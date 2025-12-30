@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tempo - Music Statistics Reimagined</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    <meta name="description"
+        content="Tempo is the beautiful, private, and open-source music statistics tracker for Android.">
+</head>
+
+<body>
+    <!-- Animated Mesh Gradient Background -->
+    <div class="background-gradient-mesh">
+        <div class="mesh-blob mesh-1"></div>
+        <div class="mesh-blob mesh-2"></div>
+        <div class="mesh-blob mesh-3"></div>
+    </div>
+
+    <nav class="navbar">
+        <div class="container nav-container">
+            <a href="#" class="logo">
+                <img src="assets/logo.png" alt="Tempo Logo">
+                <span>Tempo</span>
+            </a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#privacy">Privacy</a>
+                <a href="https://play.google.com/store/apps/details?id=me.avinas.tempo" class="btn btn-primary"
+                    target="_blank">Download App</a>
+            </div>
+            <button class="mobile-menu-btn" aria-label="Toggle menu">
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="container hero-container">
+            <div class="hero-content reveal">
+                <div class="badge">
+                    <span class="sparkle">✨</span>
+                    Open Source & Private
+                </div>
+                <h1>Your Music <br><span class="gradient-text">Unwrapped</span> <br>Every Day</h1>
+                <p>Track your listening history across Spotify, YouTube Music, and 15+ other apps without ever sharing
+                    your data with big tech.</p>
+                <div class="cta-group">
+                    <a href="https://play.google.com/store/apps/details?id=me.avinas.tempo" class="btn-play-store"
+                        target="_blank">
+                        <svg class="play-icon" role="img" viewBox="0 0 24 24" fill="currentColor"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <title>Google Play</title>
+                            <path
+                                d="M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924zm12.207 10.065l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973zm0 2.067l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z" />
+                        </svg>
+                        <div class="btn-text-group">
+                            <span class="btn-text-small">GET IT ON</span>
+                            <span class="btn-text-large">Google Play</span>
+                        </div>
+                    </a>
+                    <a href="https://github.com/avinaxhroy/Tempo" class="btn btn-lg btn-glass" target="_blank">
+                        GitHub
+                    </a>
+                </div>
+            </div>
+
+            <div class="hero-visual reveal stagger-1" id="heroVisual">
+                <!-- Realistic App Mockup & Floating Elements -->
+                <div class="app-mockup-container">
+
+                    <!-- Floating Stat Cards -->
+                    <div class="mockup-float float-stat-1" data-depth="0.1">
+                        <div class="icon-box">🔥</div>
+                        <div>
+                            <div style="font-weight: 700; font-size: 15px; color: #fff;">32 Day Streak</div>
+                            <div style="font-size: 12px; color: #a0a0b0;">Top 1% Listener</div>
+                        </div>
+                    </div>
+
+                    <div class="mockup-float float-stat-2" data-depth="-0.1">
+                        <div class="icon-box">💎</div>
+                        <div>
+                            <div style="font-weight: 700; font-size: 15px; color: #fff;">Rank #1</div>
+                            <div style="font-size: 12px; color: #a0a0b0;">The Weeknd Fan</div>
+                        </div>
+                    </div>
+
+                    <div class="app-phone-frame">
+                        <div class="dynamic-island"></div>
+                        <div class="app-screen">
+                            <div class="app-top-bar">
+                                <span class="app-greeting">Good Evening</span>
+                                <div class="app-status-icons">
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                        <path
+                                            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" />
+                                    </svg>
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                                        <path
+                                            d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z" />
+                                    </svg>
+                                </div>
+                            </div>
+
+                            <div class="app-content-scroll">
+                                <!-- Hero Card: Weekly Stats -->
+                                <div class="app-card hero-card">
+                                    <div class="hero-time-display">
+                                        <div class="hero-time-value">12h 45m</div>
+                                        <div class="hero-time-badge">+12%</div>
+                                    </div>
+                                    <div class="hero-subtitle">Music played this week</div>
+
+                                    <!-- Simple Bar Graph -->
+                                    <div class="trend-graph">
+                                        <div class="trend-bar" style="--h: 40%; --i: 1"></div>
+                                        <div class="trend-bar" style="--h: 70%; --i: 2"></div>
+                                        <div class="trend-bar" style="--h: 50%; --i: 3"></div>
+                                        <div class="trend-bar" style="--h: 100%; --i: 4"></div>
+                                        <div class="trend-bar" style="--h: 60%; --i: 5"></div>
+                                        <div class="trend-bar" style="--h: 80%; --i: 6"></div>
+                                        <div class="trend-bar" style="--h: 40%; --i: 7"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Spotlight Banner -->
+                                <div class="app-card spotlight-card">
+                                    <div class="spotlight-icon">✨</div>
+                                    <div class="spotlight-text">
+                                        <div class="spotlight-title">Your 2024 Spotlight</div>
+                                        <div class="spotlight-desc">Revisit your top moments</div>
+                                    </div>
+                                    <div class="spotlight-arrow">→</div>
+                                </div>
+
+                                <!-- Quick Stats Row -->
+                                <div class="quick-stats-row">
+                                    <div class="app-card mini-card artist-card">
+                                        <div class="mini-card-icon"></div>
+                                        <div class="mini-card-label">Top Artist</div>
+                                        <div class="mini-card-value">The Weeknd</div>
+                                    </div>
+                                    <div class="app-card mini-card track-card">
+                                        <div class="mini-card-icon"></div>
+                                        <div class="mini-card-label">Top Track</div>
+                                        <div class="mini-card-value">Starboy</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Bottom Navigation Pill -->
+                            <div class="bottom-selector-pill">
+                                <div class="selector-option active">Week</div>
+                                <div class="selector-option">Month</div>
+                                <div class="selector-option">Year</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title text-center reveal">Why <span class="gradient-text-accent">Tempo?</span></h2>
+            <!-- Bento Grid Layout -->
+            <div class="bento-grid">
+                <!-- Large Privacy Card -->
+                <div class="bento-card bento-privacy reveal">
+                    <div class="bento-content">
+                        <div class="bento-icon">🔒</div>
+                        <h3>Privacy First</h3>
+                        <p>Your listening history is yours alone. Tempo processes everything locally on your device,
+                            ensuring zero data leakage.</p>
+                    </div>
+                    <div class="privacy-shield">
+                        🛡️
+                        <div class="shield-pulse"></div>
+                    </div>
+                </div>
+
+                <!-- Battery Efficient -->
+                <div class="bento-card bento-battery reveal stagger-1">
+                    <div class="bento-icon">🔋</div>
+                    <h3>Battery Efficient</h3>
+                    <p>Uses minimal power by leveraging Android's native NotificationListenerService.</p>
+                </div>
+
+                <!-- Offline First -->
+                <div class="bento-card bento-offline reveal stagger-2">
+                    <div class="bento-icon">🔌</div>
+                    <h3>Offline First</h3>
+                    <p>Full functionality without an internet connection.</p>
+                </div>
+
+                <!-- Rich Stats (Wide) -->
+                <div class="bento-card bento-stats reveal stagger-3">
+                    <div class="bento-icon">📊</div>
+                    <h3>Rich Metadata</h3>
+                    <p>High-res album art, genres, and heavy rotation insights from MusicBrainz and Spotify API
+                        (optional).</p>
+
+                    <div
+                        style="margin-top: auto; opacity: 0.6; display: flex; align-items: flex-end; gap: 6px; height: 60px;">
+                        <div style="width: 100%; background: var(--accent-secondary); height: 30%; border-radius: 4px;">
+                        </div>
+                        <div style="width: 100%; background: var(--accent-secondary); height: 50%; border-radius: 4px;">
+                        </div>
+                        <div style="width: 100%; background: var(--accent-primary); height: 80%; border-radius: 4px;">
+                        </div>
+                        <div style="width: 100%; background: var(--accent-primary); height: 60%; border-radius: 4px;">
+                        </div>
+                        <div style="width: 100%; background: var(--accent-primary); height: 90%; border-radius: 4px;">
+                        </div>
+                        <div style="width: 100%; background: var(--accent-secondary); height: 40%; border-radius: 4px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="privacy" class="privacy-section">
+        <div class="container">
+            <div class="privacy-glass-container reveal">
+                <h2>Your Data, <span class="gradient-text">Your Control</span></h2>
+                <p>Tempo is built with a different philosophy: you shouldn't have to trade privacy for insights. Unlike
+                    streaming services that lock your data in their silos, Tempo aggregates your history locally.</p>
+
+                <div class="privacy-list">
+                    <div class="privacy-item">
+                        <div class="check-icon">✓</div>
+                        <span>No Cloud Uploads</span>
+                    </div>
+                    <div class="privacy-item">
+                        <div class="check-icon">✓</div>
+                        <span>No Tracking IDs</span>
+                    </div>
+                    <div class="privacy-item">
+                        <div class="check-icon">✓</div>
+                        <span>No Account Needed</span>
+                    </div>
+                    <div class="privacy-item">
+                        <div class="check-icon">✓</div>
+                        <span>Open Source</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container footer-container">
+            <div class="footer-big-text">TEMPO</div>
+            <div class="footer-content-row">
+                <div class="footer-brand">
+                    <div class="logo">
+                        <img src="assets/logo.png" alt="Tempo Logo" style="width: 32px;">
+                        <span>Tempo</span>
+                    </div>
+                    <p class="footer-desc">Music statistics reimagined for Android. <br>Open source, private, and
+                        beautiful.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/avinaxhroy/Tempo" target="_blank">GitHub</a>
+                    <a href="#">Privacy Policy</a>
+                    <a href="mailto:support@tempo.com">Contact</a>
+                </div>
+            </div>
+            <div class="copyright">
+                <p>&copy; 2025 Avinash. Open Source Project.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

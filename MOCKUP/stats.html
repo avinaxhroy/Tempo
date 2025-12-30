@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Music Stats</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#f42525",
+            "background-light": "#f8f5f5",
+            "background-dark": "#121212",
+          },
+          fontFamily: {
+            "display": ["Spline Sans"]
+          },
+          borderRadius: {
+            "DEFAULT": "1rem",
+            "lg": "2rem",
+            "xl": "3rem",
+            "full": "9999px"
+          },
+          boxShadow: {
+            'soft': '0 4px 12px 0 rgba(0, 0, 0, 0.1), 0 2px 8px 0 rgba(0, 0, 0, 0.06)',
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    body {
+      min-height: max(884px, 100dvh);
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .glassmorphism {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="absolute top-0 left-0 w-64 h-64 bg-red-500/30 rounded-full blur-3xl opacity-50 -translate-x-1/4 -translate-y-1/4"></div>
+<div class="absolute bottom-0 right-0 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl opacity-40 translate-x-1/4 translate-y-1/4"></div>
+<div class="absolute top-1/4 left-1/2 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl opacity-30 -translate-x-1/2"></div>
+<div class="sticky top-0 z-20 bg-background-dark/80 backdrop-blur-sm">
+<div class="flex items-center p-4 pb-2 justify-between">
+<div class="flex size-12 shrink-0 items-center"></div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Stats</h2>
+<div class="flex w-12 items-center justify-end">
+<button class="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 bg-transparent text-white gap-2 text-base font-bold leading-normal tracking-[0.015em] min-w-0 p-0">
+<span class="material-symbols-outlined text-white" style="font-size: 28px;">more_vert</span>
+</button>
+</div>
+</div>
+<div class="flex justify-center p-4 pt-2">
+<div class="flex h-12 flex-1 items-center justify-center rounded-full glassmorphism p-1 shadow-soft max-w-md">
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-3 has-[:checked]:bg-primary has-[:checked]:shadow-soft has-[:checked]:text-white text-neutral-300 text-sm font-medium leading-normal">
+<span class="truncate">Top Songs</span>
+<input checked="" class="invisible w-0" name="stats-category" type="radio" value="Top Songs"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-3 has-[:checked]:bg-primary has-[:checked]:shadow-soft has-[:checked]:text-white text-neutral-300 text-sm font-medium leading-normal">
+<span class="truncate">Top Artists</span>
+<input class="invisible w-0" name="stats-category" type="radio" value="Top Artists"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-3 has-[:checked]:bg-primary has-[:checked]:shadow-soft has-[:checked]:text-white text-neutral-300 text-sm font-medium leading-normal">
+<span class="truncate">Top Albums</span>
+<input class="invisible w-0" name="stats-category" type="radio" value="Top Albums"/>
+</label>
+</div>
+</div>
+</div>
+<main class="flex-1 pb-40 z-0">
+<div class="flex flex-col gap-3 p-4">
+<div class="flex items-center gap-4 p-4 bg-gradient-to-r from-red-900/30 to-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<div class="text-white text-lg font-bold w-8 text-center">1</div>
+<div class="w-16 h-16 bg-center bg-no-repeat aspect-square bg-cover rounded-lg" data-alt="Album art for Anti-Hero" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBrkQn6GehgaURxU0-90F19PDWm7znK3H5C7ZO0CitW16FTpdN4-BC_SVusL19oWU379fkmkBho6jEsG_bXb2h7pIOdtXgXFyaGR6tcDrJ-OWCYCxcJACrDRmnBJVgJqTc6E5tn_vSZmx3y8hPXJ3kEuq_SLIvRa6XzDitjmdx5x9RCL0IQZ0C7bsre21sYf9vLRXMJsTYzWFOUmH6w2Zhnu6b2c7YUyDpBIE3TnOxhEiyOKtAmD_0sxP0Mw3YwDxYKRHG9rRkcOLBK");'></div>
+<div class="flex-1 overflow-hidden">
+<p class="text-white font-medium truncate">Anti-Hero</p>
+<p class="text-neutral-400 text-sm truncate">Taylor Swift</p>
+</div>
+<div class="text-neutral-300 text-sm">4:20</div>
+</div>
+<div class="flex items-center gap-4 p-4 bg-gradient-to-r from-blue-900/30 to-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<div class="text-white text-lg font-bold w-8 text-center">2</div>
+<div class="w-16 h-16 bg-center bg-no-repeat aspect-square bg-cover rounded-lg" data-alt="Album art for Cruel Summer" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDYaVFQ1rTkAWv5yCfHsdh6-ja2cT9fnjSy4sgNbauLu59SCH7iRNXuhbuQ-ax8TxUE7fg_ltoeJiSHIHOx3UVGywBOMFHUWWr4ASkEXUGe7kqT65eUE0n1NZiSbM2GHNBWoQZDq8_VscUw_wTyj9Bsu2fniJpQvh20Pymcn60WFzecjR_DLZDuRYUEH1cW8wYiA6vk4jMt8R8UcVLIbWPRS77Td9NRt1YQ5Usju3xKXqUBVZrixbWJpowL0_3noJbQDmjodVwsjxQK");'></div>
+<div class="flex-1 overflow-hidden">
+<p class="text-white font-medium truncate">Cruel Summer</p>
+<p class="text-neutral-400 text-sm truncate">Taylor Swift</p>
+</div>
+<div class="text-neutral-300 text-sm">2:58</div>
+</div>
+<div class="flex items-center gap-4 p-4 bg-gradient-to-r from-purple-900/30 to-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<div class="text-white text-lg font-bold w-8 text-center">3</div>
+<div class="w-16 h-16 bg-center bg-no-repeat aspect-square bg-cover rounded-lg" data-alt="Album art for Blinding Lights" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuACjNB6muGGb4Ec2oI3Myz4TA-pgM-Cpw94R_yBs6qa3092IqLy7uMUyEipA3R2e1Ss6jIbowED6rD_0wvtgunQxy10es6pgXwVSGkB-C5eaLzLsldGgr-xcssEYWRLeTkZgreFHmi9Xw_gR8UR9TB8LHbL_8ieZchlQqVybN1JFV83t2fCHFMX_1Rv5RzWqaZYQsdV-8CiXG2Xtax7v_O3UrrY3jMFdPkJFmZxU8TBSgQQ1ymif2QEg_3BbFcgFt8aXRC-EZaZF6Tq");'></div>
+<div class="flex-1 overflow-hidden">
+<p class="text-white font-medium truncate">Blinding Lights</p>
+<p class="text-neutral-400 text-sm truncate">The Weeknd</p>
+</div>
+<div class="text-neutral-300 text-sm">3:20</div>
+</div>
+<div class="flex items-center gap-4 p-4 bg-gradient-to-r from-green-900/30 to-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<div class="text-white text-lg font-bold w-8 text-center">4</div>
+<div class="w-16 h-16 bg-center bg-no-repeat aspect-square bg-cover rounded-lg" data-alt="Album art for As It Was" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDhST8sx5bX9TZzMqnS2Ddxad0NindLKN-8dQJe1-kNbG_xR84vM7lXls9rsSur9GEQuWwPcADe22mfzeMfbaGEkhcrBzd_zGDDuE_zI4wpHhBXbeILFZzBj-8AorLHm1RaLiGtPVq-0a7aCMj7dhZ3-tFMOps5Ak7q6MVrTWwdd_mf3uEoTdVU9BHfMjh3UaX4xogBlvrqw0yvggAn7znNnivoRN5aIsLpCWMo6XK6Q9oiYQnaMYMdj5fNqz0vC8u630ShpxhSlGbG");'></div>
+<div class="flex-1 overflow-hidden">
+<p class="text-white font-medium truncate">As It Was</p>
+<p class="text-neutral-400 text-sm truncate">Harry Styles</p>
+</div>
+<div class="text-neutral-300 text-sm">2:47</div>
+</div>
+<div class="flex items-center gap-4 p-4 bg-gradient-to-r from-orange-900/30 to-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<div class="text-white text-lg font-bold w-8 text-center">5</div>
+<div class="w-16 h-16 bg-center bg-no-repeat aspect-square bg-cover rounded-lg" data-alt="Album art for good 4 u" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuB6tQufZ3oShMZyAH6dzvPInNmWxlh_PkQhrS57bGdP_V7BCbQqi5_DXIv6VKVcLZWbVeqotXgtL26GwrOFMYKAqSkHAVpVrbE8KPGMZ_IZgeH8z0Pj3J3HkXlS96FduVr8uAHVjwlTF0UEbfEJEaRXepcAmkvpMojBdHcZnYCnk3HRZMsq5OVJFkxKM8kTN0V4ED_sE_99sMu-MLQy5b7_Ony1hIL1CdwB2E7M9pW7kUs3dCVP7pDI_GjsY9umwOdO6xCIMaMUwvpe");'></div>
+<div class="flex-1 overflow-hidden">
+<p class="text-white font-medium truncate">good 4 u</p>
+<p class="text-neutral-400 text-sm truncate">Olivia Rodrigo</p>
+</div>
+<div class="text-neutral-300 text-sm">2:58</div>
+</div>
+<div class="flex items-center gap-4 p-4 bg-gradient-to-r from-yellow-900/30 to-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<div class="text-white text-lg font-bold w-8 text-center">6</div>
+<div class="w-16 h-16 bg-center bg-no-repeat aspect-square bg-cover rounded-lg" data-alt="Album art for Levitating" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAwyiCu_DSILa9djrVEBgBZuLStSTLNZek7ayElAzVFyRd6vNhknmFiiBu_cEYKZfDDW_L4SrbmZHD69oX81qio8P5SI_Q4sXDtLAsRQpNAufbZ6oapeUOjiw1rdPnYzT_je47kg5DFVvqk-Ys0mc5QQWkyi-xK6_qu7mkNRQD64S3pd10QS9mj4OZQX_WhAkDk-aGeGmHoRKqW0Innmposa5mYKMfzoO_XyIomExP3YTMc5Fgw2PXlk1CH_lJl2K7Woyb3x4Wt23cw");'></div>
+<div class="flex-1 overflow-hidden">
+<p class="text-white font-medium truncate">Levitating</p>
+<p class="text-neutral-400 text-sm truncate">Dua Lipa</p>
+</div>
+<div class="text-neutral-300 text-sm">3:23</div>
+</div>
+<div class="flex items-center gap-4 p-4 bg-gradient-to-r from-teal-900/30 to-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<div class="text-white text-lg font-bold w-8 text-center">7</div>
+<div class="w-16 h-16 bg-center bg-no-repeat aspect-square bg-cover rounded-lg" data-alt="Album art for Stay" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCjx-5iwLUOdUNqsX_YW8XIuCnO3wImk9C7fGn5-qSHUvgkZ1eaDj5-fak_Ngreb2Vgm9_ovFj1R5xu4s-EeQUNeJ-Ew6u3LATJ747UK-9u_TnqelRBLdVManbJEKeQXQw3A5RLyhxWmSog7ph4eNkqZivkOHS1ZKFJl_g_iOPjMZ48rFb9V3OJZRAkwBlTPt9HR_RxVK8uSaFA3fT4E795CLEb99QcEWKTz4CNIHzMQf2BndQs9HNuSNK5pqezV6movUTzzn4tt2i0");'></div>
+<div class="flex-1 overflow-hidden">
+<p class="text-white font-medium truncate">Stay</p>
+<p class="text-neutral-400 text-sm truncate">The Kid LAROI, Justin Bieber</p>
+</div>
+<div class="text-neutral-300 text-sm">2:21</div>
+</div>
+</div>
+</main>
+<div class="fixed bottom-20 left-0 right-0 z-10 flex justify-center px-4">
+<div class="flex h-14 w-full max-w-sm items-center justify-center rounded-full glassmorphism p-1 shadow-soft">
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-2 has-[:checked]:bg-primary has-[:checked]:shadow-soft has-[:checked]:text-white text-neutral-300 text-sm font-medium leading-normal">
+<span class="truncate">Week</span>
+<input checked="" class="invisible w-0" name="time-period" type="radio" value="Week"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-2 has-[:checked]:bg-primary has-[:checked]:shadow-soft has-[:checked]:text-white text-neutral-300 text-sm font-medium leading-normal">
+<span class="truncate">Month</span>
+<input class="invisible w-0" name="time-period" type="radio" value="Month"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-2 has-[:checked]:bg-primary has-[:checked]:shadow-soft has-[:checked]:text-white text-neutral-300 text-sm font-medium leading-normal">
+<span class="truncate">Year</span>
+<input class="invisible w-0" name="time-period" type="radio" value="Year"/>
+</label>
+</div>
+</div>
+<div class="fixed bottom-0 left-0 right-0 bg-background-light dark:bg-background-dark/80 backdrop-blur-sm border-t border-white/10 z-20">
+<div class="flex justify-around items-center h-20 px-4">
+<button class="flex flex-col items-center gap-1 text-neutral-400">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-xs font-medium">Dashboard</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bar_chart</span>
+<span class="text-xs font-medium">Stats</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-neutral-400">
+<span class="material-symbols-outlined">history</span>
+<span class="text-xs font-medium">History</span>
+</button>
+</div>
+</div>
+</div>
+
+</body></html>

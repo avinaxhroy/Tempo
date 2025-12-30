@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tempo</string>
+    
+    <!-- Service notification -->
+    <string name="tracking_notification_title">Tempo is tracking your music</string>
+    <string name="tracking_notification_idle">Listening for music playback…</string>
+    <string name="tracking_notification_active">Now tracking: %1$s - %2$s</string>
+    
+    <!-- Permission screen -->
+    <string name="permission_setup_title">Set Up Tempo</string>
+    <string name="permission_setup_subtitle">Tempo needs a couple of permissions to track your music listening in the background.</string>
+    
+    <string name="permission_notification_title">Notification Access</string>
+    <string name="permission_notification_desc">Tempo reads music notifications to detect what songs you\'re playing. This works with YouTube Music, Spotify, and other music apps.\n\nWe only read music-related notifications and never access your personal messages or other notifications.</string>
+    <string name="permission_notification_button">Grant Access</string>
+    <string name="permission_notification_granted">Granted ✓</string>
+    
+    <string name="permission_battery_title">Battery Optimization</string>
+    <string name="permission_battery_desc">To reliably track your music in the background, Tempo needs to be excluded from battery optimization.\n\nThis prevents Android from stopping Tempo when you\'re listening to music. Tempo is designed to use minimal battery.</string>
+    <string name="permission_battery_button">Disable Optimization</string>
+    <string name="permission_battery_disabled">Disabled ✓</string>
+    
+    <string name="permission_continue">Start Tracking</string>
+    <string name="permission_pending">Complete Setup Above</string>
+    <string name="permission_privacy_note">🔒 All your data stays on your device. Tempo never uploads your listening history.</string>
+    
+    <!-- Home screen -->
+    <string name="home_tracking_active">✅ Music tracking active</string>
+    <string name="home_tracking_hint">Play music in YouTube Music, Spotify, or any other music app. Tempo will automatically track your listening.</string>
+</resources>
