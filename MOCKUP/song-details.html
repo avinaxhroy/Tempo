@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Song Details</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#f42525",
+            "background-light": "#f8f5f5",
+            "background-dark": "#121212",
+          },
+          fontFamily: {
+            "display": ["Spline Sans"]
+          },
+          borderRadius: {
+            "DEFAULT": "1rem",
+            "lg": "2rem",
+            "xl": "3rem",
+            "full": "9999px"
+          },
+          boxShadow: {
+            'soft': '0 4px 12px 0 rgba(0, 0, 0, 0.1), 0 2px 8px 0 rgba(0, 0, 0, 0.06)',
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    body {
+      min-height: max(884px, 100dvh);
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .glassmorphism {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="absolute top-0 left-0 w-64 h-64 bg-red-500/30 rounded-full blur-3xl opacity-50 -translate-x-1/4 -translate-y-1/4"></div>
+<div class="absolute bottom-0 right-0 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl opacity-40 translate-x-1/4 translate-y-1/4"></div>
+<div class="absolute top-1/4 left-1/2 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl opacity-30 -translate-x-1/2"></div>
+<div class="sticky top-0 z-20 bg-background-dark/80 backdrop-blur-sm">
+<div class="flex items-center p-4 justify-between">
+<div class="flex w-12 items-center justify-start">
+<button class="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 bg-transparent text-white gap-2 text-base font-bold leading-normal tracking-[0.015em] min-w-0 p-0">
+<span class="material-symbols-outlined text-white" style="font-size: 28px;">arrow_back_ios_new</span>
+</button>
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center truncate">Song Details</h2>
+<div class="flex w-12 items-center justify-end">
+<button class="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 bg-transparent text-white gap-2 text-base font-bold leading-normal tracking-[0.015em] min-w-0 p-0">
+<span class="material-symbols-outlined text-white" style="font-size: 28px;">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<main class="flex-1 pb-28 z-0">
+<div class="p-4 flex flex-col items-center">
+<div class="w-full max-w-xs aspect-square bg-center bg-no-repeat bg-cover rounded-xl shadow-2xl mb-6" data-alt="Album art for Anti-Hero" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBrkQn6GehgaURxU0-90F19PDWm7znK3H5C7ZO0CitW16FTpdN4-BC_SVusL19oWU379fkmkBho6jEsG_bXb2h7pIOdtXgXFyaGR6tcDrJ-OWCYCxcJACrDRmnBJVgJqTc6E5tn_vSZmx3y8hPXJ3kEuq_SLIvRa6XzDitjmdx5x9RCL0IQZ0C7bsre21sYf9vLRXMJsTYzWFOUmH6w2Zhnu6b2c7YUyDpBIE3TnOxhEiyOKtAmD_0sxP0Mw3YwDxYKRHG9rRkcOLBK");'></div>
+<h1 class="text-3xl font-bold text-white text-center">Anti-Hero</h1>
+<p class="text-lg text-neutral-300 text-center mb-8">Taylor Swift</p>
+<div class="w-full p-4 bg-primary/20 rounded-lg glassmorphism shadow-soft mb-6 border border-primary/50 text-center">
+<div class="flex justify-center items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary" style="font-size: 24px;">military_tech</span>
+<p class="text-white font-semibold text-lg">Your All-Time Favorite</p>
+</div>
+<p class="text-neutral-300 text-sm">This is your most played song ever. A true classic in your personal charts!</p>
+</div>
+<div class="w-full grid grid-cols-2 gap-4 mb-6">
+<div class="col-span-2 p-4 bg-gradient-to-r from-red-900/40 to-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<p class="text-neutral-400 text-sm">Times Played</p>
+<p class="text-white text-3xl font-bold">1,284</p>
+</div>
+<div class="p-4 bg-gradient-to-r from-blue-900/40 to-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<p class="text-neutral-400 text-sm">Total Listening</p>
+<p class="text-white text-xl font-bold">90h 16m</p>
+</div>
+<div class="p-4 bg-gradient-to-r from-purple-900/40 to-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<p class="text-neutral-400 text-sm">Peak Position</p>
+<p class="text-white text-xl font-bold">#1</p>
+</div>
+<div class="p-4 bg-gradient-to-r from-green-900/40 to-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<p class="text-neutral-400 text-sm">Release Date</p>
+<p class="text-white text-xl font-bold">Oct 21, 2022</p>
+</div>
+<div class="p-4 bg-gradient-to-r from-orange-900/40 to-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<p class="text-neutral-400 text-sm">Genre</p>
+<p class="text-white text-xl font-bold">Pop</p>
+</div>
+</div>
+<div class="w-full p-4 bg-zinc-800/20 rounded-lg glassmorphism shadow-soft">
+<p class="text-white font-medium mb-2">Listening Trends</p>
+<div class="h-40 w-full flex items-end">
+<svg class="w-full h-full" fill="none" preserveAspectRatio="none" viewBox="0 0 300 100" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="gradient" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#f42525" stop-opacity="0.6"></stop>
+<stop offset="100%" stop-color="#f42525" stop-opacity="0"></stop>
+</linearGradient>
+</defs>
+<path d="M0 80 C 20 60, 40 70, 60 50 C 80 30, 100 40, 120 60 C 140 80, 160 70, 180 50 C 200 30, 220 40, 240 20 C 260 0, 280 10, 300 30 L 300 100 L 0 100 Z" fill="url(#gradient)"></path>
+<path d="M0 80 C 20 60, 40 70, 60 50 C 80 30, 100 40, 120 60 C 140 80, 160 70, 180 50 C 200 30, 220 40, 240 20 C 260 0, 280 10, 300 30" stroke="#f42525" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+</div>
+</main>
+<div class="fixed bottom-0 left-0 right-0 bg-background-light dark:bg-background-dark/80 backdrop-blur-sm border-t border-white/10 z-20">
+<div class="flex justify-around items-center h-20 px-4">
+<button class="flex flex-col items-center gap-1 text-neutral-400">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-xs font-medium">Dashboard</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bar_chart</span>
+<span class="text-xs font-medium">Stats</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-neutral-400">
+<span class="material-symbols-outlined">history</span>
+<span class="text-xs font-medium">History</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>

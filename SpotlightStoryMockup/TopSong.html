@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Your Spotlight Story - Top Songs</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#f4258c", // Vibrant Red/Pink
+            "background-light": "#f8f5f7",
+            "background-dark": "#221019",
+          },
+          fontFamily: {
+            "display": ["Spline Sans", "sans-serif"]
+          },
+          borderRadius: {
+            "DEFAULT": "1rem",
+            "lg": "2rem",
+            "xl": "3rem",
+            "full": "9999px"
+          },
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 24
+    }
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-display">
+<div class="relative flex h-[100dvh] w-full flex-col bg-background-light dark:bg-background-dark group/design-root overflow-hidden">
+<div class="absolute inset-0 z-0">
+<div class="absolute -bottom-1/4 -right-1/4 h-1/2 w-3/4 rounded-full bg-primary/30 blur-3xl"></div>
+<div class="absolute -top-1/4 left-0 h-1/2 w-3/4 rounded-full bg-purple-500/20 blur-3xl"></div>
+<div class="absolute bottom-0 left-1/2 h-1/2 w-1/2 -translate-x-1/2 rounded-full bg-sky-400/20 blur-3xl"></div>
+</div>
+<main class="relative z-10 flex h-full flex-col p-4 sm:p-6 text-white">
+<div class="flex-shrink-0">
+<div class="flex w-full flex-row items-center justify-center gap-1.5 py-2">
+<div class="h-1 flex-1 rounded-full bg-primary"></div>
+<div class="h-1 flex-1 rounded-full bg-white/20"></div>
+<div class="h-1 flex-1 rounded-full bg-white/20"></div>
+<div class="h-1 flex-1 rounded-full bg-white/20"></div>
+<div class="h-1 flex-1 rounded-full bg-white/20"></div>
+<div class="h-1 flex-1 rounded-full bg-white/20"></div>
+</div>
+<div class="flex items-center justify-end pt-4">
+<button class="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 w-10 bg-transparent text-white">
+<span class="material-symbols-outlined text-3xl">close</span>
+</button>
+</div>
+</div>
+<div class="flex flex-1 flex-col items-center justify-center px-2 space-y-4">
+<p class="text-white/80 text-lg font-normal leading-normal pb-2">Your Top 5 Songs</p>
+<div class="relative w-full max-w-xs rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-2xl text-center">
+<img alt="Album Art" class="w-full h-64 object-cover rounded-lg mb-4" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAPRZtoLHZcmKhxuKrwa4zndRQS2h7GY-yqBOgOns9ahqUjnOnWKzRzeVUgp-lFsbhARlX3VzKLgnafrgKiMbxxXmnTXU7TC_8k9ji1wozertdbZS5QrYzkJZVneoQ2ncUYOR4bf8aJq68Z6eCK17mzbWHTNI_RjgodYfA8ld0rx46HtZyvVnQiv2CUGaYuUHHEkz7q_bXu4BC2EH4Cv2iN7WdZC4au12kFh-G1R3EU79y1aPPPAxdSu645KCH8M6D1pWrFrWYpjbWA"/>
+<h2 class="text-white text-3xl font-bold leading-tight tracking-tight">Blinding Lights</h2>
+<p class="text-white/80 text-base font-normal leading-normal">The Weeknd</p>
+<p class="text-white/80 text-base font-normal leading-normal pt-2">You played this <span class="text-primary font-semibold">238</span> times!</p>
+</div>
+<div class="grid grid-cols-2 gap-3 w-full max-w-xs">
+<div class="relative rounded-lg border border-white/10 bg-white/5 p-3 backdrop-blur-2xl text-left">
+<h3 class="text-white text-base font-semibold leading-tight truncate">2. As It Was</h3>
+<p class="text-white/60 text-xs truncate">Harry Styles</p>
+<p class="text-white/60 text-xs">192 plays</p>
+</div>
+<div class="relative rounded-lg border border-white/10 bg-white/5 p-3 backdrop-blur-2xl text-left">
+<h3 class="text-white text-base font-semibold leading-tight truncate">3. Anti-Hero</h3>
+<p class="text-white/60 text-xs truncate">Taylor Swift</p>
+<p class="text-white/60 text-xs">175 plays</p>
+</div>
+<div class="relative rounded-lg border border-white/10 bg-white/5 p-3 backdrop-blur-2xl text-left">
+<h3 class="text-white text-base font-semibold leading-tight truncate">4. good 4 u</h3>
+<p class="text-white/60 text-xs truncate">Olivia Rodrigo</p>
+<p class="text-white/60 text-xs">150 plays</p>
+</div>
+<div class="relative rounded-lg border border-white/10 bg-white/5 p-3 backdrop-blur-2xl text-left">
+<h3 class="text-white text-base font-semibold leading-tight truncate">5. Kill Bill</h3>
+<p class="text-white/60 text-xs truncate">SZA</p>
+<p class="text-white/60 text-xs">142 plays</p>
+</div>
+</div>
+</div>
+<div class="flex flex-shrink-0 flex-col items-center gap-4 py-2">
+<button class="flex h-12 w-full max-w-xs cursor-pointer items-center justify-center gap-2 rounded-full bg-primary text-white transition-opacity hover:opacity-90">
+<span class="material-symbols-outlined">ios_share</span>
+<span class="text-base font-bold leading-tight tracking-tight">Share Your Story</span>
+</button>
+<div class="flex items-center justify-center gap-2 py-2">
+<p class="text-center text-sm font-medium text-white/50">Tempo Spotlight</p>
+</div>
+</div>
+</main>
+</div>
+
+</body></html>

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>History</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#f42525",
+            "background-light": "#f8f5f5",
+            "background-dark": "#121212",
+          },
+          fontFamily: {
+            "display": ["Spline Sans"]
+          },
+          borderRadius: {
+            "DEFAULT": "1rem",
+            "lg": "2rem",
+            "xl": "3rem",
+            "full": "9999px"
+          },
+          boxShadow: {
+            'soft': '0 4px 12px 0 rgba(0, 0, 0, 0.1), 0 2px 8px 0 rgba(0, 0, 0, 0.06)',
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    body {
+      min-height: max(884px, 100dvh);
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .glassmorphism {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="absolute top-0 left-0 w-64 h-64 bg-red-500/30 rounded-full blur-3xl opacity-50 -translate-x-1/4 -translate-y-1/4"></div>
+<div class="absolute bottom-0 right-0 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl opacity-40 translate-x-1/4 translate-y-1/4"></div>
+<div class="absolute top-1/4 left-1/2 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl opacity-30 -translate-x-1/2"></div>
+<div class="sticky top-0 z-20 bg-background-dark/80 backdrop-blur-sm">
+<div class="flex items-center p-4 justify-between">
+<div class="flex w-12 items-center justify-start">
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center truncate">Listening History</h2>
+<div class="flex w-12 items-center justify-end">
+<button class="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 bg-transparent text-white gap-2 text-base font-bold leading-normal tracking-[0.015em] min-w-0 p-0">
+<span class="material-symbols-outlined text-white" style="font-size: 28px;">search</span>
+</button>
+</div>
+</div>
+</div>
+<main class="flex-1 pb-28 z-0">
+<div class="p-4 flex flex-col gap-6">
+<div>
+<h3 class="text-lg font-bold text-white mb-4 px-2">Today</h3>
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-4 p-3 rounded-lg glassmorphism bg-gradient-to-br from-purple-500/10 to-transparent">
+<div class="w-14 h-14 aspect-square bg-cover bg-center rounded-md flex-shrink-0" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBJUAInAtWU4vU9StFSna5SJsVbn-zV15b_k64I-7RMiRfBjwNBI5cOargx8UJcJuV3G_hHlCCFRyZ-r8hY9FOZFe2jsNIh8MC8rHE-LwJnQ_v-bKAWUQrrbPlUeKR1dQjrmRYkH7whU4As1FolnmgPciHMB-lcr7l5LF0CpURPu5k76NBhzYyKg93KF5-9H1yuoeqmYBJKE22cuaikVoBlGgAUcZ8LSi9pfpuAvV78xMeQHgO90zbLr7AB5c4DnEHWXlVIQ6jWlGec")'></div>
+<div class="flex-1 min-w-0">
+<p class="text-white font-semibold truncate">Cruel Summer</p>
+<p class="text-neutral-400 text-sm truncate">Taylor Swift</p>
+</div>
+<p class="text-neutral-400 text-sm whitespace-nowrap">2m ago</p>
+</div>
+<div class="flex items-center gap-4 p-3 rounded-lg glassmorphism bg-gradient-to-br from-green-500/10 to-transparent">
+<div class="w-14 h-14 aspect-square bg-cover bg-center rounded-md flex-shrink-0" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAeHKXiD6BkDTyQnwzVenxTuIARZKdXDhc70GQFC7lN6oPbWfGll3FFOyZVeBvwJ3KO4HhHGN7o8edrvRROAvlDiQ---orbd9E1wJfE4FnJFM18WTNj3GwxFy_qH_KfN-_aJ-1ZFyLSVCNxdLprCpXp2w76uwdhkOAjyW6NnqR0qQ0Rpr4VQAZaOrYqy8eTTztfu34WhDVnrkfHt8zJncMJl11dYTqcqAktnFTH-TOGZePqf7dLwUUyabb-wGAXt4OXZwyjiHKHJuOj")'></div>
+<div class="flex-1 min-w-0">
+<p class="text-white font-semibold truncate">As It Was</p>
+<p class="text-neutral-400 text-sm truncate">Harry Styles</p>
+</div>
+<p class="text-neutral-400 text-sm whitespace-nowrap">15m ago</p>
+</div>
+<div class="flex items-center gap-4 p-3 rounded-lg glassmorphism bg-gradient-to-br from-red-500/10 to-transparent">
+<div class="w-14 h-14 aspect-square bg-cover bg-center rounded-md flex-shrink-0" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAeHKXiD6BkDTyQnwzVenxTuIARZKdXDhc70GQFC7lN6oPbWfGll3FFOyZVeBvwJ3KO4HhHGN7o8edrvRROAvlDiQ---orbd9E1wJfE4FnJFM18WTNj3GwxFy_qH_KfN-_aJ-1ZFyLSVCNxdLprCpXp2w76uwdhkOAjyW6NnqR0qQ0Rpr4VQAZaOrYqy8eTTztfu34WhDVnrkfHt8zJncMJl11dYTqcqAktnFTH-TOGZePqf7dLwUUyabb-wGAXt4OXZwyjiHKHJuOj")'></div>
+<div class="flex-1 min-w-0">
+<p class="text-white font-semibold truncate">Blinding Lights</p>
+<p class="text-neutral-400 text-sm truncate">The Weeknd</p>
+</div>
+<p class="text-neutral-400 text-sm whitespace-nowrap">45m ago</p>
+</div>
+</div>
+</div>
+<div>
+<h3 class="text-lg font-bold text-white mb-4 px-2">Yesterday</h3>
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-4 p-3 rounded-lg glassmorphism bg-gradient-to-br from-yellow-500/10 to-transparent">
+<div class="w-14 h-14 aspect-square bg-cover bg-center rounded-md flex-shrink-0" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBrkQn6GehgaURxU0-90F19PDWm7znK3H5C7ZO0CitW16FTpdN4-BC_SVusL19oWU379fkmkBho6jEsG_bXb2h7pIOdtXgXFyaGR6tcDrJ-OWCYCxcJACrDRmnBJVgJqTc6E5tn_vSZmx3y8hPXJ3kEuq_SLIvRa6XzDitjmdx5x9RCL0IQZ0C7bsre21sYf9vLRXMJsTYzWFOUmH6w2Zhnu6b2c7YUyDpBIE3TnOxhEiyOKtAmD_0sxP0Mw3YwDxYKRHG9rRkcOLBK")'></div>
+<div class="flex-1 min-w-0">
+<p class="text-white font-semibold truncate">Anti-Hero</p>
+<p class="text-neutral-400 text-sm truncate">Taylor Swift</p>
+</div>
+<p class="text-neutral-400 text-sm whitespace-nowrap">Yesterday</p>
+</div>
+<div class="flex items-center gap-4 p-3 rounded-lg glassmorphism bg-gradient-to-br from-blue-500/10 to-transparent">
+<div class="w-14 h-14 aspect-square bg-cover bg-center rounded-md flex-shrink-0" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAeHKXiD6BkDTyQnwzVenxTuIARZKdXDhc70GQFC7lN6oPbWfGll3FFOyZVeBvwJ3KO4HhHGN7o8edrvRROAvlDiQ---orbd9E1wJfE4FnJFM18WTNj3GwxFy_qH_KfN-_aJ-1ZFyLSVCNxdLprCpXp2w76uwdhkOAjyW6NnqR0qQ0Rpr4VQAZaOrYqy8eTTztfu34WhDVnrkfHt8zJncMJl11dYTqcqAktnFTH-TOGZePqf7dLwUUyabb-wGAXt4OXZwyjiHKHJuOj")'></div>
+<div class="flex-1 min-w-0">
+<p class="text-white font-semibold truncate">good 4 u</p>
+<p class="text-neutral-400 text-sm truncate">Olivia Rodrigo</p>
+</div>
+<p class="text-neutral-400 text-sm whitespace-nowrap">Yesterday</p>
+</div>
+</div>
+</div>
+<div>
+<h3 class="text-lg font-bold text-white mb-4 px-2">June 18, 2024</h3>
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-4 p-3 rounded-lg glassmorphism bg-gradient-to-br from-orange-500/10 to-transparent">
+<div class="w-14 h-14 aspect-square bg-cover bg-center rounded-md flex-shrink-0" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBJUAInAtWU4vU9StFSna5SJsVbn-zV15b_k64I-7RMiRfBjwNBI5cOargx8UJcJuV3G_hHlCCFRyZ-r8hY9FOZFe2jsNIh8MC8rHE-LwJnQ_v-bKAWUQrrbPlUeKR1dQjrmRYkH7whU4As1FolnmgPciHMB-lcr7l5LF0CpURPu5k76NBhzYyKg93KF5-9H1yuoeqmYBJKE22cuaikVoBlGgAUcZ8LSi9pfpuAvV78xMeQHgO90zbLr7AB5c4DnEHWXlVIQ6jWlGec")'></div>
+<div class="flex-1 min-w-0">
+<p class="text-white font-semibold truncate">Blank Space</p>
+<p class="text-neutral-400 text-sm truncate">Taylor Swift</p>
+</div>
+<p class="text-neutral-400 text-sm whitespace-nowrap">Jun 18</p>
+</div>
+<div class="flex items-center gap-4 p-3 rounded-lg glassmorphism bg-gradient-to-br from-sky-500/10 to-transparent">
+<div class="w-14 h-14 aspect-square bg-cover bg-center rounded-md flex-shrink-0" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAeHKXiD6BkDTyQnwzVenxTuIARZKdXDhc70GQFC7lN6oPbWfGll3FFOyZVeBvwJ3KO4HhHGN7o8edrvRROAvlDiQ---orbd9E1wJfE4FnJFM18WTNj3GwxFy_qH_KfN-_aJ-1ZFyLSVCNxdLprCpXp2w76uwdhkOAjyW6NnqR0qQ0Rpr4VQAZaOrYqy8eTTztfu34WhDVnrkfHt8zJncMJl11dYTqcqAktnFTH-TOGZePqf7dLwUUyabb-wGAXt4OXZwyjiHKHJuOj")'></div>
+<div class="flex-1 min-w-0">
+<p class="text-white font-semibold truncate">Houdini</p>
+<p class="text-neutral-400 text-sm truncate">Dua Lipa</p>
+</div>
+<p class="text-neutral-400 text-sm whitespace-nowrap">Jun 18</p>
+</div>
+<div class="flex items-center gap-4 p-3 rounded-lg glassmorphism bg-gradient-to-br from-teal-500/10 to-transparent">
+<div class="w-14 h-14 aspect-square bg-cover bg-center rounded-md flex-shrink-0" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAeHKXiD6BkDTyQnwzVenxTuIARZKdXDhc70GQFC7lN6oPbWfGll3FFOyZVeBvwJ3KO4HhHGN7o8edrvRROAvlDiQ---orbd9E1wJfE4FnJFM18WTNj3GwxFy_qH_KfN-_aJ-1ZFyLSVCNxdLprCpXp2w76uwdhkOAjyW6NnqR0qQ0Rpr4VQAZaOrYqy8eTTztfu34WhDVnrkfHt8zJncMJl11dYTqcqAktnFTH-TOGZePqf7dLwUUyabb-wGAXt4OXZwyjiHKHJuOj")'></div>
+<div class="flex-1 min-w-0">
+<p class="text-white font-semibold truncate">Flowers</p>
+<p class="text-neutral-400 text-sm truncate">Miley Cyrus</p>
+</div>
+<p class="text-neutral-400 text-sm whitespace-nowrap">Jun 18</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<div class="fixed bottom-0 left-0 right-0 bg-background-light dark:bg-background-dark/80 backdrop-blur-sm border-t border-white/10 z-20">
+<div class="flex justify-around items-center h-20 px-4">
+<button class="flex flex-col items-center gap-1 text-neutral-400">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-xs font-medium">Dashboard</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-neutral-400">
+<span class="material-symbols-outlined">bar_chart</span>
+<span class="text-xs font-medium">Stats</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">history</span>
+<span class="text-xs font-medium">History</span>
+</button>
+</div>
+</div>
+</div>
+
+</body></html>

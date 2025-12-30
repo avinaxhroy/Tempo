@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Music Stats Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#f42525",
+            "background-light": "#f8f5f5",
+            "background-dark": "#121212",
+          },
+          fontFamily: {
+            "display": ["Spline Sans"]
+          },
+          borderRadius: {
+            "DEFAULT": "1rem",
+            "lg": "2rem",
+            "xl": "3rem",
+            "full": "9999px"
+          },
+          boxShadow: {
+            'soft': '0 4px 12px 0 rgba(0, 0, 0, 0.1), 0 2px 8px 0 rgba(0, 0, 0, 0.06)',
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    body {
+      min-height: max(884px, 100dvh);
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .glassmorphism {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="absolute top-0 left-0 w-64 h-64 bg-red-500/30 rounded-full blur-3xl opacity-50 -translate-x-1/4 -translate-y-1/4"></div>
+<div class="absolute bottom-0 right-0 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl opacity-40 translate-x-1/4 translate-y-1/4"></div>
+<div class="absolute top-1/4 left-1/2 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl opacity-30 -translate-x-1/2"></div>
+<div class="flex items-center p-4 pb-2 justify-between sticky top-0 bg-background-light dark:bg-background-dark/80 backdrop-blur-sm z-10">
+<div class="flex size-12 shrink-0 items-center">
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">Home</h2>
+<div class="flex w-12 items-center justify-end">
+<button class="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-12 bg-transparent text-white gap-2 text-base font-bold leading-normal tracking-[0.015em] min-w-0 p-0">
+<span class="material-symbols-outlined text-white" style="font-size: 28px;">settings</span>
+</button>
+</div>
+</div>
+<main class="flex-1 pb-24 z-0">
+<div class="flex flex-col gap-4 p-4 m-4 rounded-lg glassmorphism shadow-soft">
+<div class="flex min-w-72 flex-1 flex-col gap-2">
+<p class="text-white text-lg font-medium leading-normal">Hey Alex, you've listened for</p>
+<p class="text-white tracking-light text-5xl font-bold leading-tight truncate">42h 15m</p>
+<p class="text-neutral-300 text-base font-normal leading-normal">this week! That's <span class="text-green-400 font-medium">15% more</span> than last week. Keep up the great work! ✨</p>
+</div>
+<div class="w-full h-24">
+<svg class="overflow-visible" height="100%" preserveAspectRatio="none" viewBox="0 0 300 100" width="100%">
+<defs>
+<linearGradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#f42525" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#f42525" stop-opacity="0"></stop>
+</linearGradient>
+</defs>
+<path d="M 0 70 L 50 50 L 100 60 L 150 40 L 200 55 L 250 30 L 300 45 L 300 100 L 0 100 Z" fill="url(#chartGradient)"></path>
+<path d="M 0 70 L 50 50 L 100 60 L 150 40 L 200 55 L 250 30 L 300 45" fill="none" stroke="#f42525" stroke-width="2.5"></path>
+</svg>
+</div>
+</div>
+<div class="flex px-4 py-3">
+<div class="flex h-10 flex-1 items-center justify-center rounded-full glassmorphism p-1">
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-2 has-[:checked]:bg-primary has-[:checked]:shadow-soft has-[:checked]:text-white text-neutral-300 text-sm font-medium leading-normal">
+<span class="truncate">Week</span>
+<input checked="" class="invisible w-0" name="time-period" type="radio" value="Week"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-2 has-[:checked]:bg-primary has-[:checked]:shadow-soft has-[:checked]:text-white text-neutral-300 text-sm font-medium leading-normal">
+<span class="truncate">Month</span>
+<input class="invisible w-0" name="time-period" type="radio" value="Month"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-2 has-[:checked]:bg-primary has-[:checked]:shadow-soft has-[:checked]:text-white text-neutral-300 text-sm font-medium leading-normal">
+<span class="truncate">Year</span>
+<input class="invisible w-0" name="time-period" type="radio" value="Year"/>
+</label>
+</div>
+</div>
+<div class="px-4 py-4">
+<button class="w-full flex items-center justify-center gap-4 text-white p-6 rounded-lg glassmorphism shadow-soft bg-primary/20 hover:bg-primary/30 transition-colors duration-300 border border-primary/40">
+<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1, 'wght' 500;">auto_awesome</span>
+<div class="flex flex-col items-start">
+<span class="text-xl font-bold">Your Spotlight Story</span>
+<span class="text-sm text-white/80">See your year in music, visualized.</span>
+</div>
+</button>
+</div>
+<h3 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] px-4 pb-2 pt-4">Your Week in Review</h3>
+<div class="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4 p-4">
+<div class="flex flex-col gap-3 pb-3 bg-gradient-to-br from-red-800/20 to-zinc-800/10 p-4 rounded-lg glassmorphism shadow-soft">
+<div class="w-full bg-center bg-no-repeat aspect-square bg-cover rounded-full" data-alt="Photo of Taylor Swift" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuArcn3U2A-5NKQPrqa7IxUsVw6t_mhRjbdlyEXiqT3yb4_5zSwQjgLjkgjYSigpjgm0Wu_JsVgU6UulzNQRLKzyYO_Yg3rMw5kIPzkisWuHgHNW1TQmMFBjrke66QnfKdTtZG2MFYzcqCagj3yePSSwLbHkbvciZGLPEofj19DePX5RsSwMhcyQ9URxC8ywq3rdqoSEoS-QryHFvtzOTNiRzF9wl7iDnh4UpxJ0l1RDqTxEummiebQA7OlEceC3JQGNr2VT_5ITcFuf");'></div>
+<div class="text-center">
+<p class="text-neutral-400 text-sm font-normal leading-normal">Your top artist is</p>
+<p class="text-white text-base font-medium leading-normal truncate">Taylor Swift</p>
+</div>
+</div>
+<div class="flex flex-col gap-3 pb-3 bg-gradient-to-br from-blue-800/20 to-zinc-800/10 p-4 rounded-lg glassmorphism shadow-soft">
+<div class="w-full bg-center bg-no-repeat aspect-square bg-cover rounded-lg" data-alt="Album art for Anti-Hero" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBrkQn6GehgaURxU0-90F19PDWm7znK3H5C7ZO0CitW16FTpdN4-BC_SVusL19oWU379fkmkBho6jEsG_bXb2h7pIOdtXgXFyaGR6tcDrJ-OWCYCxcJACrDRmnBJVgJqTc6E5tn_vSZmx3y8hPXJ3kEuq_SLIvRa6XzDitjmdx5x9RCL0IQZ0C7bsre21sYf9vLRXMJsTYzWFOUmH6w2Zhnu6b2c7YUyDpBIE3TnOxhEiyOKtAmD_0sxP0Mw3YwDxYKRHG9rRkcOLBK");'></div>
+<div class="text-center">
+<p class="text-neutral-400 text-sm font-normal leading-normal">You couldn't get enough of</p>
+<p class="text-white text-base font-medium leading-normal truncate">Anti-Hero</p>
+</div>
+</div>
+<div class="flex flex-col gap-3 pb-3 bg-gradient-to-br from-orange-800/20 to-zinc-800/10 p-4 rounded-lg glassmorphism shadow-soft">
+<div class="w-full flex items-center justify-center bg-center bg-no-repeat aspect-square bg-cover rounded-full bg-orange-500/20"><span class="material-symbols-outlined text-orange-400 text-5xl">hourglass_top</span></div>
+<div class="text-center">
+<p class="text-neutral-400 text-sm font-normal leading-normal">In total, you've listened for</p>
+<p class="text-white text-base font-medium leading-normal">1,204 Hours</p>
+</div>
+</div>
+<div class="flex flex-col gap-3 pb-3 bg-gradient-to-br from-purple-800/20 to-zinc-800/10 p-4 rounded-lg glassmorphism shadow-soft">
+<div class="w-full flex items-center justify-center bg-center bg-no-repeat aspect-square bg-cover rounded-full bg-purple-500/20"><span class="material-symbols-outlined text-purple-400 text-5xl">explore</span></div>
+<div class="text-center">
+<p class="text-neutral-400 text-sm font-normal leading-normal">You've found</p>
+<p class="text-white text-base font-medium leading-normal">32 New Tracks</p>
+</div>
+</div>
+</div>
+<h3 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] px-4 pb-2 pt-4">Ready to discover?</h3>
+<div class="flex overflow-x-auto space-x-4 p-4 scrollbar-hide">
+<div class="flex flex-col gap-3 pb-3 bg-gradient-to-br from-indigo-800/20 to-zinc-800/10 p-4 rounded-lg min-w-[200px] flex-shrink-0 cursor-pointer glassmorphism shadow-soft">
+<div class="flex items-center gap-3">
+<div class="flex items-center justify-center bg-indigo-500/20 rounded-full size-10"><span class="material-symbols-outlined text-indigo-400">music_note</span></div>
+</div>
+<div>
+<p class="text-white text-base font-medium leading-normal">Explore 12 new genres</p>
+<p class="text-neutral-400 text-sm font-normal leading-normal">Branch out from your usual.</p>
+</div>
+</div>
+<div class="flex flex-col gap-3 pb-3 bg-gradient-to-br from-amber-800/20 to-zinc-800/10 p-4 rounded-lg min-w-[200px] flex-shrink-0 cursor-pointer glassmorphism shadow-soft">
+<div class="flex items-center gap-3">
+<div class="flex items-center justify-center bg-amber-500/20 rounded-full size-10"><span class="material-symbols-outlined text-amber-400">calendar_month</span></div>
+</div>
+<div>
+<p class="text-white text-base font-medium leading-normal">Travel through 6 decades</p>
+<p class="text-neutral-400 text-sm font-normal leading-normal">From the 70s to the 2020s.</p>
+</div>
+</div>
+<div class="flex flex-col gap-3 pb-3 bg-gradient-to-br from-teal-800/20 to-zinc-800/10 p-4 rounded-lg min-w-[200px] flex-shrink-0 cursor-pointer glassmorphism shadow-soft">
+<div class="flex items-center gap-3">
+<div class="flex items-center justify-center bg-teal-500/20 rounded-full size-10"><span class="material-symbols-outlined text-teal-400">psychology</span></div>
+</div>
+<div>
+<p class="text-white text-base font-medium leading-normal">How unique is your taste?</p>
+<p class="text-neutral-400 text-sm font-normal leading-normal">You're 85% unique. Find out more!</p>
+</div>
+</div>
+</div>
+<h3 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] px-4 pb-2 pt-4">A Look at Your Habits</h3>
+<div class="flex flex-col gap-4 p-4">
+<div class="flex items-center gap-4 p-4 bg-gradient-to-r from-red-900/20 to-zinc-800/10 rounded-lg glassmorphism shadow-soft">
+<div class="flex items-center justify-center size-12 bg-primary/20 rounded-full shrink-0">
+<span class="material-symbols-outlined text-primary text-3xl">wb_twilight</span>
+</div>
+<div class="flex-1">
+<p class="text-white font-medium">You're a night owl</p>
+<p class="text-neutral-400 text-sm">Your prime listening time is late evening.</p>
+</div>
+</div>
+<div class="flex items-center gap-4 p-4 bg-gradient-to-r from-purple-900/20 to-zinc-800/10 rounded-lg glassmorphism shadow-soft">
+<div class="flex items-center justify-center size-12 bg-purple-500/20 rounded-full shrink-0">
+<span class="material-symbols-outlined text-purple-400 text-3xl">sentiment_very_satisfied</span>
+</div>
+<div class="flex-1">
+<p class="text-white font-medium">Feeling good this week?</p>
+<p class="text-neutral-400 text-sm">Your music was mostly energetic and upbeat.</p>
+</div>
+</div>
+<div class="flex items-center gap-4 p-4 bg-gradient-to-r from-blue-900/20 to-zinc-800/10 rounded-lg glassmorphism shadow-soft">
+<div class="flex items-center justify-center size-12 bg-blue-500/20 rounded-full shrink-0">
+<span class="material-symbols-outlined text-blue-400 text-3xl">repeat_one</span>
+</div>
+<div class="flex-1">
+<p class="text-white font-medium">"Cruel Summer" on repeat!</p>
+<p class="text-neutral-400 text-sm">This was your most-played track.</p>
+</div>
+</div>
+</div>
+</main>
+<div class="fixed bottom-0 left-0 right-0 bg-background-light dark:bg-background-dark/80 backdrop-blur-sm border-t border-white/10">
+<div class="flex justify-around items-center h-20 px-4">
+<button class="flex flex-col items-center gap-1 text-primary">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-xs font-medium">Dashboard</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-neutral-400">
+<span class="material-symbols-outlined">bar_chart</span>
+<span class="text-xs font-medium">Stats</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-neutral-400">
+<span class="material-symbols-outlined">history</span>
+<span class="text-xs font-medium">History</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>

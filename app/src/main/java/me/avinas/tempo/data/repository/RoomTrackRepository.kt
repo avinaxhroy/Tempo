@@ -1,0 +1,16 @@
+package me.avinas.tempo.data.repository
+
+import me.avinas.tempo.data.local.dao.TrackDao
+import me.avinas.tempo.data.local.entities.Track
+import kotlinx.coroutines.flow.Flow
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class RoomTrackRepository @Inject constructor(private val dao: TrackDao) : TrackRepository {
+    override fun getById(id: Long): Flow<Track?> = dao.getById(id)
+    override suspend fun findBySpotifyId(spotifyId: String): Track? = dao.findBySpotifyId(spotifyId)
+    override suspend fun insert(track: Track): Long = dao.insert(track)
+    override suspend fun update(track: Track) = dao.update(track)
+    override fun all(): Flow<List<Track>> = dao.all()
+}
