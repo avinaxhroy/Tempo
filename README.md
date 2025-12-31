@@ -16,7 +16,7 @@
   <p>
     <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-2.0.0-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" /></a>
     <a href="https://developer.android.com/jetpack/compose"><img src="https://img.shields.io/badge/Jetpack%20Compose-1.6.2-4285F4?style=for-the-badge&logo=android&logoColor=white" alt="Compose" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=for-the-badge" alt="License" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-Source%20Available-red?style=for-the-badge" alt="License" /></a>
   </p>
 
   <p>
@@ -173,7 +173,10 @@ We love open source!
 
 ## 📄 License
 
-Distributed under the Apache 2.0 License. See `LICENSE` for more information.
+Distributed under a custom **Source Available License**.
+This software is free to use for personal, non-commercial purposes only.
+**Commercial use, monetization, and rebranding are strictly prohibited.**
+See `LICENSE` for more information.
 
 <br />
 <div align="center">
