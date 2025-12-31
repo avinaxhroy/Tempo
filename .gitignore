@@ -1,47 +1,91 @@
-# Environment files with secrets
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+*.class
+
+# Log Files
+*.log
+
+# Android Studio Navigation editor temp files
+.navigation/
+
+# Android Studio captures folder
+captures/
+
+# IntelliJ
+*.iml
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/caches
+.idea/modules.xml
+.idea/runConfigurations.xml
+.idea/misc.xml
+.idea/navEditor.xml
+# .idea/codeStyles is missing on purpose to share code styles
+
+# Keystore files
+*.jks
+*.keystore
+
+# External native build folder generated in Android Studio for NDK projects
+.externalNativeBuild
+.cxx/
+
+# Google Services (oops, better strict than sorry)
+google-services.json
+
+# Environment Variables
 .env
 .env.local
 .env.*.local
 *.local.env
 
-# Logs and Build Outputs
-build_*.log
-build_*.txt
-build_output.txt
-
-
-# Gradle
+# Gradle files
 .gradle/
 build/
 !gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
 
-# IDE
-.idea/
-*.iml
-.DS_Store
-
-# Local configuration
+# Local configuration file (sdk path, etc)
 local.properties
 
-# Logs
-*.log
+# Proguard
+proguard-rules.pro
 
-# Android
-*.apk
-*.aab
-*.dex
-*.class
+# Bundle artifacts
 *.zip
 
+# MacOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
 
 # Kotlin
 *.kotlin_module
 
-# Generated files
-app/build/
-app/release/
+# Documentation
+doc/
+docs/
 
-# Signing configs
-*.jks
-*.keystore
-signing.properties
+# Mockups
+MOCKUP/
+SpotlightStoryMockup/
+
+# Landing Page
+web/
+
+# Compressed Files
+*.zip
+/.idea
+/app/release
