@@ -1,7 +1,7 @@
 # Tempo
 
 <div align="center">
-  <img src="app/src/main/ic_launcher-playstore.png" alt="Tempo Logo" width="120" height="120">
+  <img src="TempoICON.png" alt="Tempo Logo" width="120" height="120">
   <h1>Your Year in Music, Every Day.</h1>
   <p>
     <b>Universal Music Tracking • Privacy-First Analytics • Real-Time Insights</b>
