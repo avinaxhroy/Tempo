@@ -29,26 +29,6 @@
 
 ---
 
-## 📱 Screenshots
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center"><b>Home Dashboard</b></td>
-      <td align="center"><b>Spotlight Story</b></td>
-      <td align="center"><b>Detailed Stats</b></td>
-    </tr>
-    <tr>
-      <td><img src="MOCKUP/home_screen.png" width="250" /></td>
-      <td><img src="SpotlightStoryMockup/spotlight_story.png" width="250" /></td>
-      <td><img src="MOCKUP/stats_screen.png" width="250" /></td>
-    </tr>
-  </table>
-  <br/>
-  <i>(Note: These are mockups. Actual appearance may vary with your theme.)</i>
-</div>
-
----
 
 ## ✨ Features
 
