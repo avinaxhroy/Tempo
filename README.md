@@ -38,12 +38,23 @@ It runs silently in the background, building a comprehensive, "Spotify Wrapped"-
 
 Tempo isn't just a database; it is a **visual experience**.
 
-### 🌟 Living Spotlight
-Your stats come alive with our **Spotlight Story Engine**:
+### 🌟 Living Spotlight Stories
+Your stats come alive with our **Story Engine**, designed for sharing:
 *   **The Pulse:** Visualizes your listening minutes with a gentle heartbeat animation that speeds up as you listen more.
-*   **Time Devotion:** *"You spent a solid chunk of your year with..."* – Keeps track of the artists you truly committed to.
-*   **Early Adopter:** Did you find that artist before they hit 1M streams? Tempo knows. *"You discovered [Artist] on [Date]."*
-*   **Listening Peak:** *"Your volume maxed out at 2 AM on Tuesday."* Pinpoints your most intense listening sessions.
+*   **Smart Audio:** Stories fade in/out with volume normalization, preloading background tracks for a seamless audiovisual experience.
+*   **Floating Genres:** Interactive bubbles float on screen to visualize your top genres with conversational insights.
+*   **Personality Pulsar:** A cinematic reveal of your specific listening archetype (e.g., "The Party Starter", "Intense Soul").
+*   **The Conclusion Grid:** A beautiful, shareable "all-in-one" summary card that aggregates your listening time, top artist, and personality.
+
+### 📊 Deep Dive Stats
+Go beyond simple play counts with granular analytics for every Artist and Song:
+*   **Fan Status Badges:** Are you a "Casual Listener" or an "Ultimate Stan"? Earn badges based on your percentile ranking (e.g., Top 1%).
+*   **Discovery Timelines:** *"You found them on Oct 12, 2021. Since then, you've streamed 40 hours."*
+*   **Engagement Scores:** A **0-100 score** for every song, calculated from:
+    *   **Skip Rate:** Do you press next immediately?
+    *   **Completion Rate:** Do you listen to the sudden end?
+    *   **Replay Intensity:** Do you play it back-to-back?
+*   **Trend Graphs:** Beautiful cubic-bezier charts showing a song's popularity over time.
 
 ### 🧠 Deep "Vibe" Analysis
 We go beyond genres to understand the *texture* of your music:
@@ -69,6 +80,7 @@ Tempo is crafted with a global audience in mind.
 *   **Glassmorphism:** A custom-built UI system featuring frosted glass cards, dynamic blurs, and "warm violet" accents.
 *   **Fluid Motion:** Every screen transition, list item, and chart is animated for a premium feel.
 *   **Smart Colors:** The UI extracts vibrant colors from your album art to create immersive, matching backgrounds.
+*   **Shadow Renderer:** When you share a story, Tempo generates it off-screen at exactly **1080x1920px** (Instagram Story standard) to ensure it looks pixel-perfect on any device.
 
 ### 🔒 Zero-Compromise Privacy
 **Your data is YOURS. Period.**
