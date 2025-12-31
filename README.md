@@ -1,128 +1,143 @@
-<div align="center">
-  <img src="https://raw.githubusercontent.com/avinaxhroy/Tempo/main/web/assets/logo.png" alt="Tempo Logo" width="140" />
-  <br />
-  <br />
+# Tempo
 
-  <h1>Tempo</h1>
+<div align="center">
+  <img src="app/src/main/ic_launcher-playstore.png" alt="Tempo Logo" width="120" height="120">
+  <h1>Your Year in Music, Every Day.</h1>
   <p>
-    <b>The Only Music Tracker You'll Ever Need.</b>
+    <b>Universal Music Tracking • Privacy-First Analytics • Real-Time Insights</b>
   </p>
-  
-  <p>
-    <a href="https://github.com/avinaxhroy/Tempo/releases">
-      <img src="https://img.shields.io/badge/Download-APK-success?style=for-the-badge&logo=android" alt="Download APK" />
-    </a>
-  </p>
-  
-  <p>
-    <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-2.0.0-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" /></a>
-    <a href="https://developer.android.com/jetpack/compose"><img src="https://img.shields.io/badge/Jetpack%20Compose-1.6.2-4285F4?style=for-the-badge&logo=android&logoColor=white" alt="Compose" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/License-Source%20Available-red?style=for-the-badge" alt="License" /></a>
-  </p>
+
+  [![Kotlin](https://img.shields.io/badge/Kotlin-100%25-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+  [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-UI-4285F4?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com/jetpack/compose)
+  [![Privacy First](https://img.shields.io/badge/Privacy-Local%20Only-success?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/avinaxhroy/Tempo/blob/main/PRIVACY.md)
+  [![Offline Ready](https://img.shields.io/badge/Offline-100%25-orange?style=for-the-badge&logo=rss&logoColor=white)](#)
+
 </div>
 
 ---
 
-## 🎵 Why Tempo?
+## Why Tempo?
 
-Most of us listen to music everywhere—Spotify for discovery, YouTube for mixes, and local files for high-res audio. The problem? **Your stats are scattered.**
+Most music apps lock your stats behind a yearly barrier. **Tempo breaks that wall.**
 
-Tempo fixes this. It runs silently in the background, unifying your listening history from **20+ apps** into one beautiful, private dashboard.
+It runs silently in the background, building a comprehensive, "Spotify Wrapped"-style profile of your listening habits in **real-time**. Whether you're streaming 2024's hits or spinning local MP3s from 2005, Tempo tracks it all, unifies it all, and presents it with a level of polish and poetry you've never seen before.
 
-### 🧩 The Problems We Solve
+### 🚫 The Problem
+*   **Fragmented History:** You listen on Spotify, YouTube Music, and local players. Your stats are scattered everywhere.
+*   **The Waiting Game:** You have to wait until December to see your "Top Songs."
+*   **Surface-Level Data:** Most apps just tell you *what* you played, not *how* it felt.
 
-| The Problem | The Tempo Solution |
-| :--- | :--- |
-| **Fragmented History** | **Universal Sync:** Tracks Spotify, YouTube Music, Apple Music, and local players seamlessly. |
-| **Messy Metadata** | **Smart Hygiene:** Auto-fetches high-res art, tags, and genres. No more "Unknown Artist". |
-| **Fake "Plays"** | **Real Listening:** We track *actual* duration. Skipping a song after 5 seconds doesn't count. |
-| **Polluted Stats** | **Ad-Block for Stats:** Automatically detects and ignores ads from Spotify and YouTube. |
-| **Waiting for Dec 31** | **Instant Spotlight:** Get your "Wrapped" style story cards *any day*, *any time*. |
-
----
-
-## 📊 Unique Stats: The Deep Dive
-
-Tempo goes beyond simple play counts. Our local-first engine analyzes your listening habits to give you insights you won't find anywhere else.
-
-### 🎭 What's Your Vibe?
-We analyze audio features (Energy, Valence, Danceability) to detect your current mood:
-- **⚡ High Energy Mode:** When you're blasting workout tracks (>70% energy).
-- **💃 Ready to Dance:** When your playlist is full of club bangers.
-- **🎸 Acoustic Soul:** When you're in a raw, unplugged mood.
-- **🐢 Slow & Steady:** When you're chilling with low-tempo lo-fi beats.
-
-### 🦉 Listening Personality
-Are you a...
-- **Night Owl:** You do your best listening between 12 AM - 5 AM.
-- **Completionist:** You rarely skip and finish >80% of songs.
-- **Skipper:** You're always hunting for the next vibe (>30% skip rate).
-- **Morning Person:** You start your day with music (5 AM - 11 AM).
-
-### 📈 Detailed Analytics
-- **Binge Detector:** Caught listening to the same song 20 times in a row? We'll track it.
-- **Discovery Trends:** See exactly how many *new* artists you discovered this month vs last month.
-- **Listening Streak:** Don't break the chain! Track your daily listening habit.
+### ✅ The Tempo Solution
+*   **Universal Sync:** Tracks music from **20+ apps** (Spotify, Apple Music, YouTube Music, etc.) and unifies them into one timeline.
+*   **Instant Spotlight:** View your "Year in Review" for *any* time range (Today, This Week, All Time), instantly.
+*   **Poetic Insights:** We don't just count plays; we analyze your "Vibe," your "Era," and your "Listening Personality."
 
 ---
 
-## 📱 Supported Apps
+## The "Wow" Features
 
-Tempo works with almost every media player on Android. Verified support includes:
+Tempo isn't just a database; it is a **visual experience**.
 
-*   **Streaming:** Spotify, YouTube Music, Apple Music, Tidal, Deezer, Amazon Music, JioSaavn, Wynk, Gaana.
-*   **Local Players:** Samsung Music, Mi Music, Sony Music, Otto Music, Auxio, Poweramp, Pulsar, Musicolet.
-*   **Browsers:** Chrome, Firefox, Brave (for web players).
+### 🌟 Living Spotlight
+Your stats come alive with our **Spotlight Story Engine**:
+*   **The Pulse:** Visualizes your listening minutes with a gentle heartbeat animation that speeds up as you listen more.
+*   **Time Devotion:** *"You spent a solid chunk of your year with..."* – Keeps track of the artists you truly committed to.
+*   **Early Adopter:** Did you find that artist before they hit 1M streams? Tempo knows. *"You discovered [Artist] on [Date]."*
+*   **Listening Peak:** *"Your volume maxed out at 2 AM on Tuesday."* Pinpoints your most intense listening sessions.
 
-> **Note:** We actively block video apps (TikTok, Instagram, Netflix) so your music stats aren't ruined by 10-minute vlogs.
+### 🧠 Deep "Vibe" Analysis
+We go beyond genres to understand the *texture* of your music:
+*   **Mood Modes:** Are you in a "High Energy Mode" or an "Acoustic Soul" phase? Tempo analyzes Energy, Valence, and Danceability.
+*   **Personality Profiles:**
+    *   **The Completionist:** You finish every album you start.
+    *   **The Night Owl:** Your best listening happens after midnight.
+    *   **The Fabricator:** You curate disparate tracks into cohesive playlists.
+*   **Behavioral Tracking:** Detects "Binges" (repetitive listening) and "Streaks" (daily consistency).
+
+### 🌍 Hemisphere-Aware Poetry
+Tempo is crafted with a global audience in mind.
+*   **Seasonal Awareness:** The app detects your location (Northern vs. Southern Hemisphere) and adjusts its poetic summaries accordingly.
+    *   *Northern October:* "October sharpens the picture."
+    *   *Southern October:* "October gathers momentum."
+*   **Global Context:** Whether you're in a tropical zone or the arctic, Tempo's language reflects *your* season.
 
 ---
 
-## 🛡️ Privacy First
+## Design & Privacy
 
-Your data is **yours**.
-*   **Offline Database:** All history is stored locally on your device in a Room database.
-*   **No Servers:** We don't have a backend. We don't want your data.
-*   **Encrypted Backups:** (Optional) Sync your database to your own Google Drive.
+### 🎨 Deep Ocean Design
+*   **Glassmorphism:** A custom-built UI system featuring frosted glass cards, dynamic blurs, and "warm violet" accents.
+*   **Fluid Motion:** Every screen transition, list item, and chart is animated for a premium feel.
+*   **Smart Colors:** The UI extracts vibrant colors from your album art to create immersive, matching backgrounds.
+
+### 🔒 Zero-Compromise Privacy
+**Your data is YOURS. Period.**
+*   **Local First:** All data is stored in a `Room` database directly on your device.
+*   **No Servers:** We have no backend. We couldn't sell your data even if we wanted to.
+*   **Full Control:**
+    *   **Export:** Download your entire history (including cached images) as a ZIP file.
+    *   **Import:** Restore backups with smart conflict resolution (Skip vs. Replace).
+    *   **Clear:** Wipe everything with one button.
 
 ---
 
-## 🛠️ For Developers
+## Technical Mastery
 
-Tempo is a modern Android codebase showcasing best practices.
+Ideally suited for developers and enthusiasts who appreciate clean architecture.
 
-### Tech Stack
-*   **Language**: Kotlin 100%
-*   **UI**: Jetpack Compose (Material 3)
-*   **Architecture**: MVVM + Clean Architecture
-*   **Dependency Injection**: Hilt
-*   **Asynchronous**: Coroutines + Flow
-*   **Database**: Room (SQLite)
-*   **Background**: WorkManager (for robust metadata enrichment)
+### Under the Hood
+*   **Architecture:** Clean Architecture + MVVM.
+*   **Language:** 100% Kotlin.
+*   **UI:** Jetpack Compose (Single Activity).
+*   **Dependency Injection:** Hilt / Dagger.
+*   **Background Tasks:** WorkManager (Reliable Enrichment & Notifications).
+*   **Image Loading:** Coil (with sophisticated caching strategies).
 
-### Building from Source
+### Smart Enrichment Engine
+When you play a song, Tempo triggers a **6-Stage Fallback Strategy** to find the perfect metadata:
+1.  **Spotify:** Primary source for High-Res Art & Audio Features.
+2.  **MusicBrainz:** The gold standard for open metadata.
+3.  **Last.fm:** Crowd-sourced tags and bio data.
+4.  **iTunes:** High-quality fallbacks for regional/niche tracks.
+5.  **Deezer:** Additional cover art source.
+6.  **ReccoBeats:** (Internal) Last line of defense.
+
+*Note: This runs silently in the background, respecting API rate limits and battery life.*
+
+---
+
+## Download & Build
+
+### 📥 Get the App
+*Currently in private beta. Check the [Releases](https://github.com/avinaxhroy/Tempo/releases) tab for the latest APK.*
+
+### 🛠️ Build from Source
+Prerequisites: Android Studio Koala+, JDK 17.
+
 ```bash
+# 1. Clone the repo
 git clone https://github.com/avinaxhroy/Tempo.git
-cd Tempo
-# Create a local.properties file with your API keys if needed (optional for basic build)
-./gradlew :app:assembleDebug
+
+# 2. Add your API keys (Optional for core tracking, required for Enrichment)
+# Create a local.properties file and add:
+# spotify.client.id=YOUR_ID
+# spotify.client.secret=YOUR_SECRET
+
+# 3. Build
+./gradlew assembleDebug
 ```
 
 ---
 
-## 📄 License
+## License
 
-**Source Available License**
+Tempo is open-source software. You are free to view, learn from, and modify the code for personal use.
+**Commercial redistribution, rebranding, or selling of this application is strictly prohibited.**
 
-This project is open for study and personal use.
-*   ✅ You may view, modify, and use the code for personal projects.
-*   ❌ **Commercial use is strictly prohibited.**
-*   ❌ **Rebranding and distributing as your own app is prohibited.**
-*   ❌ **Monetization (ads, subscriptions) is prohibited.**
+See the [LICENSE](LICENSE) file for details.
 
-See `LICENSE` for full details.
+---
 
-<br />
 <div align="center">
-  <p>Built with ❤️ by <a href="https://github.com/avinaxhroy">Avinash</a></p>
+  <p>Made with ❤️ and too much caffeine by Avinash.</p>
 </div>
