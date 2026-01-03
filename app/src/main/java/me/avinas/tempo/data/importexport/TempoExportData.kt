@@ -7,12 +7,12 @@ import me.avinas.tempo.data.local.entities.*
  * Complete export data model for Tempo backup.
  * 
  * Includes all entity types and metadata for a complete backup/restore.
- * Images are NOT bundled - URLs are preserved and Coil fetches on-demand.
  * 
  * Version history:
  * - v1: Initial format
  * - v2: Added image bundling (deprecated)
  * - v3: Removed image bundling for lightweight exports
+ * - v4: Smart image bundling (local only) + hotlink pre-caching
  */
 @JsonClass(generateAdapter = true)
 data class TempoExportData(
@@ -30,12 +30,18 @@ data class TempoExportData(
     val enrichedMetadata: List<EnrichedMetadata> = emptyList(),
     val userPreferences: UserPreferences? = null,
     
-    // Deprecated: kept for backward compatibility when importing old exports
-    @Deprecated("Image bundling removed in v3 - URLs preserved in entity data")
+    // v4: Local images bundled in ZIP (bundledFilename -> originalFilePath)
+    val localImageManifest: Map<String, String> = emptyMap(),
+    
+    // v4: Hotlinked URLs to pre-cache after restore
+    val hotlinkedUrls: List<String> = emptyList(),
+    
+    // Deprecated: kept for backward compatibility with v2 exports
+    @Deprecated("Replaced by localImageManifest in v4")
     val imageManifest: Map<String, String> = emptyMap()
 ) {
     companion object {
-        const val CURRENT_VERSION = 3
+        const val CURRENT_VERSION = 4
         const val DATA_FILENAME = "data.json"
     }
 }

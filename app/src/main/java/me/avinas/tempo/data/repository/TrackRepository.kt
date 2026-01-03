@@ -9,4 +9,5 @@ interface TrackRepository {
     suspend fun insert(track: Track): Long
     suspend fun update(track: Track)
     fun all(): Flow<List<Track>>
+    suspend fun searchTracks(query: String): List<Track>
 }

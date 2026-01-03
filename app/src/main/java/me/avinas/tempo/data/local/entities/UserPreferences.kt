@@ -11,5 +11,9 @@ data class UserPreferences(
     val spotifyLinked: Boolean = false,
     // Extended audio analysis downloads 30s preview audio for mood/energy analysis
     // Default false to save data usage - only ReccoBeats DB lookup is used by default
-    val extendedAudioAnalysis: Boolean = false
+    val extendedAudioAnalysis: Boolean = false,
+    
+    // Smart Metadata: Merge "Live", "Remix", etc. with studio versions by default
+    // True = Cleaner library (User request), False = Precise separation
+    val mergeAlternateVersions: Boolean = true
 )

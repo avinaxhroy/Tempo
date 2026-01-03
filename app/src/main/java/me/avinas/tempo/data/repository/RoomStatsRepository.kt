@@ -1375,16 +1375,40 @@ class RoomStatsRepository @Inject constructor(
             var track = trackDao.getTrackById(trackId) ?: throw NoSuchElementException("Track not found")
             val enrichedMetadata = enrichedMetadataDao.forTrackSync(trackId)
             
-            // If track doesn't have album art, try to get it from enriched metadata
-            if (track.albumArtUrl.isNullOrBlank()) {
-                val enrichedArtUrl = enrichedMetadata?.albumArtUrl 
-                    ?: enrichedMetadata?.albumArtUrlSmall 
-                    ?: enrichedMetadata?.albumArtUrlLarge
-                if (!enrichedArtUrl.isNullOrBlank()) {
-                    track = track.copy(albumArtUrl = enrichedArtUrl)
-                    // Also update the track in DB so it's cached for next time
-                    trackDao.update(track)
-                }
+            // Smart fallback strategy:
+            // - EnrichedMetadata has hotlink URL (from API)
+            // - Track table has local backup URL (from MediaSession bitmap)
+            // - UI tries hotlink first, falls back to local if it fails
+            // - If hotlink works, local file gets deleted to save storage
+            
+            // Get enriched hotlink URL (remote)
+            val enrichedArtUrl = enrichedMetadata?.albumArtUrl 
+                ?: enrichedMetadata?.albumArtUrlSmall 
+                ?: enrichedMetadata?.albumArtUrlLarge
+            
+            // Fix HTTP to HTTPS for enriched URL
+            val fixedEnrichedUrl = me.avinas.tempo.data.enrichment.MusicBrainzEnrichmentService.fixHttpUrl(enrichedArtUrl)
+            
+            // Fix HTTP to HTTPS for track URL (may be local backup)
+            val fixedTrackUrl = me.avinas.tempo.data.enrichment.MusicBrainzEnrichmentService.fixHttpUrl(track.albumArtUrl)
+            
+            // Determine which is hotlink and which is local backup
+            val isEnrichedRemote = fixedEnrichedUrl?.startsWith("http") == true
+            val isTrackLocal = fixedTrackUrl?.startsWith("file://") == true
+            
+            // Strategy:
+            // - If we have enriched hotlink: use it in track.albumArtUrl, keep local in localBackupArtUrl
+            // - If no enriched: use local in track.albumArtUrl, no backup needed
+            val (primaryUrl, backupUrl) = when {
+                isEnrichedRemote && isTrackLocal -> fixedEnrichedUrl to fixedTrackUrl
+                isEnrichedRemote && !isTrackLocal -> fixedEnrichedUrl to null
+                !isEnrichedRemote && isTrackLocal -> fixedTrackUrl to null
+                else -> (fixedEnrichedUrl ?: fixedTrackUrl) to null
+            }
+            
+            // Update track with primary URL
+            if (primaryUrl != null && primaryUrl != track.albumArtUrl) {
+                track = track.copy(albumArtUrl = primaryUrl)
             }
             
             val playCount = statsDao.getTrackPlayCount(trackId)
@@ -1409,7 +1433,8 @@ class RoomStatsRepository @Inject constructor(
                 lastPlayed = lastPlayed,
                 isFavorite = isFavorite,
                 appleMusicUrl = enrichedMetadata?.appleMusicUrl?.takeIf { it.isNotBlank() },
-                spotifyUrl = enrichedMetadata?.spotifyTrackUrl?.takeIf { it.isNotBlank() }
+                spotifyUrl = enrichedMetadata?.spotifyTrackUrl?.takeIf { it.isNotBlank() },
+                localBackupArtUrl = backupUrl  // Local backup for fallback
             )
         }
     }

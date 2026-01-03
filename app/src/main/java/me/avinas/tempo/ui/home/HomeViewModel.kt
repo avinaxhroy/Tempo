@@ -1,6 +1,10 @@
 package me.avinas.tempo.ui.home
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -143,12 +147,60 @@ class HomeViewModel @Inject constructor(
                         audioFeatures = audioFeatures,
                         insights = insights,
                         userName = userName,
-                        hasData = hasData
+                        hasData = hasData,
+                        showRateAppPopup = shouldShowRateApp(overview.totalListeningTimeMs, overview.totalPlayCount)
                     )
                 }
             }
         } catch (e: Exception) {
             _uiState.update { it.copy(isLoading = false, error = e.message) }
+        }
+    }
+
+    private suspend fun shouldShowRateApp(totalTimeMs: Long, playCount: Int): Boolean {
+        // Engagement Check: > 2 hours listening AND > 50 plays
+        if (totalTimeMs < 2 * 60 * 60 * 1000 || playCount < 50) return false
+
+        val preferences = context.dataStore.data.first()
+        val hasRated = preferences[booleanPreferencesKey("rate_app_rated")] ?: false
+        if (hasRated) return false
+
+        val dismissCount = preferences[intPreferencesKey("rate_app_dismiss_count")] ?: 0
+        if (dismissCount >= 2) return false // Don't show if dismissed twice
+
+        val lastShown = preferences[longPreferencesKey("rate_app_last_shown")] ?: 0L
+        val threeDaysMs = 3 * 24 * 60 * 60 * 1000L
+        
+        // If never shown or shown more than 3 days ago
+        if (System.currentTimeMillis() - lastShown > threeDaysMs) {
+             // Mark as shown today
+             context.dataStore.edit { prefs ->
+                 prefs[longPreferencesKey("rate_app_last_shown")] = System.currentTimeMillis()
+             }
+             return true
+        }
+        
+        return false // Shown recently
+    }
+
+    fun onRateAppClicked() {
+        viewModelScope.launch {
+            context.dataStore.edit { prefs ->
+                prefs[booleanPreferencesKey("rate_app_rated")] = true
+            }
+            // Hide popup
+            _uiState.update { it.copy(showRateAppPopup = false) }
+        }
+    }
+    
+    fun onRateAppDismissed() {
+         viewModelScope.launch {
+            context.dataStore.edit { prefs ->
+                val current = prefs[intPreferencesKey("rate_app_dismiss_count")] ?: 0
+                prefs[intPreferencesKey("rate_app_dismiss_count")] = current + 1
+            }
+            // Hide popup
+            _uiState.update { it.copy(showRateAppPopup = false) }
         }
     }
 }
@@ -169,5 +221,6 @@ data class HomeUiState(
     val mostActiveHour: me.avinas.tempo.data.stats.HourlyDistribution? = null,
     val audioFeatures: me.avinas.tempo.data.stats.AudioFeaturesStats? = null,
     val insights: List<me.avinas.tempo.data.stats.InsightCardData> = emptyList(),
-    val userName: String? = null
+    val userName: String? = null,
+    val showRateAppPopup: Boolean = false
 )

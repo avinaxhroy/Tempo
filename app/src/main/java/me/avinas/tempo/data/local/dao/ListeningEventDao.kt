@@ -60,6 +60,12 @@ interface ListeningEventDao {
     @Query("DELETE FROM listening_events WHERE track_id = :trackId")
     suspend fun deleteByTrackId(trackId: Long)
     
+    /**
+     * Move events from one track to another (used during merge).
+     */
+    @Query("UPDATE listening_events SET track_id = :targetTrackId WHERE track_id = :sourceTrackId")
+    suspend fun reattributeEvents(sourceTrackId: Long, targetTrackId: Long)
+    
     // =====================
     // Enhanced Engagement Queries
     // =====================

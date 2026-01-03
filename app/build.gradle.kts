@@ -22,12 +22,24 @@ android {
     namespace = "me.avinas.tempo"
     compileSdk = 35
 
+    signingConfigs {
+        create("release") {
+            val keystoreFile = localProperties.getProperty("STORE_FILE")
+            if (keystoreFile != null) {
+                storeFile = file(keystoreFile)
+                storePassword = localProperties.getProperty("STORE_PASSWORD")
+                keyAlias = localProperties.getProperty("KEY_ALIAS")
+                keyPassword = localProperties.getProperty("KEY_PASSWORD")
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "me.avinas.tempo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 310
-        versionName = "3.1.0"
+        versionCode = 350
+        versionName = "3.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -37,6 +49,7 @@ android {
         buildConfigField("String", "MUSICBRAINZ_USER_AGENT", "\"Tempo/${versionName} (https://github.com/avinaxhroy/Tempo; avinashroy.bh@gmail.com)\"")
         buildConfigField("Long", "MUSICBRAINZ_RATE_LIMIT_MS", "1000L")
         buildConfigField("String", "LASTFM_API_KEY", "\"${localProperties.getProperty("LASTFM_API_KEY", "")}\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${localProperties.getProperty("GOOGLE_WEB_CLIENT_ID", "")}\"")
     }
     
     buildTypes {
@@ -47,6 +60,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -156,6 +170,26 @@ dependencies {
     // Moshi Kotlin adapter
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
     ksp("com.squareup.moshi:moshi-kotlin-codegen:1.15.1")
+
+    // Credential Manager for Google Sign-In (modern replacement for GoogleSignInClient)
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+
+    // Google Drive REST API
+    implementation("com.google.api-client:google-api-client-android:2.2.0") {
+        exclude(group = "org.apache.httpcomponents")
+    }
+    implementation("com.google.apis:google-api-services-drive:v3-rev20231128-2.0.0") {
+        exclude(group = "org.apache.httpcomponents")
+    }
+    implementation("com.google.http-client:google-http-client-gson:1.44.1")
+
+    // Play Services Auth for AuthorizationClient (Drive scopes)
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
+
+    // Coroutines extension for Play Services (await())
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

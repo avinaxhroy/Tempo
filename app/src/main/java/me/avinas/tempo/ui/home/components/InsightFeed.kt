@@ -20,13 +20,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
-import coil.compose.AsyncImage
 import me.avinas.tempo.data.stats.InsightCardData
 import me.avinas.tempo.data.stats.InsightType
 import me.avinas.tempo.ui.components.GlassCard
@@ -34,6 +32,7 @@ import me.avinas.tempo.ui.components.GlassCardVariant
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Celebration
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Piano
@@ -42,6 +41,7 @@ import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Star
 
 @Composable
 fun InsightFeed(
@@ -205,6 +205,7 @@ fun InsightCard(
         InsightType.STREAK -> Icons.Filled.LocalFireDepartment to Color(0xFFF97316) // Orange
         InsightType.GENRE -> Icons.AutoMirrored.Filled.QueueMusic to Color(0xFFE11D48) // Rose
         InsightType.ENGAGEMENT -> Icons.Filled.Favorite to Color(0xFFDB2777) // Pink
+        InsightType.RATE_APP -> Icons.Filled.Star to Color(0xFFFFD700) // Gold
         else -> Icons.Filled.Settings to Color.Gray
     }
 

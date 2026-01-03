@@ -121,12 +121,13 @@ fun PermissionScreen(
                 .fillMaxSize()
                 .padding(24.dp)
                 .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(modifier = Modifier.height(24.dp))
+
             // Hero Illustration
             GlassCard(
-                modifier = Modifier.size(160.dp),
+                modifier = Modifier.size(120.dp),
                 backgroundColor = Color(0xFFF59E0B).copy(alpha = 0.1f), // Amber tint for notifications
                 contentPadding = PaddingValues(0.dp)
             ) {
@@ -137,7 +138,7 @@ fun PermissionScreen(
                     // Inner glow
                     Box(
                         modifier = Modifier
-                            .size(100.dp)
+                            .size(80.dp)
                             .background(
                                 brush = Brush.radialGradient(
                                     colors = listOf(Color(0xFFF59E0B).copy(alpha = 0.4f), Color.Transparent)
@@ -149,33 +150,120 @@ fun PermissionScreen(
                     Icon(
                         imageVector = Icons.Default.Notifications,
                         contentDescription = null,
-                        modifier = Modifier.size(80.dp),
+                        modifier = Modifier.size(56.dp),
                         tint = Color.White
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "Enable Music Tracking",
+                text = "One Permission Needed",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 color = Color.White
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Tempo needs access to your notifications to track what you're listening to. This runs in the background and doesn't drain your battery.",
-                style = MaterialTheme.typography.bodyLarge,
+                text = "This is how Tempo sees what you're playing",
+                style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
-                color = Color.White.copy(alpha = 0.7f),
-                lineHeight = 24.sp
+                color = Color.White.copy(alpha = 0.7f)
             )
 
-            Spacer(modifier = Modifier.height(64.dp))
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Comparison Row
+            Row(
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // What we DO read
+                GlassCard(
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    backgroundColor = Color(0xFF22C55E).copy(alpha = 0.1f),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color(0xFF22C55E).copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("✓", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold)
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Text(
+                            text = "MUSIC ONLY",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF22C55E),
+                            letterSpacing = 1.sp
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "Spotify, YouTube,\n& essentially any\nmusic player",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.9f),
+                            textAlign = TextAlign.Center,
+                            lineHeight = 20.sp
+                        )
+                    }
+                }
+
+                // What we DON'T read
+                GlassCard(
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    backgroundColor = Color(0xFFEF4444).copy(alpha = 0.08f),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color(0xFFEF4444).copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("✗", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Text(
+                            text = "PRIVATE DATA",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFEF4444),
+                            letterSpacing = 1.sp
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "We ignore chats,\nOTPs, emails, and\neverything else",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.6f),
+                            textAlign = TextAlign.Center,
+                            lineHeight = 20.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
 
             Button(
                 onClick = {
@@ -195,13 +283,13 @@ fun PermissionScreen(
                 )
             ) {
                 Text(
-                    text = "Enable Tracking",
-                    fontSize = 18.sp,
+                    text = "Enable Notification Access",
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             TextButton(onClick = onSkip) {
                 Text(
@@ -211,15 +299,28 @@ fun PermissionScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Privacy note
-            Text(
-                text = "🔒 All data stays on your device",
-                textAlign = TextAlign.Center,
-                fontSize = 12.sp,
-                color = Color.Gray
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "🔒",
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Runs efficiently in background • No battery drain",
+                    textAlign = TextAlign.Center,
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

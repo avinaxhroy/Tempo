@@ -10,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import me.avinas.tempo.ui.home.HomeScreen
 import me.avinas.tempo.ui.settings.SettingsScreen
+import me.avinas.tempo.ui.settings.BackupRestoreScreen
 import me.avinas.tempo.ui.spotlight.SpotlightScreen
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import kotlinx.coroutines.launch
@@ -43,6 +44,7 @@ sealed class Screen(val route: String) {
         fun createRoute(albumId: Long) = "album_details/$albumId"
     }
     object Insights : Screen("insights")
+    object BackupRestore : Screen("backup_restore")
 }
 
 @Composable
@@ -86,7 +88,13 @@ fun AppNavigation(
                     composable(Screen.Settings.route) {
                         SettingsScreen(
                             onNavigateBack = { navController.popBackStack() },
-                            onNavigateToOnboarding = onResetToOnboarding
+                            onNavigateToOnboarding = onResetToOnboarding,
+                            onNavigateToBackup = { navController.navigate(Screen.BackupRestore.route) }
+                        )
+                    }
+                    composable(Screen.BackupRestore.route) {
+                        BackupRestoreScreen(
+                            onNavigateBack = { navController.popBackStack() }
                         )
                     }
                     composable(Screen.Spotlight.route) {

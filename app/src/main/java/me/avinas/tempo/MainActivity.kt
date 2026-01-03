@@ -21,7 +21,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import me.avinas.tempo.ui.navigation.AppNavigation
 import me.avinas.tempo.ui.onboarding.AdvancedSettingsScreen
 import me.avinas.tempo.ui.onboarding.BatteryOptimizationScreen
+import me.avinas.tempo.ui.onboarding.HowItWorksScreen
 import me.avinas.tempo.ui.onboarding.OnboardingViewModel
+import me.avinas.tempo.ui.onboarding.PrivacyExplainerScreen
 import me.avinas.tempo.ui.onboarding.SpotifyConnectionBottomSheet
 import me.avinas.tempo.ui.onboarding.WelcomeScreen
 import me.avinas.tempo.ui.permissions.PermissionScreen
@@ -74,7 +76,7 @@ class MainActivity : ComponentActivity() {
 }
 
 enum class OnboardingStep {
-    WELCOME, PERMISSION, BATTERY, SETTINGS, COMPLETED
+    WELCOME, HOW_IT_WORKS, PRIVACY, PERMISSION, BATTERY, SETTINGS, RESTORE, COMPLETED
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -122,7 +124,25 @@ fun TempoApp(
         when (currentStep) {
             OnboardingStep.WELCOME -> {
                 WelcomeScreen(
-                    onGetStarted = { currentStep = OnboardingStep.PERMISSION },
+                    onGetStarted = { currentStep = OnboardingStep.HOW_IT_WORKS },
+                    onSkip = {
+                        viewModel.completeOnboarding()
+                        currentStep = OnboardingStep.COMPLETED
+                    }
+                )
+            }
+            OnboardingStep.HOW_IT_WORKS -> {
+                HowItWorksScreen(
+                    onNext = { currentStep = OnboardingStep.PRIVACY },
+                    onSkip = {
+                        viewModel.completeOnboarding()
+                        currentStep = OnboardingStep.COMPLETED
+                    }
+                )
+            }
+            OnboardingStep.PRIVACY -> {
+                PrivacyExplainerScreen(
+                    onNext = { currentStep = OnboardingStep.PERMISSION },
                     onSkip = {
                         viewModel.completeOnboarding()
                         currentStep = OnboardingStep.COMPLETED
@@ -146,17 +166,28 @@ fun TempoApp(
                 )
             }
             OnboardingStep.SETTINGS -> {
-                var extendedAnalysisEnabled by remember { mutableStateOf(false) }
+                val onboardingViewModel: me.avinas.tempo.ui.onboarding.OnboardingViewModel = hiltViewModel()
+                val onboardingUiState by onboardingViewModel.uiState.collectAsState()
+                
                 AdvancedSettingsScreen(
-                    extendedAnalysisEnabled = extendedAnalysisEnabled,
-                    onExtendedAnalysisChange = { enabled ->
-                        extendedAnalysisEnabled = enabled
-                    },
+                    extendedAnalysisEnabled = onboardingUiState.extendedAudioAnalysisEnabled,
+                    onExtendedAnalysisChange = onboardingViewModel::setExtendedAudioAnalysis,
+                    mergeVersionsEnabled = onboardingUiState.mergeAlternateVersions,
+                    onMergeVersionsChange = onboardingViewModel::setMergeAlternateVersions,
                     onContinue = {
-                        viewModel.setExtendedAudioAnalysis(extendedAnalysisEnabled)
+                        currentStep = OnboardingStep.RESTORE
+                    }
+                )
+            }
+            OnboardingStep.RESTORE -> {
+                me.avinas.tempo.ui.onboarding.RestoreScreen(
+                    onFinish = {
                         viewModel.completeOnboarding()
                         currentStep = OnboardingStep.COMPLETED
                         showSpotifySheet = true
+                    },
+                    onBack = {
+                        currentStep = OnboardingStep.SETTINGS
                     }
                 )
             }

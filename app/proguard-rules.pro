@@ -100,3 +100,29 @@
 -optimizationpasses 5
 -allowaccessmodification
 -dontpreverify
+
+# =====================================================
+# GOOGLE DRIVE API & G_CLIENT
+# =====================================================
+-keep class com.google.api.client.** { *; }
+-keep class com.google.api.services.drive.** { *; }
+-keep class com.google.gson.** { *; }
+-keep class com.google.android.gms.** { *; }
+-keep class com.google.android.libraries.identity.** { *; }
+
+# GenericJson models used by Google API Client
+-keepclassmembers class * extends com.google.api.client.json.GenericJson {
+    *;
+}
+-keep class com.google.api.client.json.GenericJson { *; }
+-keep class com.google.api.client.util.** { *; }
+
+# Prevent R8 from stripping the default constructor of model classes
+-keepclassmembers class com.google.api.services.drive.model.** {
+    <init>();
+}
+
+# Suppress warnings for missing Java and Apache classes (likely unused or optional)
+-dontwarn javax.naming.**
+-dontwarn org.ietf.jgss.**
+-dontwarn org.apache.http.**

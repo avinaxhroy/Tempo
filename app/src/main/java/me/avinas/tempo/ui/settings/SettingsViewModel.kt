@@ -18,6 +18,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -25,7 +26,8 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val database: AppDatabase,
-    private val importExportManager: ImportExportManager
+    private val importExportManager: ImportExportManager,
+    private val userPreferencesDao: me.avinas.tempo.data.local.dao.UserPreferencesDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -49,13 +51,31 @@ class SettingsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            // Load DataStore preferences
+            val dataStorePrefs = context.dataStore.data.first()
+            
+            // Load Room preferences
+            val roomPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+            
+            _uiState.value = SettingsUiState(
+                dailySummaryEnabled = dataStorePrefs[NOTIF_DAILY_KEY] ?: true,
+                weeklyRecapEnabled = dataStorePrefs[NOTIF_WEEKLY_KEY] ?: true,
+                achievementsEnabled = dataStorePrefs[NOTIF_ACHIEVEMENTS_KEY] ?: true,
+                extendedAudioAnalysisEnabled = dataStorePrefs[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
+                userName = dataStorePrefs[USER_NAME_KEY] ?: "User",
+                mergeAlternateVersions = roomPrefs.mergeAlternateVersions
+            )
+            
+            // Continue watching DataStore for updates
             context.dataStore.data.collect { preferences ->
+                val currentRoomPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
                 _uiState.value = SettingsUiState(
                     dailySummaryEnabled = preferences[NOTIF_DAILY_KEY] ?: true,
                     weeklyRecapEnabled = preferences[NOTIF_WEEKLY_KEY] ?: true,
                     achievementsEnabled = preferences[NOTIF_ACHIEVEMENTS_KEY] ?: true,
                     extendedAudioAnalysisEnabled = preferences[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
-                    userName = preferences[USER_NAME_KEY] ?: "User"
+                    userName = preferences[USER_NAME_KEY] ?: "User",
+                    mergeAlternateVersions = currentRoomPrefs.mergeAlternateVersions
                 )
             }
         }
@@ -98,6 +118,15 @@ class SettingsViewModel @Inject constructor(
     fun toggleExtendedAudioAnalysis(enabled: Boolean) {
         viewModelScope.launch {
             context.dataStore.edit { it[EXTENDED_AUDIO_ANALYSIS_KEY] = enabled }
+        }
+    }
+    
+    fun toggleMergeAlternateVersions(enabled: Boolean) {
+        viewModelScope.launch {
+            val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+            userPreferencesDao.upsert(currentPrefs.copy(mergeAlternateVersions = enabled))
+            // Update UI state immediately
+            _uiState.value = _uiState.value.copy(mergeAlternateVersions = enabled)
         }
     }
 
@@ -162,5 +191,6 @@ data class SettingsUiState(
     val extendedAudioAnalysisEnabled: Boolean = false,
     val isSpotifyConnected: Boolean = false,
     val spotifyUsername: String? = null,
-    val userName: String = "User"
+    val userName: String = "User",
+    val mergeAlternateVersions: Boolean = true
 )

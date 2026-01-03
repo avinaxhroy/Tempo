@@ -22,7 +22,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.ui.components.GlassCard
 
 @Composable
@@ -196,8 +196,8 @@ fun DashboardEarlyAdopterCard(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (data.artistImageUrl != null) {
-                    AsyncImage(
-                        model = data.artistImageUrl,
+                    CachedAsyncImage(
+                        imageUrl = data.artistImageUrl,
                         contentDescription = null,
                         modifier = Modifier
                             .size(72.dp)
@@ -256,12 +256,11 @@ fun DashboardSeasonalAnthemCard(
     ) {
         // Background Image
         if (data.albumArtUrl != null) {
-            AsyncImage(
-                model = data.albumArtUrl,
+            CachedAsyncImage(
+                imageUrl = data.albumArtUrl,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                alpha = 0.6f // Slightly brighter
+                contentScale = ContentScale.Crop
             )
         }
         

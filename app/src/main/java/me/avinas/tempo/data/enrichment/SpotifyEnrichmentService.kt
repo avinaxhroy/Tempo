@@ -623,6 +623,13 @@ class SpotifyEnrichmentService @Inject constructor(
     ) {
         val audioFeaturesJson = serializeAudioFeatures(audioFeatures)
         val primaryArtistId = spotifyTrack.artists.firstOrNull()?.id
+        
+        // Check if we should update album art based on source priority
+        // Spotify (priority 6) can replace any lower priority source
+        val currentSource = existingMetadata?.albumArtSource ?: me.avinas.tempo.data.local.entities.AlbumArtSource.NONE
+        val hasSpotifyArt = spotifyTrack.album.mediumImageUrl != null
+        val shouldUpdateArt = hasSpotifyArt && (existingMetadata?.albumArtUrl.isNullOrBlank() || 
+            currentSource.shouldBeReplacedBy(me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY))
 
         val updated = existingMetadata?.copy(
             spotifyId = spotifyTrack.id,
@@ -632,6 +639,12 @@ class SpotifyEnrichmentService @Inject constructor(
             spotifyPreviewUrl = spotifyTrack.previewUrl,
             // Use Spotify preview if we don't have one yet
             previewUrl = existingMetadata.previewUrl ?: spotifyTrack.previewUrl,
+            // Update album art if Spotify has higher priority
+            albumArtUrl = if (shouldUpdateArt) spotifyTrack.album.mediumImageUrl else existingMetadata.albumArtUrl,
+            albumArtUrlSmall = if (shouldUpdateArt) spotifyTrack.album.smallImageUrl ?: existingMetadata.albumArtUrlSmall else existingMetadata.albumArtUrlSmall,
+            albumArtUrlLarge = if (shouldUpdateArt) spotifyTrack.album.largeImageUrl ?: existingMetadata.albumArtUrlLarge else existingMetadata.albumArtUrlLarge,
+            albumArtSource = if (shouldUpdateArt) me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY else existingMetadata.albumArtSource,
+            albumTitle = existingMetadata.albumTitle ?: spotifyTrack.album.name,
             cacheTimestamp = System.currentTimeMillis()
         ) ?: EnrichedMetadata(
             trackId = trackId,
@@ -641,8 +654,17 @@ class SpotifyEnrichmentService @Inject constructor(
             audioFeaturesJson = audioFeaturesJson,
             spotifyPreviewUrl = spotifyTrack.previewUrl,
             previewUrl = spotifyTrack.previewUrl,
+            albumArtUrl = spotifyTrack.album.mediumImageUrl,
+            albumArtUrlSmall = spotifyTrack.album.smallImageUrl,
+            albumArtUrlLarge = spotifyTrack.album.largeImageUrl,
+            albumArtSource = if (hasSpotifyArt) me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY else me.avinas.tempo.data.local.entities.AlbumArtSource.NONE,
+            albumTitle = spotifyTrack.album.name,
             cacheTimestamp = System.currentTimeMillis()
         )
+        
+        if (shouldUpdateArt && existingMetadata != null) {
+            Log.d(TAG, "Spotify: Replacing ${existingMetadata.albumArtSource} album art with SPOTIFY source (with audio features)")
+        }
 
         enrichedMetadataDao.upsert(updated)
         Log.d(TAG, "Saved Spotify data for track $trackId (artistId: $primaryArtistId, url: ${spotifyTrack.externalUrls.spotify})")
@@ -877,12 +899,19 @@ class SpotifyEnrichmentService @Inject constructor(
         existingMetadata: EnrichedMetadata?,
         spotifyTrack: SpotifyTrack
     ) {
+        // Check if we should update album art based on source priority
+        // Spotify (priority 6) can replace any lower priority source
+        val currentSource = existingMetadata?.albumArtSource ?: me.avinas.tempo.data.local.entities.AlbumArtSource.NONE
+        val shouldUpdateArt = existingMetadata?.albumArtUrl.isNullOrBlank() || 
+            currentSource.shouldBeReplacedBy(me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY)
+        
         val updated = existingMetadata?.copy(
             spotifyId = spotifyTrack.id,
             albumTitle = existingMetadata.albumTitle ?: spotifyTrack.album.name,
-            albumArtUrl = existingMetadata.albumArtUrl ?: spotifyTrack.album.mediumImageUrl,
-            albumArtUrlSmall = existingMetadata.albumArtUrlSmall ?: spotifyTrack.album.smallImageUrl,
-            albumArtUrlLarge = existingMetadata.albumArtUrlLarge ?: spotifyTrack.album.largeImageUrl,
+            albumArtUrl = if (shouldUpdateArt) spotifyTrack.album.mediumImageUrl ?: existingMetadata.albumArtUrl else existingMetadata.albumArtUrl,
+            albumArtUrlSmall = if (shouldUpdateArt) spotifyTrack.album.smallImageUrl ?: existingMetadata.albumArtUrlSmall else existingMetadata.albumArtUrlSmall,
+            albumArtUrlLarge = if (shouldUpdateArt) spotifyTrack.album.largeImageUrl ?: existingMetadata.albumArtUrlLarge else existingMetadata.albumArtUrlLarge,
+            albumArtSource = if (shouldUpdateArt && spotifyTrack.album.mediumImageUrl != null) me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY else existingMetadata.albumArtSource,
             trackDurationMs = spotifyTrack.durationMs,
             isrc = spotifyTrack.externalIds?.isrc,
             spotifyTrackUrl = spotifyTrack.externalUrls.spotify,
@@ -894,11 +923,16 @@ class SpotifyEnrichmentService @Inject constructor(
             albumArtUrl = spotifyTrack.album.mediumImageUrl,
             albumArtUrlSmall = spotifyTrack.album.smallImageUrl,
             albumArtUrlLarge = spotifyTrack.album.largeImageUrl,
+            albumArtSource = if (spotifyTrack.album.mediumImageUrl != null) me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY else me.avinas.tempo.data.local.entities.AlbumArtSource.NONE,
             trackDurationMs = spotifyTrack.durationMs,
             isrc = spotifyTrack.externalIds?.isrc,
             spotifyTrackUrl = spotifyTrack.externalUrls.spotify,
             cacheTimestamp = System.currentTimeMillis()
         )
+        
+        if (shouldUpdateArt && spotifyTrack.album.mediumImageUrl != null && existingMetadata != null) {
+            android.util.Log.d(TAG, "Spotify: Replacing ${existingMetadata.albumArtSource} album art with SPOTIFY source")
+        }
 
         enrichedMetadataDao.upsert(updated)
     }

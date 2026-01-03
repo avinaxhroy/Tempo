@@ -186,6 +186,12 @@ data class EnrichedMetadata(
     @ColumnInfo(name = "preview_url")
     val previewUrl: String? = null,
     
+    // Album art source tracking for priority-based replacement
+    // Higher priority sources can replace lower priority ones
+    // Priority: SPOTIFY > MUSICBRAINZ > ITUNES > DEEZER > LOCAL > NONE
+    @ColumnInfo(name = "album_art_source", defaultValue = "NONE")
+    val albumArtSource: AlbumArtSource = AlbumArtSource.NONE,
+    
     // Cache management
     @ColumnInfo(name = "cache_timestamp") 
     val cacheTimestamp: Long = System.currentTimeMillis(),
@@ -264,10 +270,16 @@ data class EnrichedMetadata(
 
     /**
      * Identify missing metadata gaps.
+     * For album art, considers both presence and source quality.
      */
     fun identifyGap(): me.avinas.tempo.data.enrichment.EnrichmentGap {
+        // Album art is considered "missing" if:
+        // 1. No URL at all, OR
+        // 2. Only LOCAL source (can be upgraded by API sources)
+        val needsAlbumArt = albumArtUrl.isNullOrBlank() || albumArtSource.isLocal()
+        
         return me.avinas.tempo.data.enrichment.EnrichmentGap(
-            missingAlbumArt = albumArtUrl.isNullOrBlank(),
+            missingAlbumArt = needsAlbumArt,
             missingGenres = genres.isEmpty(),
             missingAudioFeatures = audioFeaturesJson == null,
             missingArtistImage = !hasArtistImage(),
@@ -309,6 +321,51 @@ enum class EnrichmentStatus {
     FAILED,     // Failed, may retry
     NOT_FOUND,  // Track not found in MusicBrainz
     SKIPPED     // User skipped or track ineligible
+}
+
+/**
+ * Source of album art with priority levels.
+ * Higher priority sources provide higher quality, more reliable artwork.
+ * 
+ * Priority order (highest to lowest):
+ * 1. SPOTIFY (6) - Official album artwork from Spotify
+ * 2. MUSICBRAINZ (5) - Cover Art Archive (community verified)
+ * 3. ITUNES (4) - Apple Music artwork (high quality)
+ * 4. DEEZER (3) - Deezer album artwork
+ * 5. LOCAL (2) - Extracted from MediaSession/notification
+ * 6. NONE (0) - No album art yet
+ * 
+ * Key behavior:
+ * - LOCAL art can be replaced by any API source
+ * - API sources generally shouldn't be replaced by lower priority sources
+ * - Same-priority sources can replace each other (to refresh stale art)
+ */
+enum class AlbumArtSource(val priority: Int) {
+    NONE(0),
+    LOCAL(2),        // Extracted from device (MediaSession/notification)
+    DEEZER(3),       // Deezer album artwork
+    ITUNES(4),       // iTunes/Apple Music artwork
+    MUSICBRAINZ(5),  // Cover Art Archive (community verified)
+    SPOTIFY(6);      // Spotify official artwork (highest priority)
+    
+    /**
+     * Check if this source should be replaced by another.
+     * Returns true if the other source has higher or equal priority.
+     * Equal priority allows refreshing stale art from same source.
+     */
+    fun shouldBeReplacedBy(other: AlbumArtSource): Boolean {
+        return other.priority >= this.priority && other != NONE
+    }
+    
+    /**
+     * Check if this is a local (device-extracted) source.
+     */
+    fun isLocal(): Boolean = this == LOCAL
+    
+    /**
+     * Check if this is an API source (not local or none).
+     */
+    fun isApiSource(): Boolean = this != NONE && this != LOCAL
 }
 
 /**

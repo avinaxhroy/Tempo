@@ -93,6 +93,28 @@ Tempo is crafted with a global audience in mind.
 
 ---
 
+## 🙋 Frequently Asked Questions
+
+### 🎵 How is this different from Last.fm?
+Tempo is a **standalone music stats app**, not just a scrobbler. It stores your listening history **locally** on your device, works without any account, and focuses on **deep insights and visual stories** rather than social features.
+
+### 🔒 Is my data safe?
+**Yes.** Tempo is privacy-first and open source. All your listening data stays on your phone. We don't have servers, and we don't collect any user analytics. You are in full control of your data.
+
+### 🎧 Why connect Spotify?
+Connecting Spotify is **completely optional**. It's used *only* to fetch better metadata (artist genres, high-resolution cover art) for your tracks. Tempo tracks your music via Android notifications, so it works perfectly even without connecting Spotify.
+
+### 📺 Does it work with regular YouTube?
+**Currently, no.** We stick to YouTube Music to ensure we only track actual songs. Regular YouTube often mixes in non-music videos (vlogs, tutorials), which would clutter your music stats with irrelevant data.
+
+### 🍎 Is there an iOS version?
+**Not at the moment.** As a student developer offering this app for free and without ads, the high cost of the Apple Developer Program ($99/year) makes an iOS version impractical right now.
+
+### 🔄 What if I change phones?
+Since data is local, it lives on your device. However, **Tempo now supports Google Drive Backup.** You can back up your entire listening history to your private Google Drive and restore it seamlessly on a new phone during onboarding.
+
+---
+
 ## Technical Mastery
 
 Ideally suited for developers and enthusiasts who appreciate clean architecture.

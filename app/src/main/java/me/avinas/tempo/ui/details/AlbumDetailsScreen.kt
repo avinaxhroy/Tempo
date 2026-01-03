@@ -23,7 +23,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import coil.imageLoader
+import me.avinas.tempo.ui.components.buildCachedImageRequest
 import me.avinas.tempo.data.stats.AlbumDetails
 import me.avinas.tempo.data.stats.TrackWithStats
 
@@ -193,12 +194,19 @@ fun AlbumHeroSection(
                     )
                 }
             } else {
+                // Use cached image request for proper caching
+                val imageRequest = remember(artworkUrl) {
+                    buildCachedImageRequest(
+                        context = context,
+                        url = artworkUrl,
+                        allowHardware = false,
+                        crossfade = 150
+                    )
+                }
+                
                 AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(artworkUrl)
-                        .crossfade(true)
-                        .allowHardware(false)
-                        .build(),
+                    model = imageRequest,
+                    imageLoader = context.imageLoader,
                     contentDescription = "Album Art",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),

@@ -483,7 +483,11 @@ data class TrackDetails(
     val isFavorite: Boolean,
     // Links
     val appleMusicUrl: String? = null,
-    val spotifyUrl: String? = null
+    val spotifyUrl: String? = null,
+    // Album art fallback system
+    // enrichedArtUrl in track.albumArtUrl = hotlink from API (try first)
+    // localBackupArtUrl = local file saved from MediaSession (use if hotlink fails)
+    val localBackupArtUrl: String? = null
 ) {
     val totalTimeMinutes: Long get() = totalTimeMs / 60_000
 }

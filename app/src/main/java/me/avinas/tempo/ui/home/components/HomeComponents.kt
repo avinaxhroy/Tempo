@@ -30,7 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.data.stats.TimeRange
 import me.avinas.tempo.ui.components.GlassCard
 
@@ -252,8 +252,8 @@ fun WeekInReviewGrid(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    AsyncImage(
-                        model = topArtistImage,
+                    CachedAsyncImage(
+                        imageUrl = topArtistImage,
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -289,8 +289,8 @@ fun WeekInReviewGrid(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    AsyncImage(
-                        model = topTrackImage,
+                    CachedAsyncImage(
+                        imageUrl = topTrackImage,
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxWidth()

@@ -32,6 +32,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.ui.theme.WarmVioletAccent
+import me.avinas.tempo.ui.utils.adaptiveSize
+import me.avinas.tempo.ui.utils.adaptiveTextUnit
+import me.avinas.tempo.ui.utils.isSmallScreen
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 @Composable
 fun BatteryOptimizationScreen(
@@ -70,6 +75,8 @@ fun BatteryOptimizationScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(TempoDarkBackground) // Base background
+            .statusBarsPadding()
+            .navigationBarsPadding()
     ) {
         // Ambient Background Blobs
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -113,13 +120,14 @@ fun BatteryOptimizationScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             // Hero Illustration
             GlassCard(
-                modifier = Modifier.size(160.dp),
+                modifier = Modifier.size(adaptiveSize(160.dp, 120.dp, 100.dp)),
                 backgroundColor = Color(0xFF22C55E).copy(alpha = 0.1f), // Green tint for battery
                 contentPadding = PaddingValues(0.dp)
             ) {
@@ -130,7 +138,7 @@ fun BatteryOptimizationScreen(
                     // Inner glow
                     Box(
                         modifier = Modifier
-                            .size(100.dp)
+                            .size(adaptiveSize(100.dp, 70.dp, 60.dp))
                             .background(
                                 brush = Brush.radialGradient(
                                     colors = listOf(Color(0xFF22C55E).copy(alpha = 0.4f), Color.Transparent)
@@ -142,33 +150,36 @@ fun BatteryOptimizationScreen(
                     Icon(
                         imageVector = Icons.Default.BatteryFull,
                         contentDescription = null,
-                        modifier = Modifier.size(80.dp),
+                        modifier = Modifier.size(adaptiveSize(80.dp, 56.dp, 48.dp)),
                         tint = Color.White
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 24.dp)))
 
             Text(
                 text = "One more thing for better accuracy",
-                style = MaterialTheme.typography.headlineSmall,
+                style = if (isSmallScreen()) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
-                color = Color.White
+                color = Color.White,
+                fontSize = adaptiveTextUnit(24.sp, 20.sp),
+                lineHeight = adaptiveTextUnit(32.sp, 26.sp)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(adaptiveSize(16.dp, 8.dp)))
 
             Text(
                 text = "Let Tempo run in the background for continuous tracking. This ensures we don't miss any songs while your screen is off.",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = Color.White.copy(alpha = 0.7f),
-                lineHeight = 24.sp
+                lineHeight = adaptiveTextUnit(24.sp, 20.sp),
+                fontSize = adaptiveTextUnit(16.sp, 14.sp)
             )
 
-            Spacer(modifier = Modifier.height(64.dp))
+            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 24.dp)))
 
             Button(
                 onClick = {
@@ -176,7 +187,7 @@ fun BatteryOptimizationScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(adaptiveSize(56.dp, 48.dp)),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = TempoRed,
                     contentColor = Color.White

@@ -70,7 +70,7 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(scrollState)
-                        .padding(bottom = 100.dp), // Space for Bottom Nav
+                        .padding(bottom = 200.dp), // Space for Bottom Nav and Floating Filter
                     verticalArrangement = Arrangement.spacedBy(0.dp) // Reset spacing to handle it manually
                 ) {
                     // NEW: Vibe Header
@@ -222,6 +222,24 @@ fun HomeScreen(
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 100.dp) // Adjusted to sit above nav bar
                     .padding(horizontal = 32.dp)
+            )
+        }
+        
+        // Rate App Bottom Sheet
+        if (uiState.showRateAppPopup) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            RateAppBottomSheet(
+                onDismiss = viewModel::onRateAppDismissed,
+                onRate = {
+                    viewModel.onRateAppClicked()
+                    try {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=${context.packageName}"))
+                        context.startActivity(intent)
+                    } catch (e: android.content.ActivityNotFoundException) {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://play.google.com/store/apps/details?id=${context.packageName}"))
+                        context.startActivity(intent)
+                    }
+                }
             )
         }
     }

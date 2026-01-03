@@ -36,7 +36,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
+import me.avinas.tempo.ui.components.CachedAsyncImage
+import me.avinas.tempo.ui.components.MusicNotePlaceholder
 import me.avinas.tempo.data.repository.SortBy
 import me.avinas.tempo.data.stats.TimeRange
 import me.avinas.tempo.data.stats.TopAlbum
@@ -243,10 +244,10 @@ fun HeroStatItem(item: Any, onNavigate: () -> Unit) {
                 
                 // Image Layer
                 if (imageUrl != null) {
-                    AsyncImage(
-                        model = imageUrl,
+                    CachedAsyncImage(
+                        imageUrl = imageUrl,
                         contentDescription = null,
-                        modifier = Modifier.size(80.dp).clip(CircleShape), // Reduced from 120.dp
+                        modifier = Modifier.size(80.dp).clip(CircleShape),
                         contentScale = ContentScale.Crop
                     )
                 } else {
@@ -324,11 +325,16 @@ fun GlassStatItem(rank: Int, item: Any, onClick: () -> Unit) {
             )
             
             Box(
-                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.08f)), // Transparent White instead of Slate Blue
+                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center
             ) {
                 if (imageUrl != null) {
-                    AsyncImage(model = imageUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    CachedAsyncImage(
+                        imageUrl = imageUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
                 } else {
                     Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Color.White.copy(alpha = 0.5f))
                 }

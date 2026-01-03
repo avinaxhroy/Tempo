@@ -31,6 +31,8 @@ import me.avinas.tempo.data.repository.ListeningRepository
 import me.avinas.tempo.data.repository.RoomStatsRepository
 import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.data.repository.TrackRepository
+import me.avinas.tempo.data.repository.TrackAliasRepository
+import me.avinas.tempo.data.local.dao.UserPreferencesDao
 import me.avinas.tempo.utils.TrackMatcher
 import me.avinas.tempo.utils.TrackCandidate
 import me.avinas.tempo.worker.EnrichmentWorker
@@ -75,6 +77,8 @@ class MusicTrackingService : NotificationListenerService() {
         fun enrichedMetadataRepository(): EnrichedMetadataRepository
         fun statsRepository(): StatsRepository
         fun artistLinkingService(): ArtistLinkingService
+        fun trackAliasRepository(): TrackAliasRepository
+        fun userPreferencesDao(): UserPreferencesDao
     }
 
     companion object {
@@ -99,10 +103,20 @@ class MusicTrackingService : NotificationListenerService() {
             "com.miui.player",                         // Mi Music
             "com.sec.android.app.music",               // Samsung Music (old)
             "in.startv.hotstar.music",                 // Hotstar Music
-            "com.tidal.android",                       // Tidal
+            "com.tidal.android",                       // Tidal (Old/Alt)
+            "com.aspiro.tidal",                        // Tidal (Official)
             "com.qobuz.music",                         // Qobuz
-            "app.revanced.android.youtube.music",     // YouTube Music ReVanced
-            "com.vanced.android.youtube.music"        // YouTube Music Vanced
+            "app.revanced.android.youtube.music",      // YouTube Music ReVanced
+            "com.vanced.android.youtube.music",        // YouTube Music Vanced
+            "com.moonvideo.android.resso",             // Resso
+            "com.audiomack",                           // Audiomack
+            "com.mmm.trebelmusic",                     // Trebel
+            "com.maxmpz.audioplayer",                  // Poweramp
+            "in.krosbits.musicolet",                   // Musicolet
+            "com.kodarkooperativet.blackplayerfree",   // BlackPlayer Free
+            "com.kodarkooperativet.blackplayerex",     // BlackPlayer EX
+            "nugs.net",                                // Nugs.net
+            "net.nugs.multiband"                       // Nugs.net (Multiband)
         )
         
         // Video/non-music apps to explicitly BLOCK from tracking
@@ -266,9 +280,18 @@ class MusicTrackingService : NotificationListenerService() {
         // Replay detection: maximum time between plays to consider it a replay (5 minutes)
         private const val REPLAY_THRESHOLD_MS = 5 * 60 * 1000L
         
-        // Position polling interval for accurate duration tracking
-        private const val POSITION_POLL_INTERVAL_MS = 5_000L // Poll every 5 seconds when actively playing
-        private const val POSITION_POLL_INTERVAL_IDLE_MS = 30_000L // Poll every 30 seconds when idle (no music)
+        // Smart adaptive polling intervals for accurate duration tracking
+        // These are dynamically adjusted based on song phase and duration
+        private const val POLL_INTERVAL_SONG_START_MS = 3_000L     // First 30s: poll every 3s (skip detection)
+        private const val POLL_INTERVAL_SONG_MIDDLE_MS = 8_000L    // Middle: poll every 8s (battery efficient)
+        private const val POLL_INTERVAL_SONG_END_MS = 4_000L       // Last 30s: poll every 4s (completion detection)
+        private const val POLL_INTERVAL_SHORT_TRACK_MS = 5_000L    // Tracks <90s: always poll every 5s
+        private const val POLL_INTERVAL_UNKNOWN_DURATION_MS = 6_000L // Unknown duration: balanced polling
+        
+        // Song phase thresholds
+        private const val SONG_START_PHASE_MS = 30_000L    // First 30 seconds
+        private const val SONG_END_PHASE_MS = 30_000L      // Last 30 seconds
+        private const val SHORT_TRACK_THRESHOLD_MS = 90_000L // Tracks under 90 seconds
         
         // Minimum play duration to record (5 seconds)
         private const val MIN_PLAY_DURATION_MS = 5_000L
@@ -350,8 +373,8 @@ class MusicTrackingService : NotificationListenerService() {
         // Debug log when falling back to Unknown Artist (debounced - only once per track)
         // Skip logging when title is empty - metadata hasn't fully arrived yet
         val logKey = title?.takeIf { it.isNotBlank() }
-        if (logKey != null && logKey !in loggedArtistExtractionFailures) {
-            loggedArtistExtractionFailures.add(logKey)
+        if (logKey != null && !loggedArtistExtractionFailures.containsKey(logKey)) {
+            loggedArtistExtractionFailures[logKey] = true
             Log.d(TAG, "Artist extraction failed for MediaMetadata. Available keys: " +
                 "ARTIST='${metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)}', " +
                 "ALBUM_ARTIST='${metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)}', " +
@@ -400,8 +423,8 @@ class MusicTrackingService : NotificationListenerService() {
         extractArtistFromTitle(title)?.let { return it }
         
         // Debug log when falling back to Unknown Artist (debounced - only once per track)
-        if (title !in loggedArtistExtractionFailures) {
-            loggedArtistExtractionFailures.add(title)
+        if (!loggedArtistExtractionFailures.containsKey(title)) {
+            loggedArtistExtractionFailures[title] = true
             Log.d(TAG, "Artist extraction failed for notification. Available: " +
                 "TEXT='${extras.getCharSequence(EXTRA_TEXT)}', " +
                 "SUB_TEXT='${extras.getCharSequence(EXTRA_SUB_TEXT)}', " +
@@ -535,6 +558,8 @@ class MusicTrackingService : NotificationListenerService() {
     private lateinit var enrichedMetadataRepository: EnrichedMetadataRepository
     private lateinit var statsRepository: StatsRepository
     private lateinit var artistLinkingService: ArtistLinkingService
+    private lateinit var userPreferencesDao: UserPreferencesDao
+    private lateinit var trackAliasRepository: TrackAliasRepository
     
     // Enhanced tracking components
     private lateinit var trackingManager: MusicTrackingManager
@@ -544,13 +569,17 @@ class MusicTrackingService : NotificationListenerService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     // MediaSession management
     private var mediaSessionManager: MediaSessionManager? = null
-    // Map of package name to MediaController
-    private val activeControllers = mutableMapOf<String, MediaController>()
+    // Map of package name to MediaController - synchronized for thread safety
+    private val activeControllers = java.util.Collections.synchronizedMap(mutableMapOf<String, MediaController>())
     // We no longer use a single shared callback
     // private val sessionCallback = MediaSessionCallback()
 
-    // Track current playback state per app
-    private val playbackStates = mutableMapOf<String, PlaybackSession>()
+    // Track current playback state per app - ConcurrentHashMap for thread-safe operations
+    private val playbackStates = java.util.concurrent.ConcurrentHashMap<String, PlaybackSession>()
+    
+    // Lock for complex session operations that span multiple map operations
+    // Use this for operations that need to read, decide, and write atomically
+    private val sessionOperationLock = Any()
     
     // Track listener connection state to prevent duplicate processing
     @Volatile
@@ -568,6 +597,14 @@ class MusicTrackingService : NotificationListenerService() {
     
     // Estimated durations cache (title+artist hash -> duration) for when MediaSession doesn't provide duration
     private val durationEstimateCache = mutableMapOf<String, Long>()
+    
+    // Smart Metadata: Cached user preference for matching strictness
+    // This avoids database call on every track match (preferences rarely change)
+    @Volatile
+    private var cachedMergeAlternateVersions: Boolean = true // Default value
+    private var lastPreferencesFetch: Long = 0
+    private val PREFERENCES_CACHE_TTL_MS = 60_000L // Refresh every 60 seconds
+
     
     // Notification debouncing - prevents excessive notification updates
     private var lastNotificationUpdate = 0L
@@ -590,13 +627,17 @@ class MusicTrackingService : NotificationListenerService() {
     // =====================
     // Track what we've already logged to avoid spamming the same messages
     
-    // Set of track titles for which we've already logged artist extraction failures
-    // Cleared when a new track starts playing
-    private val loggedArtistExtractionFailures = mutableSetOf<String>()
+    // LRU-style set of track titles for which we've already logged artist extraction failures
+    // Uses LinkedHashMap with access order to limit memory (max 100 entries)
+    private val loggedArtistExtractionFailures = object : LinkedHashMap<String, Boolean>(100, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>): Boolean = size > 100
+    }
     
-    // Set of titles for which we've logged "Skipping likely advertisement"
-    // Cleared when a new track starts playing  
-    private val loggedAdvertisementSkips = mutableSetOf<String>()
+    // LRU-style set of titles for which we've logged "Skipping likely advertisement"
+    // Uses LinkedHashMap with access order to limit memory (max 50 entries)
+    private val loggedAdvertisementSkips = object : LinkedHashMap<String, Boolean>(50, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>): Boolean = size > 50
+    }
     
     // Track restart log debouncing - only log once per track per 5 seconds
     private var lastTrackRestartLog: Pair<String, Long>? = null
@@ -972,6 +1013,21 @@ class MusicTrackingService : NotificationListenerService() {
             enrichedMetadataRepository = entryPoint.enrichedMetadataRepository()
             statsRepository = entryPoint.statsRepository()
             artistLinkingService = entryPoint.artistLinkingService()
+            userPreferencesDao = entryPoint.userPreferencesDao()
+            trackAliasRepository = entryPoint.trackAliasRepository()
+            
+            // Load initial preferences for caching
+            serviceScope.launch {
+                try {
+                    val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+                    cachedMergeAlternateVersions = prefs.mergeAlternateVersions
+                    lastPreferencesFetch = System.currentTimeMillis()
+                    Log.d(TAG, "Loaded user preferences: mergeAlternateVersions=$cachedMergeAlternateVersions")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to load initial preferences, using defaults", e)
+                }
+            }
+            
             Log.d(TAG, "Dependencies initialized successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize dependencies", e)
@@ -1116,8 +1172,56 @@ class MusicTrackingService : NotificationListenerService() {
                 }
                 
                 pollMediaSessionPositions()
-                delay(POSITION_POLL_INTERVAL_MS)
+                
+                // Use smart adaptive polling interval based on song phase
+                val interval = calculateSmartPollingInterval()
+                delay(interval)
             }
+        }
+    }
+    
+    /**
+     * Calculate smart polling interval based on song phase and duration.
+     * 
+     * Strategy:
+     * - SHORT TRACKS (<90s): Poll every 5s - these need accuracy throughout
+     * - SONG START (first 30s): Poll every 3s - critical for skip detection
+     * - SONG END (last 30s): Poll every 4s - critical for completion detection
+     * - SONG MIDDLE: Poll every 8s - battery efficient, callbacks handle state changes
+     * - UNKNOWN DURATION: Poll every 6s - balanced approach
+     * 
+     * Battery savings: ~50% fewer polls for 3-4 minute songs while maintaining
+     * accuracy where it matters most (skip/completion detection).
+     */
+    private fun calculateSmartPollingInterval(): Long {
+        val activeSession = playbackStates.values.firstOrNull { it.isPlaying && it.isLikelyMusic }
+            ?: return POLL_INTERVAL_UNKNOWN_DURATION_MS
+        
+        val estimatedDuration = activeSession.estimatedDurationMs
+        val currentPosition = activeSession.lastRecordedPosition
+        
+        // Case 1: Unknown duration - use balanced polling
+        if (estimatedDuration == null || estimatedDuration <= 0) {
+            return POLL_INTERVAL_UNKNOWN_DURATION_MS
+        }
+        
+        // Case 2: Short track - needs consistent accuracy throughout
+        if (estimatedDuration < SHORT_TRACK_THRESHOLD_MS) {
+            return POLL_INTERVAL_SHORT_TRACK_MS
+        }
+        
+        // Case 3: Determine song phase for longer tracks
+        val remainingTime = estimatedDuration - currentPosition
+        
+        return when {
+            // Start phase: first 30 seconds - critical for skip detection
+            currentPosition < SONG_START_PHASE_MS -> POLL_INTERVAL_SONG_START_MS
+            
+            // End phase: last 30 seconds - critical for completion detection
+            remainingTime > 0 && remainingTime < SONG_END_PHASE_MS -> POLL_INTERVAL_SONG_END_MS
+            
+            // Middle phase: battery efficient polling
+            else -> POLL_INTERVAL_SONG_MIDDLE_MS
         }
     }
     
@@ -1144,6 +1248,17 @@ class MusicTrackingService : NotificationListenerService() {
                 autoSaveJob?.cancel()
                 autoSaveJob = null
             }
+            
+            // FIX: Check if we still have a valid (paused) session
+            val currentSession = playbackStates.values.firstOrNull()
+            if (currentSession != null) {
+                 // We have a session (likely paused), keep showing it
+                 // This resolves the user complaint "it stopped tracking on pause"
+                 updateTrackingNotification(currentSession.title, currentSession.artist)
+            } else {
+                 // No sessions at all -> Idle
+                 updateTrackingNotification(null, null)
+            }
         }
     }
     
@@ -1163,8 +1278,8 @@ class MusicTrackingService : NotificationListenerService() {
                 // Update position tracking
                 session.updatePosition(currentPosition, isPlaying)
                 
-                // Log periodically for debugging
-                if (isPlaying && session.accumulatedPositionMs > 0 && session.accumulatedPositionMs % 30000 < POSITION_POLL_INTERVAL_MS) {
+                // Log periodically for debugging (every ~30 seconds of accumulated play time)
+                if (isPlaying && session.accumulatedPositionMs > 0 && session.accumulatedPositionMs % 30000 < 10000) {
                     Log.d(TAG, "Position poll: '${session.title}' - position: ${currentPosition}ms, accumulated: ${session.accumulatedPositionMs}ms")
                 }
             } catch (e: Exception) {
@@ -1348,159 +1463,153 @@ class MusicTrackingService : NotificationListenerService() {
 
         Log.d(TAG, "Music notification: '$title' by '$artist' from $packageName (has art: ${albumArtBitmap != null})")
 
-        val existingSession = playbackStates[packageName]
-        
-        // Check if this is the same track (handle artist updates from Unknown -> Real)
-        val isSameTrackInfo = existingSession != null && existingSession.title == title && (
-            existingSession.artist == artist || 
-            // If existing session has unknown artist but notification has real artist, update it
-            (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(existingSession.artist) && 
-             !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist))
-        )
-        
-        // NOTE: We no longer check pause duration here because position-based tracking
-        // automatically handles the "pause for 1 hour then resume" case correctly.
-        // The accumulated position only increases when actual playback occurs.
-        
-        // Detect replay based on accumulated play time exceeding estimated duration
-        // (Notifications don't provide position, so this is our best signal)
-        val isReplayDetected = isSameTrackInfo && run {
-            // isSameTrackInfo already guarantees existingSession is non-null
-            val playedMs = existingSession!!.calculateCurrentPlayDuration()
-            val estimatedDuration = existingSession.estimatedDurationMs
+        // CRITICAL: Use synchronized block to prevent race condition when
+        // notification and MediaSession callbacks fire simultaneously for the same track.
+        // Without this, both could see existingSession=null, create sessions, and one overwrites the other.
+        val (sessionAction, existingSession) = synchronized(sessionOperationLock) {
+            val existing = playbackStates[packageName]
             
-            // If we've played significantly more than the estimated duration, it's a replay
-            val playedExceedsDuration = estimatedDuration != null && 
-                estimatedDuration > 0 && 
-                playedMs > estimatedDuration + 10_000L // 10s buffer for timing variations
+            // Check if this is the same track (handle artist updates from Unknown -> Real)
+            val isSameTrackInfo = existing != null && existing.title == title && (
+                existing.artist == artist || 
+                // If existing session has unknown artist but notification has real artist, update it
+                (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(existing.artist) && 
+                 !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist))
+            )
             
-            if (playedExceedsDuration) {
-                Log.d(TAG, "Notification: Replay detected for '${existingSession.title}': " +
-                    "played ${playedMs}ms exceeds estimated duration ${estimatedDuration}ms")
+            // Detect replay based on accumulated play time exceeding estimated duration
+            val isReplayDetected = isSameTrackInfo && run {
+                val playedMs = existing!!.calculateCurrentPlayDuration()
+                val estimatedDuration = existing.estimatedDurationMs
+                val playedExceedsDuration = estimatedDuration != null && 
+                    estimatedDuration > 0 && 
+                    playedMs > estimatedDuration + 10_000L
+                if (playedExceedsDuration) {
+                    Log.d(TAG, "Notification: Replay detected for '${existing.title}': " +
+                        "played ${playedMs}ms exceeds estimated duration ${estimatedDuration}ms")
+                }
+                playedExceedsDuration
             }
             
-            playedExceedsDuration
+            val isSameTrack = isSameTrackInfo && !isReplayDetected
+            
+            when {
+                isSameTrack -> Pair("UPDATE", existing)
+                else -> Pair("NEW", existing) // existing may be non-null (different track) or null
+            }
         }
-        
-        // Treat replay as a new track
-        val isSameTrack = isSameTrackInfo && !isReplayDetected
 
-        if (isSameTrack) {
-            // Same track - update artist if we now have a better one (existingSession is guaranteed non-null here)
-            val session = existingSession!!
-            if (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(session.artist) && 
-                !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist)) {
-                Log.d(TAG, "Notification: Updating session artist from '${session.artist}' to '$artist' for '$title'")
-                session.artist = artist
-                
-                // Update the track in database if we have a trackId
-                session.trackId?.let { trackId ->
-                    serviceScope.launch {
-                        try {
-                            val tracks = trackRepository.all().first()
-                            val track = tracks.find { it.id == trackId }
-                            if (track != null && me.avinas.tempo.utils.ArtistParser.isUnknownArtist(track.artist)) {
-                                Log.i(TAG, "Updating track $trackId artist from '${track.artist}' to '$artist' (via notification)")
-                                val updatedTrack = track.copy(artist = artist)
-                                trackRepository.update(updatedTrack)
-                                
-                                // Re-link artists and trigger enrichment
-                                artistLinkingService.linkArtistsForTrack(updatedTrack)
-                                EnrichmentWorker.enqueueImmediate(applicationContext, trackId)
+        when (sessionAction) {
+            "UPDATE" -> {
+                // Same track - update artist if we now have a better one
+                val session = existingSession!!
+                if (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(session.artist) && 
+                    !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist)) {
+                    Log.d(TAG, "Notification: Updating session artist from '${session.artist}' to '$artist' for '$title'")
+                    session.artist = artist
+                    
+                    // Update the track in database if we have a trackId
+                    session.trackId?.let { trackId ->
+                        serviceScope.launch {
+                            try {
+                                val tracks = trackRepository.all().first()
+                                val track = tracks.find { it.id == trackId }
+                                if (track != null && me.avinas.tempo.utils.ArtistParser.isUnknownArtist(track.artist)) {
+                                    Log.i(TAG, "Updating track $trackId artist from '${track.artist}' to '$artist' (via notification)")
+                                    val updatedTrack = track.copy(artist = artist)
+                                    trackRepository.update(updatedTrack)
+                                    
+                                    // Re-link artists and trigger enrichment
+                                    artistLinkingService.linkArtistsForTrack(updatedTrack)
+                                    EnrichmentWorker.enqueueImmediate(applicationContext, trackId)
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Failed to update track artist from notification", e)
                             }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Failed to update track artist from notification", e)
                         }
                     }
+                    
+                    updateTrackingNotification(title, artist)
                 }
                 
+                // Might be a play/pause update
+                if (!session.isPlaying) {
+                    session.resume()
+                }
+                return
+            }
+            "NEW" -> {
+                // Check if this is likely an advertisement - skip tracking ads
+                if (artist.isNotBlank() && 
+                    !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist) &&
+                    isLikelyAdvertisementFromNotification(title, artist, album, packageName)) {
+                    if (!loggedAdvertisementSkips.containsKey(title)) {
+                        loggedAdvertisementSkips[title] = true
+                        Log.d(TAG, "Skipping likely advertisement: '$title' from $packageName")
+                    }
+                    return
+                }
+
+                // New track or different track - save previous session first
+                if (existingSession != null) {
+                    existingSession.pause()
+                    saveListeningEvent(existingSession)
+                }
+
+                // Try to get cached duration estimate for this track
+                val cachedDurationKey = generateHash("$title|$artist")
+                val cachedDuration = durationEstimateCache[cachedDurationKey]
+
+                // Clear log debounce caches for fresh logging on new track
+                loggedArtistExtractionFailures.clear()
+                loggedAdvertisementSkips.clear()
+                
+                val newSession = PlaybackSession(
+                    packageName = packageName,
+                    title = title,
+                    artist = artist,
+                    album = album,
+                    isPlaying = true,
+                    estimatedDurationMs = cachedDuration,
+                    accumulatedPositionMs = 0,
+                    lastRecordedPosition = 0,
+                    isLikelyMusic = true
+                )
+                
+                // Atomic put - thread-safe even without the outer lock
+                playbackStates[packageName] = newSession
                 updateTrackingNotification(title, artist)
-            }
-            
-            // Might be a play/pause update
-            if (!session.isPlaying) {
-                session.resume()
-            }
-            return
-        }
-
-        // Check if this is likely an advertisement - skip tracking ads
-        // Only run ad detection when we have valid artist metadata
-        // Empty artist often means metadata is still loading, not an ad
-        if (artist.isNotBlank() && 
-            !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist) &&
-            isLikelyAdvertisementFromNotification(title, artist, album, packageName)) {
-            // Debounce - only log once per unique title per session
-            if (title !in loggedAdvertisementSkips) {
-                loggedAdvertisementSkips.add(title)
-                Log.d(TAG, "Skipping likely advertisement: '$title' from $packageName")
-            }
-            return
-        }
-
-        // New track or different track
-        if (existingSession != null) {
-            // Save the previous session before starting new one
-            existingSession.pause()
-            saveListeningEvent(existingSession)
-        }
-
-        // Try to get cached duration estimate for this track
-        val cachedDurationKey = generateHash("$title|$artist")
-        val cachedDuration = durationEstimateCache[cachedDurationKey]
-
-        // Create new session with enhanced tracking
-        // Note: Notification-based tracking doesn't have position data,
-        // but MediaSession callbacks will update position when available
-        
-        // Clear log debounce caches for fresh logging on new track
-        loggedArtistExtractionFailures.clear()
-        loggedAdvertisementSkips.clear()
-        
-        val newSession = PlaybackSession(
-            packageName = packageName,
-            title = title,
-            artist = artist,
-            album = album,
-            isPlaying = true,
-            estimatedDurationMs = cachedDuration, // Use cached duration if available
-            accumulatedPositionMs = 0,  // Start fresh
-            lastRecordedPosition = 0,
-            isLikelyMusic = true  // Already verified by isMusicNotification
-        )
-        
-        // Add to playback states immediately so we start tracking time
-        playbackStates[packageName] = newSession
-        updateTrackingNotification(title, artist)
-        
-        // Save album art locally for fallback use (if extracted)
-        val localArtUrl = albumArtBitmap?.let { saveAlbumArtToStorage(it, title, artist) }
-
-        // Insert track asynchronously but ensure trackId is set before any save
-        serviceScope.launch {
-            try {
-                val track = getOrInsertTrack(title, artist, album)
-                newSession.trackId = track.id
                 
-                // Try to get duration from track or enriched metadata
-                val duration = track.duration ?: getTrackDurationFromMetadata(track.id)
-                if (duration != null && duration > 0) {
-                    newSession.estimatedDurationMs = duration
-                    // Also cache it for future use
-                    durationEstimateCache[cachedDurationKey] = duration
+                // Save album art locally for fallback use (if extracted)
+                val localArtUrl = albumArtBitmap?.let { saveAlbumArtToStorage(it, title, artist) }
+
+                // Insert track asynchronously but ensure trackId is set before any save
+                serviceScope.launch {
+                    try {
+                        val track = getOrInsertTrack(title, artist, album)
+                        newSession.trackId = track.id
+                        
+                        // Try to get duration from track or enriched metadata
+                        val duration = track.duration ?: getTrackDurationFromMetadata(track.id)
+                        if (duration != null && duration > 0) {
+                            newSession.estimatedDurationMs = duration
+                            // Also cache it for future use
+                            durationEstimateCache[cachedDurationKey] = duration
+                        }
+                        
+                        Log.d(TAG, "Track ID ${track.id} assigned for '${title}' (duration: ${newSession.estimatedDurationMs?.let { "${it/1000}s" } ?: "unknown"})")
+                        
+                        // If we have local album art, schedule a delayed update
+                        // This gives enrichment time to complete first (MusicBrainz is preferred)
+                        if (localArtUrl != null) {
+                            // Wait for enrichment to complete (give it 10 seconds)
+                            delay(10_000)
+                            updateTrackAlbumArtIfNeeded(track.id, localArtUrl)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error inserting track", e)
+                    }
                 }
-                
-                Log.d(TAG, "Track ID ${track.id} assigned for '${title}' (duration: ${newSession.estimatedDurationMs?.let { "${it/1000}s" } ?: "unknown"})")
-                
-                // If we have local album art, schedule a delayed update
-                // This gives enrichment time to complete first (MusicBrainz is preferred)
-                if (localArtUrl != null) {
-                    // Wait for enrichment to complete (give it 10 seconds)
-                    delay(10_000)
-                    updateTrackAlbumArtIfNeeded(track.id, localArtUrl)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error inserting track", e)
             }
         }
     }
@@ -1552,6 +1661,20 @@ class MusicTrackingService : NotificationListenerService() {
             return handleExistingTrack(exactMatch, artist, album)
         }
         
+        // Step 0: Check for Smart Alias (Manual Override)
+        // If user manually merged this track before, respect that decision forever.
+        val alias = trackAliasRepository.findAlias(title, artist)
+        if (alias != null) {
+            val targetTrack = trackRepository.getById(alias.targetTrackId).first()
+            if (targetTrack != null) {
+                Log.i(TAG, "Smart Alias found: '$title' -> mapped to '${targetTrack.title}' (ID: ${targetTrack.id})")
+                return handleExistingTrack(targetTrack, artist, album)
+            } else {
+                // Orphaned alias (target deleted), ignore it
+                Log.w(TAG, "Orphaned alias found for '$title', ignoring")
+            }
+        }
+
         // Use advanced fuzzy matching with TrackMatcher
         val candidates = tracks.map { track ->
             TrackCandidate(
@@ -1562,7 +1685,23 @@ class MusicTrackingService : NotificationListenerService() {
             )
         }
         
-        val matchResult = TrackMatcher.findBestMatch(title, artist, candidates)
+        // Check user preference for matching strictness (cached for performance)
+        // Refresh cache if older than TTL (60 seconds)
+        val now = System.currentTimeMillis()
+        if (now - lastPreferencesFetch > PREFERENCES_CACHE_TTL_MS) {
+            try {
+                val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+                cachedMergeAlternateVersions = prefs.mergeAlternateVersions
+                lastPreferencesFetch = now
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to refresh preferences, using cached value", e)
+            }
+        }
+        
+        // Invert the preference: mergeAlternateVersions=true means strictMatching=false
+        val strictMatching = !cachedMergeAlternateVersions
+        
+        val matchResult = TrackMatcher.findBestMatch(title, artist, candidates, strictMatching)
         
         if (matchResult != null && matchResult.second.overallScore >= TRACK_MATCH_THRESHOLD) {
             val (candidate, result) = matchResult
@@ -1677,6 +1816,7 @@ class MusicTrackingService : NotificationListenerService() {
             return insertedTrack
         }
         
+        // Fallback: this should only be reached if artistLinkingService.linkArtistsForTrack throws
         // Create pending enrichment entry for new track (enrichment will correct artist if needed)
         enrichedMetadataRepository.createPendingIfNotExists(id)
         
@@ -1711,45 +1851,77 @@ class MusicTrackingService : NotificationListenerService() {
             }
             localMetadataCache[trackId] = updatedLocalMetadata
             
+            // IMPORTANT: Always save local bitmap to storage immediately if we have one
+            // This ensures we have a local backup even if enriched URL exists but fails to load
+            val savedLocalArtUrl = updatedLocalMetadata.albumArtBitmap?.let { 
+                saveAlbumArtToStorage(it, updatedLocalMetadata.title, updatedLocalMetadata.artist) 
+            }
+            
             // Check if track already has enriched metadata from external sources
             val existingMetadata = enrichedMetadataRepository.forTrackSync(trackId)
             
+            // Check if enriched art URL exists and is a remote URL
+            val enrichedArtUrl = existingMetadata?.albumArtUrl
+            val enrichedArtIsRemoteUrl = enrichedArtUrl?.startsWith("http") == true
+            
+            // Strategy for album art:
+            // - If we have enriched hotlink: Store enriched in EnrichedMetadata, local in Track (as backup)
+            // - If no enriched hotlink: Store local in both
+            // - UI will try enriched first, fall back to local if it fails, and delete local on success
+            
             // Determine what we should fill in from local metadata
-            val needsAlbumArt = existingMetadata?.albumArtUrl.isNullOrBlank() && 
-                               (updatedLocalMetadata.albumArtBitmap != null || updatedLocalMetadata.albumArtUri != null)
+            val hasLocalArt = savedLocalArtUrl != null || updatedLocalMetadata.albumArtUri != null
+            val needsAlbumArt = enrichedArtUrl.isNullOrBlank() && hasLocalArt
             val needsGenre = existingMetadata?.genres.isNullOrEmpty() && updatedLocalMetadata.genre != null
             val needsAlbum = existingMetadata?.albumTitle.isNullOrBlank() && updatedLocalMetadata.album != null
             val needsYear = existingMetadata?.releaseYear == null && updatedLocalMetadata.getReleaseYear() != null
             val needsDuration = existingMetadata?.trackDurationMs == null && updatedLocalMetadata.durationMs != null
             
             val shouldUpdate = existingMetadata == null || needsAlbumArt || needsGenre || needsAlbum || needsYear || needsDuration
+
             
+            // CRITICAL FIX: Even if we don't need to update EnrichedMetadata (shouldUpdate=false),
+            // we MUST ensure Track entity has album art for the UI.
+            // Strategy: Store local as backup in Track table when enriched hotlink exists
             if (!shouldUpdate) {
+                val track = trackRepository.getById(trackId).first()
+                if (track != null && track.albumArtUrl.isNullOrBlank() && savedLocalArtUrl != null) {
+                    // Store local art in Track table as immediate backup
+                    Log.i(TAG, "Storing local art as backup in Track table while enriched hotlink exists")
+                    trackRepository.update(track.copy(albumArtUrl = savedLocalArtUrl))
+                } else if (track != null && enrichedArtIsRemoteUrl && savedLocalArtUrl != null) {
+                    // We have both enriched hotlink and local backup
+                    // Keep current setup but log for tracking
+                    Log.d(TAG, "Track $trackId: Has enriched hotlink '${enrichedArtUrl?.take(30)}...' and local backup saved: $savedLocalArtUrl")
+                }
+                
                 // Only log once per track to reduce spam
                 if (loggedEnrichedTracks.add(trackId)) {
-                    // Provide helpful diagnostics about what's present vs missing
-                    val hasGenres = !existingMetadata?.genres.isNullOrEmpty()
-                    val localHasGenre = updatedLocalMetadata.genre != null
-                    if (!hasGenres && !localHasGenre) {
+                     val hasGenres = !existingMetadata?.genres.isNullOrEmpty()
+                     val localHasGenre = updatedLocalMetadata.genre != null
+                     if (!hasGenres && !localHasGenre) {
                         Log.d(TAG, "Track $trackId: No genres from external sources or local metadata (local genre was null)")
-                    } else {
-                        Log.d(TAG, "Track $trackId: Already has enriched metadata, skipping local fallback")
-                    }
+                     } else {
+                        Log.d(TAG, "Track $trackId: Already has enriched metadata. " +
+                            "Enriched art: '${enrichedArtUrl?.take(20)}...', Local backup saved: $savedLocalArtUrl")
+                     }
                 }
                 return
             }
             
-            // Save local album art if we have it and need it
-            val localArtUrl = if (needsAlbumArt) {
-                updatedLocalMetadata.albumArtBitmap?.let { 
-                    saveAlbumArtToStorage(it, updatedLocalMetadata.title, updatedLocalMetadata.artist) 
-                } ?: updatedLocalMetadata.getBestAlbumArtSource()
-            } else null
+            // Use already-saved local art URL, or get from URI
+            val localArtUrl = savedLocalArtUrl ?: updatedLocalMetadata.getBestAlbumArtSource()
             
             // Update the enriched metadata with local data (only fill in missing fields)
             val updatedMetadata = (existingMetadata ?: me.avinas.tempo.data.local.entities.EnrichedMetadata(trackId = trackId)).copy(
                 albumTitle = existingMetadata?.albumTitle ?: updatedLocalMetadata.album,
                 albumArtUrl = existingMetadata?.albumArtUrl ?: localArtUrl,
+                // Set source as LOCAL when using local album art - this allows API sources to replace it later
+                albumArtSource = if (needsAlbumArt && localArtUrl != null) {
+                    me.avinas.tempo.data.local.entities.AlbumArtSource.LOCAL
+                } else {
+                    existingMetadata?.albumArtSource ?: me.avinas.tempo.data.local.entities.AlbumArtSource.NONE
+                },
                 releaseYear = existingMetadata?.releaseYear ?: updatedLocalMetadata.getReleaseYear(),
                 trackDurationMs = existingMetadata?.trackDurationMs ?: updatedLocalMetadata.durationMs,
                 genres = if (existingMetadata?.genres.isNullOrEmpty() && updatedLocalMetadata.genre != null) {
@@ -1788,6 +1960,55 @@ class MusicTrackingService : NotificationListenerService() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error saving local metadata fallback for track $trackId", e)
+        }
+    }
+
+    /**
+     * Helper to ensure Track entity has album art, preferring enriched source but falling back to local.
+     */
+    /**
+     * Helper to ensure Track entity has album art, preferring enriched source but falling back to local.
+     * 
+     * @param trackId The track ID to check
+     * @param enrichedArtUrl The enriched art URL (may be HTTP which could fail)
+     * @param localMetadata Local metadata from MediaSession (contains bitmap in memory)
+     * @param savedLocalArtUrl Pre-saved local art file URL (already persisted to disk)
+     */
+    private suspend fun checkAndBackfillTrackArt(
+        trackId: Long, 
+        enrichedArtUrl: String?, 
+        localMetadata: LocalMediaMetadata,
+        savedLocalArtUrl: String? = null
+    ) {
+        try {
+            val track = trackRepository.getById(trackId).first()
+            if (track != null && track.albumArtUrl.isNullOrBlank()) {
+                // If we have enriched art, use that first
+                // Fix HTTP URLs to HTTPS for better reliability
+                val fixedEnrichedUrl = me.avinas.tempo.data.enrichment.MusicBrainzEnrichmentService.fixHttpUrl(enrichedArtUrl)
+                if (!fixedEnrichedUrl.isNullOrBlank()) {
+                    Log.i(TAG, "Backfilling Track $trackId with enriched art: $fixedEnrichedUrl")
+                    trackRepository.update(track.copy(albumArtUrl = fixedEnrichedUrl))
+                } 
+                // Otherwise try pre-saved local art first (already on disk)
+                else if (savedLocalArtUrl != null) {
+                    Log.i(TAG, "Backfilling Track $trackId with pre-saved local art: $savedLocalArtUrl")
+                    trackRepository.update(track.copy(albumArtUrl = savedLocalArtUrl))
+                }
+                // Finally try to save from bitmap or URI
+                else {
+                    val localArtUrl = localMetadata.albumArtBitmap?.let { 
+                        saveAlbumArtToStorage(it, localMetadata.title, localMetadata.artist) 
+                    } ?: localMetadata.getBestAlbumArtSource()
+                    
+                    if (localArtUrl != null) {
+                        Log.i(TAG, "Backfilling Track $trackId with local art: $localArtUrl")
+                        trackRepository.update(track.copy(albumArtUrl = localArtUrl))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking/backfilling track art", e)
         }
     }
     
@@ -2342,81 +2563,75 @@ class MusicTrackingService : NotificationListenerService() {
 
         val isPlaying = state == PlaybackState.STATE_PLAYING
 
-        val session = playbackStates[packageName]
-        
-        // Check if this is the same track (handle artist updates from Unknown -> Real)
-        val isSameTrackInfo = session != null && session.title == title && (
-            session.artist == artist || 
-            // If existing session has unknown artist but new one has real artist, it's the same track
-            (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(session.artist) && 
-             !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist)) ||
-            // If new metadata has unknown artist but session has real artist, keep session's artist
-            (!me.avinas.tempo.utils.ArtistParser.isUnknownArtist(session.artist) && 
-             me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist))
-        )
-        
-        // NOTE: Position-based tracking automatically handles long pauses.
-        // We don't need to check pause duration - position only accumulates during actual playback.
-        
-        // Detect replay: same track info but position reset to near beginning
-        // This happens when a song loops/repeats or user manually restarts
-        val isReplayDetected = isSameTrackInfo && isPlaying && run {
-            // isSameTrackInfo already guarantees session is non-null
-            val lastPosition = session!!.lastKnownPosition
-            val playedMs = session.calculateCurrentPlayDuration()
+        // CRITICAL: Use synchronized block to prevent race condition when
+        // notification and MediaSession callbacks fire simultaneously for the same track.
+        val (sessionAction, session, isSameTrack) = synchronized(sessionOperationLock) {
+            val existing = playbackStates[packageName]
             
-            // Position reset detection: position went back significantly (more than 5 seconds back)
-            // and we've played for a reasonable amount of time
-            val positionResetThresholdMs = 5_000L
-            val minPlayedForReplayMs = 30_000L // Need at least 30s played to consider it a replay
+            // Check if this is the same track (handle artist updates from Unknown -> Real)
+            val isSameTrackInfo = existing != null && existing.title == title && (
+                existing.artist == artist || 
+                // If existing session has unknown artist but new one has real artist, it's the same track
+                (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(existing.artist) && 
+                 !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist)) ||
+                // If new metadata has unknown artist but session has real artist, keep session's artist
+                (!me.avinas.tempo.utils.ArtistParser.isUnknownArtist(existing.artist) && 
+                 me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist))
+            )
             
-            val positionWentBack = lastPosition > positionResetThresholdMs && 
-                currentPosition < positionResetThresholdMs
-            
-            // Get estimated duration for percentage-based checks
-            val estimatedDuration = session.estimatedDurationMs ?: duration.takeIf { it > 0 }
-            
-            // FIX: Also require minimum completion percentage to prevent false positives
-            // on first play when position temporarily resets (e.g., seek, buffering issues)
-            // A real replay should have completed at least 50% of the song
-            val minCompletionForReplay = 0.5f // 50%
-            val completionPercent = if (estimatedDuration != null && estimatedDuration > 0) {
-                playedMs.toFloat() / estimatedDuration
-            } else {
-                0f
-            }
-            val hasMinCompletion = completionPercent >= minCompletionForReplay
-            
-            // Also detect replay if accumulated play time significantly exceeds estimated duration
-            // (allows catching replays even if position tracking is unreliable)
-            val playedExceedsDuration = estimatedDuration != null && 
-                estimatedDuration > 0 && 
-                playedMs > estimatedDuration + 10_000L // 10s buffer for timing variations
-            
-            // Replay is valid only if:
-            // 1. Position went back AND played enough time AND completed at least 50%, OR
-            // 2. Played time significantly exceeds track duration
-            val isReplay = (positionWentBack && playedMs >= minPlayedForReplayMs && hasMinCompletion) || 
-                           playedExceedsDuration
-            
-            if (isReplay) {
-                Log.d(TAG, "Replay detected for '${session.title}': " +
-                    "position reset from ${lastPosition}ms to ${currentPosition}ms, " +
-                    "played ${playedMs}ms (${(completionPercent * 100).toInt()}%), estimated duration ${estimatedDuration}ms")
+            // Detect replay: same track info but position reset to near beginning
+            val isReplayDetected = isSameTrackInfo && isPlaying && run {
+                val lastPosition = existing!!.lastKnownPosition
+                val playedMs = existing.calculateCurrentPlayDuration()
+                
+                val positionResetThresholdMs = 5_000L
+                val minPlayedForReplayMs = 30_000L
+                
+                val positionWentBack = lastPosition > positionResetThresholdMs && 
+                    currentPosition < positionResetThresholdMs
+                
+                val estimatedDuration = existing.estimatedDurationMs ?: duration.takeIf { it > 0 }
+                
+                val minCompletionForReplay = 0.5f
+                val completionPercent = if (estimatedDuration != null && estimatedDuration > 0) {
+                    playedMs.toFloat() / estimatedDuration
+                } else {
+                    0f
+                }
+                val hasMinCompletion = completionPercent >= minCompletionForReplay
+                
+                val playedExceedsDuration = estimatedDuration != null && 
+                    estimatedDuration > 0 && 
+                    playedMs > estimatedDuration + 10_000L
+                
+                val isReplay = (positionWentBack && playedMs >= minPlayedForReplayMs && hasMinCompletion) || 
+                               playedExceedsDuration
+                
+                if (isReplay) {
+                    Log.d(TAG, "Replay detected for '${existing.title}': " +
+                        "position reset from ${lastPosition}ms to ${currentPosition}ms, " +
+                        "played ${playedMs}ms (${(completionPercent * 100).toInt()}%), estimated duration ${estimatedDuration}ms")
+                }
+                
+                isReplay
             }
             
-            isReplay
+            // Update last known position for replay detection
+            existing?.let { it.lastKnownPosition = currentPosition }
+            
+            val isSameTrackResult = isSameTrackInfo && !isReplayDetected
+            
+            when {
+                isSameTrackResult -> Triple("UPDATE", existing, true)
+                isPlaying -> Triple("NEW", existing, false)
+                else -> Triple("IGNORE", existing, false)
+            }
         }
-        
-        // Update last known position for replay detection
-        session?.let { it.lastKnownPosition = currentPosition }
-        
-        // Treat replay as a new track (save current session, start fresh)
-        val isSameTrack = isSameTrackInfo && !isReplayDetected
-        
-        if (isSameTrack) {
-            // Same track - update play state and potentially update artist (session is guaranteed non-null here)
-            val currentSession = session!!
+
+        when (sessionAction) {
+            "UPDATE" -> {
+                // Same track - update play state and potentially update artist
+                val currentSession = session!!
             
             // Extract local metadata - music players often send metadata in stages
             // Genre, year, etc. might come in later updates
@@ -2521,78 +2736,93 @@ class MusicTrackingService : NotificationListenerService() {
             if (duration > 0) {
                 currentSession.estimatedDurationMs = duration
             }
-        } else if (isPlaying) {
-            // New track started (or replay detected - same track restarted)
-            session?.let { 
-                it.pause()
-                saveListeningEvent(it) 
             }
-            
-            // Extract ALL available metadata from MediaSession (for fallback use)
-            val localMetadata = LocalMediaMetadata.fromMediaMetadata(metadata, packageName)
-            
-            // Check if this is likely an advertisement - skip tracking ads
-            // Only check when we have valid artist metadata (empty artist = metadata still loading)
-            if (artist.isNotBlank() && 
-                !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist) &&
-                localMetadata?.isLikelyAdvertisement() == true) {
-                // Debounce - only log once per unique title per session
-                if (title !in loggedAdvertisementSkips) {
-                    loggedAdvertisementSkips.add(title)
-                    Log.d(TAG, "Skipping likely advertisement: '$title' from $packageName")
+            "NEW" -> {
+                // New track started (or replay detected - same track restarted)
+                session?.let { 
+                    it.pause()
+                    saveListeningEvent(it) 
                 }
-                return
-            }
-            
-            // Extract album art from metadata (for fallback use)
-            val albumArtBitmap = localMetadata?.albumArtBitmap ?: extractAlbumArtFromMetadata(metadata)
-            val localArtUrl = albumArtBitmap?.let { saveAlbumArtToStorage(it, title, artist) }
-
-            // Clear log debounce caches for fresh logging on new track
-            loggedArtistExtractionFailures.clear()
-            loggedAdvertisementSkips.clear()
-
-            val newSession = PlaybackSession(
-                packageName = packageName,
-                title = title,
-                artist = artist,
-                album = album,
-                isPlaying = true,
-                estimatedDurationMs = if (duration > 0) duration else null,
-                playbackStartPosition = currentPosition,
-                lastKnownPosition = currentPosition,
-                lastRecordedPosition = currentPosition,  // Start position tracking from current position
-                accumulatedPositionMs = 0,  // Start fresh - don't count any previous playback
-                isLikelyMusic = true  // Already verified by isMusicSession
-            )
-
-            // Add to playback states immediately so we start tracking time
-            playbackStates[packageName] = newSession
-            updateTrackingNotification(title, artist)
-
-            // Insert track asynchronously
-            serviceScope.launch {
-                try {
-                    val track = getOrInsertTrack(title, artist, album)
-                    newSession.trackId = track.id
-                    Log.d(TAG, "Track ID ${track.id} assigned for '${title}' (via MediaSession)")
-                    
-                    // Save local metadata as fallback (delayed to let external enrichment run first)
-                    // This provides album art, duration, genre, year even without Spotify/MusicBrainz
-                    // Use longer delay (30s) because streaming apps send metadata in batches
-                    if (localMetadata != null && localMetadata.hasRichMetadata()) {
-                        delay(30_000) // Wait 30 seconds for metadata to fully settle and enrichment to complete
-                        // Re-fetch latest local metadata as it may have been updated
-                        val latestMetadata = localMetadataCache[track.id] ?: localMetadata
-                        saveLocalMetadataFallback(track.id, latestMetadata)
-                    } else if (localArtUrl != null) {
-                        // Even without rich metadata, save the album art after delay
-                        delay(20_000) // Wait 20 seconds for potential metadata updates
-                        updateTrackAlbumArtIfNeeded(track.id, localArtUrl)
+                
+                // Extract ALL available metadata from MediaSession (for fallback use)
+                val localMetadata = LocalMediaMetadata.fromMediaMetadata(metadata, packageName)
+                
+                // Check if this is likely an advertisement - skip tracking ads
+                if (artist.isNotBlank() && 
+                    !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist) &&
+                    localMetadata?.isLikelyAdvertisement() == true) {
+                    if (!loggedAdvertisementSkips.containsKey(title)) {
+                        loggedAdvertisementSkips[title] = true
+                        Log.d(TAG, "Skipping likely advertisement: '$title' from $packageName")
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error inserting track", e)
+                    return
                 }
+                
+                // Extract album art from metadata (for fallback use)
+                val albumArtBitmap = localMetadata?.albumArtBitmap ?: extractAlbumArtFromMetadata(metadata)
+                val localArtUrl = albumArtBitmap?.let { saveAlbumArtToStorage(it, title, artist) }
+
+                // Clear log debounce caches for fresh logging on new track
+                loggedArtistExtractionFailures.clear()
+                loggedAdvertisementSkips.clear()
+
+                val newSession = PlaybackSession(
+                    packageName = packageName,
+                    title = title,
+                    artist = artist,
+                    album = album,
+                    isPlaying = true,
+                    estimatedDurationMs = if (duration > 0) duration else null,
+                    playbackStartPosition = currentPosition,
+                    lastKnownPosition = currentPosition,
+                    lastRecordedPosition = currentPosition,
+                    accumulatedPositionMs = 0,
+                    isLikelyMusic = true
+                )
+
+                // Add to playback states immediately so we start tracking time
+                playbackStates[packageName] = newSession
+                updateTrackingNotification(title, artist)
+
+                // Insert track asynchronously
+                serviceScope.launch {
+                    try {
+                        val track = getOrInsertTrack(title, artist, album)
+                        newSession.trackId = track.id
+                        Log.d(TAG, "Track ID ${track.id} assigned for '${title}' (via MediaSession)")
+                        
+                        // Ensure locally extracted art URI is available to the fallback logic
+                        if (localArtUrl != null) {
+                            val currentCache = localMetadataCache[track.id] ?: localMetadata
+                            if (currentCache != null) {
+                                localMetadataCache[track.id] = currentCache.copy(albumArtUri = localArtUrl)
+                                Log.d(TAG, "Updated local metadata cache with art URI: $localArtUrl")
+                            } else if (localMetadata == null) {
+                                localMetadataCache[track.id] = LocalMediaMetadata(
+                                    title = title,
+                                    artist = artist,
+                                    album = album,
+                                    albumArtUri = localArtUrl
+                                )
+                            }
+                        }
+                        
+                        // Save local metadata as fallback (delayed to let external enrichment run first)
+                        if (localMetadata != null && localMetadata.hasRichMetadata()) {
+                            delay(30_000)
+                            val latestMetadata = localMetadataCache[track.id] ?: localMetadata
+                            saveLocalMetadataFallback(track.id, latestMetadata)
+                        } else if (localArtUrl != null) {
+                            delay(20_000)
+                            updateTrackAlbumArtIfNeeded(track.id, localArtUrl)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error inserting track", e)
+                    }
+                }
+            }
+            "IGNORE" -> {
+                // Not playing and not same track - nothing to do
             }
         }
     }

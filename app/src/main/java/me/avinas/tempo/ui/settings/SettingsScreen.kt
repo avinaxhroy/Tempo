@@ -37,12 +37,20 @@ import me.avinas.tempo.ui.theme.TempoRed
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToOnboarding: (() -> Unit)? = null,
+    onNavigateToBackup: (() -> Unit)? = null,
     viewModel: SettingsViewModel = hiltViewModel(),
     spotifyViewModel: SpotifyViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val spotifyAuthState by spotifyViewModel.authState.collectAsState()
     val context = LocalContext.current
+    val versionName = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        } catch (e: Exception) {
+            "Unknown"
+        }
+    }
     val scope = rememberCoroutineScope()
     var showClearDataDialog by remember { mutableStateOf(false) }
     var showDisconnectDialog by remember { mutableStateOf(false) }
@@ -240,25 +248,29 @@ fun SettingsScreen(
                     variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
                 ) {
                     Column {
-                        if (spotifyViewModel.isConnected()) {
-                            SettingsOption(
-                                title = "Connected as ${spotifyViewModel.getUserDisplayName() ?: "Spotify User"}",
-                                subtitle = "Tap to disconnect",
-                                onClick = { showDisconnectDialog = true }
-                            )
-                        } else {
-                            SettingsOption(
-                                title = "Connect Spotify",
-                                subtitle = "Unlock mood tracking and audio features",
-                                onClick = { 
-                                    val intent = spotifyViewModel.startLogin()
-                                    context.startActivity(intent)
-                                }
-                            )
+                        // Use authState flow to ensure UI updates after successful auth
+                        when (spotifyAuthState) {
+                            is me.avinas.tempo.data.remote.spotify.SpotifyAuthManager.AuthState.Connected -> {
+                                SettingsOption(
+                                    title = "Connected as ${spotifyViewModel.getUserDisplayName() ?: "Spotify User"}",
+                                    subtitle = "Tap to disconnect",
+                                    onClick = { showDisconnectDialog = true }
+                                )
+                            }
+                            else -> {
+                                SettingsOption(
+                                    title = "Connect Spotify",
+                                    subtitle = "Unlock mood tracking and audio features",
+                                    onClick = { 
+                                        val intent = spotifyViewModel.startLogin()
+                                        context.startActivity(intent)
+                                    }
+                                )
+                            }
                         }
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsSwitch(
-                            title = "Extended Audio Analysis",
+                            title = "Extended Audio Analysis (Experimental)",
                             subtitle = "Download 30s previews for detailed mood analysis (uses mobile data)",
                             checked = uiState.extendedAudioAnalysisEnabled,
                             onCheckedChange = viewModel::toggleExtendedAudioAnalysis
@@ -275,36 +287,52 @@ fun SettingsScreen(
                     variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
                 ) {
                     Column {
-                        SettingsOption(
-                            title = "Export All Data",
-                            subtitle = "Create a complete backup including images",
-                            onClick = { 
-                                exportLauncher.launch("tempo_backup_${System.currentTimeMillis()}.zip")
-                            }
+                        SettingsSwitch(
+                            title = "Smart Merge Versions",
+                            subtitle = "Treat Live/Remix versions as the same song for cleaner history",
+                            checked = uiState.mergeAlternateVersions,
+                            onCheckedChange = viewModel::toggleMergeAlternateVersions
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsOption(
-                            title = "Import Backup",
-                            subtitle = "Restore from a previous export",
-                            onClick = { 
-                                importLauncher.launch(
-                                    arrayOf(
-                                        "application/zip",
-                                        "application/x-zip",
-                                        "application/x-zip-compressed",
-                                        "application/octet-stream",
-                                        "application/x-compress",
-                                        "application/x-compressed",
-                                        "multipart/x-zip"
-                                    )
-                                )
-                            }
+                            title = "Backup & Restore",
+                            subtitle = "Export or import your data",
+                            onClick = { onNavigateToBackup?.invoke() }
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsOption(
                             title = "Clear All Data",
                             textColor = TempoRed,
                             onClick = { showClearDataDialog = true }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Community
+                SettingsSectionHeader("Community")
+                GlassCard(
+                    contentPadding = PaddingValues(0.dp),
+                    variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
+                ) {
+                    Column {
+                        SettingsOption(
+                            title = "Reddit Community",
+                            subtitle = "r/TempoStats",
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.reddit.com/r/TempoStats/"))
+                                context.startActivity(intent)
+                            }
+                        )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        SettingsOption(
+                            title = "Telegram Channel",
+                            subtitle = "Confused Coconut",
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/confusedcoconut"))
+                                context.startActivity(intent)
+                            }
                         )
                     }
                 }
@@ -319,16 +347,29 @@ fun SettingsScreen(
                 ) {
                     Column {
                         SettingsOption(
+                            title = "Rate on Play Store",
+                            onClick = {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${context.packageName}"))
+                                    context.startActivity(intent)
+                                } catch (e: android.content.ActivityNotFoundException) {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=${context.packageName}"))
+                                    context.startActivity(intent)
+                                }
+                            }
+                        )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        SettingsOption(
                             title = "Privacy Policy",
                             onClick = { 
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/avinaxhroy/Tempo/blob/main/PRIVACY.md"))
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("http://tempo.avinas.me/privacy.html"))
                                 context.startActivity(intent)
                             }
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsOption(
                             title = "Version",
-                            subtitle = "1.5.0",
+                            subtitle = versionName,
                             showArrow = false
                         )
                     }

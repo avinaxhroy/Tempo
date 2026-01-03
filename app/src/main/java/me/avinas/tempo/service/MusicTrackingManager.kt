@@ -79,18 +79,26 @@ class MusicTrackingManager(
      * Returns true if the event was accepted, false if it was deduplicated.
      */
     suspend fun queueEvent(event: ListeningEvent, sessionId: String): Boolean {
-        // Check for duplicates
+        // Check for duplicates atomically using compute
         val eventHash = generateEventHash(event)
         val now = System.currentTimeMillis()
         
-        val lastSeen = recentEventHashes[eventHash]
-        if (lastSeen != null && (now - lastSeen) < DEDUP_WINDOW_MS) {
-            Log.d(TAG, "Duplicate event detected, skipping: trackId=${event.track_id}")
+        var isDuplicate = false
+        recentEventHashes.compute(eventHash) { _, lastSeen ->
+            if (lastSeen != null && (now - lastSeen) < DEDUP_WINDOW_MS) {
+                isDuplicate = true
+                lastSeen // Keep existing timestamp
+            } else {
+                now // Update/Insert new timestamp
+            }
+        }
+        
+        if (isDuplicate) {
+            Log.d(TAG, "Duplicate event detected (atomic), skipping: trackId=${event.track_id} for session $sessionId")
             updateMetrics { it.copy(duplicatesSkipped = it.duplicatesSkipped + 1) }
             return false
         }
         
-        recentEventHashes[eventHash] = now
         cleanupOldDeduplicationEntries(now)
         
         // Queue the event
@@ -283,9 +291,24 @@ class MusicTrackingManager(
     
     private fun startOfflineQueueProcessor() {
         scope.launch {
+            var consecutiveEmptyChecks = 0
             while (isActive) {
-                delay(60_000) // Process offline queue every minute
-                processOfflineQueue()
+                // Adaptive delay: check more frequently when we have items, less when empty
+                val checkInterval = if (offlineQueue.isEmpty()) {
+                    consecutiveEmptyChecks++
+                    // Exponential backoff up to 5 minutes when queue is persistently empty
+                    (60_000L * (1 shl consecutiveEmptyChecks.coerceAtMost(3))).coerceAtMost(300_000L)
+                } else {
+                    consecutiveEmptyChecks = 0
+                    60_000L // Check every minute when we have items
+                }
+                
+                delay(checkInterval)
+                
+                // Only process if there are items
+                if (offlineQueue.isNotEmpty()) {
+                    processOfflineQueue()
+                }
             }
         }
     }

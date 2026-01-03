@@ -14,7 +14,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
+import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.GlassCardVariant
 import me.avinas.tempo.utils.TempoCopyEngine
@@ -43,8 +43,8 @@ fun QuickStatsRow(
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                 AsyncImage(
-                    model = topArtistImage,
+                 CachedAsyncImage(
+                    imageUrl = topArtistImage,
                     contentDescription = null,
                     modifier = Modifier
                         .size(64.dp)
@@ -82,12 +82,12 @@ fun QuickStatsRow(
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                AsyncImage(
-                    model = topTrackImage,
+                CachedAsyncImage(
+                    imageUrl = topTrackImage,
                     contentDescription = null,
                     modifier = Modifier
                         .size(64.dp)
-                        .clip(CircleShape) // Matching visual style
+                        .clip(CircleShape)
                         .background(Color.White.copy(alpha = 0.05f)),
                     contentScale = ContentScale.Crop
                 )

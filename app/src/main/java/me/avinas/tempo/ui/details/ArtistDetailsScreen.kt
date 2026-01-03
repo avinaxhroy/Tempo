@@ -32,7 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import coil.imageLoader
+import me.avinas.tempo.ui.components.CachedAsyncImage
+import me.avinas.tempo.ui.components.buildCachedImageRequest
 import me.avinas.tempo.data.stats.ArtistDetails
 import me.avinas.tempo.data.stats.TopAlbum
 import me.avinas.tempo.data.stats.TagBasedMoodAnalyzer
@@ -346,21 +348,27 @@ fun ArtistHeroSection(
                 } else {
                     var showPlaceholder by remember { mutableStateOf(false) }
                     
+                    // Use cached image request for proper caching
+                    val imageRequest = remember(imageUrl) {
+                        buildCachedImageRequest(
+                            context = context,
+                            url = imageUrl,
+                            allowHardware = true,
+                            crossfade = 150
+                        )
+                    }
+                    
                     Box(modifier = Modifier.fillMaxSize()) {
                         AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(imageUrl)
-                                .crossfade(true)
-                                .listener(
-                                    onError = { _, result ->
-                                        android.util.Log.e("ArtistHeroSection", "Failed to load image: ${result.throwable.message}")
-                                        showPlaceholder = true
-                                    }
-                                )
-                                .build(),
+                            model = imageRequest,
+                            imageLoader = context.imageLoader,
                             contentDescription = "Artist Image",
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            onError = {
+                                android.util.Log.e("ArtistHeroSection", "Failed to load image: ${it.result.throwable.message}")
+                                showPlaceholder = true
+                            }
                         )
                         
                         // Show placeholder on error
@@ -591,8 +599,8 @@ fun TopSongItem(song: TopTrack, onClick: () -> Unit) {
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = song.albumArtUrl,
+            CachedAsyncImage(
+                imageUrl = song.albumArtUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -659,8 +667,8 @@ fun TopAlbumCard(album: TopAlbum) {
                         tint = Color.White.copy(alpha = 0.5f)
                     )
                 } else {
-                    AsyncImage(
-                        model = album.albumArtUrl,
+                    CachedAsyncImage(
+                        imageUrl = album.albumArtUrl,
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop

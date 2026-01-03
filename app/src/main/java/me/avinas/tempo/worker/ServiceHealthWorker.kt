@@ -112,7 +112,7 @@ class ServiceHealthWorker @AssistedInject constructor(
         return flat?.contains(expectedComponent) == true
     }
 
-    private fun restartService() {
+    private suspend fun restartService() {
         try {
             val componentName = ComponentName(
                 applicationContext,
@@ -128,7 +128,7 @@ class ServiceHealthWorker @AssistedInject constructor(
                 android.content.pm.PackageManager.DONT_KILL_APP
             )
             
-            Thread.sleep(100)
+            kotlinx.coroutines.delay(100) // Use coroutine delay instead of Thread.sleep
             
             pm.setComponentEnabledSetting(
                 componentName,

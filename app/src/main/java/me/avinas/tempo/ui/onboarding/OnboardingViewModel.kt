@@ -20,25 +20,31 @@ val Context.dataStore by preferencesDataStore(name = "settings")
 
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val userPreferencesDao: me.avinas.tempo.data.local.dao.UserPreferencesDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OnboardingUiState())
     val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()
 
     private val ONBOARDING_COMPLETED_KEY = booleanPreferencesKey("onboarding_completed")
-    private val EXTENDED_AUDIO_ANALYSIS_KEY = booleanPreferencesKey("extended_audio_analysis")
 
     init {
         viewModelScope.launch {
-            context.dataStore.data
-                .collect { preferences ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        isOnboardingCompleted = preferences[ONBOARDING_COMPLETED_KEY] ?: false,
-                        extendedAudioAnalysisEnabled = preferences[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false
-                    )
-                }
+            // Load completion status from DataStore
+            val onboardingCompleted = context.dataStore.data.map { 
+                it[ONBOARDING_COMPLETED_KEY] ?: false 
+            }.first()
+            
+            // Load other preferences from Room
+            val roomPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+            
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                isOnboardingCompleted = onboardingCompleted,
+                extendedAudioAnalysisEnabled = roomPrefs.extendedAudioAnalysis,
+                mergeAlternateVersions = roomPrefs.mergeAlternateVersions
+            )
         }
     }
 
@@ -52,9 +58,17 @@ class OnboardingViewModel @Inject constructor(
     
     fun setExtendedAudioAnalysis(enabled: Boolean) {
         viewModelScope.launch {
-            context.dataStore.edit { preferences ->
-                preferences[EXTENDED_AUDIO_ANALYSIS_KEY] = enabled
-            }
+            val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+            userPreferencesDao.upsert(currentPrefs.copy(extendedAudioAnalysis = enabled))
+            _uiState.value = _uiState.value.copy(extendedAudioAnalysisEnabled = enabled)
+        }
+    }
+    
+    fun setMergeAlternateVersions(enabled: Boolean) {
+        viewModelScope.launch {
+            val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+            userPreferencesDao.upsert(currentPrefs.copy(mergeAlternateVersions = enabled))
+            _uiState.value = _uiState.value.copy(mergeAlternateVersions = enabled)
         }
     }
 }
@@ -62,5 +76,6 @@ class OnboardingViewModel @Inject constructor(
 data class OnboardingUiState(
     val isLoading: Boolean = true,
     val isOnboardingCompleted: Boolean = false,
-    val extendedAudioAnalysisEnabled: Boolean = false
+    val extendedAudioAnalysisEnabled: Boolean = false,
+    val mergeAlternateVersions: Boolean = true
 )

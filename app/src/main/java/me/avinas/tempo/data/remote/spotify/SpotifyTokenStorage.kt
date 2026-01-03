@@ -30,6 +30,14 @@ class SpotifyTokenStorage @Inject constructor(
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_DISPLAY_NAME = "user_display_name"
         private const val KEY_USER_COUNTRY = "user_country"
+        
+        // PKCE flow temporary storage
+        private const val KEY_CODE_VERIFIER = "code_verifier"
+        private const val KEY_AUTH_STATE = "auth_state"
+        private const val KEY_AUTH_TIMESTAMP = "auth_timestamp"
+        
+        // Auth attempt timeout (10 minutes)
+        private const val AUTH_TIMEOUT_MS = 10 * 60 * 1000L
     }
 
     private val encryptedPrefs by lazy {
@@ -164,6 +172,62 @@ class SpotifyTokenStorage @Inject constructor(
         }
         Log.d(TAG, "All tokens cleared")
     }
+    
+    /**
+     * Save PKCE code verifier and state for pending auth.
+     * Automatically expires after 10 minutes.
+     */
+    fun savePendingAuth(codeVerifier: String, state: String) {
+        encryptedPrefs.edit().apply {
+            putString(KEY_CODE_VERIFIER, codeVerifier)
+            putString(KEY_AUTH_STATE, state)
+            putLong(KEY_AUTH_TIMESTAMP, System.currentTimeMillis())
+            apply()
+        }
+        Log.d(TAG, "Pending auth saved with state: $state")
+    }
+    
+    /**
+     * Get stored code verifier if state matches and not expired.
+     * Returns null if state doesn't match, expired, or not found.
+     */
+    fun getPendingAuth(state: String): PendingAuth? {
+        val storedState = encryptedPrefs.getString(KEY_AUTH_STATE, null)
+        val codeVerifier = encryptedPrefs.getString(KEY_CODE_VERIFIER, null)
+        val timestamp = encryptedPrefs.getLong(KEY_AUTH_TIMESTAMP, -1)
+        
+        // Check if state matches
+        if (storedState != state) {
+            Log.w(TAG, "State mismatch: expected $storedState, got $state")
+            return null
+        }
+        
+        // Check if expired (older than 10 minutes)
+        if (timestamp > 0 && System.currentTimeMillis() - timestamp > AUTH_TIMEOUT_MS) {
+            Log.w(TAG, "Pending auth expired")
+            clearPendingAuth()
+            return null
+        }
+        
+        return if (codeVerifier != null) {
+            PendingAuth(codeVerifier, storedState)
+        } else {
+            null
+        }
+    }
+    
+    /**
+     * Clear pending auth data.
+     */
+    fun clearPendingAuth() {
+        encryptedPrefs.edit().apply {
+            remove(KEY_CODE_VERIFIER)
+            remove(KEY_AUTH_STATE)
+            remove(KEY_AUTH_TIMESTAMP)
+            apply()
+        }
+        Log.d(TAG, "Pending auth cleared")
+    }
 
     /**
      * Get token status for debugging.
@@ -188,5 +252,13 @@ class SpotifyTokenStorage @Inject constructor(
         val isExpired: Boolean,
         val expiresAt: Long?,
         val userId: String?
+    )
+    
+    /**
+     * Pending auth data from PKCE flow.
+     */
+    data class PendingAuth(
+        val codeVerifier: String,
+        val state: String
     )
 }

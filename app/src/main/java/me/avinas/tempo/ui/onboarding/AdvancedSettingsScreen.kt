@@ -26,6 +26,11 @@ import androidx.compose.ui.unit.sp
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.ui.theme.WarmVioletAccent
+import me.avinas.tempo.ui.utils.adaptiveSize
+import me.avinas.tempo.ui.utils.adaptiveTextUnit
+import me.avinas.tempo.ui.utils.isSmallScreen
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 /**
  * Onboarding screen that lets users configure data/privacy settings
@@ -35,12 +40,16 @@ import me.avinas.tempo.ui.theme.WarmVioletAccent
 fun AdvancedSettingsScreen(
     extendedAnalysisEnabled: Boolean,
     onExtendedAnalysisChange: (Boolean) -> Unit,
+    mergeVersionsEnabled: Boolean,
+    onMergeVersionsChange: (Boolean) -> Unit,
     onContinue: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(TempoDarkBackground)
+            .statusBarsPadding()
+            .navigationBarsPadding()
     ) {
         // Ambient Background Blobs
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -73,14 +82,15 @@ fun AdvancedSettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 24.dp)))
             
             // Header Icon
             GlassCard(
-                modifier = Modifier.size(80.dp),
+                modifier = Modifier.size(adaptiveSize(80.dp, 60.dp)),
                 backgroundColor = Color(0xFF3B82F6).copy(alpha = 0.1f),
                 contentPadding = PaddingValues(0.dp)
             ) {
@@ -91,32 +101,34 @@ fun AdvancedSettingsScreen(
                     Icon(
                         imageVector = Icons.Default.Analytics,
                         contentDescription = null,
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.size(adaptiveSize(40.dp, 30.dp)),
                         tint = Color.White
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(adaptiveSize(24.dp, 12.dp)))
 
             Text(
                 text = "Data Preferences",
-                style = MaterialTheme.typography.headlineSmall,
+                style = if (isSmallScreen()) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
-                color = Color.White
+                color = Color.White,
+                fontSize = adaptiveTextUnit(24.sp, 20.sp)
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(adaptiveSize(8.dp, 4.dp)))
 
             Text(
                 text = "Choose how much data Tempo uses for audio analysis",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
-                color = Color.White.copy(alpha = 0.7f)
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = adaptiveTextUnit(14.sp, 12.sp)
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 16.dp)))
 
             // Default (free) option - always enabled
             SettingOptionCard(
@@ -129,12 +141,12 @@ fun AdvancedSettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(adaptiveSize(16.dp, 8.dp)))
 
             // Extended analysis option
             SettingOptionCard(
                 icon = Icons.Default.CloudDownload,
-                title = "Extended Audio Analysis",
+                title = "Extended Audio Analysis [EXPERIMENTAL]",
                 description = "Detailed mood & energy from 30s audio preview",
                 detail = "~500KB per track • More accurate",
                 isEnabled = extendedAnalysisEnabled,
@@ -143,7 +155,21 @@ fun AdvancedSettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(adaptiveSize(16.dp, 8.dp)))
+
+            // Smart Merge option
+            SettingOptionCard(
+                icon = Icons.Default.MusicNote,
+                title = "Smart Merge Versions",
+                description = "Treat Live/Remix versions as the same song for cleaner history",
+                detail = "Recommended for cleaner stats",
+                isEnabled = mergeVersionsEnabled,
+                isToggleable = true,
+                onToggle = onMergeVersionsChange,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 24.dp)))
 
             // Info text
             Text(
@@ -153,13 +179,13 @@ fun AdvancedSettingsScreen(
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(adaptiveSize(16.dp, 8.dp)))
 
             Button(
                 onClick = onContinue,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(adaptiveSize(56.dp, 48.dp)),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = TempoRed,
                     contentColor = Color.White
@@ -173,7 +199,7 @@ fun AdvancedSettingsScreen(
                 )
             }
             
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 16.dp)))
         }
     }
 }
@@ -201,7 +227,7 @@ private fun SettingOptionCard(
             // Icon
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(adaptiveSize(48.dp, 40.dp))
                     .background(
                         color = if (isEnabled) TempoRed.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
                         shape = RoundedCornerShape(12.dp)

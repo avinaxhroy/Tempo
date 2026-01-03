@@ -27,18 +27,34 @@ object TrackMatcher {
     private const val MEDIUM_MATCH_THRESHOLD = 0.70
     
     // Patterns to normalize
-    private val FEATURE_PATTERNS = listOf(
+    // Tier 1: "Junk" suffixes that should ALWAYS be removed
+    // These describe media format, not musical content
+    private val JUNK_SUFFIXES = listOf(
+        Regex("""\s*[\(\[]?\s*(?:official\s+)?(?:music\s+)?(?:video|audio|lyric\s+video|visualizer|hq|hd|4k|uhd|8k)\s*[\)\]]?""", RegexOption.IGNORE_CASE),
+        Regex("""\s*[\(\[]?\s*official\s*[\)\]]?""", RegexOption.IGNORE_CASE),
+        Regex("""\s*[\(\[]?\s*with\s+lyrics\s*[\)\]]?""", RegexOption.IGNORE_CASE),
+        Regex("""\s*[\(\[]?\s*(?:explicit|clean|censored)\s+version\s*[\)\]]?""", RegexOption.IGNORE_CASE),
+        Regex("""\s*[\(\[]?\s*(?:from|off)\s+(?:the\s+)?(?:album|ep|single)\s*[^\)\]]*[\)\]]?""", RegexOption.IGNORE_CASE)
+    )
+    
+    // Tier 2: "Version" suffixes that are removed only if merging is enabled
+    // These describe distinct musical content
+    private val VERSION_SUFFIXES = listOf(
+        Regex("""\s*[\(\[]?\s*(?:live|acoustic|demo|remix|mix|cover|instrumental|radio\s+edit|extended|original|unplugged)\s*[\)\]]?""", RegexOption.IGNORE_CASE),
+        Regex("""\s*-\s*(?:live|acoustic|demo|remix|mix|cover|instrumental|radio\s+edit|unplugged).*$""", RegexOption.IGNORE_CASE),
+        Regex("""\s*\d{4}\s*(?:remaster(?:ed)?|version).*$""", RegexOption.IGNORE_CASE),
+        Regex("""\s*[\(\[]?\s*remaster(?:ed)?\s*[\)\]]?""", RegexOption.IGNORE_CASE),
+        Regex("""\s*[\(\[]?\s*(?:mtv|bbc|live\s+at|recorded\s+at)\s+[^\)\]]+[\)\]]?""", RegexOption.IGNORE_CASE),
+        Regex("""\s*[\(\[]?\s*(?:session|performance|concert|tour)\s*[\)\]]?""", RegexOption.IGNORE_CASE)
+    )
+    
+    private val CONTENT_DESCRIPTOR_PATTERNS = listOf(
         Regex("""\s*[\(\[]?\s*(?:feat\.?|ft\.?|featuring|with|w/)\s*[^\)\]]*[\)\]]?""", RegexOption.IGNORE_CASE),
         Regex("""\s*&\s*"""),
         Regex("""\s+x\s+""", RegexOption.IGNORE_CASE)
     )
     
-    private val VERSION_PATTERNS = listOf(
-        Regex("""\s*[\(\[].*(?:remix|version|edit|mix|remaster(?:ed)?|radio|acoustic|live|instrumental|extended|original|single|album|demo|bonus).*[\)\]]""", RegexOption.IGNORE_CASE),
-        Regex("""\s*-\s*(?:remix|remaster(?:ed)?|live|acoustic|version|radio edit).*$""", RegexOption.IGNORE_CASE),
-        Regex("""\s*\d{4}\s*(?:remaster(?:ed)?|version).*$""", RegexOption.IGNORE_CASE)
-    )
-    
+    // Explicit content markers are always removed for matching
     private val EXPLICIT_PATTERNS = listOf(
         Regex("""\s*[\(\[]?\s*(?:explicit|clean|censored)\s*[\)\]]?""", RegexOption.IGNORE_CASE)
     )
@@ -53,13 +69,15 @@ object TrackMatcher {
      * @param artist1 First artist string
      * @param title2 Second track title
      * @param artist2 Second artist string
+     * @param strictMatching If true, distinct versions (Live, Remix) won't match (DEFAULT: FALSE/MERGE)
      * @return MatchResult with similarity scores and match type
      */
     fun matchTracks(
         title1: String,
         artist1: String,
         title2: String,
-        artist2: String
+        artist2: String,
+        strictMatching: Boolean = false // Default to merging versions (user preference default)
     ): MatchResult {
         // Exact match (fast path)
         if (title1.equals(title2, ignoreCase = true) && 
@@ -74,8 +92,8 @@ object TrackMatcher {
         }
         
         // Normalize and compare
-        val normTitle1 = normalizeTitle(title1)
-        val normTitle2 = normalizeTitle(title2)
+        val normTitle1 = normalizeTitle(title1, strictMatching)
+        val normTitle2 = normalizeTitle(title2, strictMatching)
         val normArtist1 = normalizeArtist(artist1)
         val normArtist2 = normalizeArtist(artist2)
         
@@ -108,7 +126,8 @@ object TrackMatcher {
     fun findBestMatch(
         targetTitle: String,
         targetArtist: String,
-        candidates: List<TrackCandidate>
+        candidates: List<TrackCandidate>,
+        strictMatching: Boolean = false
     ): Pair<TrackCandidate, MatchResult>? {
         if (candidates.isEmpty()) return null
         
@@ -116,7 +135,11 @@ object TrackMatcher {
         var bestResult: MatchResult? = null
         
         for (candidate in candidates) {
-            val result = matchTracks(targetTitle, targetArtist, candidate.title, candidate.artist)
+            val result = matchTracks(
+                targetTitle, targetArtist, 
+                candidate.title, candidate.artist,
+                strictMatching
+            )
             if (result.isMatch) {
                 if (bestResult == null || result.overallScore > bestResult.overallScore) {
                     bestMatch = candidate
@@ -132,22 +155,33 @@ object TrackMatcher {
     
     /**
      * Normalize a track title by removing common variations.
+     * 
+     * @param title The raw title
+     * @param strictMatching If true, keep version suffixes (Live, Remix) to prevent merging
      */
-    fun normalizeTitle(title: String): String {
+    fun normalizeTitle(title: String, strictMatching: Boolean = false): String {
         var normalized = title.trim()
         
-        // Remove explicit/clean tags
+        // Tier 1: Always remove "Junk" suffixes (Audio, Video, etc.)
+        JUNK_SUFFIXES.forEach { pattern ->
+            normalized = pattern.replace(normalized, "")
+        }
+        
+        // Remove explicit/clean tags (always do this)
         EXPLICIT_PATTERNS.forEach { pattern ->
             normalized = pattern.replace(normalized, "")
         }
         
-        // Remove version/remix info
-        VERSION_PATTERNS.forEach { pattern ->
-            normalized = pattern.replace(normalized, "")
+        // Tier 2: Remove "Version" suffixes ONLY if strict matching is DISABLED (i.e. we want to merge)
+        // If strictMatching is TRUE, we KEEP "Live", "Remix" etc. so they remain distinct
+        if (!strictMatching) {
+            VERSION_SUFFIXES.forEach { pattern ->
+                normalized = pattern.replace(normalized, "")
+            }
         }
         
-        // Remove feature artists from title
-        FEATURE_PATTERNS.forEach { pattern ->
+        // Remove feature artists from title (they are checked in artist match)
+        CONTENT_DESCRIPTOR_PATTERNS.forEach { pattern ->
             normalized = pattern.replace(normalized, "")
         }
         
@@ -169,7 +203,7 @@ object TrackMatcher {
         var normalized = artist.trim()
         
         // Remove feature artists (they'll be compared separately)
-        FEATURE_PATTERNS.forEach { pattern ->
+        CONTENT_DESCRIPTOR_PATTERNS.forEach { pattern ->
             normalized = pattern.replace(normalized, "")
         }
         

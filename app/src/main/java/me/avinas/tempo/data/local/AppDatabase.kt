@@ -17,9 +17,10 @@ import me.avinas.tempo.data.local.entities.*
         Album::class,
         EnrichedMetadata::class,
         UserPreferences::class,
-        TrackArtist::class  // New junction table
+        TrackArtist::class,  // New junction table
+        TrackAlias::class    // Smart metadata aliases
     ],
-    version = 15, // Deezer and Last.fm artist image URLs for comprehensive artist image fallback
+    version = 18, // Add track_aliases table
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -31,7 +32,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun enrichedMetadataDao(): EnrichedMetadataDao
     abstract fun userPreferencesDao(): UserPreferencesDao
     abstract fun statsDao(): StatsDao
-    abstract fun trackArtistDao(): TrackArtistDao  // New DAO
+    abstract fun trackArtistDao(): TrackArtistDao
+    abstract fun trackAliasDao(): TrackAliasDao
+  // New DAO
     
     companion object {
         private const val TAG = "AppDatabase"
@@ -398,6 +401,215 @@ abstract class AppDatabase : RoomDatabase() {
         }
         
         /**
+         * Migration from version 15 to 16.
+         * 
+         * Adds album_art_source column to track where album art came from.
+         * This enables priority-based replacement where API sources can replace
+         * local device-extracted art, but local art won't replace higher quality API art.
+         * 
+         * Priority: SPOTIFY > MUSICBRAINZ > ITUNES > DEEZER > LOCAL > NONE
+         */
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 15 to 16 - Adding album art source tracking")
+                
+                // Add album_art_source column with default value
+                db.execSQL("""
+                    ALTER TABLE enriched_metadata 
+                    ADD COLUMN album_art_source TEXT NOT NULL DEFAULT 'NONE'
+                """)
+                
+                // For existing records with album art, infer the source:
+                // - If has MusicBrainz release ID, assume MUSICBRAINZ
+                // - If URL starts with http(s) (API source), mark as ITUNES (safe default)
+                // - If URL starts with file:// (local), mark as LOCAL
+                
+                // Mark MusicBrainz sourced art
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_source = 'MUSICBRAINZ' 
+                    WHERE album_art_url IS NOT NULL 
+                    AND musicbrainz_release_id IS NOT NULL
+                """)
+                
+                // Mark Spotify sourced art
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_source = 'SPOTIFY' 
+                    WHERE album_art_url IS NOT NULL 
+                    AND spotify_id IS NOT NULL
+                    AND album_art_source = 'NONE'
+                """)
+                
+                // Mark local file art
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_source = 'LOCAL' 
+                    WHERE album_art_url IS NOT NULL 
+                    AND album_art_url LIKE 'file://%'
+                    AND album_art_source = 'NONE'
+                """)
+                
+                // Mark remaining API art as ITUNES (safe default for http URLs)
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_source = 'ITUNES' 
+                    WHERE album_art_url IS NOT NULL 
+                    AND (album_art_url LIKE 'http://%' OR album_art_url LIKE 'https://%')
+                    AND album_art_source = 'NONE'
+                """)
+                
+                Log.i(TAG, "Migration from version 15 to 16 completed successfully")
+            }
+        }
+        
+        /**
+         * Migration from version 16 to 17.
+         * 
+         * Fix HTTP URLs to HTTPS for Cover Art Archive images.
+         * Cover Art Archive returns HTTP URLs but HTTPS works better and avoids redirect issues.
+         * This migration updates all existing album art URLs to use HTTPS.
+         */
+        val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 16 to 17 - Fixing HTTP URLs to HTTPS")
+                
+                // Fix Cover Art Archive URLs in enriched_metadata table
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_url = REPLACE(album_art_url, 'http://coverartarchive.org', 'https://coverartarchive.org')
+                    WHERE album_art_url LIKE 'http://coverartarchive.org%'
+                """)
+                
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_url_small = REPLACE(album_art_url_small, 'http://coverartarchive.org', 'https://coverartarchive.org')
+                    WHERE album_art_url_small LIKE 'http://coverartarchive.org%'
+                """)
+                
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_url_large = REPLACE(album_art_url_large, 'http://coverartarchive.org', 'https://coverartarchive.org')
+                    WHERE album_art_url_large LIKE 'http://coverartarchive.org%'
+                """)
+                
+                // Fix Internet Archive URLs (used by Cover Art Archive)
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_url = REPLACE(album_art_url, 'http://archive.org', 'https://archive.org')
+                    WHERE album_art_url LIKE 'http://archive.org%'
+                """)
+                
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_url_small = REPLACE(album_art_url_small, 'http://archive.org', 'https://archive.org')
+                    WHERE album_art_url_small LIKE 'http://archive.org%'
+                """)
+                
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_url_large = REPLACE(album_art_url_large, 'http://archive.org', 'https://archive.org')
+                    WHERE album_art_url_large LIKE 'http://archive.org%'
+                """)
+                
+                // Fix Internet Archive CDN URLs (ia*.us.archive.org)
+                // These use HTTP by default but support HTTPS
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_url = 'https' || SUBSTR(album_art_url, 5)
+                    WHERE album_art_url LIKE 'http://ia%.us.archive.org%'
+                """)
+                
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_url_small = 'https' || SUBSTR(album_art_url_small, 5)
+                    WHERE album_art_url_small LIKE 'http://ia%.us.archive.org%'
+                """)
+                
+                db.execSQL("""
+                    UPDATE enriched_metadata 
+                    SET album_art_url_large = 'https' || SUBSTR(album_art_url_large, 5)
+                    WHERE album_art_url_large LIKE 'http://ia%.us.archive.org%'
+                """)
+                
+                // Also fix URLs in the tracks table
+                db.execSQL("""
+                    UPDATE tracks 
+                    SET album_art_url = REPLACE(album_art_url, 'http://coverartarchive.org', 'https://coverartarchive.org')
+                    WHERE album_art_url LIKE 'http://coverartarchive.org%'
+                """)
+                
+                db.execSQL("""
+                    UPDATE tracks 
+                    SET album_art_url = REPLACE(album_art_url, 'http://archive.org', 'https://archive.org')
+                    WHERE album_art_url LIKE 'http://archive.org%'
+                """)
+                
+                db.execSQL("""
+                    UPDATE tracks 
+                    SET album_art_url = 'https' || SUBSTR(album_art_url, 5)
+                    WHERE album_art_url LIKE 'http://ia%.us.archive.org%'
+                """)
+                
+                // Also fix URLs in albums table if present
+                db.execSQL("""
+                    UPDATE albums 
+                    SET artwork_url = REPLACE(artwork_url, 'http://coverartarchive.org', 'https://coverartarchive.org')
+                    WHERE artwork_url LIKE 'http://coverartarchive.org%'
+                """)
+                
+                db.execSQL("""
+                    UPDATE albums 
+                    SET artwork_url = REPLACE(artwork_url, 'http://archive.org', 'https://archive.org')
+                    WHERE artwork_url LIKE 'http://archive.org%'
+                """)
+                
+                db.execSQL("""
+                    UPDATE albums 
+                    SET artwork_url = 'https' || SUBSTR(artwork_url, 5)
+                    WHERE artwork_url LIKE 'http://ia%.us.archive.org%'
+                """)
+                
+                Log.i(TAG, "Migration from version 16 to 17 completed successfully")
+            }
+        }
+        
+        /**
+         * Migration from version 17 to 18.
+         * 
+         * Adds track_aliases table for smart metadata deduplication.
+         * This allows users to manually merge duplicate tracks and have the system
+         * remember the mapping for future plays.
+         */
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 17 to 18 - Adding track_aliases table")
+                
+                // Step 1: Create track_aliases table for manual merge tracking
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS track_aliases (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        target_track_id INTEGER NOT NULL,
+                        original_title TEXT NOT NULL,
+                        original_artist TEXT NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        FOREIGN KEY(target_track_id) REFERENCES tracks(id) ON DELETE CASCADE
+                    )
+                """)
+                
+                // Step 2: Create indices for efficient lookups
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_track_aliases_original_title_original_artist ON track_aliases(original_title, original_artist)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_track_aliases_target_track_id ON track_aliases(target_track_id)")
+                
+                // Step 3: Add mergeAlternateVersions column to user_preferences
+                // Default to 1 (true) for cleaner library experience
+                db.execSQL("ALTER TABLE user_preferences ADD COLUMN mergeAlternateVersions INTEGER NOT NULL DEFAULT 1")
+                
+                Log.i(TAG, "Migration from version 17 to 18 completed successfully")
+            }
+        }
+
+        /**
          * All migrations in order.
          */
         val ALL_MIGRATIONS = arrayOf(
@@ -409,8 +621,11 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_11_12,
             MIGRATION_12_13,
             MIGRATION_13_14,
-            MIGRATION_14_15
+            MIGRATION_14_15,
+            MIGRATION_15_16,
+            MIGRATION_16_17,
+            MIGRATION_17_18
         )
+        
     }
 }
-

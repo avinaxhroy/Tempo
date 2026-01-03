@@ -172,7 +172,8 @@ class EnrichmentWorker @AssistedInject constructor(
         }
 
         /**
-         * Trigger immediate enrichment for a specific track.
+         * Trigger immediate enrichment for a specific track or batch.
+         * When trackId is null, only processes completely unenriched tracks to avoid excessive API calls.
          */
         fun enqueueImmediate(context: Context, trackId: Long? = null) {
             val constraints = Constraints.Builder()
@@ -182,7 +183,8 @@ class EnrichmentWorker @AssistedInject constructor(
             val inputData = if (trackId != null) {
                 workDataOf("track_id" to trackId)
             } else {
-                Data.EMPTY
+                // Flag to indicate this is app-startup enrichment (only process pending tracks)
+                workDataOf("is_immediate" to true)
             }
 
             val workRequest = OneTimeWorkRequestBuilder<EnrichmentWorker>()
@@ -259,11 +261,22 @@ class EnrichmentWorker @AssistedInject constructor(
             for (metadata in tracksToBackfill) {
                 val track = trackDao.getTrackById(metadata.trackId)
                 if (track != null && metadata.albumArtUrl != null) {
+                    // Fix HTTP URLs to HTTPS for better reliability
+                    val fixedArtUrl = MusicBrainzEnrichmentService.fixHttpUrl(metadata.albumArtUrl)
                     val updatedTrack = track.copy(
-                        albumArtUrl = metadata.albumArtUrl,
+                        albumArtUrl = fixedArtUrl,
                         album = if (track.album.isNullOrBlank()) metadata.albumTitle else track.album
                     )
                     trackDao.update(updatedTrack)
+                    
+                    // Also update the enriched metadata if URL was fixed
+                    if (fixedArtUrl != metadata.albumArtUrl) {
+                        enrichedMetadataDao.upsert(metadata.copy(
+                            albumArtUrl = fixedArtUrl,
+                            albumArtUrlSmall = MusicBrainzEnrichmentService.fixHttpUrl(metadata.albumArtUrlSmall),
+                            albumArtUrlLarge = MusicBrainzEnrichmentService.fixHttpUrl(metadata.albumArtUrlLarge)
+                        ))
+                    }
                 }
             }
             
@@ -373,13 +386,55 @@ class EnrichmentWorker @AssistedInject constructor(
                 }
             }
         }
+        
+        // CRITICAL FIX: Explicitly update the Track entity with the enriched album art
+        // The UI observes the Track table, not EnrichedMetadata, so we must propagate the URL immediately
+        // This fixes the issue where enrichment succeeds but the UI still shows no cover art
+        try {
+            // Re-fetch latest metadata to get the most up-to-date URL (from strategies or genre inference)
+            val finalMetadata = enrichedMetadataDao.forTrackSync(trackId)
+            
+            if (finalMetadata?.albumArtUrl != null) {
+                // Fix HTTP URLs to HTTPS for better reliability
+                val fixedArtUrl = MusicBrainzEnrichmentService.fixHttpUrl(finalMetadata.albumArtUrl)
+                
+                // We have a URL, ensure it's on the track
+                // Note: We don't need to re-fetch the track, we can use the ID
+                val currentTrack = trackDao.getTrackById(trackId)
+                if (currentTrack != null && currentTrack.albumArtUrl != fixedArtUrl) {
+                    Log.i(TAG, "Propagating enriched album art to Track $trackId: $fixedArtUrl")
+                    val updatedTrack = currentTrack.copy(
+                        albumArtUrl = fixedArtUrl,
+                        // Also update album name if track is missing it
+                        album = if (currentTrack.album.isNullOrBlank()) finalMetadata.albumTitle else currentTrack.album
+                    )
+                    trackDao.update(updatedTrack)
+                    
+                    // Also update the enriched metadata if URL was changed
+                    if (fixedArtUrl != finalMetadata.albumArtUrl) {
+                        Log.d(TAG, "Fixed HTTP URL to HTTPS for track $trackId")
+                        enrichedMetadataDao.upsert(finalMetadata.copy(
+                            albumArtUrl = fixedArtUrl,
+                            albumArtUrlSmall = MusicBrainzEnrichmentService.fixHttpUrl(finalMetadata.albumArtUrlSmall),
+                            albumArtUrlLarge = MusicBrainzEnrichmentService.fixHttpUrl(finalMetadata.albumArtUrlLarge)
+                        ))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to propagate album art to Track entity", e)
+        }
     }
 
     private suspend fun enrichBatch() {
         var enrichedCount = 0
         var failedCount = 0
+        
+        // Check if this is an immediate enrichment (triggered on app start)
+        // If so, only process completely unenriched tracks to avoid hammering APIs
+        val isImmediateEnrichment = inputData.getBoolean("is_immediate", false)
 
-        // 1. Process pending tracks
+        // 1. Process pending tracks (completely unenriched)
         val pendingTracks = enrichedMetadataDao.getTracksNeedingEnrichment(
             status = EnrichmentStatus.PENDING,
             limit = BATCH_SIZE
@@ -403,8 +458,15 @@ class EnrichmentWorker @AssistedInject constructor(
 
             kotlinx.coroutines.delay(INTER_TRACK_DELAY_MS)
         }
+        
+        // Skip retry/refresh steps for immediate enrichment to avoid excessive API calls on app start
+        if (isImmediateEnrichment) {
+            Log.d(TAG, "Immediate enrichment complete: ${enrichedCount} enriched, ${failedCount} failed")
+            Log.i(TAG, "Batch complete: enriched=$enrichedCount, failed=$failedCount")
+            return
+        }
 
-        // 2. Retry enriched tracks with missing cover art or genres
+        // 2. Retry enriched tracks with missing cover art or genres (only for periodic work)
         if (!isStopped) {
             val incompleteTracks = enrichedMetadataDao.getEnrichedTracksWithIncompleteData(
                 retryAfter = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L),
@@ -422,7 +484,7 @@ class EnrichmentWorker @AssistedInject constructor(
             }
         }
 
-        // 3. Retry failed tracks
+        // 3. Retry failed tracks (only for periodic work)
         if (!isStopped) {
             val retryTracks = enrichedMetadataDao.getTracksToRetry(
                 status = EnrichmentStatus.FAILED,
@@ -440,23 +502,11 @@ class EnrichmentWorker @AssistedInject constructor(
             }
         }
 
-        // 4. Refresh stale cache
-        if (!isStopped) {
-            val staleThreshold = System.currentTimeMillis() - EnrichedMetadata.CACHE_VALIDITY_MS
-            val staleTracks = enrichedMetadataDao.getStaleMetadata(
-                staleThreshold = staleThreshold,
-                limit = 3
-            )
-            
-            Log.d(TAG, "Found ${staleTracks.size} stale tracks to refresh")
-            
-            for (metadata in staleTracks) {
-                if (isStopped) break
-                
-                enrichSpecificTrack(metadata.trackId)
-                kotlinx.coroutines.delay(INTER_TRACK_DELAY_MS)
-            }
-        }
+        // Note: We don't refresh stale cache for fully enriched tracks because:
+        // - Album art URLs rarely change
+        // - Genres/metadata are stable once set
+        // - Refreshing wastes API quota and bandwidth
+        // Only incomplete/failed tracks get retried above
         
         // 5. Fetch missing artist images (Legacy loop reduced, mostly handled by Strategies now)
         // We still keep a small check for tracks that might have missed it

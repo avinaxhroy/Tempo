@@ -13,4 +13,10 @@ class RoomTrackRepository @Inject constructor(private val dao: TrackDao) : Track
     override suspend fun insert(track: Track): Long = dao.insert(track)
     override suspend fun update(track: Track) = dao.update(track)
     override fun all(): Flow<List<Track>> = dao.all()
+    
+    override suspend fun searchTracks(query: String): List<Track> {
+        val byTitle = dao.searchByTitle(query)
+        val byArtist = dao.searchByArtist(query)
+        return (byTitle + byArtist).distinctBy { it.id }
+    }
 }

@@ -1,6 +1,7 @@
 package me.avinas.tempo.data.enrichment
 
 import android.util.Log
+import me.avinas.tempo.data.local.entities.AlbumArtSource
 import me.avinas.tempo.data.local.entities.Artist
 import me.avinas.tempo.data.local.entities.EnrichedMetadata
 import me.avinas.tempo.data.local.entities.Track
@@ -179,11 +180,17 @@ class ITunesEnrichmentSource @Inject constructor(
         return if (result is ITunesEnrichmentService.iTunesResult.Success) {
             val base = currentMetadata ?: EnrichedMetadata(trackId = track.id)
             
-            // Merge logic (simplified version of what was in Worker)
+            // Check if we should update album art based on source priority
+            // iTunes (priority 4) can replace LOCAL (priority 2) and DEEZER (priority 3)
+            val shouldUpdateArt = base.albumArtUrl.isNullOrBlank() || 
+                base.albumArtSource.shouldBeReplacedBy(AlbumArtSource.ITUNES)
+            
+            // Merge logic with source-aware album art handling
             val updated = base.copy(
-                albumArtUrl = base.albumArtUrl ?: result.albumArtUrl,
-                albumArtUrlSmall = base.albumArtUrlSmall ?: result.albumArtUrlSmall,
-                albumArtUrlLarge = base.albumArtUrlLarge ?: result.albumArtUrlLarge,
+                albumArtUrl = if (shouldUpdateArt && result.albumArtUrl.isNotBlank()) result.albumArtUrl else base.albumArtUrl,
+                albumArtUrlSmall = if (shouldUpdateArt) result.albumArtUrlSmall ?: base.albumArtUrlSmall else base.albumArtUrlSmall,
+                albumArtUrlLarge = if (shouldUpdateArt) result.albumArtUrlLarge ?: base.albumArtUrlLarge else base.albumArtUrlLarge,
+                albumArtSource = if (shouldUpdateArt && result.albumArtUrl.isNotBlank()) AlbumArtSource.ITUNES else base.albumArtSource,
                 albumTitle = base.albumTitle ?: result.albumTitle,
                 genres = if (base.genres.isEmpty() && result.genre != null) listOf(result.genre) else base.genres,
                 releaseYear = base.releaseYear ?: result.releaseYear,
@@ -195,6 +202,10 @@ class ITunesEnrichmentSource @Inject constructor(
                 cacheTimestamp = System.currentTimeMillis(),
                 lastEnrichmentAttempt = System.currentTimeMillis()
             )
+            
+            if (shouldUpdateArt && result.albumArtUrl.isNotBlank()) {
+                Log.d("EnrichmentSource", "iTunes: Replacing ${base.albumArtSource} album art with ITUNES source")
+            }
             
             // Handle artist images for ALL artists
             // This ensures secondary artists (feat. X) also get their images enriched and saved
@@ -320,14 +331,26 @@ class DeezerEnrichmentSource @Inject constructor(
         return if (result is DeezerEnrichmentService.DeezerResult.Success) {
             val base = currentMetadata ?: EnrichedMetadata(trackId = track.id)
             
+            // Check if we should update album art based on source priority
+            // Deezer (priority 3) can only replace LOCAL (priority 2) and NONE
+            val shouldUpdateArt = (base.albumArtUrl.isNullOrBlank() || 
+                base.albumArtSource.shouldBeReplacedBy(AlbumArtSource.DEEZER)) &&
+                result.albumArtUrl != null
+            
             val updated = base.copy(
                 previewUrl = base.previewUrl ?: result.previewUrl,
-                albumArtUrl = base.albumArtUrl ?: result.albumArtUrl,
-                albumArtUrlSmall = base.albumArtUrlSmall ?: result.albumArtUrlSmall,
-                albumArtUrlLarge = base.albumArtUrlLarge ?: result.albumArtUrlLarge,
+                albumArtUrl = if (shouldUpdateArt) result.albumArtUrl else base.albumArtUrl,
+                albumArtUrlSmall = if (shouldUpdateArt) result.albumArtUrlSmall ?: base.albumArtUrlSmall else base.albumArtUrlSmall,
+                albumArtUrlLarge = if (shouldUpdateArt) result.albumArtUrlLarge ?: base.albumArtUrlLarge else base.albumArtUrlLarge,
+                albumArtSource = if (shouldUpdateArt) AlbumArtSource.DEEZER else base.albumArtSource,
                 deezerArtistImageUrl = base.deezerArtistImageUrl ?: result.artistImageUrl,
                 cacheTimestamp = System.currentTimeMillis()
             )
+            
+            if (shouldUpdateArt) {
+                Log.d("EnrichmentSource", "Deezer: Replacing ${base.albumArtSource} album art with DEEZER source")
+            }
+            
             metadataDao.upsert(updated)
             updated
         } else {

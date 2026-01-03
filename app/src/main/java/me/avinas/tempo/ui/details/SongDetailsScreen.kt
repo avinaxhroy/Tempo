@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.CallMerge
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -38,8 +39,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.palette.graphics.Palette
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import me.avinas.tempo.data.stats.DailyListening
 import me.avinas.tempo.data.stats.TagBasedMoodAnalyzer
 import me.avinas.tempo.data.stats.TrackDetails
@@ -116,6 +115,7 @@ fun SongDetailsContent(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
+    var showMergeDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     
     Column(modifier = Modifier.fillMaxSize()) {
@@ -147,14 +147,39 @@ fun SongDetailsContent(
                 textAlign = TextAlign.Center
             )
             
-            IconButton(
-                onClick = { showShareDialog = true },
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.White.copy(alpha = 0.1f),
-                    contentColor = Color.White
-                )
-            ) {
-                Icon(Icons.Default.Share, contentDescription = "Share")
+            Box {
+                IconButton(
+                    onClick = { showMenu = true },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.White.copy(alpha = 0.1f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Options")
+                }
+                
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(Color(0xFF1E293B)) // Dark slate background
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Share", color = Color.White) },
+                        leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = Color.White) },
+                        onClick = { 
+                            showMenu = false
+                            showShareDialog = true 
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Merge duplicate...", color = Color.White) },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.CallMerge, contentDescription = null, tint = Color.White) },
+                        onClick = { 
+                            showMenu = false
+                            showMergeDialog = true
+                        }
+                    )
+                }
             }
         }
 
@@ -229,6 +254,14 @@ fun SongDetailsContent(
             }
         )
     }
+
+    if (showMergeDialog) {
+        MergeSearchDialog(
+            sourceTrackId = trackDetails.track.id,
+            onDismiss = { showMergeDialog = false },
+            onTrackSelected = { /* Handled in ViewModel */ }
+        )
+    }
 }
 
 @Composable
@@ -260,40 +293,12 @@ fun SongHeroSection(
                 contentPadding = PaddingValues(0.dp),
                 backgroundColor = Color.White.copy(alpha = 0.1f)
             ) {
-                val context = LocalContext.current
-                val albumArtUrl = trackDetails.track.albumArtUrl
-                
-                if (albumArtUrl.isNullOrBlank()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        Color(0xFFF59E0B).copy(alpha = 0.2f),
-                                        Color(0xFFD97706).copy(alpha = 0.1f)
-                                    )
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "🎵",
-                            fontSize = 64.sp,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
-                    }
-                } else {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(albumArtUrl)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "Album Art",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+                me.avinas.tempo.ui.components.AlbumArtImage(
+                    albumArtUrl = trackDetails.track.albumArtUrl,
+                    localArtUrl = trackDetails.localBackupArtUrl,
+                    contentDescription = "Album Art for ${trackDetails.track.title}",
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
         
@@ -765,11 +770,7 @@ fun EngagementSection(engagement: TrackEngagement) {
                     value = "${engagement.replayCount}",
                     subtext = "back-to-back"
                 )
-                BehaviorStat(
-                    label = "Replays",
-                    value = "${engagement.replayCount}",
-                    subtext = "back-to-back"
-                )
+
             }
             
             Spacer(modifier = Modifier.height(24.dp))

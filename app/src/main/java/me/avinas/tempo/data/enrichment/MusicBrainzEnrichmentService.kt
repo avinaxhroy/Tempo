@@ -6,6 +6,7 @@ import me.avinas.tempo.data.local.dao.ArtistDao
 import me.avinas.tempo.data.local.dao.EnrichedMetadataDao
 import me.avinas.tempo.data.local.dao.TrackDao
 import me.avinas.tempo.data.local.entities.Album
+import me.avinas.tempo.data.local.entities.AlbumArtSource
 import me.avinas.tempo.data.local.entities.Artist
 import me.avinas.tempo.data.local.entities.EnrichedMetadata
 import me.avinas.tempo.data.local.entities.EnrichmentStatus
@@ -62,6 +63,47 @@ class MusicBrainzEnrichmentService @Inject constructor(
         private const val MIN_SEARCH_SCORE = 80 // Minimum match score to accept
         private const val MIN_TITLE_SIMILARITY = 0.85 // Minimum title similarity to accept a match
         private const val MIN_FUZZY_TITLE_SIMILARITY = 0.70 // For fuzzy searches, require slightly lower but still reasonable match
+        
+        /**
+         * Fix HTTP URLs to use HTTPS for better reliability.
+         * Cover Art Archive and Internet Archive use HTTPS for actual images,
+         * but the API sometimes returns HTTP URLs that need to redirect.
+         * By using HTTPS directly, we avoid redirect issues and improve loading.
+         */
+        fun fixHttpUrl(url: String?): String? {
+            if (url.isNullOrBlank()) return url
+            // Convert http:// to https:// for coverartarchive.org and archive.org domains
+            return when {
+                url.startsWith("http://coverartarchive.org") -> 
+                    url.replace("http://coverartarchive.org", "https://coverartarchive.org")
+                url.startsWith("http://archive.org") -> 
+                    url.replace("http://archive.org", "https://archive.org")
+                url.startsWith("http://ia") && url.contains(".us.archive.org") -> 
+                    url.replaceFirst("http://", "https://")
+                else -> url
+            }
+        }
+        
+        /**
+         * validate if the URL is a valid image URL and NOT a JSON endpoint.
+         * Reject URLs that look like:
+         * - https://coverartarchive.org/release/{mbid} (JSON index)
+         * - Any URL ending in .json
+         */
+        private fun isValidAlbumArtUrl(url: String?): Boolean {
+            if (url.isNullOrBlank()) return false
+            
+            // Reject .json extension
+            if (url.endsWith(".json", ignoreCase = true)) return false
+            
+            // Reject Cover Art Archive index endpoints (return JSON)
+            // Pattern: .../release/{mbid} or .../release-group/{mbid} possibly with trailing slash
+            // Valid image URLs usually have /front, /back, or .jpg/.png extension
+            val isCaaIndex = url.matches(Regex("""^https?://coverartarchive\.org/(release|release-group)/[a-f0-9-]+/?$"""))
+            if (isCaaIndex) return false
+            
+            return true
+        }
     }
 
     /**
@@ -488,6 +530,8 @@ class MusicBrainzEnrichmentService @Inject constructor(
                 albumArtUrl = albumArtUrl,
                 albumArtUrlSmall = albumArtUrlSmall,
                 albumArtUrlLarge = albumArtUrlLarge,
+                // Set source as MUSICBRAINZ if we got album art from Cover Art Archive
+                albumArtSource = if (albumArtUrl != null) AlbumArtSource.MUSICBRAINZ else AlbumArtSource.NONE,
                 artistName = allArtistNames ?: primaryArtist?.name ?: recording.artistCredit?.firstOrNull()?.name,
                 artistCountry = primaryArtist?.country,
                 artistType = primaryArtist?.type,
@@ -707,16 +751,25 @@ class MusicBrainzEnrichmentService @Inject constructor(
                 
                 frontImage?.let { image ->
                     // Try to get the best available URL for each size
-                    CoverArtUrls(
-                        small = image.thumbnails?.small 
+                    // Fix HTTP URLs to HTTPS for better reliability
+                    val urls = CoverArtUrls(
+                        small = fixHttpUrl(image.thumbnails?.small 
                             ?: image.thumbnails?.small2
-                            ?: "${CoverArtArchiveApi.BASE_URL}release/$releaseMbid/front-250",
-                        medium = image.image 
-                            ?: "${CoverArtArchiveApi.BASE_URL}release/$releaseMbid/front-500",
-                        large = image.thumbnails?.large 
+                            ?: "${CoverArtArchiveApi.BASE_URL}release/$releaseMbid/front-250"),
+                        medium = fixHttpUrl(image.thumbnails?.medium 
+                            ?: image.image 
+                            ?: "${CoverArtArchiveApi.BASE_URL}release/$releaseMbid/front-500"),
+                        large = fixHttpUrl(image.thumbnails?.large 
                             ?: image.thumbnails?.large2
-                            ?: "${CoverArtArchiveApi.BASE_URL}release/$releaseMbid/front-1200"
+                            ?: "${CoverArtArchiveApi.BASE_URL}release/$releaseMbid/front-1200")
                     )
+                    
+                    // Sanity check: Ensure valid image URLs
+                    if (!isValidAlbumArtUrl(urls.medium)) {
+                         Log.w(TAG, "Ignored invalid album art URL: ${urls.medium}")
+                         return null
+                    }
+                    return urls
                 }
             } else if (response.code() == 404) {
                 // No cover art available for this release
@@ -756,16 +809,24 @@ class MusicBrainzEnrichmentService @Inject constructor(
                 
                 frontImage?.let { image ->
                     Log.d(TAG, "Found release group cover art for: $releaseGroupMbid")
-                    CoverArtUrls(
-                        small = image.thumbnails?.small 
+                    // Fix HTTP URLs to HTTPS for better reliability
+                    val urls = CoverArtUrls(
+                        small = fixHttpUrl(image.thumbnails?.small 
                             ?: image.thumbnails?.small2
-                            ?: "${CoverArtArchiveApi.BASE_URL}release-group/$releaseGroupMbid/front-250",
-                        medium = image.image 
-                            ?: "${CoverArtArchiveApi.BASE_URL}release-group/$releaseGroupMbid/front-500",
-                        large = image.thumbnails?.large 
+                            ?: "${CoverArtArchiveApi.BASE_URL}release-group/$releaseGroupMbid/front-250"),
+                        medium = fixHttpUrl(image.thumbnails?.medium 
+                            ?: image.image 
+                            ?: "${CoverArtArchiveApi.BASE_URL}release-group/$releaseGroupMbid/front-500"),
+                        large = fixHttpUrl(image.thumbnails?.large 
                             ?: image.thumbnails?.large2
-                            ?: "${CoverArtArchiveApi.BASE_URL}release-group/$releaseGroupMbid/front-1200"
+                            ?: "${CoverArtArchiveApi.BASE_URL}release-group/$releaseGroupMbid/front-1200")
                     )
+                    
+                    if (!isValidAlbumArtUrl(urls.medium)) {
+                         Log.w(TAG, "Ignored invalid release group art URL: ${urls.medium}")
+                         return null
+                    }
+                    return urls
                 }
             } else if (response.code() == 404) {
                 Log.d(TAG, "No cover art found for release group $releaseGroupMbid")

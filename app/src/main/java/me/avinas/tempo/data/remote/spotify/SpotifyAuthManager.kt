@@ -67,9 +67,6 @@ class SpotifyAuthManager @Inject constructor(
     private val _authState = MutableStateFlow<AuthState>(AuthState.NotConnected)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
-    // Temporary storage for PKCE code verifier during auth flow
-    private var pendingCodeVerifier: String? = null
-
     init {
         // Check if we have stored tokens on startup
         checkStoredTokens()
@@ -122,11 +119,14 @@ class SpotifyAuthManager @Inject constructor(
         val codeVerifier = generateCodeVerifier()
         val codeChallenge = generateCodeChallenge(codeVerifier)
         
-        // Store verifier for later exchange
-        pendingCodeVerifier = codeVerifier
+        // Generate random state for CSRF protection
+        val state = generateCodeVerifier() // Reuse same generation logic
+        
+        // Store verifier and state in encrypted storage (persists across process death)
+        tokenStorage.savePendingAuth(codeVerifier, state)
 
-        // Build authorization URL
-        val authUrl = buildAuthorizationUrl(codeChallenge)
+        // Build authorization URL with state parameter
+        val authUrl = buildAuthorizationUrl(codeChallenge, state)
         
         Log.d(TAG, "Starting login flow with URL: $authUrl")
         
@@ -137,7 +137,7 @@ class SpotifyAuthManager @Inject constructor(
      * Handle the OAuth callback from Spotify.
      * Called when the app receives the redirect URI with the authorization code.
      * 
-     * @param uri The callback URI containing the authorization code
+     * @param uri The callback URI containing the authorization code and state
      * @return true if authentication was successful
      */
     suspend fun handleCallback(uri: Uri): Boolean {
@@ -146,9 +146,15 @@ class SpotifyAuthManager @Inject constructor(
         // Check for errors
         val error = uri.getQueryParameter("error")
         if (error != null) {
+            val errorMessage = when (error) {
+                "access_denied" -> "You cancelled the Spotify login"
+                "invalid_scope" -> "Permission error, please try again"
+                "server_error" -> "Spotify server error, please try again later"
+                else -> "Authentication failed: $error"
+            }
             Log.e(TAG, "Auth error: $error")
-            _authState.value = AuthState.Error("Authentication failed: $error")
-            pendingCodeVerifier = null
+            _authState.value = AuthState.Error(errorMessage)
+            tokenStorage.clearPendingAuth()
             return false
         }
 
@@ -157,20 +163,29 @@ class SpotifyAuthManager @Inject constructor(
         if (code == null) {
             Log.e(TAG, "No authorization code in callback")
             _authState.value = AuthState.Error("No authorization code received")
-            pendingCodeVerifier = null
+            tokenStorage.clearPendingAuth()
+            return false
+        }
+        
+        // Get and validate state parameter (CSRF protection)
+        val state = uri.getQueryParameter("state")
+        if (state == null) {
+            Log.e(TAG, "No state parameter in callback")
+            _authState.value = AuthState.Error("Invalid authentication response")
+            tokenStorage.clearPendingAuth()
             return false
         }
 
-        // Get stored code verifier
-        val codeVerifier = pendingCodeVerifier
-        if (codeVerifier == null) {
-            Log.e(TAG, "No code verifier stored")
-            _authState.value = AuthState.Error("Authentication state lost")
+        // Get stored code verifier and validate state
+        val pendingAuth = tokenStorage.getPendingAuth(state)
+        if (pendingAuth == null) {
+            Log.e(TAG, "No matching pending auth found or expired")
+            _authState.value = AuthState.Error("Authentication expired or invalid")
             return false
         }
 
         // Exchange code for tokens
-        return exchangeCodeForTokens(code, codeVerifier)
+        return exchangeCodeForTokens(code, pendingAuth.codeVerifier)
     }
 
     /**
@@ -213,21 +228,23 @@ class SpotifyAuthManager @Inject constructor(
                         expiresAt = expiresAt,
                         scope = scope
                     )
+                    
+                    // Clear pending auth data
+                    tokenStorage.clearPendingAuth()
 
                     Log.i(TAG, "Successfully authenticated with Spotify")
                     _authState.value = AuthState.Connected(null)
-                    pendingCodeVerifier = null
                     true
                 } else {
                     Log.e(TAG, "Token exchange failed: ${response.code} - $responseBody")
                     _authState.value = AuthState.Error("Failed to get access token")
-                    pendingCodeVerifier = null
+                    tokenStorage.clearPendingAuth()
                     false
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Token exchange error", e)
                 _authState.value = AuthState.Error("Authentication error: ${e.message}")
-                pendingCodeVerifier = null
+                tokenStorage.clearPendingAuth()
                 false
             }
         }
@@ -303,15 +320,16 @@ class SpotifyAuthManager @Inject constructor(
     }
 
     /**
-     * Build the authorization URL with PKCE parameters.
+     * Build the authorization URL with PKCE parameters and state.
      */
-    private fun buildAuthorizationUrl(codeChallenge: String): String {
+    private fun buildAuthorizationUrl(codeChallenge: String, state: String): String {
         return Uri.parse(SpotifyApi.AUTH_URL).buildUpon()
             .appendQueryParameter("client_id", CLIENT_ID)
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("redirect_uri", SpotifyApi.REDIRECT_URI)
             .appendQueryParameter("code_challenge_method", CODE_CHALLENGE_METHOD)
             .appendQueryParameter("code_challenge", codeChallenge)
+            .appendQueryParameter("state", state)
             .appendQueryParameter("scope", SpotifyApi.SCOPES)
             .build()
             .toString()

@@ -27,8 +27,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
-import coil.compose.rememberAsyncImagePainter
-import coil.request.ImageRequest
 import me.avinas.tempo.R
 import me.avinas.tempo.data.stats.ArtistDetails
 import me.avinas.tempo.data.stats.TrackDetails
@@ -138,16 +136,20 @@ fun ArtistShareCard(
                      // FIX: Use artist image instead of album art
                      val imageUrl = artistDetails.artist.imageUrl
                     
-                    Image(
-                        painter = rememberAsyncImagePainter(
-                            ImageRequest.Builder(LocalContext.current)
-                                .data(imageUrl ?: R.drawable.ic_launcher_foreground)
-                                .allowHardware(false) // FIX: Disable hardware bitmaps for capture
-                                .build()
-                        ),
+                    CachedAsyncImage(
+                        imageUrl = imageUrl,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        allowHardware = false,
+                        placeholder = {
+                            Box(
+                                modifier = Modifier.fillMaxSize().background(Color.Gray),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White)
+                            }
+                        }
                     )
                 }
                 
@@ -312,16 +314,20 @@ fun SongShareCard(
                     modifier = Modifier.size(280.dp),
                     shape = RoundedCornerShape(24.dp)
                 ) {
-                    Image(
-                        painter = rememberAsyncImagePainter(
-                            ImageRequest.Builder(LocalContext.current)
-                                .data(trackDetails.track.albumArtUrl ?: R.drawable.ic_launcher_foreground)
-                                .allowHardware(false) // FIX: Disable hardware bitmaps for capture
-                                .build()
-                        ),
+                    CachedAsyncImage(
+                        imageUrl = trackDetails.track.albumArtUrl,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        allowHardware = false,
+                        placeholder = {
+                            Box(
+                                modifier = Modifier.fillMaxSize().background(Color.Gray),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White)
+                            }
+                        }
                     )
                 }
             }

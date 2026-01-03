@@ -5,6 +5,8 @@ import android.os.Handler
 import android.os.Looper
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import me.avinas.tempo.worker.EnrichmentWorker
 import me.avinas.tempo.worker.ServiceHealthWorker
 import dagger.hilt.android.HiltAndroidApp
@@ -16,12 +18,18 @@ import javax.inject.Inject
  * 
  * Implements Configuration.Provider to use HiltWorkerFactory for injecting
  * dependencies into Workers.
+ * 
+ * Implements ImageLoaderFactory to provide our optimized ImageLoader singleton
+ * to all Compose and Views in the app.
  */
 @HiltAndroidApp
-class TempoApplication : Application(), Configuration.Provider {
+class TempoApplication : Application(), Configuration.Provider, ImageLoaderFactory {
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
+    
+    @Inject
+    lateinit var imageLoader: ImageLoader
     
     // Background executor for non-critical initialization
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
@@ -30,6 +38,14 @@ class TempoApplication : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
+    
+    /**
+     * Provide our Hilt-injected ImageLoader singleton to the entire app.
+     * This ensures all image loading uses our optimized cache configuration.
+     */
+    override fun newImageLoader(): ImageLoader {
+        return imageLoader
+    }
 
     override fun onCreate() {
         super.onCreate()

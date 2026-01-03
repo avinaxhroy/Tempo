@@ -58,8 +58,7 @@ import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Balance
 import kotlinx.coroutines.delay
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import me.avinas.tempo.ui.components.CachedAsyncImage
 import androidx.compose.ui.platform.LocalContext
 import me.avinas.tempo.data.stats.TimeRange
 import me.avinas.tempo.ui.components.GlassCard
@@ -371,17 +370,15 @@ fun TopArtistPage(page: SpotlightStoryPage.TopArtist) {
                                          )
                                  )
                                  
-                                 AsyncImage(
-                                     model = ImageRequest.Builder(LocalContext.current)
-                                         .data(page.topArtistImageUrl)
-                                         .allowHardware(false)
-                                         .build(),
+                                 CachedAsyncImage(
+                                     imageUrl = page.topArtistImageUrl,
                                      contentDescription = null,
                                      modifier = Modifier
                                          .size(imageSize)
                                          .clip(CircleShape)
                                          .border(4.dp * dimens.scale * heroImageScale, Color.White.copy(alpha = 0.2f), CircleShape),
-                                     contentScale = ContentScale.Crop
+                                     contentScale = ContentScale.Crop,
+                                     allowHardware = false
                                  )
                              }
                              
@@ -445,14 +442,12 @@ fun TopArtistPage(page: SpotlightStoryPage.TopArtist) {
                                                      color = Color.White.copy(alpha = 0.5f),
                                                      modifier = Modifier.width(20.dp)
                                                  )
-                                                 AsyncImage(
-                                                     model = ImageRequest.Builder(LocalContext.current)
-                                                         .data(artist.imageUrl)
-                                                         .allowHardware(false)
-                                                         .build(),
+                                                 CachedAsyncImage(
+                                                     imageUrl = artist.imageUrl,
                                                      contentDescription = null,
                                                      modifier = Modifier.size(dimens.imageGrid).clip(CircleShape),
-                                                     contentScale = ContentScale.Crop
+                                                     contentScale = ContentScale.Crop,
+                                                     allowHardware = false
                                                  )
                                                  Spacer(modifier = Modifier.width(8.dp))
                                                  Text(
@@ -496,14 +491,12 @@ fun TopArtistPage(page: SpotlightStoryPage.TopArtist) {
                                         color = Color.White.copy(alpha = 0.5f),
                                         modifier = Modifier.width(20.dp)
                                     )
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current)
-                                            .data(lastArtist.imageUrl)
-                                            .allowHardware(false)
-                                            .build(),
+                                    CachedAsyncImage(
+                                        imageUrl = lastArtist.imageUrl,
                                         contentDescription = null,
                                         modifier = Modifier.size(dimens.imageList).clip(CircleShape),
-                                        contentScale = ContentScale.Crop
+                                        contentScale = ContentScale.Crop,
+                                        allowHardware = false
                                     )
                                     Spacer(modifier = Modifier.width(dimens.gridSpacing))
                                     Text(
@@ -582,18 +575,15 @@ fun TopTrackSetupPage(page: SpotlightStoryPage.TopTrackSetup) {
             
             EnterAnimation(delay = 400) {
                 // Subtle hint of what's coming
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(page.topSongImageUrl)
-                        .allowHardware(false)
-                        .build(),
+                CachedAsyncImage(
+                    imageUrl = page.topSongImageUrl,
                     contentDescription = null,
                     modifier = Modifier
                         .size(dimens.imageMain * 0.8f)
                         .clip(RoundedCornerShape(12.dp * dimens.scale))
-                        .blur(8.dp * dimens.scale), // Blurred to build anticipation
+                        .blur(8.dp * dimens.scale),
                     contentScale = ContentScale.Crop,
-                    alpha = 0.6f
+                    allowHardware = false
                 )
             }
         }
@@ -642,17 +632,15 @@ fun TopSongsPage(page: SpotlightStoryPage.TopSongs) {
                     EnterAnimation(delay = 200) {
                          Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(contentAlignment = Alignment.Center) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(LocalContext.current)
-                                        .data(page.topSongImageUrl)
-                                        .allowHardware(false)
-                                        .build(),
+                                CachedAsyncImage(
+                                    imageUrl = page.topSongImageUrl,
                                     contentDescription = null,
                                     modifier = Modifier
-                                        .size(dimens.imageMain * heroImageScale) // Dynamic scaling
+                                        .size(dimens.imageMain * heroImageScale)
                                         .clip(RoundedCornerShape(24.dp * dimens.scale))
                                         .border(1.dp * dimens.scale, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp * dimens.scale)),
-                                    contentScale = ContentScale.Crop
+                                    contentScale = ContentScale.Crop,
+                                    allowHardware = false
                                 )
                             }
                             Spacer(modifier = Modifier.height(dimens.spacerSmall))
@@ -709,14 +697,12 @@ fun TopSongsPage(page: SpotlightStoryPage.TopSongs) {
                                                     color = Color.White.copy(alpha = 0.5f),
                                                     modifier = Modifier.width(20.dp)
                                                 )
-                                                AsyncImage(
-                                                    model = ImageRequest.Builder(LocalContext.current)
-                                                        .data(song.imageUrl)
-                                                        .allowHardware(false)
-                                                        .build(),
+                                                CachedAsyncImage(
+                                                    imageUrl = song.imageUrl,
                                                     contentDescription = null,
                                                     modifier = Modifier.size(dimens.imageGrid).clip(RoundedCornerShape(4.dp)),
-                                                    contentScale = ContentScale.Crop
+                                                    contentScale = ContentScale.Crop,
+                                                    allowHardware = false
                                                 )
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Column {
@@ -771,14 +757,12 @@ fun TopSongsPage(page: SpotlightStoryPage.TopSongs) {
                                         color = Color.White.copy(alpha = 0.5f),
                                         modifier = Modifier.width(32.dp)
                                     )
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current)
-                                            .data(lastItem.imageUrl)
-                                            .allowHardware(false)
-                                            .build(),
+                                    CachedAsyncImage(
+                                        imageUrl = lastItem.imageUrl,
                                         contentDescription = null,
                                         modifier = Modifier.size(dimens.imageList).clip(RoundedCornerShape(8.dp)),
-                                        contentScale = ContentScale.Crop
+                                        contentScale = ContentScale.Crop,
+                                        allowHardware = false
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
@@ -1233,14 +1217,12 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.padding(vertical = 4.dp * dimens.scale)
                                     ) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(LocalContext.current)
-                                                .data(artist.imageUrl)
-                                                .allowHardware(false)
-                                                .build(),
+                                        CachedAsyncImage(
+                                            imageUrl = artist.imageUrl,
                                             contentDescription = null,
                                             modifier = Modifier.size(24.dp * dimens.scale).clip(CircleShape),
-                                            contentScale = ContentScale.Crop
+                                            contentScale = ContentScale.Crop,
+                                            allowHardware = false
                                         )
                                         Spacer(modifier = Modifier.width(8.dp * dimens.scale))
                                         Text(
@@ -1278,14 +1260,12 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.padding(vertical = 4.dp * dimens.scale)
                                     ) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(LocalContext.current)
-                                                .data(song.imageUrl)
-                                                .allowHardware(false)
-                                                .build(),
+                                        CachedAsyncImage(
+                                            imageUrl = song.imageUrl,
                                             contentDescription = null,
                                             modifier = Modifier.size(24.dp * dimens.scale).clip(RoundedCornerShape(4.dp * dimens.scale)),
-                                            contentScale = ContentScale.Crop
+                                            contentScale = ContentScale.Crop,
+                                            allowHardware = false
                                         )
                                         Spacer(modifier = Modifier.width(8.dp * dimens.scale))
                                         Text(

@@ -1,5 +1,7 @@
 package me.avinas.tempo.utils
 
+import android.util.Log
+
 /**
  * Utility class for parsing and normalizing artist names from various formats.
  * 
@@ -70,10 +72,54 @@ object ArtistParser {
         Regex("\\[ft\\.?\\s*", RegexOption.IGNORE_CASE)
     )
 
+    // Known bands with ampersands in their name (Option 3: Known Band Database)
+    // This list can be expanded as more bands are discovered
+    private val KNOWN_AMPERSAND_BANDS = setOf(
+        "dead & company",
+        "derek & the dominos",
+        "belle & sebastian",
+        "iron & wine",
+        "simon & garfunkel",
+        "hall & oates",
+        "brooks & dunn",
+        "big & rich",
+        "florida georgia line",  // Sometimes written as "Florida Georgia & Line"
+        "the mamas & the papas",
+        "peter paul & mary",
+        "crosby stills nash & young",
+        "emerson lake & palmer",
+        "blood sweat & tears",
+        "earth wind & fire",
+        "kool & the gang",
+        "rob base & dj ez rock",
+        "eric b & rakim",
+        "salt n pepa",  // Sometimes written with &
+        "outkast",  // Sometimes written as "Andre 3000 & Big Boi"
+        "tears for fears",  // Context: Sometimes listed as "Curt Smith & Roland Orzabal"
+        "tom petty & the heartbreakers",
+        "bob seger & the silver bullet band",
+        "bruce springsteen & the e street band",
+        "hootie & the blowfish",
+        "kid cudi & eminem",  // Collaboration duo that performs together
+        "lil nas x & billy ray cyrus"  // Known collaboration
+    )
+    
+    // Patterns that indicate the ampersand is part of a band name (Option 1: Pattern-Based Whitelist)
+    // These patterns help identify when & is part of the artist name, not a separator
+    private val AMPERSAND_BAND_PATTERNS = listOf(
+        Regex("\\s*&\\s*the\\s+", RegexOption.IGNORE_CASE),      // "& The ..." (e.g., Derek & The Dominos)
+        Regex("\\s*&\\s*company\\b", RegexOption.IGNORE_CASE),   // "& Company" (e.g., Dead & Company)
+        Regex("\\s*&\\s*friends\\b", RegexOption.IGNORE_CASE),   // "& Friends"
+        Regex("\\s*&\\s*associates\\b", RegexOption.IGNORE_CASE) // "& Associates"
+        // REMOVED: Short-form pattern was too aggressive and caught real collaborations
+    )
+
     // Patterns that indicate artist collaboration (split into multiple artists)
+    // Note: Ampersand is now handled separately with smart detection
     private val COLLABORATION_PATTERNS = listOf(
         Regex("\\s*,\\s*"),                           // Comma
-        Regex("\\s*&\\s*"),                           // Ampersand (flexible spaces)
+        Regex("\\s*\\|\\s*"),                         // Pipe/Vertical bar
+        // Ampersand is handled separately in splitArtistsSmartly()
         Regex("\\s+and\\s+", RegexOption.IGNORE_CASE), // "and"
         Regex("\\s+x\\s+", RegexOption.IGNORE_CASE),  // "x" collaboration
         Regex("\\s*/\\s*"),                           // Slash
@@ -142,21 +188,72 @@ object ArtistParser {
 
     /**
      * Split an artist string by collaboration patterns.
+     * Uses smart ampersand detection to avoid splitting band names.
      */
     private fun splitArtists(artistString: String): List<String> {
         var parts = listOf(artistString)
 
+        // First, handle all non-ampersand collaboration patterns
         for (pattern in COLLABORATION_PATTERNS) {
+            val beforeSize = parts.size
             parts = parts.flatMap { part ->
                 part.split(pattern).map { it.trim() }
             }
+            if (parts.size > beforeSize) {
+                Log.d("ArtistParser", "Split by pattern: '$artistString' -> ${parts.size} parts")
+            }
         }
 
-        return parts
+        // Then, smartly handle ampersands for each part
+        parts = parts.flatMap { part ->
+            splitByAmpersandSmartly(part)
+        }
+
+        val result = parts
             .map { normalizeArtistName(it) }
             .filter { it.isNotEmpty() && it != "Unknown Artist" }
             .distinct()
             .ifEmpty { listOf(artistString.trim()) }
+        
+        if (result.size > 1) {
+            Log.i("ArtistParser", "Final split: '$artistString' -> [${result.joinToString(", ")}]")
+        }
+        
+        return result
+    }
+    
+    /**
+     * Smart ampersand splitting that preserves band names.
+     * Checks against known bands database and pattern-based whitelist.
+     */
+    private fun splitByAmpersandSmartly(artistString: String): List<String> {
+        // If no ampersand, return as-is
+        if (!artistString.contains("&")) {
+            return listOf(artistString)
+        }
+        
+        val normalized = normalizeForSearch(artistString)
+        
+        // Option 3: Check against known bands database
+        if (KNOWN_AMPERSAND_BANDS.any { knownBand ->
+            normalized.contains(knownBand) || knownBand.contains(normalized)
+        }) {
+            Log.d("ArtistParser", "Preserving band name: '$artistString'")
+            return listOf(artistString) // Keep as single artist
+        }
+        
+        // Option 1: Check against pattern-based whitelist
+        if (AMPERSAND_BAND_PATTERNS.any { pattern ->
+            pattern.containsMatchIn(artistString)
+        }) {
+            Log.d("ArtistParser", "Preserving band name (pattern match): '$artistString'")
+            return listOf(artistString) // Keep as single artist
+        }
+        
+        // If none of the above match, treat ampersand as a separator
+        val split = artistString.split(Regex("\\s*&\\s*")).map { it.trim() }
+        Log.d("ArtistParser", "Splitting artists by &: '$artistString' -> ${split.joinToString(", ")}")
+        return split
     }
 
     /**

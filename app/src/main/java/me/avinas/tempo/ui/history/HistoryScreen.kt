@@ -37,7 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
+import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.data.local.dao.HistoryItem
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import me.avinas.tempo.ui.components.GlassCard
@@ -559,7 +559,7 @@ fun HistoryListItem(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.08f)), // Transparent White
+                    .background(Color.White.copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center
             ) {
                 if (item.album_art_url.isNullOrBlank()) {
@@ -569,8 +569,8 @@ fun HistoryListItem(
                         tint = Color.White.copy(alpha = 0.5f)
                     )
                 } else {
-                    AsyncImage(
-                        model = item.album_art_url,
+                    CachedAsyncImage(
+                        imageUrl = item.album_art_url,
                         contentDescription = "Album art for ${item.title}",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
