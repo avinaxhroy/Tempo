@@ -150,7 +150,11 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_14_15,  // Deezer and Last.fm artist images
                 AppDatabase.MIGRATION_15_16,  // Album art source tracking for robust local fallback
                 AppDatabase.MIGRATION_16_17,  // Fix HTTP URLs to HTTPS for Cover Art Archive
-                AppDatabase.MIGRATION_17_18   // Track aliases for manual merge tracking
+                AppDatabase.MIGRATION_17_18,  // Track aliases for manual merge tracking
+                AppDatabase.MIGRATION_18_19,  // Content filtering support
+                AppDatabase.MIGRATION_19_20,  // History coach mark
+                AppDatabase.MIGRATION_20_21,  // Remove foreign key from manual_content_marks
+                AppDatabase.MIGRATION_21_22   // Walkthrough flags
             )
             // Enable Write-Ahead Logging for better concurrent read/write performance
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
@@ -202,4 +206,7 @@ object DatabaseModule {
     
     @Provides
     fun provideTrackAliasDao(db: AppDatabase) = db.trackAliasDao()
+    
+    @Provides
+    fun provideManualContentMarkDao(db: AppDatabase) = db.manualContentMarkDao()
 }

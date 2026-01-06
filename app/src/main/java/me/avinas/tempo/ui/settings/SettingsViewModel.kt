@@ -63,7 +63,9 @@ class SettingsViewModel @Inject constructor(
                 achievementsEnabled = dataStorePrefs[NOTIF_ACHIEVEMENTS_KEY] ?: true,
                 extendedAudioAnalysisEnabled = dataStorePrefs[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
                 userName = dataStorePrefs[USER_NAME_KEY] ?: "User",
-                mergeAlternateVersions = roomPrefs.mergeAlternateVersions
+                mergeAlternateVersions = roomPrefs.mergeAlternateVersions,
+                filterPodcasts = roomPrefs.filterPodcasts,
+                filterAudiobooks = roomPrefs.filterAudiobooks
             )
             
             // Continue watching DataStore for updates
@@ -75,7 +77,9 @@ class SettingsViewModel @Inject constructor(
                     achievementsEnabled = preferences[NOTIF_ACHIEVEMENTS_KEY] ?: true,
                     extendedAudioAnalysisEnabled = preferences[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
                     userName = preferences[USER_NAME_KEY] ?: "User",
-                    mergeAlternateVersions = currentRoomPrefs.mergeAlternateVersions
+                    mergeAlternateVersions = currentRoomPrefs.mergeAlternateVersions,
+                    filterPodcasts = currentRoomPrefs.filterPodcasts,
+                    filterAudiobooks = currentRoomPrefs.filterAudiobooks
                 )
             }
         }
@@ -127,6 +131,22 @@ class SettingsViewModel @Inject constructor(
             userPreferencesDao.upsert(currentPrefs.copy(mergeAlternateVersions = enabled))
             // Update UI state immediately
             _uiState.value = _uiState.value.copy(mergeAlternateVersions = enabled)
+        }
+    }
+    
+    fun toggleFilterPodcasts(enabled: Boolean) {
+        viewModelScope.launch {
+            val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+            userPreferencesDao.upsert(currentPrefs.copy(filterPodcasts = enabled))
+            _uiState.value = _uiState.value.copy(filterPodcasts = enabled)
+        }
+    }
+    
+    fun toggleFilterAudiobooks(enabled: Boolean) {
+        viewModelScope.launch {
+            val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+            userPreferencesDao.upsert(currentPrefs.copy(filterAudiobooks = enabled))
+            _uiState.value = _uiState.value.copy(filterAudiobooks = enabled)
         }
     }
 
@@ -192,5 +212,7 @@ data class SettingsUiState(
     val isSpotifyConnected: Boolean = false,
     val spotifyUsername: String? = null,
     val userName: String = "User",
-    val mergeAlternateVersions: Boolean = true
+    val mergeAlternateVersions: Boolean = true,
+    val filterPodcasts: Boolean = true,
+    val filterAudiobooks: Boolean = true
 )

@@ -149,28 +149,15 @@ class SpotifyEnrichmentWorker @AssistedInject constructor(
         Log.d(TAG, "Found ${tracksToEnrich.size} tracks to enrich with Spotify")
 
         // OPTIMIZATION: Check if we have tracks with Spotify IDs but missing audio features
-        // These can be bulk-enriched in a single API call per 100 tracks!
-        val withSpotifyId = tracksToEnrich.filter { it.spotifyId != null && it.audioFeaturesJson == null }
+        // Since Spotify no longer provides audio features, we skip audio feature enrichment.
+        // We only process tracks that don't have Spotify IDs yet to get basic metadata (album art).
         val withoutSpotifyId = tracksToEnrich.filter { it.spotifyId == null }
         
         var successCount = 0
         
-        // Phase 1: Bulk enrich tracks that already have Spotify IDs (super efficient!)
-        if (withSpotifyId.isNotEmpty()) {
-            Log.d(TAG, "Bulk enriching ${withSpotifyId.size} tracks that have Spotify IDs")
-            val bulkSuccess = spotifyEnrichmentService.enrichAudioFeaturesForKnownTracks(withSpotifyId)
-            successCount += bulkSuccess
-            
-            // Update status for successful ones
-            withSpotifyId.forEach { metadata ->
-                if (metadata.audioFeaturesJson != null) {
-                    enrichedMetadataDao.updateSpotifyEnrichmentStatus(
-                        trackId = metadata.trackId,
-                        status = SpotifyEnrichmentStatus.ENRICHED
-                    )
-                }
-            }
-        }
+        // Phase 1: Bulk enrichment for audio features was removed (deprecated API)
+        // We now skip directly to finding missing metadata for new tracks
+
         
         // Phase 2: Search and enrich tracks without Spotify IDs
         for (metadata in withoutSpotifyId) {
@@ -206,13 +193,7 @@ class SpotifyEnrichmentWorker @AssistedInject constructor(
                     Log.d(TAG, "Track not found on Spotify: '${track.title}'")
                 }
                 
-                is SpotifyEnrichmentService.SpotifyEnrichmentResult.AudioFeaturesNotAvailable -> {
-                    enrichedMetadataDao.updateSpotifyEnrichmentStatus(
-                        trackId = metadata.trackId,
-                        status = SpotifyEnrichmentStatus.UNAVAILABLE
-                    )
-                    Log.d(TAG, "Audio features not available: '${track.title}'")
-                }
+
                 
                 is SpotifyEnrichmentService.SpotifyEnrichmentResult.NotConnected -> {
                     Log.w(TAG, "Spotify not connected, stopping batch")

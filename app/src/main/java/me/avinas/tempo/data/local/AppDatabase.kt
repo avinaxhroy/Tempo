@@ -18,9 +18,10 @@ import me.avinas.tempo.data.local.entities.*
         EnrichedMetadata::class,
         UserPreferences::class,
         TrackArtist::class,  // New junction table
-        TrackAlias::class    // Smart metadata aliases
+        TrackAlias::class,   // Smart metadata aliases
+        ManualContentMark::class  // Content filtering marks
     ],
-    version = 18, // Add track_aliases table
+    version = 22, // Add walkthrough flags to user_preferences
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -34,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun statsDao(): StatsDao
     abstract fun trackArtistDao(): TrackArtistDao
     abstract fun trackAliasDao(): TrackAliasDao
-  // New DAO
+    abstract fun manualContentMarkDao(): ManualContentMarkDao  // Content filtering DAO
     
     companion object {
         private const val TAG = "AppDatabase"
@@ -608,6 +609,206 @@ abstract class AppDatabase : RoomDatabase() {
                 Log.i(TAG, "Migration from version 17 to 18 completed successfully")
             }
         }
+        
+        /**
+         * Migration from version 18 to 19.
+         * 
+         * Adds comprehensive content filtering support:
+         * 1. Add content_type column to tracks table (MUSIC, PODCAST, AUDIOBOOK)
+         * 2. Add filterPodcasts and filterAudiobooks to user_preferences
+         * 3. Create manual_content_marks table for user-defined filtering patterns
+         */
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 18 to 19 - Adding content filtering")
+                
+                // Step 1: Add content_type column to tracks table
+                db.execSQL("""
+                    ALTER TABLE tracks 
+                    ADD COLUMN content_type TEXT NOT NULL DEFAULT 'MUSIC'
+                """)
+                
+                // Create index for content type filtering
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_tracks_content_type 
+                    ON tracks(content_type)
+                """)
+                
+                // Step 2: Add filter preferences to user_preferences
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN filterPodcasts INTEGER NOT NULL DEFAULT 1
+                """)
+                
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN filterAudiobooks INTEGER NOT NULL DEFAULT 1
+                """)
+                
+                // Step 3: Create manual_content_marks table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS manual_content_marks (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        target_track_id INTEGER NOT NULL,
+                        pattern_type TEXT NOT NULL,
+                        original_title TEXT NOT NULL,
+                        original_artist TEXT NOT NULL,
+                        pattern_value TEXT NOT NULL,
+                        content_type TEXT NOT NULL,
+                        marked_at INTEGER NOT NULL,
+                        FOREIGN KEY(target_track_id) REFERENCES tracks(id) ON DELETE CASCADE
+                    )
+                """)
+                
+                // Create indices for efficient pattern matching
+                db.execSQL("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS index_manual_content_marks_original_title_original_artist 
+                    ON manual_content_marks(original_title, original_artist)
+                """)
+                
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_manual_content_marks_target_track_id 
+                    ON manual_content_marks(target_track_id)
+                """)
+                
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_manual_content_marks_content_type 
+                    ON manual_content_marks(content_type)
+                """)
+                
+                Log.i(TAG, "Migration from version 18 to 19 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 19 to 20.
+         * 
+         * Adds 'hasSeenHistoryCoachMark' to user_preferences to track
+         * if the user has been shown the history long-press tutorial.
+         */
+        val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 19 to 20")
+                
+                // Add column with default false (0)
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN hasSeenHistoryCoachMark INTEGER NOT NULL DEFAULT 0
+                """)
+                
+                Log.i(TAG, "Migration from version 19 to 20 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 20 to 21.
+         * 
+         * Removes foreign key from manual_content_marks table.
+         * Artist-level marks should persist even after the original track is deleted,
+         * as they are meant to filter FUTURE content from that artist.
+         * With CASCADE delete, deleting an orphaned track would also delete
+         * the artist block, defeating the purpose.
+         */
+        val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 20 to 21")
+                
+                // Check if the old table exists (it should from migration 18->19)
+                val cursor = db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='manual_content_marks'")
+                val tableExists = cursor.moveToFirst()
+                cursor.close()
+                
+                if (!tableExists) {
+                    // Table doesn't exist - create it fresh without foreign key
+                    Log.i(TAG, "manual_content_marks table not found, creating fresh")
+                    db.execSQL("""
+                        CREATE TABLE IF NOT EXISTS manual_content_marks (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            target_track_id INTEGER NOT NULL,
+                            pattern_type TEXT NOT NULL,
+                            original_title TEXT NOT NULL,
+                            original_artist TEXT NOT NULL,
+                            pattern_value TEXT NOT NULL,
+                            content_type TEXT NOT NULL,
+                            marked_at INTEGER NOT NULL DEFAULT 0
+                        )
+                    """)
+                } else {
+                    // Table exists - migrate it to remove foreign key
+                    // SQLite doesn't support dropping foreign keys directly.
+                    // We need to recreate the table without the foreign key.
+                    
+                    Log.i(TAG, "Migrating manual_content_marks to remove foreign key")
+                    
+                    // 1. Create new table without foreign key
+                    db.execSQL("""
+                        CREATE TABLE manual_content_marks_new (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                            target_track_id INTEGER NOT NULL,
+                            pattern_type TEXT NOT NULL,
+                            original_title TEXT NOT NULL,
+                            original_artist TEXT NOT NULL,
+                            pattern_value TEXT NOT NULL,
+                            content_type TEXT NOT NULL,
+                            marked_at INTEGER NOT NULL DEFAULT 0
+                        )
+                    """)
+                    
+                    // 2. Copy data from old table (preserving all user marks!)
+                    db.execSQL("""
+                        INSERT INTO manual_content_marks_new 
+                        SELECT id, target_track_id, pattern_type, original_title, 
+                               original_artist, pattern_value, content_type, marked_at
+                        FROM manual_content_marks
+                    """)
+                    
+                    // 3. Drop old table
+                    db.execSQL("DROP TABLE manual_content_marks")
+                    
+                    // 4. Rename new table
+                    db.execSQL("ALTER TABLE manual_content_marks_new RENAME TO manual_content_marks")
+                }
+                
+                // 5. Recreate indices (safe with IF NOT EXISTS)
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_manual_content_marks_original_title_original_artist ON manual_content_marks(original_title, original_artist)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_manual_content_marks_target_track_id ON manual_content_marks(target_track_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_manual_content_marks_content_type ON manual_content_marks(content_type)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_manual_content_marks_pattern_type_original_artist ON manual_content_marks(pattern_type, original_artist)")
+                
+                Log.i(TAG, "Migration from version 20 to 21 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 21 to 22.
+         * 
+         * Adds boolean flags for the new "Passive Game" Walkthrough system:
+         * - hasSeenSpotlightTutorial
+         * - hasSeenStatsSortTutorial
+         * - hasSeenStatsItemClickTutorial
+         */
+        val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 21 to 22")
+                
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN hasSeenSpotlightTutorial INTEGER NOT NULL DEFAULT 0
+                """)
+                
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN hasSeenStatsSortTutorial INTEGER NOT NULL DEFAULT 0
+                """)
+                
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN hasSeenStatsItemClickTutorial INTEGER NOT NULL DEFAULT 0
+                """)
+                
+                Log.i(TAG, "Migration from version 21 to 22 completed successfully")
+            }
+        }
 
         /**
          * All migrations in order.
@@ -624,7 +825,11 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_14_15,
             MIGRATION_15_16,
             MIGRATION_16_17,
-            MIGRATION_17_18
+            MIGRATION_17_18,
+            MIGRATION_18_19,
+            MIGRATION_19_20,
+            MIGRATION_20_21,
+            MIGRATION_21_22
         )
         
     }

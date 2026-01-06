@@ -548,3 +548,13 @@ data class TrackWithStats(
     val playCount: Int,
     val totalTimeMs: Long
 )
+
+/**
+ * Raw mood data fetched from database for aggregation.
+ * Includes both Spotify audio features JSON and MusicBrainz tags/genres for fallback.
+ */
+data class MoodRawData(
+    @ColumnInfo(name = "audio_features_json") val json: String?,
+    @ColumnInfo(name = "tags") val tags: String?,
+    @ColumnInfo(name = "genres") val genres: String?
+)

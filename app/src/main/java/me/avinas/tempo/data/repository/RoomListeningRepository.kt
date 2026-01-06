@@ -16,8 +16,9 @@ class RoomListeningRepository @Inject constructor(private val dao: ListeningEven
     override suspend fun insert(event: ListeningEvent): Long = dao.insert(event)
     override suspend fun insertAll(events: List<ListeningEvent>): List<Long> = dao.insertAll(events)
     override suspend fun delete(event: ListeningEvent) = dao.delete(event)
-    override suspend fun deleteById(id: Long) = dao.deleteById(id)
+    override suspend fun deleteById(id: Long): Int = dao.deleteById(id)
     override suspend fun deleteByTrackId(trackId: Long) = dao.deleteByTrackId(trackId)
+    override suspend fun deleteByArtist(artistName: String): Int = dao.deleteByArtist(artistName)
     override suspend fun getEventsForTrack(trackId: Long): List<ListeningEvent> = dao.getEventsForTrack(trackId)
     override suspend fun getEventsInRange(startTime: Long, endTime: Long): List<ListeningEvent> = dao.getEventsInRange(startTime, endTime)
     

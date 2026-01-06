@@ -30,8 +30,6 @@ import androidx.compose.ui.unit.sp
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.theme.TempoDarkBackground
 import me.avinas.tempo.ui.theme.TempoRed
-import me.avinas.tempo.ui.theme.TempoRed
-import me.avinas.tempo.ui.theme.WarmVioletAccent
 import me.avinas.tempo.ui.utils.adaptiveSize
 import me.avinas.tempo.ui.utils.adaptiveTextUnit
 import me.avinas.tempo.ui.utils.isSmallScreen
@@ -76,40 +74,12 @@ fun HowItWorksScreen(
         label = "step3"
     )
 
-    Box(
+    me.avinas.tempo.ui.components.DeepOceanBackground(
         modifier = Modifier
             .fillMaxSize()
-            .background(TempoDarkBackground)
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // Ambient Background Blobs
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val width = size.width
-            val height = size.height
-
-            // Blue-tinted blob (top-left) for "techy" feel
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF3B82F6).copy(alpha = 0.15f), Color.Transparent),
-                    center = Offset(0f, 0f),
-                    radius = width * 0.8f
-                ),
-                center = Offset(0f, 0f),
-                radius = width * 0.8f
-            )
-
-            // Warm Violet blob (bottom-right)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(WarmVioletAccent.copy(alpha = 0.12f), Color.Transparent),
-                    center = Offset(width, height),
-                    radius = width * 0.9f
-                ),
-                center = Offset(width, height),
-                radius = width * 0.9f
-            )
-        }
 
         // Skip button
         TextButton(
@@ -128,7 +98,7 @@ fun HowItWorksScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
+                .padding(adaptiveSize(24.dp, 16.dp))
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
@@ -141,7 +111,7 @@ fun HowItWorksScreen(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 color = Color.White,
-                fontSize = adaptiveTextUnit(28.sp, 22.sp)
+                fontSize = adaptiveTextUnit(28.sp, 20.sp)
             )
 
             Spacer(modifier = Modifier.height(adaptiveSize(8.dp, 4.dp)))
@@ -151,15 +121,15 @@ fun HowItWorksScreen(
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = Color.White.copy(alpha = 0.7f),
-                fontSize = adaptiveTextUnit(16.sp, 14.sp)
+                fontSize = adaptiveTextUnit(16.sp, 13.sp)
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 16.dp)))
+            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 12.dp)))
 
             // Visual Flow: Three connected steps
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(adaptiveSize(16.dp, 8.dp))
+                verticalArrangement = Arrangement.spacedBy(adaptiveSize(16.dp, 4.dp))
             ) {
                 // Step 1: Music App
                 FlowStep(
@@ -195,7 +165,7 @@ fun HowItWorksScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 24.dp)))
+            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 16.dp)))
 
             // Bottom info badges
             Row(
@@ -207,14 +177,14 @@ fun HowItWorksScreen(
                 InfoBadge(emoji = "⚡", text = "Auto-tracks")
             }
 
-            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 24.dp)))
+            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 16.dp)))
 
             // CTA Button
             Button(
                 onClick = onNext,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(adaptiveSize(56.dp, 48.dp)),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = TempoRed,
                     contentColor = Color.White
@@ -227,7 +197,7 @@ fun HowItWorksScreen(
             ) {
                 Text(
                     text = "Next",
-                    fontSize = 18.sp,
+                    fontSize = adaptiveTextUnit(18.sp, 16.sp),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -246,9 +216,9 @@ private fun FlowStep(
     GlassCard(
         modifier = modifier
             .fillMaxWidth()
-            .height(adaptiveSize(96.dp, 80.dp)), // Increased height
+            .height(adaptiveSize(96.dp, 64.dp)), // Compact height for small screens
         backgroundColor = iconColor.copy(alpha = 0.08f), // Subtler background
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp)
+        contentPadding = PaddingValues(horizontal = adaptiveSize(20.dp, 12.dp), vertical = adaptiveSize(16.dp, 8.dp))
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -267,12 +237,12 @@ private fun FlowStep(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    modifier = Modifier.size(adaptiveSize(32.dp, 24.dp)), // Larger icon
+                    modifier = Modifier.size(adaptiveSize(32.dp, 20.dp)), // Compact icon
                     tint = iconColor
                 )
             }
 
-            Spacer(modifier = Modifier.width(20.dp)) // More breathing room
+            Spacer(modifier = Modifier.width(adaptiveSize(20.dp, 12.dp)))
 
             Column(
                 verticalArrangement = Arrangement.Center
@@ -282,14 +252,15 @@ private fun FlowStep(
                     style = if (isSmallScreen()) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge, // Larger title
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    fontSize = adaptiveTextUnit(20.sp, 16.sp)
+                    fontSize = adaptiveTextUnit(20.sp, 15.sp)
                 )
-                Spacer(modifier = Modifier.height(adaptiveSize(4.dp, 2.dp)))
+                Spacer(modifier = Modifier.height(adaptiveSize(4.dp, 0.dp)))
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = adaptiveTextUnit(14.sp, 12.sp)
+                    fontSize = adaptiveTextUnit(14.sp, 11.sp),
+                    maxLines = 1
                 )
             }
         }
@@ -328,7 +299,7 @@ private fun FlowConnector(
         Text(
             text = "↓",
             color = Color.White.copy(alpha = 0.5f),
-            fontSize = 16.sp,
+            fontSize = adaptiveTextUnit(16.sp, 12.sp),
             modifier = Modifier.scale(1f + (progress * 0.1f))
         )
     }
@@ -344,14 +315,15 @@ private fun InfoBadge(
     ) {
         Text(
             text = emoji,
-            fontSize = 32.sp // Larger emoji
+            fontSize = adaptiveTextUnit(32.sp, 24.sp) // Adaptive emoji
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(adaptiveSize(8.dp, 4.dp)))
         Text(
             text = text,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Medium,
-            color = Color.White.copy(alpha = 0.8f)
+            color = Color.White.copy(alpha = 0.8f),
+            fontSize = adaptiveTextUnit(12.sp, 10.sp)
         )
     }
 }

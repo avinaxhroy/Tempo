@@ -44,7 +44,6 @@ import me.avinas.tempo.ui.settings.BackupRestoreViewModel
 import me.avinas.tempo.ui.settings.DriveOperationState
 import me.avinas.tempo.ui.theme.TempoDarkBackground
 import me.avinas.tempo.ui.theme.TempoRed
-import me.avinas.tempo.ui.theme.WarmVioletAccent
 import me.avinas.tempo.ui.utils.adaptiveSize
 import me.avinas.tempo.utils.FormatUtils.formatBytes
 import me.avinas.tempo.ui.utils.adaptiveTextUnit
@@ -176,35 +175,11 @@ fun RestoreScreen(
         containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
-        Box(
+        me.avinas.tempo.ui.components.DeepOceanBackground(
             modifier = Modifier
                 .fillMaxSize()
-                .background(TempoDarkBackground)
                 .padding(paddingValues)
         ) {
-             // Ambient Background Blobs (Reused from WelcomeScreen style)
-             androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                val width = size.width
-                val height = size.height
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color(0xFFEF4444).copy(alpha = 0.1f), Color.Transparent),
-                        center = androidx.compose.ui.geometry.Offset(width, 0f),
-                        radius = width * 0.8f
-                    ),
-                    center = androidx.compose.ui.geometry.Offset(width, 0f),
-                    radius = width * 0.8f
-                )
-                 drawCircle(
-                     brush = Brush.radialGradient(
-                         colors = listOf(WarmVioletAccent.copy(alpha = 0.1f), Color.Transparent),
-                         center = androidx.compose.ui.geometry.Offset(0f, height),
-                         radius = width * 0.9f
-                     ),
-                     center = androidx.compose.ui.geometry.Offset(0f, height),
-                     radius = width * 0.9f
-                 )
-            }
     
             Column(
                 modifier = Modifier

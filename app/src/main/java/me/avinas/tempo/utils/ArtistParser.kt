@@ -119,7 +119,7 @@ object ArtistParser {
     private val COLLABORATION_PATTERNS = listOf(
         Regex("\\s*,\\s*"),                           // Comma
         Regex("\\s*\\|\\s*"),                         // Pipe/Vertical bar
-        // Ampersand is handled separately in splitArtistsSmartly()
+        // Ampersand is handled separately in splitByAmpersandSmartly()
         Regex("\\s+and\\s+", RegexOption.IGNORE_CASE), // "and"
         Regex("\\s+x\\s+", RegexOption.IGNORE_CASE),  // "x" collaboration
         Regex("\\s*/\\s*"),                           // Slash

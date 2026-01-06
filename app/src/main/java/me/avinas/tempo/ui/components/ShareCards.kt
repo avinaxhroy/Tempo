@@ -348,7 +348,7 @@ fun SongShareCard(
             
             Text(
                 text = trackDetails.track.artist,
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleMedium,
                 color = Color(0xFFE9D5FF), // Purple 200 - Lighter contrast
                 fontWeight = FontWeight.SemiBold,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center

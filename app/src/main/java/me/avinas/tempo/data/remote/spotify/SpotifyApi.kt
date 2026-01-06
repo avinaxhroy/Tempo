@@ -27,8 +27,7 @@ interface SpotifyApi {
         const val AUTH_URL = "https://accounts.spotify.com/authorize"
         const val TOKEN_URL = "https://accounts.spotify.com/api/token"
         
-        // Scopes required for audio features
-        // Note: user-read-private is required for market-specific searches
+        // Scopes required for market-specific searches
         const val SCOPES = "user-read-private"
         
         // Redirect URI for OAuth callback
@@ -91,53 +90,7 @@ interface SpotifyApi {
     // Audio Features (DEPRECATED BY SPOTIFY)
     // =====================
     
-    /**
-     * Get audio features for a single track.
-     * 
-     * ⚠️ IMPORTANT: Spotify deprecated the audio-features endpoint for third-party apps
-     * in late 2024. New apps and existing apps without extended quota will receive
-     * 403 Forbidden responses. The app gracefully handles this and caches the
-     * unavailability to avoid redundant API calls.
-     * 
-     * Audio features include:
-     * - danceability: 0.0-1.0, how suitable for dancing
-     * - energy: 0.0-1.0, perceptual measure of intensity
-     * - valence: 0.0-1.0, musical positiveness (happy/cheerful vs sad/angry)
-     * - tempo: BPM of the track
-     * - acousticness: 0.0-1.0, confidence the track is acoustic
-     * - instrumentalness: 0.0-1.0, predicts if track has no vocals
-     * - loudness: Overall loudness in dB
-     * - speechiness: 0.0-1.0, presence of spoken words
-     * - liveness: 0.0-1.0, presence of audience in recording
-     * - key: Pitch class notation (0-11)
-     * - mode: Modality (0 = minor, 1 = major)
-     * - time_signature: Estimated time signature
-     * 
-     * @param authorization Bearer token
-     * @param trackId Spotify track ID
-     * @return Audio features for the track, or 403 if API access is restricted
-     */
-    @GET("audio-features/{id}")
-    suspend fun getAudioFeatures(
-        @Header("Authorization") authorization: String,
-        @Path("id") trackId: String
-    ): Response<SpotifyAudioFeatures>
-
-    /**
-     * Get audio features for multiple tracks.
-     * 
-     * ⚠️ IMPORTANT: This endpoint is also deprecated for third-party apps.
-     * See getAudioFeatures() for details.
-     * 
-     * @param authorization Bearer token
-     * @param ids Comma-separated list of track IDs (max 100)
-     * @return Audio features for all tracks, or 403 if API access is restricted
-     */
-    @GET("audio-features")
-    suspend fun getMultipleAudioFeatures(
-        @Header("Authorization") authorization: String,
-        @Query("ids") ids: String
-    ): Response<SpotifyAudioFeaturesResponse>
+    // Audio features endpoints removed as they are deprecated for third-party apps since Nov 2024.
 
     // =====================
     // Track Details

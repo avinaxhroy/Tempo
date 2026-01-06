@@ -240,6 +240,31 @@ fun SettingsScreen(
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
+                
+                // Content Filtering
+                SettingsSectionHeader("Content Filtering")
+                GlassCard(
+                    contentPadding = PaddingValues(0.dp),
+                    variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
+                ) {
+                    Column {
+                        SettingsSwitch(
+                            title = "Filter Podcasts",
+                            subtitle = "Exclude podcast apps and content from tracking",
+                            checked = uiState.filterPodcasts,
+                            onCheckedChange = viewModel::toggleFilterPodcasts
+                        )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        SettingsSwitch(
+                            title = "Filter Audiobooks",
+                            subtitle = "Exclude audiobook apps and content from tracking",
+                            checked = uiState.filterAudiobooks,
+                            onCheckedChange = viewModel::toggleFilterAudiobooks
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // Spotify
                 SettingsSectionHeader("Advanced Stats")

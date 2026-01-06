@@ -109,48 +109,75 @@ class ReccoBeatsEnrichmentService @Inject constructor(
         existingMetadata: EnrichedMetadata?,
         previewUrl: String? = null
     ): ReccoBeatsResult {
-        // Skip if artist is unknown - waiting for metadata to settle
-        if (ArtistParser.isUnknownArtist(track.artist)) {
-            Log.d(TAG, "Skipping ReccoBeats enrichment for track ${track.id}: artist is unknown")
-            return ReccoBeatsResult.TrackNotFound
-        }
-
-        Log.d(TAG, "Enriching track '${track.title}' by '${track.artist}' with ReccoBeats")
-
-        // Strategy 1: Try with existing Spotify ID (fastest path)
-        val spotifyId = existingMetadata?.spotifyId ?: track.spotifyId
-        if (!spotifyId.isNullOrBlank()) {
-            Log.d(TAG, "Trying ReccoBeats with Spotify ID: $spotifyId")
-            val result = fetchAudioFeaturesById(spotifyId)
-            if (result is ReccoBeatsResult.Success) {
-                // Update metadata and return
-                updateMetadataWithReccoBeats(track.id, existingMetadata, result)
-                return result
+        // CRITICAL: Wrap entire enrichment logic to ensure errors don't affect music tracking
+        return try {
+            // Skip if artist is unknown - waiting for metadata to settle
+            if (ArtistParser.isUnknownArtist(track.artist)) {
+                Log.d(TAG, "Skipping ReccoBeats enrichment for track ${track.id}: artist is unknown")
+                return ReccoBeatsResult.TrackNotFound
             }
-            // If 404, the track might not be in ReccoBeats database, continue to search
-            delay(RATE_LIMIT_DELAY_MS)
-        }
 
-        // Strategy 2: Search for track by name
-        Log.d(TAG, "Searching ReccoBeats for '${track.title}' by '${track.artist}'")
-        val searchResult = searchAndEnrich(track)
-        if (searchResult is ReccoBeatsResult.Success) {
-            updateMetadataWithReccoBeats(track.id, existingMetadata, searchResult)
-            return searchResult
-        }
+            Log.d(TAG, "Enriching track '${track.title}' by '${track.artist}' with ReccoBeats")
 
-        // Strategy 3: Audio file analysis (if preview URL available)
-        if (!previewUrl.isNullOrBlank()) {
-            Log.d(TAG, "Trying ReccoBeats audio analysis with preview URL")
-            delay(RATE_LIMIT_DELAY_MS)
-            val analysisResult = analyzePreviewAudio(previewUrl)
-            if (analysisResult is ReccoBeatsResult.Success) {
-                updateMetadataWithReccoBeats(track.id, existingMetadata, analysisResult)
-                return analysisResult
+            // Strategy 1: Try with existing Spotify ID (fastest path)
+            val spotifyId = existingMetadata?.spotifyId ?: track.spotifyId
+            if (!spotifyId.isNullOrBlank()) {
+                try {
+                    Log.d(TAG, "Trying ReccoBeats with Spotify ID: $spotifyId")
+                    val result = fetchAudioFeaturesById(spotifyId)
+                    if (result is ReccoBeatsResult.Success) {
+                        // Update metadata and return
+                        updateMetadataWithReccoBeats(track.id, existingMetadata, result)
+                        return result
+                    }
+                    // If 404, the track might not be in ReccoBeats database, continue to search
+                    delay(RATE_LIMIT_DELAY_MS)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error fetching by Spotify ID, continuing to search: ${e.message}")
+                    // Continue to next strategy instead of failing
+                }
             }
-        }
 
-        return searchResult // Return the search result (likely NotFound or Error)
+            // Strategy 2: Search for track by name
+            val searchResult = try {
+                Log.d(TAG, "Searching ReccoBeats for '${track.title}' by '${track.artist}'")
+                searchAndEnrich(track)
+            } catch (e: Exception) {
+                Log.w(TAG, "Error during ReccoBeats search: ${e.message}")
+                ReccoBeatsResult.Error(e.message ?: "Search failed", retryable = false)
+            }
+            
+            if (searchResult is ReccoBeatsResult.Success) {
+                updateMetadataWithReccoBeats(track.id, existingMetadata, searchResult)
+                return searchResult
+            }
+
+            // Strategy 3: Audio file analysis (if preview URL available)
+            // This is the EXPENSIVE operation - wrap in extra protection
+            if (!previewUrl.isNullOrBlank()) {
+                try {
+                    Log.d(TAG, "Trying ReccoBeats audio analysis with preview URL")
+                    delay(RATE_LIMIT_DELAY_MS)
+                    val analysisResult = analyzePreviewAudio(previewUrl)
+                    if (analysisResult is ReccoBeatsResult.Success) {
+                        updateMetadataWithReccoBeats(track.id, existingMetadata, analysisResult)
+                        return analysisResult
+                    }
+                } catch (e: Exception) {
+                    // Audio analysis failed but this shouldn't crash the enrichment
+                    Log.w(TAG, "ReccoBeats audio analysis failed for track ${track.id}: ${e.message}")
+                    // Continue to return searchResult below
+                }
+            } else if (previewUrl != null) {
+                Log.d(TAG, "Preview URL is blank, skipping audio analysis")
+            }
+
+            return searchResult // Return the search result (likely NotFound or Error)
+        } catch (e: Exception) {
+            // Top-level safety net - should never reach here but ensures robustness
+            Log.e(TAG, "Critical error in ReccoBeats enrichTrack for track ${track.id}", e)
+            ReccoBeatsResult.Error("Critical error: ${e.message}", retryable = false)
+        }
     }
 
     /**

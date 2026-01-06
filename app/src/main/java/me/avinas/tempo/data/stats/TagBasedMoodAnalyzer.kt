@@ -69,28 +69,73 @@ object TagBasedMoodAnalyzer {
         "ballad", "slow jam", "r&b", "soul", "smooth"
     )
     
-    // Genre to energy mapping
+    // Genre to energy mapping - EXPANDED with regional/global genres
     private val highEnergyGenres = setOf(
+        // Western
         "metal", "punk", "hardcore", "thrash", "death metal", "black metal",
         "grindcore", "metalcore", "hard rock", "speed metal", "power metal",
-        "drum and bass", "dnb", "dubstep", "hardstyle", "gabber", "industrial"
+        "drum and bass", "dnb", "dubstep", "hardstyle", "gabber", "industrial",
+        // Indian
+        "bhangra", "punjabi", "item song", "desi hip hop", "indian rock",
+        // Latin
+        "reggaeton", "perreo", "dembow", "baile funk", "kuduro",
+        // African
+        "afrobeats", "gqom", "amapiano", "kwaito", "azonto",
+        // Asian
+        "k-pop", "j-rock", "visual kei", "city pop", "c-pop",
+        // Middle Eastern
+        "dabke", "shaabi"
     )
     
     private val moderateHighEnergyGenres = setOf(
+        // Western
         "rock", "alternative rock", "indie rock", "pop rock", "electronic",
         "edm", "house", "techno", "trance", "dance", "disco", "funk", "ska",
-        "hip hop", "rap", "trap", "grime"
+        "hip hop", "rap", "trap", "grime",
+        // Indian
+        "bollywood", "filmi", "indian pop", "tollywood", "kollywood", "desi",
+        // Latin
+        "salsa", "merengue", "cumbia", "bachata", "samba", "forró", "axé",
+        // African
+        "highlife", "afropop", "bongo flava", "naija", "gengetone",
+        // Asian
+        "mandopop", "cantopop", "j-pop", "thai pop", "indo pop",
+        // Arabic/Turkish
+        "arabic pop", "khaleeji", "turkish pop", "arabesk"
     )
     
     private val moderateEnergyGenres = setOf(
+        // Western
         "pop", "indie", "alternative", "new wave", "synth-pop", "electropop",
-        "r&b", "soul", "reggae", "latin", "world", "country"
+        "r&b", "soul", "reggae", "country",
+        // Indian
+        "semi-classical", "indi-pop", "playback", "sufi rock", "carnatic fusion",
+        // Latin
+        "bossa nova", "tropicalia", "bolero", "ranchera", "norteño", "tango",
+        // African
+        "mbalax", "soukous", "jùjú", "chimurenga",
+        // Asian
+        "enka", "trot", "dangdut", "pinoy pop",
+        // Middle Eastern
+        "raï", "chaabi", "mizrahi"
     )
     
     private val lowEnergyGenres = setOf(
+        // Western
         "ambient", "chillout", "lounge", "downtempo", "trip-hop", "shoegaze",
         "dream pop", "slowcore", "acoustic", "folk", "singer-songwriter",
-        "classical", "jazz", "blues", "easy listening", "new age"
+        "classical", "jazz", "blues", "easy listening", "new age",
+        // Indian
+        "ghazal", "carnatic", "hindustani", "classical indian", "devotional",
+        "bhajan", "kirtan", "sufi", "qawwali", "rabindra sangeet",
+        // Latin
+        "trova", "nueva canción", "música criolla",
+        // African
+        "desert blues", "gnawa", "mbira",
+        // Asian
+        "gamelan", "gagaku", "traditional chinese", "guqin", "erhu",
+        // Middle Eastern
+        "maqam", "classical arabic", "persian classical", "sufi music"
     )
     
     /**
@@ -118,37 +163,81 @@ object TagBasedMoodAnalyzer {
     }
     
     /**
-     * Analyze tags/genres to estimate energy level.
+     * Analyze tags/genres to estimate energy level using weighted scoring.
+     * Multiple matching signals boost confidence in the result.
      */
     fun analyzeEnergy(tags: List<String>, genres: List<String>): EnergyLevel {
         val allTags = (tags + genres).map { it.lowercase().trim() }
         
-        // Check genres first as they're more reliable
+        if (allTags.isEmpty()) return EnergyLevel.UNKNOWN
+        
+        // Weighted scoring: accumulate points for each energy level
+        var veryHighScore = 0.0
+        var highScore = 0.0
+        var moderateScore = 0.0
+        var lowScore = 0.0
+        
         for (tag in allTags) {
+            // Very High Energy indicators
             if (highEnergyGenres.any { it in tag || tag in it }) {
-                return EnergyLevel.VERY_HIGH
+                // Specific subgenres get higher weight
+                veryHighScore += when {
+                    tag.contains("death") || tag.contains("black") || tag.contains("grind") -> 1.5
+                    tag.contains("bhangra") || tag.contains("punjabi") || tag.contains("reggaeton") -> 1.3
+                    tag.contains("afrobeats") || tag.contains("amapiano") || tag.contains("gqom") -> 1.2
+                    else -> 1.0
+                }
             }
-        }
-        
-        for (tag in allTags) {
+            
+            // High Energy indicators
             if (moderateHighEnergyGenres.any { it in tag || tag in it }) {
-                return EnergyLevel.HIGH
+                highScore += when {
+                    tag.contains("bollywood") || tag.contains("filmi") || tag.contains("item") -> 1.2
+                    tag.contains("salsa") || tag.contains("samba") || tag.contains("cumbia") -> 1.1
+                    tag.contains("k-pop") || tag.contains("j-pop") -> 1.1
+                    else -> 1.0
+                }
             }
-        }
-        
-        for (tag in allTags) {
+            
+            // Low Energy indicators
             if (lowEnergyGenres.any { it in tag || tag in it }) {
-                return EnergyLevel.LOW
+                lowScore += when {
+                    tag.contains("ghazal") || tag.contains("sufi") || tag.contains("qawwali") -> 1.3
+                    tag.contains("carnatic") || tag.contains("hindustani") || tag.contains("classical") -> 1.2
+                    tag.contains("ambient") || tag.contains("meditation") -> 1.2
+                    else -> 1.0
+                }
             }
-        }
-        
-        for (tag in allTags) {
+            
+            // Moderate Energy indicators
             if (moderateEnergyGenres.any { it in tag || tag in it }) {
-                return EnergyLevel.MODERATE
+                moderateScore += 1.0
             }
+            
+            // Boost from descriptive mood tags (cross-reference)
+            if (energeticTags.any { it in tag }) highScore += 0.5
+            if (aggressiveTags.any { it in tag }) veryHighScore += 0.5
+            if (calmTags.any { it in tag }) lowScore += 0.5
+            if (happyTags.any { it in tag }) moderateScore += 0.3 // Happy usually moderate energy
+            if (romanticTags.any { it in tag }) lowScore += 0.3 // Romantic usually slower
         }
         
-        return EnergyLevel.UNKNOWN
+        // Find the winning category
+        val scores = mapOf(
+            EnergyLevel.VERY_HIGH to veryHighScore,
+            EnergyLevel.HIGH to highScore,
+            EnergyLevel.MODERATE to moderateScore,
+            EnergyLevel.LOW to lowScore
+        )
+        
+        val winner = scores.maxByOrNull { it.value }
+        
+        // Only return a result if we have some confidence (score > 0)
+        return if (winner != null && winner.value > 0) {
+            winner.key
+        } else {
+            EnergyLevel.UNKNOWN
+        }
     }
     
     /**
@@ -186,5 +275,80 @@ object TagBasedMoodAnalyzer {
         }.take(3)
         
         return MoodSummary(mood, energy, primaryGenre, moodTags)
+    }
+
+    /**
+     * Estimate valence (positiveness) from tags/genres.
+     * Range: 0.0 (sad/depressed) to 1.0 (happy/cheerful)
+     */
+    fun analyzeValence(tags: List<String>, genres: List<String>): Float {
+        val mood = analyzeMood(tags, genres)
+        return when (mood) {
+            MoodCategory.HAPPY -> 0.8f
+            MoodCategory.ENERGETIC -> 0.7f
+            MoodCategory.ROMANTIC -> 0.6f
+            MoodCategory.CALM -> 0.5f // Neutral/Calm
+            MoodCategory.AGGRESSIVE -> 0.3f
+            MoodCategory.MELANCHOLIC -> 0.2f
+            MoodCategory.UNKNOWN -> 0.5f
+        }
+    }
+
+    /**
+     * Estimate danceability from tags using weighted scoring.
+     * Range: 0.0 to 1.0
+     */
+    fun analyzeDanceability(tags: List<String>, genres: List<String>): Float {
+        val allTags = (tags + genres).map { it.lowercase().trim() }
+        
+        if (allTags.isEmpty()) return 0.5f
+        
+        var score = 0.5f // Start neutral
+        
+        for (tag in allTags) {
+            // Strong positive indicators
+            when {
+                tag.contains("dance") || tag.contains("disco") -> score += 0.15f
+                tag.contains("house") || tag.contains("techno") || tag.contains("edm") -> score += 0.12f
+                tag.contains("funk") || tag.contains("club") || tag.contains("party") -> score += 0.1f
+                tag.contains("pop") || tag.contains("hip hop") || tag.contains("r&b") -> score += 0.08f
+                tag.contains("latin") || tag.contains("reggaeton") || tag.contains("salsa") -> score += 0.1f
+            }
+            
+            // Negative indicators (less danceable)
+            when {
+                tag.contains("ambient") || tag.contains("drone") || tag.contains("noise") -> score -= 0.15f
+                tag.contains("classical") || tag.contains("orchestral") -> score -= 0.1f
+                tag.contains("metal") || tag.contains("doom") || tag.contains("sludge") -> score -= 0.08f
+                tag.contains("sleep") || tag.contains("meditation") || tag.contains("relax") -> score -= 0.12f
+            }
+        }
+        
+        // Clamp to valid range
+        return score.coerceIn(0.1f, 0.95f)
+    }
+
+    /**
+     * Estimate acousticness from tags.
+     * Range: 0.0 to 1.0
+     */
+    fun analyzeAcousticness(tags: List<String>, genres: List<String>): Float {
+        val allTags = (tags + genres).map { it.lowercase().trim() }
+        
+        if (allTags.any { tag -> 
+                tag.contains("acoustic") || tag.contains("folk") || tag.contains("classical") || 
+                tag.contains("piano") || tag.contains("unplugged") || tag.contains("orchestra")
+            }) {
+            return 0.8f
+        }
+        
+        if (allTags.any { tag -> 
+                tag.contains("electronic") || tag.contains("synth") || tag.contains("techno") || 
+                tag.contains("edm") || tag.contains("metal") || tag.contains("rock")
+            }) {
+            return 0.1f
+        }
+        
+        return 0.3f // Default slightly low for modern music
     }
 }

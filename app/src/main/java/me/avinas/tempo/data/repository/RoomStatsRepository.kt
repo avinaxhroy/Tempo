@@ -62,7 +62,8 @@ class RoomStatsRepository @Inject constructor(
     private val albumDao: AlbumDao,
     private val enrichedMetadataDao: EnrichedMetadataDao,
     private val spotifyEnrichmentService: me.avinas.tempo.data.enrichment.SpotifyEnrichmentService,
-    private val iTunesEnrichmentService: me.avinas.tempo.data.enrichment.ITunesEnrichmentService
+    private val iTunesEnrichmentService: me.avinas.tempo.data.enrichment.ITunesEnrichmentService,
+    private val userPreferencesDao: UserPreferencesDao
 ) : StatsRepository {
 
     companion object {
@@ -217,7 +218,9 @@ class RoomStatsRepository @Inject constructor(
     // =====================
 
     override suspend fun getListeningOverview(timeRange: TimeRange): ListeningOverview {
-        val key = "overview_${timeRange.name}"
+        // Get user content filtering preferences for cache key
+        val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+        val key = "overview_${timeRange.name}_pod${if (prefs.filterPodcasts) 1 else 0}_audio${if (prefs.filterAudiobooks) 1 else 0}"
         return getCached(key) {
             computeListeningOverview(timeRange)
         }
@@ -228,8 +231,8 @@ class RoomStatsRepository @Inject constructor(
         
         return try {
             // Fetch raw JSONs and aggregate in memory
-            val moodJsonList = statsDao.getMoodRawData(startTime, endTime)
-            val moodStats = calculateMoodAggregates(moodJsonList)
+            val moodRawList = statsDao.getMoodRawData(startTime, endTime)
+            val moodStats = calculateMoodAggregates(moodRawList)
             
             val bingeSessions = statsDao.getBingeListeningSessions(startTime, endTime)
             val discoveryTrends = statsDao.getNewArtistDiscoveryTrend(startTime, endTime)
@@ -258,42 +261,97 @@ class RoomStatsRepository @Inject constructor(
         }
     }
     
-    private fun calculateMoodAggregates(jsonList: List<String>): me.avinas.tempo.data.stats.MoodAggregates? {
-        if (jsonList.isEmpty()) return null
+    private fun calculateMoodAggregates(rawList: List<MoodRawData>): me.avinas.tempo.data.stats.MoodAggregates? {
+        if (rawList.isEmpty()) return null
         
         var totalValence = 0.0
         var totalEnergy = 0.0
         var totalDanceability = 0.0
         var totalTempo = 0.0
         var totalAcousticness = 0.0
-        var count = 0
+        var realCount = 0
+        var estimatedCount = 0
+        var tempoRealCount = 0 // Only count tempo from verified sources
+        var failureCount = 0
         
-        jsonList.forEach { json ->
-            try {
-                // serialized JSON from EnrichedMetadata
-                val obj = org.json.JSONObject(json)
-                if (obj.has("valence") && obj.has("energy")) {
-                    totalValence += obj.optDouble("valence", 0.0)
-                    totalEnergy += obj.optDouble("energy", 0.0)
-                    totalDanceability += obj.optDouble("danceability", 0.0)
-                    totalTempo += obj.optDouble("tempo", 0.0)
-                    totalAcousticness += obj.optDouble("acousticness", 0.0)
-                    count++
+        rawList.forEach { item ->
+            var hasData = false
+            var isRealData = false
+            
+            // Try reading from JSON (Spotify/ReccoBeats features - REAL DATA)
+            if (!item.json.isNullOrBlank()) {
+                try {
+                    val obj = org.json.JSONObject(item.json)
+                    // Check for minimal required fields to ensure data integrity
+                    if (obj.has("energy") && obj.has("valence")) {
+                        totalValence += obj.optDouble("valence", 0.0)
+                        totalEnergy += obj.optDouble("energy", 0.0)
+                        totalDanceability += obj.optDouble("danceability", 0.0)
+                        totalTempo += obj.optDouble("tempo", 0.0)
+                        totalAcousticness += obj.optDouble("acousticness", 0.0)
+                        hasData = true
+                        isRealData = true
+                        if (obj.has("tempo") && obj.optDouble("tempo", 0.0) > 0) {
+                            tempoRealCount++
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Log warning but allow fallback to proceed
+                    Log.w(TAG, "Failed to parse audio features JSON, attempting fallback", e)
                 }
-            } catch (e: Exception) {
-                // Ignore malformed JSON
+            }
+            
+            // Fallback estimation if no real data found (ESTIMATED DATA)
+            if (!hasData) {
+                try {
+                    val tags = item.tags?.split("|||")?.filter { it.isNotBlank() } ?: emptyList()
+                    val genres = item.genres?.split("|||")?.filter { it.isNotBlank() } ?: emptyList()
+                    
+                    if (tags.isNotEmpty() || genres.isNotEmpty()) {
+                        totalValence += TagBasedMoodAnalyzer.analyzeValence(tags, genres).toDouble()
+                        totalEnergy += TagBasedMoodAnalyzer.analyzeEnergy(tags, genres).value.toDouble()
+                        totalDanceability += TagBasedMoodAnalyzer.analyzeDanceability(tags, genres).toDouble()
+                        totalAcousticness += TagBasedMoodAnalyzer.analyzeAcousticness(tags, genres).toDouble()
+                        // NOTE: DO NOT estimate Tempo - it cannot be reliably inferred from genre
+                        hasData = true
+                        // isRealData remains false - this is estimated
+                        
+                        // Log sporadic debug info for fallback validation
+                        if (estimatedCount < 3) {
+                             Log.d(TAG, "Estimated mood for track: energy=${TagBasedMoodAnalyzer.analyzeEnergy(tags, genres).value} (tags: ${tags.take(3)})")
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Catch unexpected errors during tag analysis to prevent crashing the whole batch
+                    Log.e(TAG, "Error during mood estimation fallback", e)
+                    failureCount++
+                }
+            }
+            
+            if (hasData) {
+                if (isRealData) realCount++ else estimatedCount++
             }
         }
         
-        if (count == 0) return null
+        if (failureCount > 0) {
+            Log.w(TAG, "Mood aggregation completed with $failureCount failures out of ${rawList.size} items")
+        }
+        
+        val totalCount = realCount + estimatedCount
+        if (totalCount == 0) return null
+        
+        Log.d(TAG, "Mood stats: $realCount real + $estimatedCount estimated = $totalCount total")
         
         return me.avinas.tempo.data.stats.MoodAggregates(
-            avg_valence = (totalValence / count).toFloat(),
-            avg_energy = (totalEnergy / count).toFloat(),
-            avg_danceability = (totalDanceability / count).toFloat(),
-            avg_tempo = (totalTempo / count).toFloat(),
-            avg_acousticness = (totalAcousticness / count).toFloat(),
-            sample_size = count
+            avg_valence = (totalValence / totalCount).toFloat(),
+            avg_energy = (totalEnergy / totalCount).toFloat(),
+            avg_danceability = (totalDanceability / totalCount).toFloat(),
+            // Only average Tempo if we have real data; null otherwise
+            avg_tempo = if (tempoRealCount > 0) (totalTempo / tempoRealCount).toFloat() else null,
+            avg_acousticness = (totalAcousticness / totalCount).toFloat(),
+            sample_size = totalCount,
+            real_sample_size = realCount,
+            estimated_sample_size = estimatedCount
         )
     }
 
@@ -305,9 +363,14 @@ class RoomStatsRepository @Inject constructor(
     private suspend fun computeListeningOverview(timeRange: TimeRange): ListeningOverview {
         val startTime = timeRange.getStartTimestamp()
         val endTime = timeRange.getEndTimestamp()
+        
+        // Get user content filtering preferences
+        val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+        val filterPodcasts = prefs.filterPodcasts
+        val filterAudiobooks = prefs.filterAudiobooks
 
-        // Use combined query to reduce database round trips (5 queries -> 1 query)
-        val combinedStats = statsDao.getCombinedBasicStats(startTime, endTime)
+        // Use combined query with content filtering to reduce database round trips
+        val combinedStats = statsDao.getCombinedBasicStatsFiltered(startTime, endTime, filterPodcasts, filterAudiobooks)
 
         // Calculate average session duration (approximate: total time / number of days)
         val activeDays = statsDao.getActiveDaysCount(startTime, endTime).coerceAtLeast(1)
@@ -335,7 +398,9 @@ class RoomStatsRepository @Inject constructor(
         page: Int,
         pageSize: Int
     ): PaginatedResult<TopTrack> {
-        val key = "top_tracks_${timeRange.name}_${sortBy.name}_${page}_$pageSize"
+        // Get user content filtering preferences for cache key
+        val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+        val key = "top_tracks_${timeRange.name}_${sortBy.name}_${page}_${pageSize}_pod${if (prefs.filterPodcasts) 1 else 0}_audio${if (prefs.filterAudiobooks) 1 else 0}"
         return getCached(key) {
             computeTopTracks(timeRange, sortBy, page, pageSize)
         }
@@ -350,14 +415,19 @@ class RoomStatsRepository @Inject constructor(
         val startTime = timeRange.getStartTimestamp()
         val endTime = timeRange.getEndTimestamp()
         val offset = page * pageSize
+        
+        // Get user content filtering preferences
+        val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+        val filterPodcasts = prefs.filterPodcasts
+        val filterAudiobooks = prefs.filterAudiobooks
 
         val items = when (sortBy) {
-            SortBy.PLAY_COUNT -> statsDao.getTopTracksByPlayCount(startTime, endTime, pageSize, offset)
-            SortBy.TOTAL_TIME -> statsDao.getTopTracksByTime(startTime, endTime, pageSize, offset)
-            SortBy.COMBINED_SCORE -> statsDao.getTopTracksByCombinedScore(startTime, endTime, pageSize, offset)
+            SortBy.PLAY_COUNT -> statsDao.getTopTracksByPlayCountFiltered(startTime, endTime, filterPodcasts, filterAudiobooks, pageSize, offset)
+            SortBy.TOTAL_TIME -> statsDao.getTopTracksByTimeFiltered(startTime, endTime, filterPodcasts, filterAudiobooks, pageSize, offset)
+            SortBy.COMBINED_SCORE -> statsDao.getTopTracksByCombinedScoreFiltered(startTime, endTime, filterPodcasts, filterAudiobooks, pageSize, offset)
         }
 
-        val totalCount = statsDao.getUniqueTracksPlayedCount(startTime, endTime)
+        val totalCount = statsDao.getUniqueTracksPlayedCountFiltered(startTime, endTime, filterPodcasts, filterAudiobooks)
 
         return PaginatedResult(
             items = items,
@@ -374,7 +444,9 @@ class RoomStatsRepository @Inject constructor(
         page: Int,
         pageSize: Int
     ): PaginatedResult<TopArtist> {
-        val key = "top_artists_${timeRange.name}_${sortBy.name}_${page}_$pageSize"
+        // Get user content filtering preferences for cache key
+        val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+        val key = "top_artists_${timeRange.name}_${sortBy.name}_${page}_${pageSize}_pod${if (prefs.filterPodcasts) 1 else 0}_audio${if (prefs.filterAudiobooks) 1 else 0}"
         return getCached(key) {
             computeTopArtists(timeRange, sortBy, page, pageSize)
         }
@@ -389,9 +461,14 @@ class RoomStatsRepository @Inject constructor(
         val startTime = timeRange.getStartTimestamp()
         val endTime = timeRange.getEndTimestamp()
         val offset = page * pageSize
+        
+        // Get user content filtering preferences
+        val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+        val filterPodcasts = prefs.filterPodcasts
+        val filterAudiobooks = prefs.filterAudiobooks
 
-        // Get raw artist stats from database
-        val rawStats = statsDao.getAllArtistStatsRaw(startTime, endTime)
+        // Get raw artist stats from database with content filtering
+        val rawStats = statsDao.getAllArtistStatsRawFiltered(startTime, endTime, filterPodcasts, filterAudiobooks)
         
         // Split multi-artist entries and aggregate by individual artist
         val artistStatsMap = mutableMapOf<String, ArtistAggregator>()
@@ -613,14 +690,18 @@ class RoomStatsRepository @Inject constructor(
         page: Int,
         pageSize: Int
     ): PaginatedResult<TopAlbum> {
-        val key = "top_albums_${timeRange.name}_${page}_$pageSize"
+        // Get user content filtering preferences
+        val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+        val filterPodcasts = prefs.filterPodcasts
+        val filterAudiobooks = prefs.filterAudiobooks
+        val key = "top_albums_${timeRange.name}_${page}_${pageSize}_pod${if (filterPodcasts) 1 else 0}_audio${if (filterAudiobooks) 1 else 0}"
         return getCached(key) {
             val startTime = timeRange.getStartTimestamp()
             val endTime = timeRange.getEndTimestamp()
             val offset = page * pageSize
 
-            val items = statsDao.getTopAlbums(startTime, endTime, pageSize, offset)
-            val totalCount = statsDao.getUniqueAlbumsCount(startTime, endTime)
+            val items = statsDao.getTopAlbumsFiltered(startTime, endTime, filterPodcasts, filterAudiobooks, pageSize, offset)
+            val totalCount = statsDao.getUniqueAlbumsCountFiltered(startTime, endTime, filterPodcasts, filterAudiobooks)
 
             PaginatedResult(
                 items = items,
@@ -1744,6 +1825,8 @@ class RoomStatsRepository @Inject constructor(
         startTime: Long?,
         endTime: Long?,
         includeSkips: Boolean,
+        filterPodcasts: Boolean,
+        filterAudiobooks: Boolean,
         page: Int,
         pageSize: Int
     ): PaginatedResult<HistoryItem> {
@@ -1753,7 +1836,8 @@ class RoomStatsRepository @Inject constructor(
         val rangeKey = timeRange?.name ?: "custom_${startTime}_${endTime}"
         val queryKey = searchQuery?.lowercase() ?: "all"
         val skipKey = if (includeSkips) "with_skips" else "no_skips"
-        val key = "history_${rangeKey}_${queryKey}_${skipKey}_${page}_$pageSize"
+        val filterKey = "pod${if (filterPodcasts) 1 else 0}_audio${if (filterAudiobooks) 1 else 0}"
+        val key = "history_${rangeKey}_${queryKey}_${skipKey}_${filterKey}_${page}_$pageSize"
 
         return getCached(key) {
             val finalStartTime = startTime ?: timeRange?.getStartTimestamp()
@@ -1765,6 +1849,8 @@ class RoomStatsRepository @Inject constructor(
                 startTime = finalStartTime,
                 endTime = finalEndTime,
                 includeSkips = includeSkips,
+                filterPodcasts = filterPodcasts,
+                filterAudiobooks = filterAudiobooks,
                 limit = pageSize,
                 offset = offset
             )

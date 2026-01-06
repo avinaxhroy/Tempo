@@ -34,7 +34,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import me.avinas.tempo.service.MusicTrackingService
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.theme.TempoRed
-import me.avinas.tempo.ui.theme.WarmVioletAccent
 
 /**
  * Permission setup screen that guides users through granting Notification Listener access.
@@ -72,49 +71,10 @@ fun PermissionScreen(
         }
     }
 
-    Box(
+    me.avinas.tempo.ui.components.DeepOceanBackground(
         modifier = Modifier
             .fillMaxSize()
-            .background(TempoDarkBackground) // Base background
     ) {
-        // Ambient Background Blobs
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val width = size.width
-            val height = size.height
-            
-            // Red blob (top-left)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFFEF4444).copy(alpha = 0.2f), Color.Transparent),
-                    center = Offset(0f, 0f),
-                    radius = width * 0.8f
-                ),
-                center = Offset(0f, 0f),
-                radius = width * 0.8f
-            )
-            
-            // Warm Violet blob (bottom-right)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(WarmVioletAccent.copy(alpha = 0.15f), Color.Transparent),
-                    center = Offset(width, height),
-                    radius = width * 0.9f
-                ),
-                center = Offset(width, height),
-                radius = width * 0.9f
-            )
-            
-            // Purple blob (center-ish)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFFA855F7).copy(alpha = 0.1f), Color.Transparent),
-                    center = Offset(width * 0.3f, height * 0.4f),
-                    radius = width * 0.6f
-                ),
-                center = Offset(width * 0.3f, height * 0.4f),
-                radius = width * 0.6f
-            )
-        }
 
         Column(
             modifier = Modifier

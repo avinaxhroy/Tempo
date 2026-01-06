@@ -49,78 +49,78 @@ sealed class Screen(val route: String) {
 
 @Composable
 fun AppNavigation(
-    modifier: Modifier = Modifier,
-    navController: NavHostController = rememberNavController(),
-    onResetToOnboarding: (() -> Unit)? = null,
-    navigationViewModel: NavigationViewModel = hiltViewModel()
+    walkthroughController: me.avinas.tempo.ui.components.WalkthroughController,
+    onResetToOnboarding: () -> Unit
 ) {
-
+    val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
     val currentDestination = navBackStackEntry?.destination
 
-    val showBottomBar = currentDestination?.route in listOf(
+    // Dismiss any active walkthrough when navigating to a new screen
+    androidx.compose.runtime.LaunchedEffect(currentRoute) {
+        if (currentRoute != null) {
+            walkthroughController.dismissCurrent()
+        }
+    }
+
+    val showBottomBar = currentRoute in listOf(
         Screen.Home.route,
         Screen.Stats.route,
-        Screen.History.route
+        Screen.History.route,
+        Screen.Settings.route
     )
 
-    Box(modifier = Modifier.fillMaxSize().background(me.avinas.tempo.ui.theme.TempoDarkBackground)) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Scaffold(
-                modifier = modifier,
-                containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                bottomBar = {}
-            ) { innerPadding ->
+    me.avinas.tempo.ui.components.DeepOceanBackground {
+        me.avinas.tempo.ui.components.WalkthroughOverlay(
+            controller = walkthroughController
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 NavHost(
                     navController = navController,
                     startDestination = Screen.Home.route,
-                    modifier = Modifier.padding(innerPadding)
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     composable(Screen.Home.route) {
-                        HomeScreen(
-                            onNavigateToStats = { navController.navigate(Screen.Stats.route) },
-                            onNavigateToHistory = { navController.navigate(Screen.History.route) },
+                        me.avinas.tempo.ui.home.HomeScreen(
+                            onNavigateToStats = {
+                                navController.navigate(Screen.Stats.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            onNavigateToHistory = {
+                                navController.navigate(Screen.History.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
                             onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                             onNavigateToTrack = { trackId -> navController.navigate(Screen.SongDetails.createRoute(trackId)) },
                             onNavigateToSpotlight = { navController.navigate(Screen.Spotlight.route) }
                         )
                     }
-                    composable(Screen.Settings.route) {
-                        SettingsScreen(
-                            onNavigateBack = { navController.popBackStack() },
-                            onNavigateToOnboarding = onResetToOnboarding,
-                            onNavigateToBackup = { navController.navigate(Screen.BackupRestore.route) }
-                        )
-                    }
-                    composable(Screen.BackupRestore.route) {
-                        BackupRestoreScreen(
-                            onNavigateBack = { navController.popBackStack() }
-                        )
-                    }
-                    composable(Screen.Spotlight.route) {
-                        me.avinas.tempo.ui.spotlight.SpotlightScreen(
-                            navController = navController
-                        )
-                    }
+
                     composable(Screen.Stats.route) {
                         val scope = rememberCoroutineScope()
+                        val navigationViewModel: me.avinas.tempo.ui.navigation.NavigationViewModel = hiltViewModel()
+
                         me.avinas.tempo.ui.stats.StatsScreen(
                             onNavigateToTrack = { trackId -> navController.navigate(Screen.SongDetails.createRoute(trackId)) },
-                            onNavigateToArtist = { artistIdentifier -> 
-                                // artistIdentifier can be "id:123" for ID or just artist name for name-based
+                            onNavigateToArtist = { artistIdentifier ->
                                 if (artistIdentifier.startsWith("id:")) {
                                     val artistId = artistIdentifier.removePrefix("id:").toLongOrNull()
                                     if (artistId != null && artistId > 0) {
                                         navController.navigate(Screen.ArtistDetails.createRouteById(artistId))
                                     }
                                 } else {
-                                    // Fallback to name-based navigation
                                     navController.navigate(Screen.ArtistDetails.createRouteByName(artistIdentifier))
                                 }
                             },
-                            onNavigateToAlbum = { albumInfo -> 
-                                // albumInfo format: "albumTitle|artistName"
-                                scope.launch {
+                            onNavigateToAlbum = { albumInfo ->
+                                 scope.launch {
                                     val parts = albumInfo.split("|")
                                     if (parts.size == 2) {
                                         val albumId = navigationViewModel.getAlbumIdByTitleAndArtist(parts[0], parts[1])
@@ -132,11 +132,33 @@ fun AppNavigation(
                             }
                         )
                     }
+
                     composable(Screen.History.route) {
                         me.avinas.tempo.ui.history.HistoryScreen(
                             onNavigateToTrack = { trackId -> navController.navigate(Screen.SongDetails.createRoute(trackId)) }
                         )
                     }
+
+                    composable(Screen.Settings.route) {
+                        SettingsScreen(
+                            onNavigateBack = { navController.popBackStack() },
+                            onNavigateToOnboarding = onResetToOnboarding,
+                            onNavigateToBackup = { navController.navigate(Screen.BackupRestore.route) }
+                        )
+                    }
+
+                    composable(Screen.BackupRestore.route) {
+                        BackupRestoreScreen(
+                            onNavigateBack = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable(Screen.Spotlight.route) {
+                        me.avinas.tempo.ui.spotlight.SpotlightScreen(
+                            navController = navController
+                        )
+                    }
+
                     composable(
                         route = Screen.SongDetails.route,
                         arguments = listOf(androidx.navigation.navArgument("trackId") { type = androidx.navigation.NavType.LongType })
@@ -147,14 +169,15 @@ fun AppNavigation(
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }
+
                     composable(
                         route = Screen.ArtistDetails.route,
                         arguments = listOf(
-                            androidx.navigation.navArgument("artistId") { 
-                                type = androidx.navigation.NavType.LongType 
+                            androidx.navigation.navArgument("artistId") {
+                                type = androidx.navigation.NavType.LongType
                                 defaultValue = 0L
                             },
-                            androidx.navigation.navArgument("artistName") { 
+                            androidx.navigation.navArgument("artistName") {
                                 type = androidx.navigation.NavType.StringType
                                 nullable = true
                                 defaultValue = null
@@ -162,11 +185,10 @@ fun AppNavigation(
                         )
                     ) { backStackEntry ->
                         val artistId = backStackEntry.arguments?.getLong("artistId") ?: 0L
-                        val artistName = backStackEntry.arguments?.getString("artistName")?.let { 
-                            java.net.URLDecoder.decode(it, "UTF-8") 
+                        val artistName = backStackEntry.arguments?.getString("artistName")?.let {
+                            java.net.URLDecoder.decode(it, "UTF-8")
                         }
-                        
-                        // Prefer ID-based navigation, fall back to name-based
+
                         if (artistId > 0) {
                             me.avinas.tempo.ui.details.ArtistDetailsScreen(
                                 artistId = artistId,
@@ -182,10 +204,10 @@ fun AppNavigation(
                                 onNavigateToSong = { trackId -> navController.navigate(Screen.SongDetails.createRoute(trackId)) }
                             )
                         } else {
-                            // Invalid state - no artist ID or name
                             navController.popBackStack()
                         }
                     }
+
                     composable(
                         route = Screen.AlbumDetails.route,
                         arguments = listOf(androidx.navigation.navArgument("albumId") { type = androidx.navigation.NavType.LongType })
@@ -198,40 +220,40 @@ fun AppNavigation(
                         )
                     }
                 }
-            }
 
-            if (showBottomBar) {
-                TempoBottomNavigation(
-                    currentDestination = currentDestination,
-                    onNavigateToHome = {
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
+                if (showBottomBar) {
+                    me.avinas.tempo.ui.navigation.TempoBottomNavigation(
+                        currentDestination = currentDestination,
+                        onNavigateToHome = {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
                             }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    onNavigateToStats = {
-                        navController.navigate(Screen.Stats.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
+                        },
+                        onNavigateToStats = {
+                            navController.navigate(Screen.Stats.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
                             }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    onNavigateToHistory = {
-                        navController.navigate(Screen.History.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
+                        },
+                        onNavigateToHistory = {
+                            navController.navigate(Screen.History.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
                             }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                )
+                        },
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
+                }
             }
         }
     }

@@ -25,9 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.*
 import androidx.compose.ui.draw.scale
+import me.avinas.tempo.ui.components.DeepOceanBackground
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.theme.TempoRed
-import me.avinas.tempo.ui.theme.WarmVioletAccent
 import me.avinas.tempo.ui.utils.adaptiveSize
 import me.avinas.tempo.ui.utils.adaptiveTextUnit
 import me.avinas.tempo.ui.utils.isSmallScreen
@@ -37,52 +37,12 @@ fun WelcomeScreen(
     onGetStarted: () -> Unit,
     onSkip: () -> Unit
 ) {
-    Box(
+    DeepOceanBackground(
         modifier = Modifier
             .fillMaxSize()
-            .background(TempoDarkBackground) // Base background
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // Ambient Background Blobs
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val width = size.width
-            val height = size.height
-            
-            // Red blob (top-left)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFFEF4444).copy(alpha = 0.2f), Color.Transparent),
-                    center = Offset(0f, 0f),
-                    radius = width * 0.8f
-                ),
-                center = Offset(0f, 0f),
-                radius = width * 0.8f
-            )
-            
-            // Warm Violet blob (bottom-right)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(WarmVioletAccent.copy(alpha = 0.15f), Color.Transparent),
-                    center = Offset(width, height),
-                    radius = width * 0.9f
-                ),
-                center = Offset(width, height),
-                radius = width * 0.9f
-            )
-            
-            // Purple blob (center-ish)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFFA855F7).copy(alpha = 0.1f), Color.Transparent),
-                    center = Offset(width * 0.3f, height * 0.4f),
-                    radius = width * 0.6f
-                ),
-                center = Offset(width * 0.3f, height * 0.4f),
-                radius = width * 0.6f
-            )
-        }
-
         // Skip button
         TextButton(
             onClick = onSkip,

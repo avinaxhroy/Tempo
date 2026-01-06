@@ -71,13 +71,11 @@ class SpotifyEnrichmentService @Inject constructor(
      */
     sealed class SpotifyEnrichmentResult {
         data class Success(
-            val spotifyId: String,
-            val audioFeatures: SpotifyAudioFeatures
+            val spotifyId: String
         ) : SpotifyEnrichmentResult()
         
         object NotConnected : SpotifyEnrichmentResult()
         object TrackNotFound : SpotifyEnrichmentResult()
-        object AudioFeaturesNotAvailable : SpotifyEnrichmentResult()
         data class Error(val message: String, val retryable: Boolean = true) : SpotifyEnrichmentResult()
     }
 
@@ -105,10 +103,10 @@ class SpotifyEnrichmentService @Inject constructor(
             return SpotifyEnrichmentResult.NotConnected
         }
 
-        // Check if we already have Spotify data with audio features
-        if (existingMetadata?.spotifyId != null && existingMetadata.audioFeaturesJson != null) {
+        // Check if we already have Spotify data
+        if (existingMetadata?.spotifyId != null) {
             Log.d(TAG, "Track ${track.id} already has Spotify data")
-            return parseExistingAudioFeatures(existingMetadata)
+            return SpotifyEnrichmentResult.Success(existingMetadata.spotifyId)
         }
 
         // Skip enrichment if artist is unknown - waiting for metadata to settle
@@ -129,42 +127,14 @@ class SpotifyEnrichmentService @Inject constructor(
 
         val authHeader = "Bearer $accessToken"
 
-        // Check if we already have a Spotify ID (from basic metadata fetch)
-        val spotifyId = existingMetadata?.spotifyId
-        
-        if (spotifyId != null) {
-            // We already have the Spotify ID, just fetch audio features
-            Log.d(TAG, "Using existing Spotify ID: $spotifyId for track ${track.id}")
-            val audioFeatures = fetchAudioFeatures(spotifyId, authHeader)
-                ?: return SpotifyEnrichmentResult.AudioFeaturesNotAvailable
-            
-            // Update metadata with audio features
-            val audioFeaturesJson = serializeAudioFeatures(audioFeatures)
-            val updated = existingMetadata.copy(
-                audioFeaturesJson = audioFeaturesJson,
-                cacheTimestamp = System.currentTimeMillis()
-            )
-            enrichedMetadataDao.upsert(updated)
-            Log.d(TAG, "Saved audio features for track ${track.id}")
-            
-            return SpotifyEnrichmentResult.Success(spotifyId, audioFeatures)
-        }
-
         // Step 1: Search for the track on Spotify
         val spotifyTrack = searchTrack(track.title, track.artist, authHeader)
             ?: return SpotifyEnrichmentResult.TrackNotFound
 
-        // Small delay to be nice to the API
-        delay(RATE_LIMIT_DELAY_MS)
+        // Step 2: Update metadata with Spotify data (just basic info, no audio features)
+        updateMetadataWithSpotifyData(track.id, existingMetadata, spotifyTrack)
 
-        // Step 2: Fetch audio features
-        val audioFeatures = fetchAudioFeatures(spotifyTrack.id, authHeader)
-            ?: return SpotifyEnrichmentResult.AudioFeaturesNotAvailable
-
-        // Step 3: Update metadata with Spotify data
-        updateMetadataWithSpotifyData(track.id, existingMetadata, spotifyTrack, audioFeatures)
-
-        return SpotifyEnrichmentResult.Success(spotifyTrack.id, audioFeatures)
+        return SpotifyEnrichmentResult.Success(spotifyTrack.id)
     }
 
     /**
@@ -415,83 +385,7 @@ class SpotifyEnrichmentService @Inject constructor(
         return if (union > 0) intersection.toDouble() / union else 0.0
     }
 
-    // Track if audio features API is available (Spotify deprecated this endpoint for third-party apps in late 2024)
-    @Volatile
-    private var audioFeaturesAvailable = true
-    private var lastAudioFeaturesCheck = 0L
-    private val AUDIO_FEATURES_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L // Re-check once per day
 
-    /**
-     * Fetch audio features for a track.
-     * 
-     * Note: Spotify deprecated the audio-features endpoint for third-party apps in late 2024.
-     * This method gracefully handles 403 responses and caches the unavailability state
-     * to avoid unnecessary API calls.
-     */
-    private var audioFeaturesSkipLoggedOnce = false // Log "skipping" message only once per session
-    
-    private suspend fun fetchAudioFeatures(
-        spotifyId: String,
-        authHeader: String
-    ): SpotifyAudioFeatures? {
-        // Check if we already know audio features are unavailable
-        val now = System.currentTimeMillis()
-        if (!audioFeaturesAvailable && (now - lastAudioFeaturesCheck) < AUDIO_FEATURES_CHECK_INTERVAL_MS) {
-            // Only log once per session to reduce spam
-            if (!audioFeaturesSkipLoggedOnce) {
-                Log.d(TAG, "Skipping audio features fetch - API deprecated by Spotify (Nov 2024)")
-                audioFeaturesSkipLoggedOnce = true
-            }
-            return null
-        }
-        
-        try {
-            val response = spotifyApi.getAudioFeatures(
-                authorization = authHeader,
-                trackId = spotifyId
-            )
-
-            if (!response.isSuccessful) {
-                val errorCode = response.code()
-                val errorBody = response.errorBody()?.string()
-                Log.e(TAG, "Audio features failed: $errorCode - $errorBody")
-                
-                // 403 means the API is not available for this app (deprecated by Spotify)
-                if (errorCode == 403) {
-                    Log.w(TAG, "Audio features API unavailable (403) - Spotify deprecated this endpoint for third-party apps")
-                    audioFeaturesAvailable = false
-                    lastAudioFeaturesCheck = now
-                    return null
-                }
-                
-                // 404 means audio features not available for this specific track
-                if (errorCode == 404) {
-                    return null
-                }
-                return null
-            }
-
-            // API is working - reset availability flag
-            audioFeaturesAvailable = true
-            return response.body()
-        } catch (e: Exception) {
-            Log.e(TAG, "Audio features error", e)
-            return null
-        }
-    }
-    
-    /**
-     * Check if audio features API is currently available.
-     * Returns false if we've received a 403 recently.
-     */
-    fun isAudioFeaturesAvailable(): Boolean {
-        val now = System.currentTimeMillis()
-        if (!audioFeaturesAvailable && (now - lastAudioFeaturesCheck) >= AUDIO_FEATURES_CHECK_INTERVAL_MS) {
-            // Reset to allow re-checking
-            audioFeaturesAvailable = true
-        }
-        return audioFeaturesAvailable
-    }
     
     /**
      * Fetch genres for an artist from Spotify.
@@ -613,15 +507,13 @@ class SpotifyEnrichmentService @Inject constructor(
     }
 
     /**
-     * Update enriched metadata with Spotify data.
+     * Update enriched metadata with Spotify data (no audio features).
      */
     private suspend fun updateMetadataWithSpotifyData(
         trackId: Long,
         existingMetadata: EnrichedMetadata?,
-        spotifyTrack: SpotifyTrack,
-        audioFeatures: SpotifyAudioFeatures
+        spotifyTrack: SpotifyTrack
     ) {
-        val audioFeaturesJson = serializeAudioFeatures(audioFeatures)
         val primaryArtistId = spotifyTrack.artists.firstOrNull()?.id
         
         // Check if we should update album art based on source priority
@@ -635,7 +527,7 @@ class SpotifyEnrichmentService @Inject constructor(
             spotifyId = spotifyTrack.id,
             spotifyArtistId = primaryArtistId,
             spotifyTrackUrl = spotifyTrack.externalUrls.spotify,
-            audioFeaturesJson = audioFeaturesJson,
+            // audioFeaturesJson = NO LONGER FETCHED FROM SPOTIFY
             spotifyPreviewUrl = spotifyTrack.previewUrl,
             // Use Spotify preview if we don't have one yet
             previewUrl = existingMetadata.previewUrl ?: spotifyTrack.previewUrl,
@@ -651,7 +543,7 @@ class SpotifyEnrichmentService @Inject constructor(
             spotifyId = spotifyTrack.id,
             spotifyArtistId = primaryArtistId,
             spotifyTrackUrl = spotifyTrack.externalUrls.spotify,
-            audioFeaturesJson = audioFeaturesJson,
+            audioFeaturesJson = null, // No audio features
             spotifyPreviewUrl = spotifyTrack.previewUrl,
             previewUrl = spotifyTrack.previewUrl,
             albumArtUrl = spotifyTrack.album.mediumImageUrl,
@@ -663,10 +555,11 @@ class SpotifyEnrichmentService @Inject constructor(
         )
         
         if (shouldUpdateArt && existingMetadata != null) {
-            Log.d(TAG, "Spotify: Replacing ${existingMetadata.albumArtSource} album art with SPOTIFY source (with audio features)")
+            Log.d(TAG, "Spotify: Replacing ${existingMetadata.albumArtSource} album art with SPOTIFY source")
         }
 
         enrichedMetadataDao.upsert(updated)
+        // Log simplified message
         Log.d(TAG, "Saved Spotify data for track $trackId (artistId: $primaryArtistId, url: ${spotifyTrack.externalUrls.spotify})")
         
         // Update Artist table if we have artist info
@@ -688,26 +581,7 @@ class SpotifyEnrichmentService @Inject constructor(
         return adapter.toJson(features)
     }
 
-    /**
-     * Parse existing audio features from stored JSON.
-     */
-    private fun parseExistingAudioFeatures(metadata: EnrichedMetadata): SpotifyEnrichmentResult {
-        val json = metadata.audioFeaturesJson ?: return SpotifyEnrichmentResult.AudioFeaturesNotAvailable
-        val spotifyId = metadata.spotifyId ?: return SpotifyEnrichmentResult.TrackNotFound
 
-        return try {
-            val adapter = moshi.adapter(SpotifyAudioFeatures::class.java)
-            val features = adapter.fromJson(json)
-            if (features != null) {
-                SpotifyEnrichmentResult.Success(spotifyId, features)
-            } else {
-                SpotifyEnrichmentResult.AudioFeaturesNotAvailable
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse stored audio features", e)
-            SpotifyEnrichmentResult.AudioFeaturesNotAvailable
-        }
-    }
 
     /**
      * Get parsed audio features from an enriched metadata record.
@@ -765,15 +639,15 @@ class SpotifyEnrichmentService @Inject constructor(
         var failed = 0
         var skipped = 0
 
-        // Phase 1: Search for tracks and collect Spotify IDs
+        // Phase 1: Search for tracks
         // Store: (original track, metadata, spotifyTrack)
         val searchResults = mutableListOf<Triple<Track, EnrichedMetadata?, SpotifyTrack>>()
         
         tracks.forEachIndexed { index, (track, metadata) ->
-            onProgress?.invoke(index + 1, tracks.size * 2) // First half of progress
+            onProgress?.invoke(index + 1, tracks.size)
             
-            // Skip if already has complete Spotify data
-            if (metadata?.spotifyId != null && metadata.audioFeaturesJson != null) {
+            // Skip if already has complete Spotify data (ignoring audio features since we don't fetch them)
+            if (metadata?.spotifyId != null) {
                 skipped++
                 return@forEachIndexed
             }
@@ -781,6 +655,9 @@ class SpotifyEnrichmentService @Inject constructor(
             val spotifyTrack = searchTrack(track.title, track.artist, authHeader)
             if (spotifyTrack != null) {
                 searchResults.add(Triple(track, metadata, spotifyTrack))
+                // Update basic metadata immediately
+                updateMetadataWithSpotifyData(track.id, metadata, spotifyTrack)
+                successful++
             } else {
                 failed++
             }
@@ -789,35 +666,6 @@ class SpotifyEnrichmentService @Inject constructor(
             delay(RATE_LIMIT_DELAY_MS)
         }
         
-        if (searchResults.isEmpty()) {
-            return BatchEnrichmentResult(
-                total = tracks.size,
-                successful = 0,
-                failed = failed,
-                skipped = skipped,
-                reason = null
-            )
-        }
-
-        // Phase 2: Batch fetch audio features (up to 100 per request)
-        val spotifyIds = searchResults.map { it.third.id }
-        val audioFeaturesMap = fetchBatchAudioFeatures(spotifyIds, authHeader)
-        
-        // Phase 3: Update metadata for all tracks
-        searchResults.forEachIndexed { index, (track, existingMetadata, spotifyTrack) ->
-            onProgress?.invoke(tracks.size + index + 1, tracks.size * 2) // Second half
-            
-            val audioFeatures = audioFeaturesMap[spotifyTrack.id]
-            if (audioFeatures != null) {
-                updateMetadataWithSpotifyData(track.id, existingMetadata, spotifyTrack, audioFeatures)
-                successful++
-            } else {
-                // Still save basic metadata even without audio features
-                updateMetadataWithBasicSpotifyData(track.id, existingMetadata, spotifyTrack)
-                successful++ // Count as partial success
-            }
-        }
-
         return BatchEnrichmentResult(
             total = tracks.size,
             successful = successful,
@@ -827,115 +675,9 @@ class SpotifyEnrichmentService @Inject constructor(
         )
     }
     
-    /**
-     * Fetch audio features for multiple tracks in batches of 100.
-     * Returns a map of spotifyId -> audioFeatures
-     * 
-     * Note: This endpoint is also deprecated by Spotify for third-party apps.
-     * Returns empty map if audio features API is unavailable (403).
-     */
-    private suspend fun fetchBatchAudioFeatures(
-        spotifyIds: List<String>,
-        authHeader: String
-    ): Map<String, SpotifyAudioFeatures> {
-        // Check if audio features API is available before making requests
-        if (!audioFeaturesAvailable) {
-            val now = System.currentTimeMillis()
-            if ((now - lastAudioFeaturesCheck) < AUDIO_FEATURES_CHECK_INTERVAL_MS) {
-                Log.d(TAG, "Skipping batch audio features - API unavailable (cached)")
-                return emptyMap()
-            }
-        }
-        
-        val result = mutableMapOf<String, SpotifyAudioFeatures>()
-        
-        // Spotify allows up to 100 IDs per request
-        spotifyIds.chunked(100).forEach { chunk ->
-            try {
-                val idsParam = chunk.joinToString(",")
-                val response = spotifyApi.getMultipleAudioFeatures(
-                    authorization = authHeader,
-                    ids = idsParam
-                )
-                
-                if (response.isSuccessful) {
-                    // API is working - reset availability flag
-                    audioFeaturesAvailable = true
-                    response.body()?.audioFeatures?.forEachIndexed { index, features ->
-                        if (features != null && index < chunk.size) {
-                            result[chunk[index]] = features
-                        }
-                    }
-                } else {
-                    val errorCode = response.code()
-                    Log.w(TAG, "Batch audio features failed: $errorCode")
-                    
-                    // 403 means API is not available for this app
-                    if (errorCode == 403) {
-                        Log.w(TAG, "Batch audio features API unavailable (403) - Spotify deprecated this endpoint")
-                        audioFeaturesAvailable = false
-                        lastAudioFeaturesCheck = System.currentTimeMillis()
-                        return result // Return whatever we have so far
-                    }
-                }
-                
-                // Small delay between batch requests
-                delay(RATE_LIMIT_DELAY_MS)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error fetching batch audio features", e)
-            }
-        }
-        
-        Log.d(TAG, "Fetched audio features for ${result.size}/${spotifyIds.size} tracks in ${(spotifyIds.size + 99) / 100} API calls")
-        return result
-    }
-    
-    /**
-     * Update metadata with basic Spotify data (without audio features).
-     * Used when audio features are not available for a track.
-     */
-    private suspend fun updateMetadataWithBasicSpotifyData(
-        trackId: Long,
-        existingMetadata: EnrichedMetadata?,
-        spotifyTrack: SpotifyTrack
-    ) {
-        // Check if we should update album art based on source priority
-        // Spotify (priority 6) can replace any lower priority source
-        val currentSource = existingMetadata?.albumArtSource ?: me.avinas.tempo.data.local.entities.AlbumArtSource.NONE
-        val shouldUpdateArt = existingMetadata?.albumArtUrl.isNullOrBlank() || 
-            currentSource.shouldBeReplacedBy(me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY)
-        
-        val updated = existingMetadata?.copy(
-            spotifyId = spotifyTrack.id,
-            albumTitle = existingMetadata.albumTitle ?: spotifyTrack.album.name,
-            albumArtUrl = if (shouldUpdateArt) spotifyTrack.album.mediumImageUrl ?: existingMetadata.albumArtUrl else existingMetadata.albumArtUrl,
-            albumArtUrlSmall = if (shouldUpdateArt) spotifyTrack.album.smallImageUrl ?: existingMetadata.albumArtUrlSmall else existingMetadata.albumArtUrlSmall,
-            albumArtUrlLarge = if (shouldUpdateArt) spotifyTrack.album.largeImageUrl ?: existingMetadata.albumArtUrlLarge else existingMetadata.albumArtUrlLarge,
-            albumArtSource = if (shouldUpdateArt && spotifyTrack.album.mediumImageUrl != null) me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY else existingMetadata.albumArtSource,
-            trackDurationMs = spotifyTrack.durationMs,
-            isrc = spotifyTrack.externalIds?.isrc,
-            spotifyTrackUrl = spotifyTrack.externalUrls.spotify,
-            cacheTimestamp = System.currentTimeMillis()
-        ) ?: EnrichedMetadata(
-            trackId = trackId,
-            spotifyId = spotifyTrack.id,
-            albumTitle = spotifyTrack.album.name,
-            albumArtUrl = spotifyTrack.album.mediumImageUrl,
-            albumArtUrlSmall = spotifyTrack.album.smallImageUrl,
-            albumArtUrlLarge = spotifyTrack.album.largeImageUrl,
-            albumArtSource = if (spotifyTrack.album.mediumImageUrl != null) me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY else me.avinas.tempo.data.local.entities.AlbumArtSource.NONE,
-            trackDurationMs = spotifyTrack.durationMs,
-            isrc = spotifyTrack.externalIds?.isrc,
-            spotifyTrackUrl = spotifyTrack.externalUrls.spotify,
-            cacheTimestamp = System.currentTimeMillis()
-        )
-        
-        if (shouldUpdateArt && spotifyTrack.album.mediumImageUrl != null && existingMetadata != null) {
-            android.util.Log.d(TAG, "Spotify: Replacing ${existingMetadata.albumArtSource} album art with SPOTIFY source")
-        }
 
-        enrichedMetadataDao.upsert(updated)
-    }
+    
+
 
     data class BatchEnrichmentResult(
         val total: Int,
@@ -964,7 +706,7 @@ class SpotifyEnrichmentService @Inject constructor(
             val genres: List<String>,
             val durationMs: Long?,
             val isrc: String?,
-            val audioFeaturesJson: String?, // Serialized audio features JSON (ready to store in DB)
+            // audioFeaturesJson removed
             val previewUrl: String?, // Spotify 30s preview URL for ReccoBeats audio analysis fallback
             val spotifyTrackUrl: String? // Direct link to track on Spotify
         ) : BasicMetadataResult()
@@ -1020,38 +762,19 @@ class SpotifyEnrichmentService @Inject constructor(
         
         Log.d(TAG, "Verified artist: '$verifiedArtistName' (all: '$allArtistNames')")
         
-        // OPTIMIZATION: Fetch genres and audio features in parallel
-        // This reduces total API wait time from ~200ms to ~100ms
-        val (genres, audioFeatures) = coroutineScope {
-            val genresDeferred = async {
-                if (primaryArtist != null) {
-                    fetchArtistGenres(primaryArtist.id, authHeader)
-                } else {
-                    emptyList()
-                }
+        // OPTIMIZATION: Fetch genres in parallel
+        val genres = coroutineScope {
+            if (primaryArtist != null) {
+                fetchArtistGenres(primaryArtist.id, authHeader)
+            } else {
+                emptyList()
             }
-            
-            val audioFeaturesDeferred = async {
-                fetchAudioFeatures(spotifyTrack.id, authHeader)
-            }
-            
-            Pair(genresDeferred.await(), audioFeaturesDeferred.await())
         }
         
         if (genres.isNotEmpty()) {
             Log.d(TAG, "Found ${genres.size} genres for '${track.title}': ${genres.take(3).joinToString(", ")}")
         }
         
-        // Serialize audio features to JSON if available
-        val audioFeaturesJson = audioFeatures?.let { serializeAudioFeatures(it) }
-        
-        // Only log at debug level - avoid spam since audio features API is deprecated
-        if (audioFeatures == null && !audioFeaturesAvailable) {
-            // Already logged at warn level when we discovered it was unavailable
-        } else if (audioFeatures == null) {
-            Log.d(TAG, "Audio features not available for '${track.title}'")
-        }
-
         return BasicMetadataResult.Success(
             spotifyId = spotifyTrack.id,
             spotifyArtistId = primaryArtist?.id,
@@ -1066,63 +789,12 @@ class SpotifyEnrichmentService @Inject constructor(
             genres = genres, // Genres fetched from Spotify artist endpoint
             durationMs = spotifyTrack.durationMs,
             isrc = spotifyTrack.externalIds?.isrc,
-            audioFeaturesJson = audioFeaturesJson,
             previewUrl = spotifyTrack.previewUrl,
             spotifyTrackUrl = spotifyTrack.externalUrls.spotify
         )
     }
 
-    /**
-     * Super-efficient bulk enrichment for tracks that already have Spotify IDs.
-     * 
-     * Use this when you have tracks with spotifyId but missing audio features.
-     * Makes only 1 API call per 100 tracks!
-     * 
-     * @param metadataList List of EnrichedMetadata with spotifyId set
-     * @return Number of tracks successfully enriched with audio features
-     */
-    suspend fun enrichAudioFeaturesForKnownTracks(
-        metadataList: List<EnrichedMetadata>
-    ): Int {
-        if (!isAvailable()) {
-            Log.d(TAG, "Spotify not connected, skipping bulk audio features enrichment")
-            return 0
-        }
 
-        // Filter to tracks with Spotify ID but missing audio features
-        val needsFeatures = metadataList.filter { 
-            it.spotifyId != null && it.audioFeaturesJson == null 
-        }
-        
-        if (needsFeatures.isEmpty()) {
-            Log.d(TAG, "No tracks need audio features enrichment")
-            return 0
-        }
-
-        val accessToken = authManager.getValidAccessToken() ?: return 0
-        val authHeader = "Bearer $accessToken"
-        
-        val spotifyIds = needsFeatures.mapNotNull { it.spotifyId }
-        val audioFeaturesMap = fetchBatchAudioFeatures(spotifyIds, authHeader)
-        
-        var enrichedCount = 0
-        needsFeatures.forEach { metadata ->
-            val features = audioFeaturesMap[metadata.spotifyId]
-            if (features != null) {
-                val audioFeaturesJson = serializeAudioFeatures(features)
-                val updated = metadata.copy(
-                    audioFeaturesJson = audioFeaturesJson,
-                    spotifyEnrichmentStatus = me.avinas.tempo.data.local.entities.SpotifyEnrichmentStatus.ENRICHED,
-                    cacheTimestamp = System.currentTimeMillis()
-                )
-                enrichedMetadataDao.upsert(updated)
-                enrichedCount++
-            }
-        }
-        
-        Log.i(TAG, "Bulk enriched audio features for $enrichedCount/${needsFeatures.size} tracks")
-        return enrichedCount
-    }
 
     /**
      * Fetch artist image URL from Spotify.
@@ -1589,6 +1261,7 @@ class SpotifyEnrichmentService @Inject constructor(
             
             // Step 2: Get Spotify IDs for the top tracks
             val topTrackIds = topTracks.map { it.id }
+            
             
             // Step 3: Look up which tracks exist in our database with audio features
             val featuresFromDb = mutableListOf<SpotifyAudioFeatures>()

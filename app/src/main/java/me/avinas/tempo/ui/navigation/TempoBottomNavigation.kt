@@ -1,6 +1,7 @@
 package me.avinas.tempo.ui.navigation
 
 import me.avinas.tempo.ui.theme.TempoDarkBackground
+import me.avinas.tempo.ui.theme.TempoDarkSurface
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -54,13 +55,13 @@ fun TempoBottomNavigation(
             .padding(horizontal = 24.dp, vertical = 24.dp)
             .height(72.dp)
             .clip(RoundedCornerShape(36.dp))
-            .background(TempoDarkBackground) // Base dark background
+            .background(TempoDarkSurface) // Lighter surface for contrast against background
             .border(
                 width = 1.dp,
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.05f), // Reduced from 0.1f
-                        Color.White.copy(alpha = 0.02f)  // Reduced from 0.05f
+                        Color.White.copy(alpha = 0.15f), // Increased from 0.05f for visibility
+                        Color.White.copy(alpha = 0.05f)  // Increased from 0.02f
                     )
                 ),
                 shape = RoundedCornerShape(36.dp)

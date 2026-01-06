@@ -28,8 +28,12 @@ class InsightGenerator @Inject constructor() {
             val valence = mood.avg_valence ?: return@let
             val energy = mood.avg_energy ?: return@let
             
+            // Subtle indicator for estimated data - only show if >30% is estimated
+            val estimatedPercent = if (mood.sample_size > 0) (mood.estimated_sample_size * 100) / mood.sample_size else 0
+            val estimatedNote = if (estimatedPercent > 30) " • via genre" else ""
+            
             val moodTitle = me.avinas.tempo.utils.TempoCopyEngine.getMoodTitle(valence, energy)
-            val description = me.avinas.tempo.utils.TempoCopyEngine.getMoodDescription(energy, valence)
+            val description = me.avinas.tempo.utils.TempoCopyEngine.getMoodDescription(energy, valence) + estimatedNote
             
             insights.add(InsightCardData(
                 title = moodTitle,
@@ -43,7 +47,7 @@ class InsightGenerator @Inject constructor() {
             if (energy >= 0.7f) {
                 insights.add(InsightCardData(
                     title = "High Energy Mode! ⚡",
-                    description = "Average energy level: ${(energy * 100).toInt()}%",
+                    description = "Average energy level: ${(energy * 100).toInt()}%$estimatedNote",
                     type = InsightType.ENERGY,
                     score = 0.65,
                     data = mood
@@ -54,15 +58,16 @@ class InsightGenerator @Inject constructor() {
             if (danceability > 0.5f) {
                 insights.add(InsightCardData(
                     title = "Ready to Dance! 💃",
-                    description = "Your playlist is ${(danceability * 100).toInt()}% danceable",
+                    description = "Your playlist is ${(danceability * 100).toInt()}% danceable$estimatedNote",
                     type = InsightType.DANCEABILITY,
                     score = 0.65,
                     data = mood
                 ))
             }
 
-            val tempo = mood.avg_tempo ?: 0f
-            if (tempo > 0) {
+            val tempo = mood.avg_tempo
+            // Only show Tempo insight if we have real audio data (not estimated)
+            if (tempo != null && tempo > 0 && mood.isFullyVerified) {
                  val tempoTitle = when {
                     tempo >= 140 -> "Fast & furious 🏎️"
                     tempo >= 120 -> "Upbeat tempo 🎶"
@@ -83,7 +88,7 @@ class InsightGenerator @Inject constructor() {
             if (acousticness > 0.5f) {
                  insights.add(InsightCardData(
                     title = "Acoustic Soul 🎸",
-                    description = "${(acousticness * 100).toInt()}% of your music is acoustic",
+                    description = "${(acousticness * 100).toInt()}% of your music is acoustic$estimatedNote",
                     type = InsightType.ACOUSTICNESS,
                     score = 0.65,
                     data = mood

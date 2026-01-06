@@ -292,6 +292,9 @@ interface StatsRepository {
 
     /**
      * Get listening history with pagination.
+     * 
+     * @param filterPodcasts If true, exclude tracks marked as PODCAST
+     * @param filterAudiobooks If true, exclude tracks marked as AUDIOBOOK
      */
     suspend fun getHistory(
         timeRange: TimeRange? = null, // Made nullable to support custom ranges if needed, or handle inside implementation
@@ -299,6 +302,8 @@ interface StatsRepository {
         startTime: Long? = null,
         endTime: Long? = null,
         includeSkips: Boolean = true,
+        filterPodcasts: Boolean = true,
+        filterAudiobooks: Boolean = true,
         page: Int = 0,
         pageSize: Int = 20
     ): PaginatedResult<HistoryItem>

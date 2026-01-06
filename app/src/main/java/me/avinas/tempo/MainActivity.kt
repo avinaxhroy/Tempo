@@ -42,6 +42,9 @@ class MainActivity : ComponentActivity() {
         // Handle POST_NOTIFICATIONS permission result
     }
 
+    @javax.inject.Inject
+    lateinit var walkthroughController: me.avinas.tempo.ui.components.WalkthroughController
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -64,6 +67,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     TempoApp(
+                        walkthroughController = walkthroughController,
                         onSetupComplete = {
                             // Schedule the health worker after setup is complete
                             ServiceHealthWorker.schedule(this)
@@ -82,6 +86,7 @@ enum class OnboardingStep {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TempoApp(
+    walkthroughController: me.avinas.tempo.ui.components.WalkthroughController,
     onSetupComplete: () -> Unit,
     viewModel: OnboardingViewModel = hiltViewModel(),
     spotifyViewModel: SpotifyViewModel = hiltViewModel()
@@ -193,6 +198,7 @@ fun TempoApp(
             }
             OnboardingStep.COMPLETED -> {
                 AppNavigation(
+                    walkthroughController = walkthroughController,
                     onResetToOnboarding = {
                         currentStep = OnboardingStep.WELCOME
                     }

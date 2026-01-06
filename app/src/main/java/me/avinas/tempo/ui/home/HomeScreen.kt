@@ -37,6 +37,8 @@ import me.avinas.tempo.ui.home.components.*
 import me.avinas.tempo.data.stats.InsightCardData
 import me.avinas.tempo.data.stats.InsightType
 import me.avinas.tempo.data.stats.TimeRange
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.layout.onGloballyPositioned
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,8 +122,23 @@ fun HomeScreen(
                             )
 
 
+                            // Trigger Walkthrough
+                            val walkthroughController = me.avinas.tempo.ui.components.LocalWalkthroughController.current
+                            LaunchedEffect(Unit) {
+                                walkthroughController.checkAndTrigger(me.avinas.tempo.ui.components.WalkthroughStep.HOME_SPOTLIGHT)
+                            }
+
                             SpotlightStoryCard(
-                                onClick = onNavigateToSpotlight
+                                onClick = {
+                                    walkthroughController.dismiss()
+                                    onNavigateToSpotlight()
+                                },
+                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                    walkthroughController.registerTarget(
+                                        me.avinas.tempo.ui.components.WalkthroughStep.HOME_SPOTLIGHT,
+                                        coordinates
+                                    )
+                                }
                             )
 
                             // NEW: Quick Stats (Side-by-side Top Artist & Track)
@@ -220,7 +237,7 @@ fun HomeScreen(
                 availableRanges = listOf(TimeRange.THIS_WEEK, TimeRange.THIS_MONTH, TimeRange.THIS_YEAR, TimeRange.ALL_TIME),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 100.dp) // Adjusted to sit above nav bar
+                    .padding(bottom = 130.dp) // Adjusted to sit above nav bar
                     .padding(horizontal = 32.dp)
             )
         }

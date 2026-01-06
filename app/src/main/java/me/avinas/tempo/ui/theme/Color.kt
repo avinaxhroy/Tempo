@@ -17,12 +17,16 @@ val TertiaryRed = Color(0xFF7F1D1D) // Red 900
 val AccentRed = Color(0xFFF87171) // Red 400
 
 // Custom App Colors
-val TempoDarkBackground = Color(0xFF161014) // Deep Prune/Charcoal (Red-Violet undertone)
-val TempoDarkSurface = Color(0xFF1F1A1E) // Plum Charcoal (Surface)
+val TempoDarkBackground = Color(0xFF0A0A0A) // Obsidian (Cinematic Base)
+val TempoDarkSurface = Color(0xFF141414) // Slightly lighter for subtle depth
 val TempoPrimary = Color(0xFFEF4444)
 val TempoSecondary = Color(0xFF14B8A6) // Teal 500 for calmness
 val TempoError = Color(0xFFF43F5E) // Rose 500
-val WarmVioletAccent = Color(0xFFD946EF) // Fuchsia 500 (Orchid/Magenta) - No Blue Tilt
+
+// Premium Mesh Gradient Accents (Warm/Neutral)
+val MeshGradient1 = Color(0xFF1C1917) // Warm Slate
+val MeshGradient2 = Color(0xFF171717) // Rich Charcoal
+val MeshGradient3 = Color(0xFF1F1A1A) // Deep Earth
 
 // Legacy Support
 val TempoRed = Color(0xFFEF4444) // Mapped to PrimaryRed equivalent

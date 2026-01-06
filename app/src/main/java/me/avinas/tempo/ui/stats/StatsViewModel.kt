@@ -47,6 +47,16 @@ class StatsViewModel @Inject constructor(
                 }
         }
         
+        viewModelScope.launch {
+            // Observe metadata updates - this triggers when content is marked as podcast/audiobook
+            // or when track metadata is enriched
+            statsRepository.observeMetadataUpdates()
+                .collect {
+                    // Force refresh when metadata changes (e.g., content marked as podcast)
+                    refreshTrigger.value = System.currentTimeMillis()
+                }
+        }
+        
         // React to refresh triggers with debounce to prevent excessive refreshes
         viewModelScope.launch {
             refreshTrigger

@@ -31,7 +31,8 @@ import androidx.room.PrimaryKey
         Index(value = ["artist"]),
         Index(value = ["album"]),
         Index(value = ["primary_artist_id"]),
-        Index(value = ["title", "artist"]) // For duplicate detection
+        Index(value = ["title", "artist"]), // For duplicate detection
+        Index(value = ["content_type"]) // For content filtering
     ]
 )
 data class Track(
@@ -63,5 +64,13 @@ data class Track(
      * Can be null for legacy tracks not yet migrated.
      */
     @ColumnInfo(name = "primary_artist_id")
-    val primaryArtistId: Long? = null
+    val primaryArtistId: Long? = null,
+    
+    /**
+     * Content type classification: MUSIC, PODCAST, or AUDIOBOOK.
+     * Used for filtering non-music content from statistics.
+     * Defaults to MUSIC for backward compatibility.
+     */
+    @ColumnInfo(name = "content_type", defaultValue = "MUSIC")
+    val contentType: String = "MUSIC"
 )

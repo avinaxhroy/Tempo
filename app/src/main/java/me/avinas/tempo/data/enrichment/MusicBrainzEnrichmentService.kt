@@ -515,7 +515,14 @@ class MusicBrainzEnrichmentService @Inject constructor(
                 ?: recording.firstReleaseDate
             val releaseYear = releaseDate?.take(4)?.toIntOrNull()
             
+            // Check if we should update album art based on source priority
+            // MusicBrainz (priority 5) should not overwrite Spotify (priority 6)
+            val currentSource = existingMetadata?.albumArtSource ?: AlbumArtSource.NONE
+            val shouldUpdateArt = albumArtUrl != null && 
+                currentSource.shouldBeReplacedBy(AlbumArtSource.MUSICBRAINZ)
+            
             // Build metadata - use complete artist name that includes all credited artists
+            // Respect existing album art if from higher priority source (e.g., Spotify)
             val metadata = EnrichedMetadata(
                 id = existingMetadata?.id ?: 0,
                 trackId = track.id,
@@ -527,11 +534,13 @@ class MusicBrainzEnrichmentService @Inject constructor(
                 releaseDate = releaseDate,
                 releaseYear = releaseYear,
                 releaseType = primaryRelease?.releaseGroup?.primaryType,
-                albumArtUrl = albumArtUrl,
-                albumArtUrlSmall = albumArtUrlSmall,
-                albumArtUrlLarge = albumArtUrlLarge,
-                // Set source as MUSICBRAINZ if we got album art from Cover Art Archive
-                albumArtSource = if (albumArtUrl != null) AlbumArtSource.MUSICBRAINZ else AlbumArtSource.NONE,
+                albumArtUrl = if (shouldUpdateArt) albumArtUrl else (existingMetadata?.albumArtUrl ?: albumArtUrl),
+                albumArtUrlSmall = if (shouldUpdateArt) albumArtUrlSmall else (existingMetadata?.albumArtUrlSmall ?: albumArtUrlSmall),
+                albumArtUrlLarge = if (shouldUpdateArt) albumArtUrlLarge else (existingMetadata?.albumArtUrlLarge ?: albumArtUrlLarge),
+                // Set source as MUSICBRAINZ only if we're actually updating the album art
+                albumArtSource = if (shouldUpdateArt) AlbumArtSource.MUSICBRAINZ 
+                                 else (existingMetadata?.albumArtSource ?: 
+                                       if (albumArtUrl != null) AlbumArtSource.MUSICBRAINZ else AlbumArtSource.NONE),
                 artistName = allArtistNames ?: primaryArtist?.name ?: recording.artistCredit?.firstOrNull()?.name,
                 artistCountry = primaryArtist?.country,
                 artistType = primaryArtist?.type,
@@ -546,6 +555,13 @@ class MusicBrainzEnrichmentService @Inject constructor(
                 lastEnrichmentAttempt = System.currentTimeMillis(),
                 cacheTimestamp = System.currentTimeMillis()
             )
+            
+            // Log album art source decision
+            if (shouldUpdateArt && existingMetadata != null) {
+                Log.d(TAG, "MusicBrainz: Replacing ${existingMetadata.albumArtSource} album art with MUSICBRAINZ source")
+            } else if (!shouldUpdateArt && existingMetadata?.albumArtSource != null && albumArtUrl != null) {
+                Log.d(TAG, "MusicBrainz: Preserving ${existingMetadata.albumArtSource} album art (higher priority than MUSICBRAINZ)")
+            }
             
             enrichedMetadataDao.upsert(metadata)
             Log.i(TAG, "Successfully enriched track ${track.id}: '${track.title}'")
@@ -567,9 +583,17 @@ class MusicBrainzEnrichmentService @Inject constructor(
             }
             
             // Update the Track entity with MusicBrainz ID and album art URL
+            // Only update album art if we actually used MusicBrain art (not if we preserved Spotify art)
+            val finalAlbumArtUrl = if (shouldUpdateArt) {
+                albumArtUrl ?: albumArtUrlSmall ?: albumArtUrlLarge
+            } else {
+                // Preserve existing art or use MusicBrainz if no existing art
+                track.albumArtUrl ?: (albumArtUrl ?: albumArtUrlSmall ?: albumArtUrlLarge)
+            }
+            
             val updatedTrack = track.copy(
                 musicbrainzId = recording.id,
-                albumArtUrl = albumArtUrl ?: albumArtUrlSmall ?: albumArtUrlLarge,
+                albumArtUrl = finalAlbumArtUrl,
                 album = if (track.album.isNullOrBlank()) primaryRelease?.title else track.album
             )
             trackDao.update(updatedTrack)

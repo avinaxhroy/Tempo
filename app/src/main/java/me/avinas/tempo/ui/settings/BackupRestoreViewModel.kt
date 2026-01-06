@@ -134,15 +134,51 @@ class BackupRestoreViewModel @Inject constructor(
                 val artistCount = database.artistDao().getAllArtistsSync().size
                 val eventCount = database.listeningEventDao().getAllEventsSync().size
                 
-                // Calculate local image count and size
-                val albumArtDir = File(context.filesDir, ALBUM_ART_DIR)
-                val localImages = if (albumArtDir.exists()) {
-                    albumArtDir.listFiles()?.toList() ?: emptyList()
-                } else {
-                    emptyList()
+                // Calculate local image count and size - ONLY count images referenced in database
+                // This matches the logic in ImportExportManager.collectImageUrls()
+                val tracks = database.trackDao().getAllSync()
+                val artists = database.artistDao().getAllArtistsSync()
+                val albums = database.albumDao().getAllSync()
+                val enrichedMetadata = database.enrichedMetadataDao().getAllSync()
+                
+                // Collect all local image URLs (file://) that are actually referenced
+                val localImageUrls = mutableSetOf<String>()
+                
+                fun collectLocal(url: String?) {
+                    url?.let {
+                        if (it.startsWith("file://")) {
+                            localImageUrls.add(it)
+                        }
+                    }
                 }
-                val localImageCount = localImages.size
-                val localImageSize = localImages.sumOf { it.length() }
+                
+                tracks.forEach { collectLocal(it.albumArtUrl) }
+                artists.forEach { collectLocal(it.imageUrl) }
+                albums.forEach { collectLocal(it.artworkUrl) }
+                enrichedMetadata.forEach { meta ->
+                    collectLocal(meta.albumArtUrl)
+                    collectLocal(meta.albumArtUrlSmall)
+                    collectLocal(meta.albumArtUrlLarge)
+                    collectLocal(meta.spotifyArtistImageUrl)
+                    collectLocal(meta.iTunesArtistImageUrl)
+                    collectLocal(meta.deezerArtistImageUrl)
+                    collectLocal(meta.lastFmArtistImageUrl)
+                }
+                
+                // Calculate size of referenced local images only
+                var localImageSize = 0L
+                var localImageCount = 0
+                localImageUrls.forEach { fileUrl ->
+                    try {
+                        val file = File(fileUrl.removePrefix("file://"))
+                        if (file.exists()) {
+                            localImageSize += file.length()
+                            localImageCount++
+                        }
+                    } catch (e: Exception) {
+                        // Ignore invalid file paths
+                    }
+                }
                 
                 // Estimate export size
                 val estimatedJsonSize = (trackCount + artistCount + eventCount) * 500L

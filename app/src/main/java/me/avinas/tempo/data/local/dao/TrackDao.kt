@@ -31,7 +31,7 @@ interface TrackDao {
     suspend fun update(track: Track)
     
     @Query("DELETE FROM tracks WHERE id = :id")
-    suspend fun deleteById(id: Long)
+    suspend fun deleteById(id: Long): Int
 
     @Query("SELECT * FROM tracks ORDER BY title ASC")
     fun all(): Flow<List<Track>>
@@ -132,5 +132,30 @@ interface TrackDao {
      */
     @Query("SELECT * FROM tracks WHERE LOWER(artist) LIKE '%' || LOWER(:query) || '%' ORDER BY title ASC")
     suspend fun searchByArtist(query: String): List<Track>
+    
+    // =====================
+    // Content Type Operations
+    // =====================
+    
+    /**
+     * Update content type for all tracks from a specific artist.
+     * Used when user marks an entire artist as podcast/audiobook.
+     */
+    @Query("UPDATE tracks SET content_type = :contentType WHERE LOWER(artist) = LOWER(:artistName)")
+    suspend fun updateContentTypeByArtist(artistName: String, contentType: String): Int
+    
+    /**
+     * Get all track IDs for a specific artist.
+     * Used when deleting all content from an artist.
+     */
+    @Query("SELECT id FROM tracks WHERE LOWER(artist) = LOWER(:artistName)")
+    suspend fun getTrackIdsByArtist(artistName: String): List<Long>
+    
+    /**
+     * Delete all tracks from a specific artist.
+     * Returns the number of deleted rows.
+     */
+    @Query("DELETE FROM tracks WHERE LOWER(artist) = LOWER(:artistName)")
+    suspend fun deleteByArtist(artistName: String): Int
 }
 

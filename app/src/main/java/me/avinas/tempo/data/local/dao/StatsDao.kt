@@ -870,14 +870,21 @@ interface StatsDao {
      * We process this in the repository because SQLite JSON support varies.
      */
     @Query("""
-        SELECT em.audio_features_json
+        SELECT 
+            em.audio_features_json,
+            em.tags,
+            em.genres
         FROM listening_events le
         INNER JOIN tracks t ON le.track_id = t.id
         LEFT JOIN enriched_metadata em ON t.id = em.track_id
         WHERE le.timestamp >= :startTime AND le.timestamp <= :endTime
-        AND em.audio_features_json IS NOT NULL
+        AND (
+            em.audio_features_json IS NOT NULL 
+            OR (em.tags IS NOT NULL AND em.tags != '' AND em.tags != '[]')
+            OR (em.genres IS NOT NULL AND em.genres != '' AND em.genres != '[]')
+        )
     """)
-    suspend fun getMoodRawData(startTime: Long, endTime: Long): List<String>
+    suspend fun getMoodRawData(startTime: Long, endTime: Long): List<MoodRawData>
 
     /**
      * Discovery Rate: Calculates new artist discovery over time periods.
@@ -1130,6 +1137,10 @@ interface StatsDao {
 
     /**
      * Get listening history with track metadata.
+     * Filters out podcast/audiobook content based on user preferences.
+     * 
+     * @param filterPodcasts If true, exclude tracks with content_type = 'PODCAST'
+     * @param filterAudiobooks If true, exclude tracks with content_type = 'AUDIOBOOK'
      */
     @Query("""
         SELECT 
@@ -1141,6 +1152,7 @@ interface StatsDao {
             t.title,
             t.artist,
             t.album,
+            t.content_type,
             COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url
         FROM listening_events le
         INNER JOIN tracks t ON le.track_id = t.id
@@ -1152,7 +1164,9 @@ interface StatsDao {
             (:searchQuery IS NULL OR :searchQuery = '' OR 
                 t.title LIKE '%' || :searchQuery || '%' OR 
                 t.artist LIKE '%' || :searchQuery || '%' OR 
-                t.album LIKE '%' || :searchQuery || '%')
+                t.album LIKE '%' || :searchQuery || '%') AND
+            (:filterPodcasts = 0 OR t.content_type != 'PODCAST') AND
+            (:filterAudiobooks = 0 OR t.content_type != 'AUDIOBOOK')
         ORDER BY le.timestamp DESC
         LIMIT :limit OFFSET :offset
     """)
@@ -1161,6 +1175,8 @@ interface StatsDao {
         startTime: Long? = null,
         endTime: Long? = null,
         includeSkips: Boolean = true,
+        filterPodcasts: Boolean = true,
+        filterAudiobooks: Boolean = true,
         limit: Int,
         offset: Int
     ): List<HistoryItem>
@@ -1553,6 +1569,7 @@ interface StatsDao {
             COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url,
             t.spotify_id,
             t.musicbrainz_id,
+            t.content_type,
             COUNT(le.id) as play_count,
             COALESCE(SUM(le.playDuration), 0) as total_time_ms
         FROM tracks t
@@ -1862,6 +1879,256 @@ interface StatsDao {
         LIMIT :limit
     """)
     suspend fun getTopAlbumsForArtistById(artistId: Long, limit: Int): List<TopAlbum>
+
+    // =====================
+    // Content-Type Filtered Stats Queries
+    // These exclude podcasts/audiobooks from stats when user has marked them
+    // =====================
+
+    /**
+     * Get top tracks by play count with content type filtering.
+     */
+    @SuppressWarnings("RoomWarnings.QUERY_MISMATCH")
+    @Query("""
+        SELECT 
+            t.id as track_id,
+            t.title,
+            t.artist,
+            t.album,
+            COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url,
+            COUNT(le.id) as play_count,
+            SUM(le.playDuration) as total_time_ms,
+            MIN(le.timestamp) as first_played,
+            MAX(le.timestamp) as last_played,
+            em.preview_url as preview_url,
+            NULL as combined_score
+        FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        LEFT JOIN enriched_metadata em ON t.id = em.track_id
+        WHERE le.timestamp >= :startTime AND le.timestamp <= :endTime
+            AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
+            AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
+        GROUP BY t.id
+        ORDER BY play_count DESC, total_time_ms DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getTopTracksByPlayCountFiltered(
+        startTime: Long,
+        endTime: Long,
+        filterPodcasts: Boolean,
+        filterAudiobooks: Boolean,
+        limit: Int,
+        offset: Int
+    ): List<TopTrack>
+
+    /**
+     * Get top tracks by time with content type filtering.
+     */
+    @SuppressWarnings("RoomWarnings.QUERY_MISMATCH")
+    @Query("""
+        SELECT 
+            t.id as track_id,
+            t.title,
+            t.artist,
+            t.album,
+            COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url,
+            COUNT(le.id) as play_count,
+            SUM(le.playDuration) as total_time_ms,
+            MIN(le.timestamp) as first_played,
+            MAX(le.timestamp) as last_played,
+            em.preview_url as preview_url,
+            NULL as combined_score
+        FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        LEFT JOIN enriched_metadata em ON t.id = em.track_id
+        WHERE le.timestamp >= :startTime AND le.timestamp <= :endTime
+            AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
+            AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
+        GROUP BY t.id
+        ORDER BY total_time_ms DESC, play_count DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getTopTracksByTimeFiltered(
+        startTime: Long,
+        endTime: Long,
+        filterPodcasts: Boolean,
+        filterAudiobooks: Boolean,
+        limit: Int,
+        offset: Int
+    ): List<TopTrack>
+
+    /**
+     * Get top tracks by combined score with content type filtering.
+     */
+    @SuppressWarnings("RoomWarnings.QUERY_MISMATCH")
+    @Query("""
+        WITH stats AS (
+            SELECT 
+                t.id as track_id,
+                t.title,
+                t.artist,
+                t.album,
+                COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url,
+                COUNT(le.id) as play_count,
+                SUM(le.playDuration) as total_time_ms,
+                MIN(le.timestamp) as first_played,
+                MAX(le.timestamp) as last_played,
+                em.preview_url as preview_url
+            FROM listening_events le
+            INNER JOIN tracks t ON le.track_id = t.id
+            LEFT JOIN enriched_metadata em ON t.id = em.track_id
+            WHERE le.timestamp >= :startTime AND le.timestamp <= :endTime
+                AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
+                AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
+            GROUP BY t.id
+        ),
+        max_values AS (
+            SELECT 
+                MAX(play_count) as max_plays,
+                MAX(total_time_ms) as max_time
+            FROM stats
+        )
+        SELECT 
+            stats.*,
+            CASE 
+                WHEN max_values.max_plays > 0 AND max_values.max_time > 0 THEN
+                    (0.5 * CAST(stats.play_count AS REAL) / max_values.max_plays) + 
+                    (0.5 * CAST(stats.total_time_ms AS REAL) / max_values.max_time)
+                ELSE 0.0
+            END as combined_score
+        FROM stats
+        CROSS JOIN max_values
+        ORDER BY combined_score DESC, play_count DESC, total_time_ms DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getTopTracksByCombinedScoreFiltered(
+        startTime: Long,
+        endTime: Long,
+        filterPodcasts: Boolean,
+        filterAudiobooks: Boolean,
+        limit: Int,
+        offset: Int
+    ): List<TopTrack>
+
+    /**
+     * Get unique tracks count with content type filtering.
+     */
+    @Query("""
+        SELECT COUNT(DISTINCT t.id) 
+        FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        WHERE le.timestamp >= :startTime AND le.timestamp <= :endTime
+            AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
+            AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
+    """)
+    suspend fun getUniqueTracksPlayedCountFiltered(
+        startTime: Long,
+        endTime: Long,
+        filterPodcasts: Boolean,
+        filterAudiobooks: Boolean
+    ): Int
+
+    /**
+     * Get all artist stats raw with content type filtering.
+     * Used for splitting multi-artist entries and aggregation.
+     */
+    @Query("""
+        SELECT 
+            t.artist,
+            COUNT(le.id) as play_count,
+            SUM(le.playDuration) as total_time_ms,
+            COUNT(DISTINCT t.id) as unique_tracks,
+            MIN(le.timestamp) as first_played,
+            MAX(le.timestamp) as last_played
+        FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        WHERE le.timestamp >= :startTime AND le.timestamp <= :endTime
+            AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
+            AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
+        GROUP BY t.artist
+    """)
+    suspend fun getAllArtistStatsRawFiltered(
+        startTime: Long,
+        endTime: Long,
+        filterPodcasts: Boolean,
+        filterAudiobooks: Boolean
+    ): List<RawArtistStats>
+
+    /**
+     * Get top albums with content type filtering.
+     */
+    @Query("""
+        SELECT 
+            t.album,
+            t.artist,
+            COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url,
+            COUNT(le.id) as play_count,
+            SUM(le.playDuration) as total_time_ms,
+            COUNT(DISTINCT t.id) as unique_tracks
+        FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        LEFT JOIN enriched_metadata em ON t.id = em.track_id
+        WHERE le.timestamp >= :startTime AND le.timestamp <= :endTime
+        AND t.album IS NOT NULL AND t.album != ''
+        AND (em.release_type IS NULL OR em.release_type NOT IN ('Single', 'single'))
+        AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
+        AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
+        GROUP BY t.album, t.artist
+        ORDER BY play_count DESC, total_time_ms DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getTopAlbumsFiltered(
+        startTime: Long,
+        endTime: Long,
+        filterPodcasts: Boolean,
+        filterAudiobooks: Boolean,
+        limit: Int,
+        offset: Int
+    ): List<TopAlbum>
+
+    /**
+     * Get unique albums count with content type filtering.
+     */
+    @Query("""
+        SELECT COUNT(DISTINCT t.album) 
+        FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        LEFT JOIN enriched_metadata em ON t.id = em.track_id
+        WHERE le.timestamp >= :startTime AND le.timestamp <= :endTime
+        AND t.album IS NOT NULL
+        AND (em.release_type IS NULL OR LOWER(em.release_type) != 'single')
+        AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
+        AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
+    """)
+    suspend fun getUniqueAlbumsCountFiltered(
+        startTime: Long,
+        endTime: Long,
+        filterPodcasts: Boolean,
+        filterAudiobooks: Boolean
+    ): Int
+
+    /**
+     * Get combined basic stats with content type filtering.
+     */
+    @Query("""
+        SELECT 
+            COALESCE(SUM(le.playDuration), 0) as total_time_ms,
+            COUNT(le.id) as play_count,
+            COUNT(DISTINCT le.track_id) as unique_tracks,
+            COUNT(DISTINCT t.artist) as unique_artists,
+            COUNT(DISTINCT CASE WHEN t.album IS NOT NULL THEN t.album END) as unique_albums
+        FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        WHERE le.timestamp >= :startTime AND le.timestamp <= :endTime
+            AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
+            AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
+    """)
+    suspend fun getCombinedBasicStatsFiltered(
+        startTime: Long,
+        endTime: Long,
+        filterPodcasts: Boolean,
+        filterAudiobooks: Boolean
+    ): CombinedBasicStats
 }
 
 data class TrackWithStatsRaw(
@@ -1907,6 +2174,7 @@ data class HistoryItem(
     val title: String,
     val artist: String,
     val album: String?,
+    val content_type: String = "MUSIC",
     val album_art_url: String?
 )
 

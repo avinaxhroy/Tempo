@@ -55,7 +55,7 @@ interface ListeningEventDao {
     suspend fun delete(event: ListeningEvent)
     
     @Query("DELETE FROM listening_events WHERE id = :id")
-    suspend fun deleteById(id: Long)
+    suspend fun deleteById(id: Long): Int
     
     @Query("DELETE FROM listening_events WHERE track_id = :trackId")
     suspend fun deleteByTrackId(trackId: Long)
@@ -152,4 +152,14 @@ interface ListeningEventDao {
      */
     @Query("SELECT * FROM listening_events ORDER BY timestamp DESC")
     suspend fun getAllEventsSync(): List<ListeningEvent>
+    
+    /**
+     * Delete all listening events for tracks belonging to a specific artist.
+     * Returns the number of deleted rows.
+     */
+    @Query("""
+        DELETE FROM listening_events 
+        WHERE track_id IN (SELECT id FROM tracks WHERE LOWER(artist) = LOWER(:artistName))
+    """)
+    suspend fun deleteByArtist(artistName: String): Int
 }

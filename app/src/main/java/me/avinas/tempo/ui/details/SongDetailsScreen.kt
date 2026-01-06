@@ -147,38 +147,50 @@ fun SongDetailsContent(
                 textAlign = TextAlign.Center
             )
             
-            Box {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
-                    onClick = { showMenu = true },
+                    onClick = { showShareDialog = true },
                     colors = IconButtonDefaults.iconButtonColors(
                         containerColor = Color.White.copy(alpha = 0.1f),
                         contentColor = Color.White
                     )
                 ) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Options")
+                    Icon(Icons.Default.Share, contentDescription = "Share")
                 }
-                
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                    modifier = Modifier.background(Color(0xFF1E293B)) // Dark slate background
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Share", color = Color.White) },
-                        leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = Color.White) },
-                        onClick = { 
-                            showMenu = false
-                            showShareDialog = true 
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Merge duplicate...", color = Color.White) },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.CallMerge, contentDescription = null, tint = Color.White) },
-                        onClick = { 
-                            showMenu = false
-                            showMergeDialog = true
-                        }
-                    )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Box {
+                    IconButton(
+                        onClick = { showMenu = true },
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = Color.White.copy(alpha = 0.1f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Options")
+                    }
+
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        modifier = Modifier.background(Color(0xFF1E293B)) // Dark slate background
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Merge duplicate...", color = Color.White) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.CallMerge,
+                                    contentDescription = null,
+                                    tint = Color.White
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                showMergeDialog = true
+                            }
+                        )
+                    }
                 }
             }
         }

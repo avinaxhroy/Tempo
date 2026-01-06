@@ -12,8 +12,9 @@ interface ListeningRepository {
     suspend fun insert(event: ListeningEvent): Long
     suspend fun insertAll(events: List<ListeningEvent>): List<Long>
     suspend fun delete(event: ListeningEvent)
-    suspend fun deleteById(id: Long)
+    suspend fun deleteById(id: Long): Int
     suspend fun deleteByTrackId(trackId: Long)
+    suspend fun deleteByArtist(artistName: String): Int
     suspend fun getEventsForTrack(trackId: Long): List<ListeningEvent>
     suspend fun getEventsInRange(startTime: Long, endTime: Long): List<ListeningEvent>
     

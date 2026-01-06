@@ -33,6 +33,7 @@ import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.data.repository.TrackRepository
 import me.avinas.tempo.data.repository.TrackAliasRepository
 import me.avinas.tempo.data.local.dao.UserPreferencesDao
+import me.avinas.tempo.data.local.dao.ManualContentMarkDao
 import me.avinas.tempo.utils.TrackMatcher
 import me.avinas.tempo.utils.TrackCandidate
 import me.avinas.tempo.worker.EnrichmentWorker
@@ -79,6 +80,7 @@ class MusicTrackingService : NotificationListenerService() {
         fun artistLinkingService(): ArtistLinkingService
         fun trackAliasRepository(): TrackAliasRepository
         fun userPreferencesDao(): UserPreferencesDao
+        fun manualContentMarkDao(): ManualContentMarkDao
     }
 
     companion object {
@@ -117,6 +119,40 @@ class MusicTrackingService : NotificationListenerService() {
             "com.kodarkooperativet.blackplayerex",     // BlackPlayer EX
             "nugs.net",                                // Nugs.net
             "net.nugs.multiband"                       // Nugs.net (Multiband)
+        )
+        
+        // Podcast apps - filtered by content filtering settings
+        // Note: Spotify is NOT in this list because it has music, podcasts, AND audiobooks
+        // We rely on metadata detection for Spotify
+        private val PODCAST_APPS = setOf(
+            "com.google.android.apps.podcasts",     // Google Podcasts
+            "fm.player",                             // Player FM
+            "au.com.shiftyjelly.pocketcasts",       // Pocket Casts
+            "com.bambuna.podcastaddict",            // Podcast Addict
+            "com.clearchannel.iheartradio.controller", // iHeartRadio
+            "app.tunein.player",                    // TuneIn Radio
+            "com.stitcher.app",                     // Stitcher
+            "com.castbox.player",                   // Castbox
+            "com.overcast.app",                     // Overcast
+            "com.apple.android.podcasts",           // Apple Podcasts
+            "com.podcastone.mobile",                // PodcastOne
+            "com.wondery.wondery",                  // Wondery
+            "com.podcasts.android",                 // Podcasts (generic)
+            "fm.castbox.audiobook.radio.podcast"    // Castbox variant
+        )
+        
+        // Audiobook apps - filtered by content filtering settings  
+        private val AUDIOBOOK_APPS = setOf(
+            "com.audible.application",              // Audible
+            "com.google.android.apps.books",        // Google Play Books
+            "com.audiobooks.android.audiobooks",    // Audiobooks.com
+            "com.scribd.app.reader0",               // Scribd
+            "com.storytel",                         // Storytel
+            "fm.libro",                             // Libro.fm
+            "com.libro.app",                        // Libro.fm (alt)
+            "com.kobo.books.ereader",               // Kobo Books
+            "com.nook.app",                         // Nook Audiobooks
+            "com.audiobooks.androidapp"             // Audiobooks (generic)
         )
         
         // Video/non-music apps to explicitly BLOCK from tracking
@@ -560,6 +596,75 @@ class MusicTrackingService : NotificationListenerService() {
     private lateinit var artistLinkingService: ArtistLinkingService
     private lateinit var userPreferencesDao: UserPreferencesDao
     private lateinit var trackAliasRepository: TrackAliasRepository
+    private lateinit var manualContentMarkDao: ManualContentMarkDao
+    
+    /**
+     * Check if content should be filtered based on user preferences and detection.
+     * Three-layer approach:
+     * 1. App-level: Block dedicated podcast/audiobook apps (NOT Spotify)
+     * 2. Metadata-based: Detect content type from metadata (critical for Spotify)
+     * 3. Manual marks: User-defined patterns
+     * 
+     * @param packageName The source app package
+     * @param metadata Optional full metadata (may be null if MediaSession didn't provide enough)
+     * @param title Track title (required for manual marks check even without full metadata)
+     * @param artist Track artist (required for manual marks check even without full metadata)
+     */
+    private suspend fun shouldFilterContent(
+        packageName: String,
+        metadata: LocalMediaMetadata?,
+        title: String,
+        artist: String
+    ): Boolean {
+        // Get user preferences - use defaults if no row exists yet
+        // CRITICAL: Don't return false if prefs is null - use default filtering values!
+        val prefs = userPreferencesDao.getSync()
+        val filterPodcasts = prefs?.filterPodcasts ?: true  // Default: filter podcasts
+        val filterAudiobooks = prefs?.filterAudiobooks ?: true  // Default: filter audiobooks
+        
+        // Layer 1: App-level filtering (ONLY for dedicated apps, NOT Spotify!)
+        // Spotify has music + podcasts + audiobooks, so we rely on metadata detection
+        if (filterPodcasts && packageName in PODCAST_APPS) {
+            Log.d(TAG, "Filtering podcast app: $packageName")
+            return true
+        }
+        if (filterAudiobooks && packageName in AUDIOBOOK_APPS) {
+            Log.d(TAG, "Filtering audiobook app: $packageName")
+            return true
+        }
+        
+        // Layer 2: Metadata-based detection (works for all apps including Spotify)
+        if (metadata != null) {
+            if (filterPodcasts && metadata.isPodcast()) {
+                Log.d(TAG, "Filtering podcast content: ${metadata.title} by ${metadata.artist}")
+                return true
+            }
+            if (filterAudiobooks && metadata.isAudiobook()) {
+                Log.d(TAG, "Filtering audiobook content: ${metadata.title} by ${metadata.artist}")
+                return true
+            }
+        }
+        
+        // Layer 3: Manual marks (user-defined patterns)
+        // Uses title/artist parameters directly - works even without full metadata
+        val manualMark = manualContentMarkDao.findMatchingMark(title, artist)
+        if (manualMark != null) {
+            // IMPORTANT: Only filter if the user has filtering enabled for this content type
+            val shouldFilter = when (manualMark.contentType) {
+                "PODCAST" -> filterPodcasts
+                "AUDIOBOOK" -> filterAudiobooks
+                else -> false
+            }
+            if (shouldFilter) {
+                Log.d(TAG, "Filtering manually marked content: $title by $artist (type: ${manualMark.contentType}, pattern: ${manualMark.patternType})")
+                return true
+            } else {
+                Log.d(TAG, "Manual mark found for '$title' but filtering disabled for ${manualMark.contentType}")
+            }
+        }
+        
+        return false
+    }
     
     // Enhanced tracking components
     private lateinit var trackingManager: MusicTrackingManager
@@ -719,8 +824,8 @@ class MusicTrackingService : NotificationListenerService() {
             positionUpdatesCount++
             
             // Validate position is reasonable
+            // -1 is commonly sent during pause/stop - ignore silently (no warning needed)
             if (newPosition < 0) {
-                Log.w("PlaybackSession", "Invalid negative position: $newPosition, ignoring")
                 return
             }
             
@@ -798,12 +903,13 @@ class MusicTrackingService : NotificationListenerService() {
                     
                     // We simply act as if nothing happened to the accumulation.
                     // The lastRecordedPosition update below handles the new baseline.
-                } else {
-                    // Seek backward
+                } else if (delta > 100) {
+                    // Seek backward - only count/log if delta > 100ms (ignore jitter)
                     seekCount++
                     lastSeekTimestamp = now
                     Log.d("PlaybackSession", "Backward seek detected: -${delta}ms for '${title}'")
                 }
+                // Tiny backward movements (< 100ms) are position jitter, ignore silently
             }
             
             lastRecordedPosition = newPosition
@@ -1015,6 +1121,7 @@ class MusicTrackingService : NotificationListenerService() {
             artistLinkingService = entryPoint.artistLinkingService()
             userPreferencesDao = entryPoint.userPreferencesDao()
             trackAliasRepository = entryPoint.trackAliasRepository()
+            manualContentMarkDao = entryPoint.manualContentMarkDao()
             
             // Load initial preferences for caching
             serviceScope.launch {
@@ -1643,7 +1750,12 @@ class MusicTrackingService : NotificationListenerService() {
         }
     }
 
-    private suspend fun getOrInsertTrack(title: String, artist: String, album: String?): Track {
+    private suspend fun getOrInsertTrack(
+        title: String, 
+        artist: String, 
+        album: String?,
+        metadata: LocalMediaMetadata? = null
+    ): Track {
         // Clean the title to remove embedded artist info for better matching
         val cleanTitle = me.avinas.tempo.utils.ArtistParser.cleanTrackTitle(title)
         
@@ -1726,7 +1838,7 @@ class MusicTrackingService : NotificationListenerService() {
         }
         
         // No existing track found - insert new one
-        return insertNewTrack(title, artist, album)
+        return insertNewTrack(title, artist, album, metadata)
     }
     
     /**
@@ -1766,8 +1878,17 @@ class MusicTrackingService : NotificationListenerService() {
     /**
      * Insert a new track into the database.
      */
-    private suspend fun insertNewTrack(title: String, artist: String, album: String?): Track {
-        // Insert new track with the raw artist string (preserve all artist info)
+    private suspend fun insertNewTrack(
+        title: String, 
+        artist: String, 
+        album: String?,
+        metadata: LocalMediaMetadata? = null
+    ): Track {
+        Log.d(TAG, "Inserting new track: '$title' by '$artist'")
+        
+        // Determine content type from metadata if available, otherwise default to MUSIC
+        val contentType = metadata?.getContentType()?.toString() ?: "MUSIC"
+        
         val newTrack = Track(
             title = title,
             artist = artist,
@@ -1775,7 +1896,8 @@ class MusicTrackingService : NotificationListenerService() {
             duration = null,
             albumArtUrl = null,
             spotifyId = null,
-            musicbrainzId = null
+            musicbrainzId = null,
+            contentType = contentType
         )
         
         val id = trackRepository.insert(newTrack)
@@ -2787,7 +2909,19 @@ class MusicTrackingService : NotificationListenerService() {
                 // Insert track asynchronously
                 serviceScope.launch {
                     try {
-                        val track = getOrInsertTrack(title, artist, album)
+                        // CONTENT FILTERING: Check if this should be filtered (podcasts/audiobooks)
+                        // Must be done in coroutine since shouldFilterContent is suspend
+                        // Note: We pass title/artist directly so manual marks work even without full metadata
+                        if (shouldFilterContent(packageName, localMetadata, title, artist)) {
+                            val contentType = localMetadata?.getContentType()?.name ?: "MANUAL_MARK"
+                            Log.d(TAG, "Content filtered ($contentType): '$title' by '$artist' from $packageName")
+                            // Remove the session we just added
+                            playbackStates.remove(packageName)
+                            updateTrackingNotification(null, null)
+                            return@launch
+                        }
+                        
+                        val track = getOrInsertTrack(title, artist, album, localMetadata)
                         newSession.trackId = track.id
                         Log.d(TAG, "Track ID ${track.id} assigned for '${title}' (via MediaSession)")
                         
@@ -2971,9 +3105,10 @@ class MusicTrackingService : NotificationListenerService() {
         // Create notification content identifier for comparison
         val contentId = "$currentTrack|$currentArtist|${hasActivePlayback()}"
         
-        // Debounce: skip update if content hasn't changed and updated within last 1 second
-        if (contentId == lastNotificationContent && (now - lastNotificationUpdate) < 1000) {
-            Log.v(TAG, "Skipping notification update - content unchanged and recently updated")
+        // Debounce: skip update if content hasn't changed and updated within last 2 seconds
+        // Increased from 1s to 2s to reduce notification spam during rapid MediaSession callbacks
+        if (contentId == lastNotificationContent && (now - lastNotificationUpdate) < 2000) {
+            // Silent skip - no logging needed for normal debounce behavior
             return
         }
         

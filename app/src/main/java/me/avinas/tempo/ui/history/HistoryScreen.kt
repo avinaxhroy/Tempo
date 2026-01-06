@@ -9,21 +9,40 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.*
@@ -31,14 +50,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import kotlinx.coroutines.delay
 import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.data.local.dao.HistoryItem
+import me.avinas.tempo.ui.components.CoachMark
+import me.avinas.tempo.ui.components.CoachMarkArrow
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.theme.TempoRed
@@ -54,6 +84,18 @@ fun HistoryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Show feedback snackbar when message is set
+    LaunchedEffect(uiState.feedbackMessage) {
+        uiState.feedbackMessage?.let { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.clearFeedbackMessage()
+        }
+    }
     
     // Pagination
     val isAtBottom by remember {
@@ -105,84 +147,44 @@ fun HistoryScreen(
     DeepOceanBackground {
         Box(modifier = Modifier.fillMaxSize()) {
             // List Content
-            LazyColumn(
-                state = listState,
-                // Top padding for header (approx 80dp + status bars), Bottom for nav
-                contentPadding = PaddingValues(top = 100.dp, bottom = 120.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                // Empty State
-                if (!uiState.isLoading && uiState.rawItems.isEmpty()) {
-                    item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(400.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = if (uiState.searchQuery.isNotBlank()) Icons.Default.Search else Icons.Default.History,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(80.dp)
-                                    .padding(bottom = 16.dp),
-                                tint = Color(0xFF2D2A32) // Charcoal Lighter
-                            )
-                            Text(
-                                text = if (uiState.searchQuery.isNotBlank() || uiState.startDate != null) "No results found" else "History is empty",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = if (uiState.searchQuery.isNotBlank()) "Try adjusting your search or filters." else "Play some music to see it here.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFFCAC4D0) // Warm Gray
-                            )
-                        }
-                    }
+            HistoryListContent(
+                groupedItems = uiState.groupedItems,
+                isLoading = uiState.isLoading,
+                isLoadingMore = uiState.isLoadingMore,
+                showCoachMark = uiState.showCoachMark,
+                listState = listState,
+                onLoadMore = viewModel::loadMore,
+                viewModel = viewModel,
+                onNavigateToTrack = onNavigateToTrack,
+                onDismissCoachMark = viewModel::dismissCoachMark
+            )
+
+            // Snackbar for feedback messages
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 100.dp), // Above nav bar
+                snackbar = { snackbarData ->
+                    Snackbar(
+                        snackbarData = snackbarData,
+                        containerColor = Color(0xFF2D2A32),
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(12.dp)
+                    )
                 }
-
-                uiState.groupedItems.forEach { (dateHeader, items) ->
-                    stickyHeader {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(TempoDarkBackground.copy(alpha = 0.8f)) // Semitransparent background for sticky header
-                                .padding(horizontal = 24.dp, vertical = 12.dp)
-                        ) {
-                            Text(
-                                text = dateHeader,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = TempoRed,
-                                letterSpacing = 1.sp
-                            )
-                        }
-                    }
-
-                    itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
-                        SwipeToDeleteHistoryItem(
-                            item = item,
-                            index = index,
-                            onDelete = { viewModel.deleteListeningEvent(item.id) },
-                            onClick = { onNavigateToTrack(item.track_id) }
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-                }
-
-                if (uiState.isLoading || uiState.isLoadingMore) {
-                    item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(
-                                color = TempoRed,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                    }
+            )
+            
+            // Loading overlay when marking content
+            if (uiState.isMarking) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .clickable(enabled = false) { }, // Block clicks
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = TempoRed)
                 }
             }
 
@@ -441,17 +443,24 @@ fun SwipeToDeleteHistoryItem(
     item: HistoryItem,
     index: Int,
     onDelete: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onMarkContent: ((Long, String, Boolean) -> Unit)? = null,
+    onMarkArtist: ((Long, String, Boolean) -> Unit)? = null
 ) {
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.EndToStart) {
-                showDeleteDialog = true
+    // Use item.id as key for all state to prevent state reuse when items shift
+    var showDeleteDialog by remember(item.id) { mutableStateOf(false) }
+    
+    // Reset dismiss state when item.id changes (item was deleted and a new one appeared)
+    val dismissState = key(item.id) {
+        rememberSwipeToDismissBoxState(
+            confirmValueChange = { value ->
+                if (value == SwipeToDismissBoxValue.EndToStart) {
+                    showDeleteDialog = true
+                }
+                false // Don't auto-dismiss, wait for user confirmation
             }
-            false // Don't auto-dismiss, wait for user confirmation
-        }
-    )
+        )
+    }
 
     // Delete confirmation dialog
     if (showDeleteDialog) {
@@ -531,99 +540,416 @@ fun SwipeToDeleteHistoryItem(
             item = item, 
             index = index, 
             onClick = onClick,
-            onDeleteClick = { showDeleteDialog = true }
+            onDeleteClick = { showDeleteDialog = true },
+            onMarkContent = { type, delete -> onMarkContent?.invoke(item.track_id, type, delete) },
+            onMarkArtist = { type, delete -> onMarkArtist?.invoke(item.track_id, type, delete) }
         )
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun HistoryListContent(
+    groupedItems: Map<String, List<HistoryItem>>,
+    isLoading: Boolean,
+    isLoadingMore: Boolean,
+    showCoachMark: Boolean,
+    listState: LazyListState,
+    onLoadMore: () -> Unit,
+    viewModel: HistoryViewModel,
+    onNavigateToTrack: (Long) -> Unit,
+    onDismissCoachMark: () -> Unit
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            // Top padding for header (approx 80dp + status bars), Bottom for nav
+            contentPadding = PaddingValues(top = 100.dp, bottom = 120.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // Empty State
+            if (!isLoading && groupedItems.isEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(400.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(80.dp)
+                                .padding(bottom = 16.dp),
+                            tint = Color(0xFF2D2A32) // Charcoal Lighter
+                        )
+                        Text(
+                            text = "History is empty",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Play some music to see it here.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFCAC4D0) // Warm Gray
+                        )
+                    }
+                }
+            }
+
+            groupedItems.entries.forEachIndexed { groupIndex, (header, itemsList) ->
+                stickyHeader(key = "header_$header") {
+                    HistorySectionHeader(header)
+                }
+
+                items(
+                    count = itemsList.size,
+                    key = { index -> itemsList[index].id }
+                ) { index ->
+                    val item = itemsList[index]
+                    val isFirstItem = groupIndex == 0 && index == 0
+                    
+                    // Walkthrough Integration
+                    val walkthroughController = me.avinas.tempo.ui.components.LocalWalkthroughController.current
+                    
+                    if (isFirstItem) {
+                        LaunchedEffect(Unit) {
+                            // Try to trigger tutorial if we have data
+                             walkthroughController.checkAndTrigger(me.avinas.tempo.ui.components.WalkthroughStep.HISTORY_FILTER)
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (isFirstItem) {
+                                    Modifier.onGloballyPositioned { coordinates ->
+                                        walkthroughController.registerTarget(
+                                            me.avinas.tempo.ui.components.WalkthroughStep.HISTORY_FILTER, 
+                                            coordinates
+                                        )
+                                    }
+                                } else Modifier
+                            )
+                    ) {
+                        SwipeToDeleteHistoryItem(
+                            item = item,
+                            index = index,
+                            onDelete = { viewModel.deleteListeningEvent(item.id) },
+                            onClick = { onNavigateToTrack(item.track_id) },
+                            onMarkContent = viewModel::markContent,
+                            onMarkArtist = viewModel::markArtistContent
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+
+            if (isLoadingMore) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = TempoRed)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HistorySectionHeader(title: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(TempoDarkBackground.copy(alpha = 0.8f)) // Semitransparent background for sticky header
+            .padding(horizontal = 24.dp, vertical = 12.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = TempoRed,
+            letterSpacing = 1.sp
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HistoryListItem(
     item: HistoryItem, 
     index: Int, 
     onClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    onMarkContent: ((String, Boolean) -> Unit)? = null, // type, deleteFromHistory
+    onMarkArtist: ((String, Boolean) -> Unit)? = null // type, deleteFromHistory - artist level
 ) {
-    GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clickable(onClick = onClick),
-        backgroundColor = Color(0xFF1E1B24).copy(alpha = 0.4f), // Warm Charcoal Transparent
-        contentPadding = PaddingValues(12.dp),
-        variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.08f)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (item.album_art_url.isNullOrBlank()) {
-                    Icon(
-                        imageVector = Icons.Rounded.MusicNote,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.5f)
-                    )
-                } else {
-                    CachedAsyncImage(
-                        imageUrl = item.album_art_url,
-                        contentDescription = "Album art for ${item.title}",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = item.artist,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFCAC4D0), // Warm Gray
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            
-            Spacer(modifier = Modifier.width(8.dp))
+    var showMenu by remember { mutableStateOf(false) }
+    val walkthroughController = me.avinas.tempo.ui.components.LocalWalkthroughController.current
 
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.height(56.dp) // Match height of album art for alignment
+    Box {
+        GlassCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .combinedClickable(
+                    onClick = { 
+                        walkthroughController.dismiss()
+                        onClick() 
+                    },
+                    onLongClick = { 
+                        walkthroughController.dismiss()
+                        showMenu = true 
+                    }
+                ),
+            backgroundColor = Color(0xFF1E1B24).copy(alpha = 0.4f), // Warm Charcoal Transparent
+            contentPadding = PaddingValues(12.dp),
+            variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = formatRelativeTime(item.timestamp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFFA8A29E) // Warm Mid-Gray
-                )
-                
-                IconButton(
-                    onClick = onDeleteClick,
-                    modifier = Modifier.size(24.dp)
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White.copy(alpha = 0.08f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = Color(0xFFA8A29E), // Warm Mid-Gray
-                        modifier = Modifier.size(20.dp)
+                    if (item.album_art_url.isNullOrBlank()) {
+                        Icon(
+                            imageVector = Icons.Rounded.MusicNote,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.5f)
+                        )
+                    } else {
+                        CachedAsyncImage(
+                            imageUrl = item.album_art_url,
+                            contentDescription = "Album art for ${item.title}",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                    
+                    // Visual Badge for Non-Music Content
+                    if (item.content_type != "MUSIC") {
+                        val badgeColor = when(item.content_type) {
+                            "PODCAST" -> Color(0xFF03DAC6) // Teal
+                            "AUDIOBOOK" -> Color(0xFFFFA000) // Amber
+                            else -> Color.Gray
+                        }
+                        
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(2.dp)
+                                .background(badgeColor, CircleShape)
+                                .size(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (item.content_type == "PODCAST") 
+                                    androidx.compose.material.icons.Icons.Default.Mic 
+                                else 
+                                    androidx.compose.material.icons.Icons.Default.Book,
+                                contentDescription = item.content_type,
+                                tint = Color.Black,
+                                modifier = Modifier.size(10.dp)
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.width(16.dp))
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        
+                        // Inline Badge Text
+                        if (item.content_type != "MUSIC") {
+                            val badgeColor = when(item.content_type) {
+                                "PODCAST" -> Color(0xFF03DAC6) // Teal
+                                "AUDIOBOOK" -> Color(0xFFFFA000) // Amber
+                                else -> Color.Gray
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = item.content_type.take(1),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = badgeColor,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .border(1.dp, badgeColor, RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 4.dp, vertical = 0.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = item.artist,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFCAC4D0), // Warm Gray
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+                
+                Spacer(modifier = Modifier.width(8.dp))
+    
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.height(56.dp) // Match height of album art for alignment
+                ) {
+                    Text(
+                        text = formatRelativeTime(item.timestamp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFA8A29E) // Warm Mid-Gray
+                    )
+                    
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = Color(0xFFA8A29E), // Warm Mid-Gray
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
+        }
+        
+        // Context Menu for Blocking Content
+        DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { showMenu = false },
+            modifier = Modifier
+                .background(Color(0xFF2D2A32))
+                .widthIn(max = 280.dp)
+        ) {
+            // Section Header: Block this track
+            Text(
+                text = "BLOCK THIS TRACK",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            DropdownMenuItem(
+                text = { 
+                    Column {
+                        Text("It's a Podcast", color = Color.White)
+                        Text("Remove from history & block future plays", 
+                             color = Color.Gray, 
+                             style = MaterialTheme.typography.labelSmall)
+                    }
+                },
+                onClick = { 
+                    onMarkContent?.invoke("PODCAST", true)
+                    showMenu = false 
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.Mic,
+                        contentDescription = null,
+                        tint = Color(0xFF03DAC6)
+                    )
+                }
+            )
+            DropdownMenuItem(
+                text = { 
+                    Column {
+                        Text("It's an Audiobook", color = Color.White)
+                        Text("Remove from history & block future plays", 
+                             color = Color.Gray, 
+                             style = MaterialTheme.typography.labelSmall)
+                    }
+                },
+                onClick = { 
+                    onMarkContent?.invoke("AUDIOBOOK", true)
+                    showMenu = false 
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.Book,
+                        contentDescription = null,
+                        tint = Color(0xFFFFA000)
+                    )
+                }
+            )
+            
+            HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 4.dp))
+            
+            // Section Header: Block artist
+            Text(
+                text = "BLOCK ENTIRE ARTIST",
+                style = MaterialTheme.typography.labelSmall,
+                color = TempoRed.copy(alpha = 0.7f),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            DropdownMenuItem(
+                text = { 
+                    Column {
+                        Text("\"${item.artist}\" is Podcast", color = TempoRed)
+                        Text("Remove ALL content from this source", 
+                             color = Color.Gray, 
+                             style = MaterialTheme.typography.labelSmall)
+                    }
+                },
+                onClick = { 
+                    onMarkArtist?.invoke("PODCAST", true)
+                    showMenu = false 
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        tint = Color(0xFF03DAC6)
+                    )
+                }
+            )
+            DropdownMenuItem(
+                text = { 
+                    Column {
+                        Text("\"${item.artist}\" is Audiobook", color = TempoRed)
+                        Text("Remove ALL content from this source", 
+                             color = Color.Gray, 
+                             style = MaterialTheme.typography.labelSmall)
+                    }
+                },
+                onClick = { 
+                    onMarkArtist?.invoke("AUDIOBOOK", true)
+                    showMenu = false 
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        tint = Color(0xFFFFA000)
+                    )
+                }
+            )
         }
     }
 }

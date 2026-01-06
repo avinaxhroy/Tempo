@@ -51,6 +51,7 @@ fun TempoTheme(
             val window = (view.context as Activity).window
             val insetsController = WindowCompat.getInsetsController(window, view)
             insetsController.isAppearanceLightStatusBars = false // Always light text (for dark bg)
+            insetsController.isAppearanceLightNavigationBars = false // Always light icons (for dark bg)
         }
     }
 

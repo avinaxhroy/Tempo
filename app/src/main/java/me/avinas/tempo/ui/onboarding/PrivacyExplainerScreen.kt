@@ -33,8 +33,6 @@ import androidx.compose.ui.unit.sp
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.theme.TempoDarkBackground
 import me.avinas.tempo.ui.theme.TempoRed
-import me.avinas.tempo.ui.theme.TempoRed
-import me.avinas.tempo.ui.theme.WarmVioletAccent
 import me.avinas.tempo.ui.utils.adaptiveSize
 import me.avinas.tempo.ui.utils.adaptiveTextUnit
 import me.avinas.tempo.ui.utils.isSmallScreen
@@ -60,40 +58,12 @@ fun PrivacyExplainerScreen(
         label = "shieldScale"
     )
 
-    Box(
+    me.avinas.tempo.ui.components.DeepOceanBackground(
         modifier = Modifier
             .fillMaxSize()
-            .background(TempoDarkBackground)
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // Ambient Background Blobs
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val width = size.width
-            val height = size.height
-
-            // Green-tinted blob (top-left) for "safe" feel
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF22C55E).copy(alpha = 0.12f), Color.Transparent),
-                    center = Offset(0f, height * 0.2f),
-                    radius = width * 0.7f
-                ),
-                center = Offset(0f, height * 0.2f),
-                radius = width * 0.7f
-            )
-
-            // Warm Violet blob (bottom-right)
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(WarmVioletAccent.copy(alpha = 0.1f), Color.Transparent),
-                    center = Offset(width, height),
-                    radius = width * 0.8f
-                ),
-                center = Offset(width, height),
-                radius = width * 0.8f
-            )
-        }
 
         // Skip button
         TextButton(
@@ -112,23 +82,23 @@ fun PrivacyExplainerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
+                .padding(adaptiveSize(24.dp, 16.dp))
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 16.dp)))
+            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 8.dp)))
 
             // Shield Icon with pulse animation
             Box(
                 modifier = Modifier
-                    .size(adaptiveSize(100.dp, 80.dp, 60.dp))
+                    .size(adaptiveSize(100.dp, 70.dp, 50.dp))
                     .scale(shieldScale),
                 contentAlignment = Alignment.Center
             ) {
                 // Glow effect
                 Box(
                     modifier = Modifier
-                        .size(adaptiveSize(100.dp, 80.dp, 60.dp))
+                        .size(adaptiveSize(100.dp, 70.dp, 50.dp))
                         .background(
                             brush = Brush.radialGradient(
                                 colors = listOf(
@@ -142,12 +112,12 @@ fun PrivacyExplainerScreen(
                 Icon(
                     imageVector = Icons.Default.Shield,
                     contentDescription = null,
-                    modifier = Modifier.size(adaptiveSize(56.dp, 44.dp, 32.dp)),
+                    modifier = Modifier.size(adaptiveSize(56.dp, 40.dp, 28.dp)),
                     tint = Color(0xFF22C55E)
                 )
             }
 
-            Spacer(modifier = Modifier.height(adaptiveSize(24.dp, 12.dp)))
+            Spacer(modifier = Modifier.height(adaptiveSize(24.dp, 8.dp)))
 
             // Header
             Text(
@@ -156,27 +126,27 @@ fun PrivacyExplainerScreen(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 color = Color.White,
-                fontSize = adaptiveTextUnit(28.sp, 22.sp)
+                fontSize = adaptiveTextUnit(28.sp, 20.sp)
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(8.dp, 4.dp)))
+            Spacer(modifier = Modifier.height(adaptiveSize(8.dp, 2.dp)))
 
             Text(
                 text = "Privacy isn't a feature. It's the foundation.",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = Color.White.copy(alpha = 0.7f),
-                fontSize = adaptiveTextUnit(16.sp, 14.sp)
+                fontSize = adaptiveTextUnit(16.sp, 13.sp)
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 16.dp)))
+            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 12.dp)))
 
             // Privacy points with staggered animation
             val listVisible = remember { mutableStateOf(false) }
             LaunchedEffect(Unit) { listVisible.value = true }
             
             Column(
-                verticalArrangement = Arrangement.spacedBy(adaptiveSize(12.dp, 8.dp))
+                verticalArrangement = Arrangement.spacedBy(adaptiveSize(12.dp, 6.dp))
             ) {
                 // Item 1
                 AnimatedOpacity(delay = 200, visible = listVisible.value) {
@@ -219,13 +189,13 @@ fun PrivacyExplainerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 16.dp)))
+            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 12.dp)))
 
             // Bottom quote
             GlassCard(
                 modifier = Modifier.fillMaxWidth(),
                 backgroundColor = Color(0xFF22C55E).copy(alpha = 0.08f),
-                contentPadding = PaddingValues(16.dp)
+                contentPadding = PaddingValues(adaptiveSize(16.dp, 8.dp))
             ) {
                 Text(
                     text = "\"We can't see your data. We don't want to.\"",
@@ -233,7 +203,8 @@ fun PrivacyExplainerScreen(
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                     color = Color.White.copy(alpha = 0.9f),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = adaptiveTextUnit(14.sp, 12.sp)
                 )
             }
 
@@ -244,7 +215,7 @@ fun PrivacyExplainerScreen(
                 onClick = onNext,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(adaptiveSize(56.dp, 48.dp)),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = TempoRed,
                     contentColor = Color.White
@@ -257,7 +228,7 @@ fun PrivacyExplainerScreen(
             ) {
                 Text(
                     text = "Got It",
-                    fontSize = 18.sp,
+                    fontSize = adaptiveTextUnit(18.sp, 16.sp),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -277,7 +248,7 @@ private fun PrivacyPoint(
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         backgroundColor = iconColor.copy(alpha = 0.08f),
-        contentPadding = PaddingValues(adaptiveSize(14.dp, 10.dp))
+        contentPadding = PaddingValues(adaptiveSize(14.dp, 8.dp))
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically
@@ -285,7 +256,7 @@ private fun PrivacyPoint(
             // Checkmark with colored background
             Box(
                 modifier = Modifier
-                    .size(adaptiveSize(40.dp, 36.dp))
+                    .size(adaptiveSize(40.dp, 32.dp))
                     .background(
                         color = iconColor.copy(alpha = 0.2f),
                         shape = RoundedCornerShape(10.dp)
@@ -295,24 +266,27 @@ private fun PrivacyPoint(
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = null,
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(adaptiveSize(22.dp, 18.dp)),
                     tint = iconColor
                 )
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(adaptiveSize(14.dp, 10.dp)))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White
+                    color = Color.White,
+                    fontSize = adaptiveTextUnit(16.sp, 14.sp)
                 )
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.6f)
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = adaptiveTextUnit(14.sp, 11.sp),
+                    lineHeight = adaptiveTextUnit(20.sp, 14.sp)
                 )
             }
         }

@@ -152,6 +152,101 @@ data class LocalMediaMetadata(
         return year?.toInt() ?: releaseDate?.take(4)?.toIntOrNull()
     }
     
+    /**
+     * Detect if this content is likely a podcast based on metadata.
+     * Uses CONSERVATIVE heuristics to avoid false positives.
+     */
+    fun isPodcast(): Boolean {
+        val lowerGenre = genre?.lowercase()?.trim() ?: ""
+        val lowerTitle = title.lowercase()
+        
+        // STRICT genre check - exact matches only
+        if (lowerGenre == "podcast" || 
+            lowerGenre == "podcasts" ||
+            lowerGenre == "talk" ||
+            lowerGenre == "speech") {
+            return true
+        }
+        
+        // Genre contains podcast but not music-related
+        if (lowerGenre.contains("podcast") && 
+            !lowerGenre.contains("music") &&
+            !lowerGenre.contains("rock") &&
+            !lowerGenre.contains("pop")) {
+            return true
+        }
+        
+        // CONSERVATIVE title patterns - require "Episode" or "Ep." prefix/suffix
+        // Avoid matching song titles that happen to contain "ep" or numbers
+        if (lowerTitle.matches(Regex("^episode\\s+\\d+.*")) ||
+            lowerTitle.matches(Regex(".*[:\\-]\\s*episode\\s+\\d+.*")) ||
+            lowerTitle.matches(Regex("^ep\\.?\\s*\\d+.*")) ||
+            lowerTitle.matches(Regex(".*[:\\-]\\s*ep\\.?\\s*\\d+.*"))) {
+            return true
+        }
+        
+        // VERY long duration + no album + no genre = likely podcast
+        // 30+ minutes to avoid flagging long progressive/classical music
+        if (durationMs != null && durationMs > 30 * 60 * 1000L && 
+            album == null && 
+            (genre == null || genre.isBlank())) {
+            return true
+        }
+        
+        return false
+    }
+    
+    /**
+     * Detect if this content is likely an audiobook.
+     * Uses CONSERVATIVE heuristics to avoid false positives.
+     */
+    fun isAudiobook(): Boolean {
+        val lowerGenre = genre?.lowercase()?.trim() ?: ""
+        val lowerTitle = title.lowercase()
+        
+        // STRICT genre check
+        if (lowerGenre == "audiobook" ||
+            lowerGenre == "audiobooks" ||
+            lowerGenre == "spoken word" ||
+            lowerGenre == "book") {
+            return true
+        }
+        
+        // Genre contains audiobook but not music-related
+        if (lowerGenre.contains("audiobook") && !lowerGenre.contains("music")) {
+            return true
+        }
+        
+        // CONSERVATIVE chapter patterns - require specific format
+        // "Chapter 1", "Chapter 1: Title", etc.
+        if (lowerTitle.matches(Regex("^chapter\\s+\\d+.*")) ||
+            lowerTitle.matches(Regex(".*[:\\-]\\s*chapter\\s+\\d+.*")) ||
+            lowerTitle.matches(Regex("^part\\s+\\d+\\s*:.*"))) {
+            return true
+        }
+        
+        // Very long duration + chapter pattern + no genre
+        // This is very specific to avoid false positives
+        if (durationMs != null && durationMs > 40 * 60 * 1000L &&
+            lowerTitle.matches(Regex("^(chapter|part)\\s+\\d+.*")) &&
+            (genre == null || genre.isBlank())) {
+            return true
+        }
+        
+        return false
+    }
+    
+    /**
+     * Get content type for UI display and filtering.
+     */
+    fun getContentType(): ContentType {
+        return when {
+            isPodcast() -> ContentType.PODCAST
+            isAudiobook() -> ContentType.AUDIOBOOK
+            else -> ContentType.MUSIC
+        }
+    }
+    
     companion object {
         // Patterns for extracting artist from title
         private val TITLE_ARTIST_PATTERNS = listOf(
@@ -274,4 +369,15 @@ data class LocalMediaMetadata(
             )
         }
     }
+}
+
+/**
+ * Content type classification for filtering.
+ */
+enum class ContentType {
+    MUSIC,
+    PODCAST,
+    AUDIOBOOK;
+    
+    override fun toString(): String = name
 }

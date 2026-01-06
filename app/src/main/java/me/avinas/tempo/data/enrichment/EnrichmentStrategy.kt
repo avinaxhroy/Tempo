@@ -366,33 +366,58 @@ class ReccoBeatsEnrichmentSource @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : EnrichmentSource {
     override val name = "ReccoBeats"
-    override val priority = 6
+    override val priority = 8 // Run LAST - requires preview URLs from earlier sources (Deezer/iTunes)
 
     override fun canProvide(gap: EnrichmentGap): Boolean {
         return gap.missingAudioFeatures
     }
 
     override suspend fun enrich(track: Track, currentMetadata: EnrichedMetadata?): EnrichedMetadata? {
-        // Check if extended analysis is enabled
-        val extendedAnalysisEnabled = try {
-            val key = androidx.datastore.preferences.core.booleanPreferencesKey("extended_audio_analysis")
-            val prefs = context.dataStore.data.firstOrNull()
-            prefs?.get(key) ?: false
-        } catch (e: Exception) {
-            false
-        }
+        // CRITICAL: Wrap entire ReccoBeats logic in try-catch to ensure failures don't affect music tracking
+        return try {
+            Log.d("EnrichmentSource", "ReccoBeats: Starting enrichment for track ${track.id}")
+            
+            // Check if extended analysis is enabled
+            val extendedAnalysisEnabled = try {
+                val key = androidx.datastore.preferences.core.booleanPreferencesKey("extended_audio_analysis")
+                val prefs = context.dataStore.data.firstOrNull()
+                prefs?.get(key) ?: false
+            } catch (e: Exception) {
+                Log.w("EnrichmentSource", "ReccoBeats: Failed to check extended analysis setting, defaulting to false", e)
+                false
+            }
 
-        // Only pass previewUrl if extended analysis is enabled. 
-        // ReccoBeatsService uses this to trigger the expensive audio analysis fallback.
-        val previewUrl = if (extendedAnalysisEnabled) currentMetadata?.previewUrl else null
-        
-        val result = reccoBeatsService.enrichTrack(track, currentMetadata, previewUrl)
-         
-        return if (result is ReccoBeatsEnrichmentService.ReccoBeatsResult.Success) {
-             // The service updates the DB internally, so we re-fetch the updated metadata
-             enrichedMetadataDao.forTrackSync(track.id)
-        } else {
-             null
+            // Only pass previewUrl if extended analysis is enabled. 
+            // ReccoBeatsService uses this to trigger the expensive audio analysis fallback.
+            val previewUrl = if (extendedAnalysisEnabled) currentMetadata?.previewUrl else null
+            
+            if (extendedAnalysisEnabled && previewUrl != null) {
+                Log.d("EnrichmentSource", "ReccoBeats: Extended analysis enabled with preview URL")
+            } else if (extendedAnalysisEnabled && previewUrl == null) {
+                Log.d("EnrichmentSource", "ReccoBeats: Extended analysis enabled but no preview URL available yet")
+            }
+            
+            val result = reccoBeatsService.enrichTrack(track, currentMetadata, previewUrl)
+             
+            when (result) {
+                is ReccoBeatsEnrichmentService.ReccoBeatsResult.Success -> {
+                    Log.d("EnrichmentSource", "ReccoBeats: Successfully enriched track ${track.id}")
+                    // The service updates the DB internally, so we re-fetch the updated metadata
+                    enrichedMetadataDao.forTrackSync(track.id)
+                }
+                is ReccoBeatsEnrichmentService.ReccoBeatsResult.Error -> {
+                    Log.w("EnrichmentSource", "ReccoBeats: Failed to enrich track ${track.id}: ${result.message}")
+                    null
+                }
+                else -> {
+                    Log.d("EnrichmentSource", "ReccoBeats: Track ${track.id} not found or no audio features available")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            // CRITICAL: Catch all exceptions to prevent ReccoBeats failures from affecting music tracking
+            Log.e("EnrichmentSource", "ReccoBeats: Critical error enriching track ${track.id}, but music tracking will continue", e)
+            null
         }
     }
 }

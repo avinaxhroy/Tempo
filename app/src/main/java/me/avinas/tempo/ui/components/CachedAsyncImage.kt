@@ -124,7 +124,15 @@ fun CachedAsyncImage(
                 onSuccess?.invoke(painterState)
             }
             is AsyncImagePainter.State.Error -> {
-                Log.w(TAG, "Image failed to load: $cacheKey - ${painterState.result.throwable.message}")
+                // Spotify content:// URIs are transient - only work when Spotify is running
+                // These failures are expected and should not spam warnings
+                val isSpotifyContentUri = fixedUrl?.contains("com.spotify.mobile.android.mediaapi") == true
+                if (isSpotifyContentUri) {
+                    // Silent failure for Spotify content URIs - expected behavior when app not running
+                    // No logging needed - this is normal
+                } else {
+                    Log.w(TAG, "Image failed to load: $cacheKey - ${painterState.result.throwable.message}")
+                }
                 onError?.invoke(painterState)
             }
             else -> { /* Loading or Empty */ }

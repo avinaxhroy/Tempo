@@ -2,6 +2,7 @@ package me.avinas.tempo.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +36,7 @@ fun TimePeriodSelector(
             .fillMaxWidth()
             .padding(horizontal = 4.dp)
             .background(Color.Black, RoundedCornerShape(24.dp)) // Dark Pill for better visibility
+            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp)) // Subtle border
             .padding(4.dp)
     ) {
         Row(

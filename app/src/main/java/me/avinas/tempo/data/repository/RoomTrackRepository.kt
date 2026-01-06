@@ -19,4 +19,15 @@ class RoomTrackRepository @Inject constructor(private val dao: TrackDao) : Track
         val byArtist = dao.searchByArtist(query)
         return (byTitle + byArtist).distinctBy { it.id }
     }
+    
+    override suspend fun deleteById(id: Long): Int = dao.deleteById(id)
+    
+    override suspend fun updateContentTypeByArtist(artistName: String, contentType: String): Int =
+        dao.updateContentTypeByArtist(artistName, contentType)
+    
+    override suspend fun getTrackIdsByArtist(artistName: String): List<Long> =
+        dao.getTrackIdsByArtist(artistName)
+    
+    override suspend fun deleteByArtist(artistName: String): Int =
+        dao.deleteByArtist(artistName)
 }

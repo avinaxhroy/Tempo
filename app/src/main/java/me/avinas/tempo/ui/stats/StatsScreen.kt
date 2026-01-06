@@ -1,7 +1,7 @@
 package me.avinas.tempo.ui.stats
 
 import me.avinas.tempo.ui.theme.TempoDarkBackground
-import me.avinas.tempo.ui.theme.WarmVioletAccent
+import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.ui.theme.innerShadow
 import androidx.compose.ui.graphics.Brush
 
@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,6 +60,7 @@ fun StatsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+    val walkthroughController = me.avinas.tempo.ui.components.LocalWalkthroughController.current
 
     // Pagination Logic
     val isAtBottom by remember {
@@ -86,7 +88,7 @@ fun StatsScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
-                contentPadding = PaddingValues(top = 100.dp, bottom = 160.dp),
+                contentPadding = PaddingValues(top = 100.dp, bottom = 200.dp),
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp) // Increased spacing for vertical rhythm
             ) {
@@ -107,10 +109,25 @@ fun StatsScreen(
 
                 item {
                     // Sort By Selector
+
+                    
                     if (uiState.selectedTab != StatsTab.TOP_ALBUMS) {
+                        LaunchedEffect(Unit) {
+                            walkthroughController.checkAndTrigger(me.avinas.tempo.ui.components.WalkthroughStep.STATS_SORT)
+                        }
+                        
                         SortBySelector(
                             selectedSortBy = uiState.selectedSortBy,
-                            onSortBySelected = viewModel::onSortBySelected
+                            onSortBySelected = { 
+                                walkthroughController.dismiss()
+                                viewModel.onSortBySelected(it) 
+                            },
+                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                walkthroughController.registerTarget(
+                                    me.avinas.tempo.ui.components.WalkthroughStep.STATS_SORT,
+                                    coordinates
+                                )
+                            }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -126,13 +143,33 @@ fun StatsScreen(
                     val firstItem = uiState.items.firstOrNull()
                     val remainingItems = uiState.items.drop(1)
 
+
+                    // Rank 1 Hero
                     // Rank 1 Hero
                     if (firstItem != null) {
                         item {
-                            HeroStatItem(
-                                item = firstItem,
-                                onNavigate = { resolveNavigation(firstItem, onNavigateToTrack, onNavigateToArtist, onNavigateToAlbum) }
-                            )
+                            LaunchedEffect(Unit) {
+                                // Try to trigger, controller handles priority/dismissal state
+                                walkthroughController.checkAndTrigger(me.avinas.tempo.ui.components.WalkthroughStep.STATS_ITEM_CLICK)
+                            }
+                            
+                            Box(
+                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                    walkthroughController.registerTarget(
+                                        me.avinas.tempo.ui.components.WalkthroughStep.STATS_ITEM_CLICK,
+                                        coordinates
+                                    )
+                                }
+                            ) {
+
+                                HeroStatItem(
+                                    item = firstItem,
+                                    onNavigate = { 
+                                        walkthroughController.dismiss()
+                                        resolveNavigation(firstItem, onNavigateToTrack, onNavigateToArtist, onNavigateToAlbum) 
+                                    }
+                                )
+                            }
                             Spacer(modifier = Modifier.height(16.dp))
                         }
                     }
@@ -143,7 +180,10 @@ fun StatsScreen(
                         GlassStatItem(
                             rank = rank,
                             item = item,
-                            onClick = { resolveNavigation(item, onNavigateToTrack, onNavigateToArtist, onNavigateToAlbum) }
+                            onClick = { 
+                                walkthroughController.dismiss()
+                                resolveNavigation(item, onNavigateToTrack, onNavigateToArtist, onNavigateToAlbum) 
+                            }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -153,7 +193,7 @@ fun StatsScreen(
                 if (uiState.isLoadingMore) {
                     item {
                         Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = WarmVioletAccent)
+                            CircularProgressIndicator(color = TempoRed)
                         }
                     }
                 }
@@ -182,7 +222,7 @@ fun StatsScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 100.dp)
+                    .padding(bottom = 130.dp)
                     .padding(horizontal = 32.dp)
             ) {
                 TimePeriodSelector(
@@ -193,7 +233,7 @@ fun StatsScreen(
             }
 
             if (uiState.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = WarmVioletAccent)
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = TempoRed)
             }
         }
     }
@@ -409,11 +449,15 @@ fun StatsTabSelector(selectedTab: StatsTab, onTabSelected: (StatsTab) -> Unit) {
 }
 
 @Composable
-fun SortBySelector(selectedSortBy: SortBy, onSortBySelected: (SortBy) -> Unit) {
+fun SortBySelector(
+    selectedSortBy: SortBy, 
+    onSortBySelected: (SortBy) -> Unit,
+    modifier: Modifier = Modifier
+) {
      var expanded by remember { mutableStateOf(false) }
     
     Row(
-        modifier = Modifier
+        modifier = modifier
             .padding(horizontal = 24.dp)
             .fillMaxWidth(),
         horizontalArrangement = Arrangement.End,
@@ -433,7 +477,7 @@ fun SortBySelector(selectedSortBy: SortBy, onSortBySelected: (SortBy) -> Unit) {
                     },
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
-                    color = WarmVioletAccent
+                    color = TempoRed
                 )
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -445,7 +489,7 @@ fun SortBySelector(selectedSortBy: SortBy, onSortBySelected: (SortBy) -> Unit) {
                             SortBy.TOTAL_TIME -> "Total Time"
                         }, fontWeight = if (sortBy == selectedSortBy) FontWeight.Bold else FontWeight.Normal) },
                         onClick = { expanded = false; onSortBySelected(sortBy) },
-                        leadingIcon = if (sortBy == selectedSortBy) { { Text("✓", color = WarmVioletAccent) } } else null
+                        leadingIcon = if (sortBy == selectedSortBy) { { Text("✓", color = TempoRed) } } else null
                     )
                 }
             }
