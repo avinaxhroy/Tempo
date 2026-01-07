@@ -97,7 +97,6 @@ fun StatsScreen(
                      Box(
                          modifier = Modifier
                              .fillMaxWidth()
-                             .background(TempoDarkBackground.copy(alpha = 0.95f))
                              .padding(bottom = 12.dp)
                      ) {
                          StatsTabSelector(
@@ -222,7 +221,8 @@ fun StatsScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 130.dp)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(bottom = 100.dp) // Reduced static padding, relying on insets + 100dp for lift
                     .padding(horizontal = 32.dp)
             ) {
                 TimePeriodSelector(
@@ -270,8 +270,9 @@ fun HeroStatItem(item: Any, onNavigate: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
+            .border(0.5.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp)) // Subtle border for definition
             .clickable(onClick = onNavigate),
-        backgroundColor = Color(0xFFF59E0B).copy(alpha = 0.25f), // Stronger Gold Tint
+        backgroundColor = Color(0xFFF59E0B).copy(alpha = 0.15f), // Reduced from 0.25f for better blend
         contentPadding = PaddingValues(16.dp) // Reduced from 24.dp
     ) {
         Row(
@@ -330,10 +331,10 @@ fun GlassStatItem(rank: Int, item: Any, onClick: () -> Unit) {
     )
 
     val (tintColor, bgAlpha) = when(rank) {
-        1 -> Color(0xFFF59E0B) to 0.25f // Gold
-        2 -> Color(0xFFE879F9) to 0.20f // Dusty Orchid (Warmer than Pale Violet)
-        3 -> Color(0xFFB45309) to 0.20f // Bronze - Warmer
-        else -> palette[(rank - 4) % palette.size] to 0.15f // Cycle through palette
+        1 -> Color(0xFFF59E0B) to 0.15f // Gold
+        2 -> Color(0xFFE879F9) to 0.12f // Dusty Orchid
+        3 -> Color(0xFFB45309) to 0.12f // Bronze
+        else -> palette[(rank - 4) % palette.size] to 0.15f // Cycle through palette (Increased to 0.15f for better visibility)
     }
     
     // Smart Composition: Rank 1-3 get 3D/HighProminence, Rest get 2D/LowProminence
@@ -344,6 +345,7 @@ fun GlassStatItem(rank: Int, item: Any, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
+            .border(0.5.dp, tintColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp)) // Border matches tint for harmony
             .clickable(onClick = onClick)
             .innerShadow(
                 color = if (rank <= 3) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.2f),
@@ -414,7 +416,8 @@ fun StatsTabSelector(selectedTab: StatsTab, onTabSelected: (StatsTab) -> Unit) {
             .padding(horizontal = 16.dp)
             .fillMaxWidth()
             .height(48.dp)
-            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(24.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp)) // Beautiful border
+            .background(Color.Transparent, RoundedCornerShape(24.dp))
             .padding(4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {

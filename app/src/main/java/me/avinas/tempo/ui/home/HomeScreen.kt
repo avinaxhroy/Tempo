@@ -237,7 +237,8 @@ fun HomeScreen(
                 availableRanges = listOf(TimeRange.THIS_WEEK, TimeRange.THIS_MONTH, TimeRange.THIS_YEAR, TimeRange.ALL_TIME),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 130.dp) // Adjusted to sit above nav bar
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(bottom = 100.dp)
                     .padding(horizontal = 32.dp)
             )
         }

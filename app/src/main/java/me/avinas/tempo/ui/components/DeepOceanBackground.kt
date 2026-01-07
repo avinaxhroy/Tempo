@@ -67,10 +67,10 @@ fun DeepOceanBackground(
             val h = size.height
 
             // 1. Mesh Gradient Layer: Subtle, structured blends
-            // Top-Left: Warm Slate (MeshGradient1)
+            // Top-Left: Neutral Dark (MeshGradient1)
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(MeshGradient1.copy(alpha = 0.4f), Color.Transparent),
+                    colors = listOf(MeshGradient1.copy(alpha = 0.2f), Color.Transparent),
                     center = Offset(w * 0.1f + p1Offset, h * 0.1f + p1Offset),
                     radius = w * 0.9f
                 ),
@@ -78,10 +78,10 @@ fun DeepOceanBackground(
                 radius = w * 0.9f
             )
 
-            // Center-Right: Rich Charcoal (MeshGradient2) - texture anchor
+            // Center-Right: Deepest Charcoal (MeshGradient2) - texture anchor
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(MeshGradient2.copy(alpha = 0.3f), Color.Transparent),
+                    colors = listOf(MeshGradient2.copy(alpha = 0.15f), Color.Transparent),
                     center = Offset(w * 0.8f, h * 0.5f),
                     radius = w * 0.8f
                 ),
@@ -89,10 +89,10 @@ fun DeepOceanBackground(
                 radius = w * 0.8f
             )
 
-            // Bottom-Left: Deep Earth (MeshGradient3) - grounding
+            // Bottom-Left: Soft Dark Overlay (MeshGradient3) - grounding
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(MeshGradient3.copy(alpha = 0.4f), Color.Transparent),
+                    colors = listOf(MeshGradient3.copy(alpha = 0.2f), Color.Transparent),
                     center = Offset(w * 0.2f + p2Offset, h * 0.9f),
                     radius = w * 1.0f
                 ),
@@ -101,7 +101,7 @@ fun DeepOceanBackground(
             )
 
             // 2. Cinematic Noise Overlay (The "Premium" Texture)
-            drawNoiseOverlay(noiseBitmap, alpha = 0.03f) // 3% opacity for subtle film grain
+            drawNoiseOverlay(noiseBitmap, alpha = 0.05f) // Increased to 5% for visible texture on black
 
             // 3. Cinematic Vignette (Bottom Fade)
             // darker grounding for the bottom navigation area

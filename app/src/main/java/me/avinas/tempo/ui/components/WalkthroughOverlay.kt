@@ -216,7 +216,7 @@ fun SpotlightLayer(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(with(density) { rect.top.toDp() })
+                .height(with(density) { rect.top.toDp().coerceAtLeast(0.dp) })
                 .background(bgColor)
                 .clickable(
                     interactionSource = interactionSource,
@@ -229,7 +229,7 @@ fun SpotlightLayer(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = with(density) { rect.bottom.toDp() })
+                .padding(top = with(density) { rect.bottom.toDp().coerceAtLeast(0.dp) })
                 .fillMaxHeight()
                 .background(bgColor)
                 .clickable(
@@ -242,8 +242,8 @@ fun SpotlightLayer(
         // Left
         Box(
             modifier = Modifier
-                .width(with(density) { rect.left.toDp() })
-                .height(with(density) { rect.height.toDp() })
+                .width(with(density) { rect.left.toDp().coerceAtLeast(0.dp) })
+                .height(with(density) { rect.height.toDp().coerceAtLeast(0.dp) })
                 .offset { IntOffset(0, rect.top.toInt()) }
                 .background(bgColor)
                 .clickable(
@@ -257,8 +257,8 @@ fun SpotlightLayer(
         Box(
             modifier = Modifier
                 .fillMaxWidth() // Fill remaining width
-                .padding(start = with(density) { rect.right.toDp() })
-                .height(with(density) { rect.height.toDp() })
+                .padding(start = with(density) { rect.right.toDp().coerceAtLeast(0.dp) })
+                .height(with(density) { rect.height.toDp().coerceAtLeast(0.dp) })
                 .offset { IntOffset(0, rect.top.toInt()) }
                 .background(bgColor)
                 .clickable(

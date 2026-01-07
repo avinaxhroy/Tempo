@@ -67,8 +67,7 @@ fun AppNavigation(
     val showBottomBar = currentRoute in listOf(
         Screen.Home.route,
         Screen.Stats.route,
-        Screen.History.route,
-        Screen.Settings.route
+        Screen.History.route
     )
 
     me.avinas.tempo.ui.components.DeepOceanBackground {

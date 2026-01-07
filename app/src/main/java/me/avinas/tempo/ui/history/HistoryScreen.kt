@@ -193,7 +193,6 @@ fun HistoryScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .background(TempoDarkBackground.copy(alpha = 0.9f)) // Almost opaque status bar/header area for legibility
                     .statusBarsPadding()
                     .padding(vertical = 12.dp, horizontal = 16.dp)
             ) {
@@ -209,7 +208,7 @@ fun HistoryScreen(
                             .height(50.dp),
                         shape = RoundedCornerShape(25.dp),
                         contentPadding = PaddingValues(horizontal = 16.dp),
-                        backgroundColor = Color(0xFF1E1B24).copy(alpha = 0.6f),
+                        backgroundColor = Color.Black.copy(alpha = 0.5f), // Blend with deep background
                         variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
                     ) {
                         Row(
@@ -671,7 +670,6 @@ fun HistorySectionHeader(title: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(TempoDarkBackground.copy(alpha = 0.8f)) // Semitransparent background for sticky header
             .padding(horizontal = 24.dp, vertical = 12.dp)
     ) {
         Text(

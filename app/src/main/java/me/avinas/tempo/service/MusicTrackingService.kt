@@ -1374,7 +1374,11 @@ class MusicTrackingService : NotificationListenerService() {
      * Updates the corresponding PlaybackSession with accurate position data.
      */
     private fun pollMediaSessionPositions() {
-        activeControllers.forEach { (packageName, controller) ->
+        // Create a snapshot to avoid ConcurrentModificationException
+        // when activeControllers is modified during iteration
+        val controllerSnapshot = activeControllers.toList()
+        
+        controllerSnapshot.forEach { (packageName, controller) ->
             try {
                 val playbackState = controller.playbackState ?: return@forEach
                 val session = playbackStates[packageName] ?: return@forEach
@@ -3153,8 +3157,10 @@ class MusicTrackingService : NotificationListenerService() {
         playbackStates.clear()
 
         // Cleanup MediaSession callbacks
-        // Cleanup MediaSession callbacks
-        activeControllers.forEach { (packageName, controller) ->
+        // Create a snapshot to avoid ConcurrentModificationException during cleanup
+        val controllerSnapshot = activeControllers.toList()
+        
+        controllerSnapshot.forEach { (packageName, controller) ->
             val callback = packageSpecificCallbacks[packageName] ?: sharedCallback
             controller.unregisterCallback(callback)
         }
