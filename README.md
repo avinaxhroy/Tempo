@@ -28,6 +28,7 @@
          height="80">
   </a>
 </div>
+
 ## Why Tempo?
 
 Most music apps lock your stats behind a yearly barrier. **Tempo breaks that wall.**
