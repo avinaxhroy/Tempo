@@ -7,6 +7,7 @@
     <!-- Foreground service for persistent tracking -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     
     <!-- Auto-restart after reboot -->
@@ -70,6 +71,12 @@
                 android:name="android.service.notification.default_filter_types"
                 android:value="alerting|ongoing" />
         </service>
+
+        <!-- WorkManager's SystemForegroundService for background workers -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
 
         <!-- Boot Receiver for auto-restart -->
         <receiver

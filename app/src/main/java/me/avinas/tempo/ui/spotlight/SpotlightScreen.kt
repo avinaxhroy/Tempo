@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,15 +29,29 @@ import me.avinas.tempo.ui.components.DeepOceanBackground
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.TimePeriodSelector
 import me.avinas.tempo.data.stats.TimeRange
+import me.avinas.tempo.ui.navigation.Screen
 
 @Composable
 fun SpotlightScreen(
     navController: NavController,
-    viewModel: SpotlightViewModel = hiltViewModel()
+    viewModel: SpotlightViewModel = hiltViewModel(),
+    initialTimeRange: TimeRange? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     
     var showStory by remember { mutableStateOf(false) }
+    
+    // Apply initial time range if provided (e.g., from reminder)
+    LaunchedEffect(initialTimeRange) {
+        if (initialTimeRange != null && initialTimeRange != uiState.selectedTimeRange) {
+            viewModel.onTimeRangeSelected(initialTimeRange)
+        }
+    }
+    
+    // Navigate to canvas with card ID
+    val onShareCard: (SpotlightCardData) -> Unit = { card ->
+        navController.navigate(Screen.ShareCanvas.createRoute(card.id))
+    }
 
     DeepOceanBackground {
         Scaffold(
@@ -71,8 +86,18 @@ fun SpotlightScreen(
             }
         ) { paddingValues ->
             if (uiState.isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     CircularProgressIndicator(color = Color.White)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Please wait while we cooking your data",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
                 }
             } else if (uiState.cards.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -98,73 +123,65 @@ fun SpotlightScreen(
                             enter = fadeIn(animationSpec = tween(500)) + 
                                    slideInVertically(animationSpec = tween(500), initialOffsetY = { 50 })
                         ) {
-                            SpotlightStoryButton(onClick = { showStory = true })
+                            SpotlightStoryButton(
+                                onClick = { 
+                                    if (!uiState.isStoryLocked) {
+                                        showStory = true 
+                                    }
+                                },
+                                isLocked = uiState.isStoryLocked,
+                                lockMessage = uiState.storyLockMessage
+                            )
                         }
                     }
 
-                    // Render specific cards in order if they exist
-                    val timeDevotion = uiState.cards.find { it is SpotlightCardData.TimeDevotion } as? SpotlightCardData.TimeDevotion
-                    if (timeDevotion != null) {
-                        item {
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(animationSpec = tween(500, delayMillis = 100)) + 
-                                       slideInVertically(animationSpec = tween(500, delayMillis = 100), initialOffsetY = { 50 })
-                            ) {
-                                DashboardTimeDevotionCard(timeDevotion)
+                    // Dynamic Feed of Insights
+                    items(uiState.cards) { card ->
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn(animationSpec = tween(500)) + 
+                                   slideInVertically(animationSpec = tween(500), initialOffsetY = { 50 })
+                        ) {
+                            when (card) {
+                                is SpotlightCardData.CosmicClock -> DashboardCosmicClockCard(
+                                    data = card,
+                                    onShareClick = { onShareCard(card) }
+                                )
+                                is SpotlightCardData.WeekendWarrior -> DashboardWeekendWarriorCard(
+                                    data = card,
+                                    onShareClick = { onShareCard(card) }
+                                )
+                                is SpotlightCardData.ForgottenFavorite -> DashboardForgottenFavoriteCard(
+                                    data = card,
+                                    onShareClick = { onShareCard(card) }
+                                )
+                                is SpotlightCardData.DeepDive -> DashboardDeepDiveCard(
+                                    data = card,
+                                    onShareClick = { onShareCard(card) }
+                                )
+                                is SpotlightCardData.NewObsession -> DashboardNewObsessionCard(
+                                    data = card,
+                                    onShareClick = { onShareCard(card) }
+                                )
+                                is SpotlightCardData.EarlyAdopter -> DashboardEarlyAdopterCard(
+                                    data = card,
+                                    onShareClick = { onShareCard(card) }
+                                )
+                                is SpotlightCardData.ListeningPeak -> DashboardListeningPeakCard(
+                                    data = card,
+                                    onShareClick = { onShareCard(card) }
+                                )
+                                is SpotlightCardData.ArtistLoyalty -> DashboardArtistLoyaltyCard(
+                                    data = card,
+                                    onShareClick = { onShareCard(card) }
+                                )
+                                is SpotlightCardData.Discovery -> DashboardDiscoveryCard(
+                                    data = card,
+                                    onShareClick = { onShareCard(card) }
+                                )
+                                else -> { /* Support other cards or ignore */ }
                             }
                         }
-                    }
-
-                    val earlyAdopter = uiState.cards.find { it is SpotlightCardData.EarlyAdopter } as? SpotlightCardData.EarlyAdopter
-                    if (earlyAdopter != null) {
-                        item {
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(animationSpec = tween(500, delayMillis = 200)) + 
-                                       slideInVertically(animationSpec = tween(500, delayMillis = 200), initialOffsetY = { 50 })
-                            ) {
-                                DashboardEarlyAdopterCard(earlyAdopter)
-                            }
-                        }
-                    }
-
-                    val seasonalAnthem = uiState.cards.find { it is SpotlightCardData.SeasonalAnthem } as? SpotlightCardData.SeasonalAnthem
-                    if (seasonalAnthem != null) {
-                        item {
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(animationSpec = tween(500, delayMillis = 300)) + 
-                                       slideInVertically(animationSpec = tween(500, delayMillis = 300), initialOffsetY = { 50 })
-                            ) {
-                                DashboardSeasonalAnthemCard(seasonalAnthem)
-                            }
-                        }
-                    }
-
-                    val listeningPeak = uiState.cards.find { it is SpotlightCardData.ListeningPeak } as? SpotlightCardData.ListeningPeak
-                    if (listeningPeak != null) {
-                        item {
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(animationSpec = tween(500, delayMillis = 400)) + 
-                                       slideInVertically(animationSpec = tween(500, delayMillis = 400), initialOffsetY = { 50 })
-                            ) {
-                                DashboardListeningPeakCard(listeningPeak)
-                            }
-                        }
-                    }
-                    
-                    // Render other cards that are not the main 4
-                    val otherCards = uiState.cards.filter { 
-                        it !is SpotlightCardData.TimeDevotion &&
-                        it !is SpotlightCardData.EarlyAdopter &&
-                        it !is SpotlightCardData.SeasonalAnthem &&
-                        it !is SpotlightCardData.ListeningPeak
-                    }
-                    
-                    items(otherCards) { card ->
-                        // Fallback renderer for other cards
                     }
                 }
             }
@@ -181,27 +198,54 @@ fun SpotlightScreen(
                 .navigationBarsPadding()
         )
 
-        // Story Overlay
+        // Story Overlay - only show if story pages are loaded
         AnimatedVisibility(
             visible = showStory,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            SpotlightStoryScreen(
-                storyPages = uiState.storyPages,
-                onClose = { showStory = false }
-            )
+            if (uiState.storyLoading) {
+                // Story still loading - show loading indicator
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Color.White)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Preparing your story...",
+                            color = Color.White.copy(alpha = 0.7f),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            } else {
+                SpotlightStoryScreen(
+                    storyPages = uiState.storyPages,
+                    onClose = { showStory = false }
+                )
+            }
         }
     }
 }
 
 @Composable
-fun SpotlightStoryButton(onClick: () -> Unit) {
+fun SpotlightStoryButton(
+    onClick: () -> Unit,
+    isLocked: Boolean = false,
+    lockMessage: String = ""
+) {
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        backgroundColor = Color(0xFFA855F7).copy(alpha = 0.15f), // Purple Tint
+            .clickable(enabled = !isLocked, onClick = onClick),
+        backgroundColor = if (isLocked) 
+            Color.Gray.copy(alpha = 0.1f) 
+        else 
+            Color(0xFFA855F7).copy(alpha = 0.15f), // Purple Tint
         contentPadding = PaddingValues(20.dp)
     ) {
         Row(
@@ -212,18 +256,21 @@ fun SpotlightStoryButton(onClick: () -> Unit) {
                 modifier = Modifier
                     .size(48.dp)
                     .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFFA855F7),
-                                Color(0xFFEC4899)
-                            )
-                        ),
+                        brush = if (isLocked) 
+                            Brush.linearGradient(colors = listOf(Color.Gray, Color.DarkGray))
+                        else 
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    Color(0xFFA855F7),
+                                    Color(0xFFEC4899)
+                                )
+                            ),
                         shape = CircleShape
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.AutoAwesome,
+                    imageVector = if (isLocked) Icons.Default.Lock else Icons.Default.AutoAwesome,
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(24.dp)
@@ -234,13 +281,13 @@ fun SpotlightStoryButton(onClick: () -> Unit) {
             
             Column {
                 Text(
-                    text = "Your Wrapped",
+                    text = if (isLocked) "Story Locked" else "Your Wrapped",
                     style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
+                    color = Color.White.copy(alpha = if (isLocked) 0.5f else 1f),
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Tap to view your story",
+                    text = if (isLocked) lockMessage else "Tap to view your story",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.7f)
                 )

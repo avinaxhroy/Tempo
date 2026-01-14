@@ -2,7 +2,6 @@ package me.avinas.tempo.ui.onboarding
 
 import me.avinas.tempo.ui.theme.TempoDarkBackground
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,8 +14,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -28,9 +25,12 @@ import androidx.compose.ui.draw.scale
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.theme.TempoRed
-import me.avinas.tempo.ui.utils.adaptiveSize
-import me.avinas.tempo.ui.utils.adaptiveTextUnit
+import me.avinas.tempo.ui.utils.adaptiveSizeByCategory
+import me.avinas.tempo.ui.utils.adaptiveTextUnitByCategory
 import me.avinas.tempo.ui.utils.isSmallScreen
+import me.avinas.tempo.ui.utils.rememberScreenHeightPercentage
+import me.avinas.tempo.ui.utils.scaledSize
+import me.avinas.tempo.ui.utils.rememberClampedHeightPercentage
 
 @Composable
 fun WelcomeScreen(
@@ -43,20 +43,6 @@ fun WelcomeScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // Skip button
-        TextButton(
-            onClick = onSkip,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp)
-        ) {
-            Text(
-                text = "Skip",
-                color = Color.White.copy(alpha = 0.6f),
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
-
         // Animated Entry
         var isVisible by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) { isVisible = true }
@@ -73,12 +59,13 @@ fun WelcomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .padding(horizontal = adaptiveSizeByCategory(24.dp, 20.dp, 16.dp)),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Hero Illustration with pulse
+                // Top flexible spacer - takes remaining space proportionally
+                Spacer(modifier = Modifier.weight(0.15f))
+                
+                // Hero Illustration with pulse - adaptive sizing
                 val isSmall = isSmallScreen()
                 val infiniteTransition = rememberInfiniteTransition(label = "pulse")
                 val scale by infiniteTransition.animateFloat(
@@ -91,9 +78,14 @@ fun WelcomeScreen(
                     label = "scale"
                 )
 
+                // Hero card with clamped sizing to prevent extremes
+                val heroSize = rememberClampedHeightPercentage(0.16f, 90.dp, 160.dp)
+                val innerGlowSize = rememberClampedHeightPercentage(0.10f, 55.dp, 100.dp)
+                val iconSize = rememberClampedHeightPercentage(0.08f, 45.dp, 80.dp)
+                
                 GlassCard(
                     modifier = Modifier
-                        .size(adaptiveSize(160.dp, 120.dp, 100.dp))
+                        .size(heroSize)
                         .scale(scale),
                     backgroundColor = TempoRed.copy(alpha = 0.1f),
                     contentPadding = PaddingValues(0.dp)
@@ -105,7 +97,7 @@ fun WelcomeScreen(
                         // Inner glow
                         Box(
                             modifier = Modifier
-                                .size(adaptiveSize(100.dp, 70.dp, 60.dp))
+                                .size(innerGlowSize)
                                 .background(
                                     brush = Brush.radialGradient(
                                         colors = listOf(TempoRed.copy(alpha = 0.4f), Color.Transparent)
@@ -117,23 +109,23 @@ fun WelcomeScreen(
                         Icon(
                             imageVector = Icons.Default.MusicNote,
                             contentDescription = null,
-                            modifier = Modifier.size(adaptiveSize(80.dp, 56.dp, 48.dp)),
+                            modifier = Modifier.size(iconSize),
                             tint = Color.White
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 24.dp, 16.dp)))
+                // Proportional spacing after hero
+                Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.045f)))
 
-                // Gradient Headline
+                // Gradient Headline - responsive text
                 Text(
                     text = "Know Your Music,",
                     style = if (isSmall) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.padding(bottom = 0.dp),
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     color = Color.White,
-                    fontSize = adaptiveTextUnit(34.sp, 24.sp)
+                    fontSize = adaptiveTextUnitByCategory(34.sp, 28.sp, 24.sp)
                 )
                 
                 // "Love Your Stats" with Gradient
@@ -149,27 +141,30 @@ fun WelcomeScreen(
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                     color = Color.White,
-                    fontSize = adaptiveTextUnit(34.sp, 24.sp)
+                    fontSize = adaptiveTextUnitByCategory(34.sp, 28.sp, 24.sp)
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.02f)))
 
+                // Description text - responsive sizing
                 Text(
                     text = "Tempo automatically tracks what you listen to and shows you beautiful insights about your listening habits.",
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                     color = Color.White.copy(alpha = 0.7f),
-                    lineHeight = adaptiveTextUnit(24.sp, 20.sp),
-                    fontSize = adaptiveTextUnit(16.sp, 14.sp)
+                    lineHeight = adaptiveTextUnitByCategory(24.sp, 22.sp, 20.sp),
+                    fontSize = adaptiveTextUnitByCategory(16.sp, 15.sp, 14.sp)
                 )
 
-                Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 24.dp)))
+                // Flexible spacer between content and button
+                Spacer(modifier = Modifier.weight(0.2f))
 
+                // CTA Button with adaptive height
                 Button(
                     onClick = onGetStarted,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
+                        .height(scaledSize(54.dp, 0.85f, 1.1f)),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = TempoRed,
                         contentColor = Color.White
@@ -182,13 +177,28 @@ fun WelcomeScreen(
                 ) {
                     Text(
                         text = "Get Started",
-                        fontSize = 18.sp,
+                        fontSize = adaptiveTextUnitByCategory(18.sp, 17.sp, 16.sp),
                         fontWeight = FontWeight.Bold
                     )
                 }
                 
-                Spacer(modifier = Modifier.height(24.dp))
+                // Bottom padding - proportional to screen
+                Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.03f)))
             }
+        }
+
+        // Skip button - rendered LAST to be on top of all content (z-ordering in Box)
+        TextButton(
+            onClick = onSkip,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(adaptiveSizeByCategory(16.dp, 14.dp, 12.dp))
+        ) {
+            Text(
+                text = "Skip",
+                color = Color.White.copy(alpha = 0.6f),
+                style = MaterialTheme.typography.labelLarge
+            )
         }
     }
 }

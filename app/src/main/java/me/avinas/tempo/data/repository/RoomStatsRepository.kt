@@ -7,6 +7,9 @@ import me.avinas.tempo.data.local.entities.Artist
 import me.avinas.tempo.data.stats.*
 import me.avinas.tempo.utils.ArtistParser
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.flow
@@ -383,9 +386,61 @@ class RoomStatsRepository @Inject constructor(
             uniqueArtistsCount = combinedStats.uniqueArtists,
             uniqueAlbumsCount = combinedStats.uniqueAlbums,
             averageSessionDurationMs = avgSessionDuration,
-            longestSessionMs = combinedStats.totalTimeMs, // Would need session detection for accurate value
+            longestSessionMs = calculateLongestSession(startTime, endTime), // Use actual session calculation
             timeRange = timeRange
         )
+
+    }
+
+    /**
+     * Calculate the longest continuous listening session in a time range.
+     * A session is defined as a sequence of songs with less than 20 minutes gap between them.
+     */
+    private suspend fun calculateLongestSession(startTime: Long, endTime: Long): Long {
+        val points = listeningEventDao.getSessionPointsInRange(startTime, endTime)
+        if (points.isEmpty()) return 0L
+
+        var maxDuration = 0L
+        var currentSessionDuration = 0L
+        var sessionStartTime = points.first().timestamp
+        var lastEndTime = points.first().timestamp + points.first().playDuration
+
+        currentSessionDuration = points.first().playDuration
+        maxDuration = currentSessionDuration
+
+        // Threshold for session break: 20 minutes (1200000 ms)
+        val sessionThreshold = 20 * 60 * 1000L
+
+        for (i in 1 until points.size) {
+            val point = points[i]
+            val gap = point.timestamp - lastEndTime
+            
+            if (gap <= sessionThreshold) {
+                // Continue session
+                // Add gap time to duration? Ideally yes for "wall clock" session time, 
+                // but let's stick to "active listening time" sum or "total elapsed"?
+                // Let's use total elapsed time (wall clock) for the session length
+                val pointEndTime = point.timestamp + point.playDuration
+                currentSessionDuration = pointEndTime - sessionStartTime
+                lastEndTime = pointEndTime
+            } else {
+                // End of session
+                if (currentSessionDuration > maxDuration) {
+                    maxDuration = currentSessionDuration
+                }
+                // Start new session
+                sessionStartTime = point.timestamp
+                currentSessionDuration = point.playDuration
+                lastEndTime = sessionStartTime + point.playDuration
+            }
+        }
+        
+        // Check last session
+        if (currentSessionDuration > maxDuration) {
+            maxDuration = currentSessionDuration
+        }
+
+        return maxDuration
     }
 
     // =====================
@@ -468,7 +523,10 @@ class RoomStatsRepository @Inject constructor(
         val filterAudiobooks = prefs.filterAudiobooks
 
         // Get raw artist stats from database with content filtering
-        val rawStats = statsDao.getAllArtistStatsRawFiltered(startTime, endTime, filterPodcasts, filterAudiobooks)
+        // Limit to top 100 artists by raw play count - users rarely scroll past this
+        // This significantly reduces memory and CPU usage during aggregation
+        val maxArtistsToProcess = 100 + (page * pageSize) // Fetch enough for requested page + buffer
+        val rawStats = statsDao.getAllArtistStatsRawFiltered(startTime, endTime, filterPodcasts, filterAudiobooks, maxArtistsToProcess)
         
         // Split multi-artist entries and aggregate by individual artist
         val artistStatsMap = mutableMapOf<String, ArtistAggregator>()
@@ -514,19 +572,24 @@ class RoomStatsRepository @Inject constructor(
             .drop(offset)
             .take(pageSize)
         
-        // Fetch image URLs, artist IDs, and country for each artist
-        val itemsWithImages = paginatedItems.map { artist ->
-            val imageUrl = getArtistImageUrlWithFallback(artist.artist)
-            val country = getArtistCountry(artist.artist)
-            // Try to find the artist ID from the database
-            val normalizedName = me.avinas.tempo.data.local.entities.Artist.normalizeName(artist.artist)
-            val artistEntity = artistDao.getArtistByNormalizedName(normalizedName)
-                ?: artistDao.getArtistByName(artist.artist)
-            artist.copy(
-                artistId = artistEntity?.id,
-                imageUrl = imageUrl, 
-                country = country
-            )
+        // Fetch image URLs, artist IDs, and country for each artist IN PARALLEL
+        // This significantly speeds up loading by running all fetches concurrently
+        val itemsWithImages = coroutineScope {
+            paginatedItems.map { artist ->
+                async {
+                    val imageUrl = getArtistImageUrlWithFallback(artist.artist)
+                    val country = getArtistCountry(artist.artist)
+                    // Try to find the artist ID from the database
+                    val normalizedName = me.avinas.tempo.data.local.entities.Artist.normalizeName(artist.artist)
+                    val artistEntity = artistDao.getArtistByNormalizedName(normalizedName)
+                        ?: artistDao.getArtistByName(artist.artist)
+                    artist.copy(
+                        artistId = artistEntity?.id,
+                        imageUrl = imageUrl, 
+                        country = country
+                    )
+                }
+            }.awaitAll()
         }
 
         return PaginatedResult(
@@ -1962,6 +2025,55 @@ class RoomStatsRepository @Inject constructor(
         val key = "artist_discovery_$artistId"
         return getCached(key) {
             statsDao.getArtistDiscoveryDate(artistId)
+        }
+    }
+    
+    // =====================
+    // Batch Operations (Spotlight Performance)
+    // =====================
+    
+    override suspend fun getArtistPlayCountsBatch(artistNames: List<String>): Map<String, Int> {
+        if (artistNames.isEmpty()) return emptyMap()
+        
+        val key = "artist_playcounts_batch_${artistNames.hashCode()}"
+        return getCached(key) {
+            // Build result map by querying each artist
+            // Note: For optimal performance, a dedicated batch DAO query would be better,
+            // but this still avoids the N+1 problem in the generator loop by pre-fetching
+            val result = mutableMapOf<String, Int>()
+            artistNames.forEach { name ->
+                // Try ID-based lookup first (faster with proper indices)
+                val normalizedName = me.avinas.tempo.data.local.entities.Artist.normalizeName(name)
+                val artist = artistDao.getArtistByNormalizedName(normalizedName)
+                    ?: artistDao.getArtistByName(name)
+                
+                val playCount = if (artist != null) {
+                    statsDao.getArtistPlayCountById(artist.id)
+                } else {
+                    // Fallback to partial match for parsed artists
+                    statsDao.getArtistPlayCountByPartialMatch(name)
+                }
+                result[name] = playCount
+            }
+            result
+        }
+    }
+    
+    override suspend fun getArtistImageUrlsBatch(artistNames: List<String>): Map<String, String?> {
+        // Implementation for batch fetching (could be optimized further)
+        // For now, simple parallel fetch to reuse existing logic
+        return coroutineScope {
+            artistNames.associateWith { name ->
+                async { getArtistImageUrlWithFallback(name) }
+            }.mapValues { it.value.await() }
+        }
+    }
+
+    override suspend fun getEarliestDataTimestamp(): Long? {
+        // Cache this as it rarely changes (only on import or deletion)
+        val key = "earliest_data_timestamp"
+        return getCached(key) {
+           listeningEventDao.getEarliestEventTimestamp()
         }
     }
 }

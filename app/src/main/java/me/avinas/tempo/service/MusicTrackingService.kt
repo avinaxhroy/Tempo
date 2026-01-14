@@ -109,6 +109,7 @@ class MusicTrackingService : NotificationListenerService() {
             "com.aspiro.tidal",                        // Tidal (Official)
             "com.qobuz.music",                         // Qobuz
             "app.revanced.android.youtube.music",      // YouTube Music ReVanced
+            "app.revanced.android.apps.youtube.music", // YouTube Music ReVanced (Correct App ID)
             "com.vanced.android.youtube.music",        // YouTube Music Vanced
             "com.moonvideo.android.resso",             // Resso
             "com.audiomack",                           // Audiomack
@@ -118,7 +119,46 @@ class MusicTrackingService : NotificationListenerService() {
             "com.kodarkooperativet.blackplayerfree",   // BlackPlayer Free
             "com.kodarkooperativet.blackplayerex",     // BlackPlayer EX
             "nugs.net",                                // Nugs.net
-            "net.nugs.multiband"                       // Nugs.net (Multiband)
+            "net.nugs.multiband",                      // Nugs.net (Multiband)
+            
+            // Open Source / GitHub Music Clients (Ad-free)
+            "com.dd3boh.outertune",                    // OuterTune
+            "com.zionhuang.music",                     // InnerTune
+            "it.vfsfitvnm.vimusic",                    // ViMusic
+            "oss.krtirtho.spotube",                    // Spotube
+            "com.shadow.blackhole",                    // BlackHole
+            "com.anandnet.harmonymusic",               // Harmony Music
+            "it.fast4x.rimusic",                       // RiMusic
+            "com.msob7y.namida",                       // Namida
+            "com.metrolist.music",                     // Metrolist
+            "com.gokadzev.musify",                     // Musify
+            "com.gokadzev.musify.fdroid",              // Musify (F-Droid)
+            "ls.bloomee.musicplayer",                  // BloomeeTunes
+            "com.maxrave.simpmusic",                   // SimpMusic
+            "it.ncaferra.pixelplayerfree",             // Pixel Player
+            "com.theveloper.pixelplay",                // PixelPlay
+            "com.singularity.gramophone",              // Gramophone
+            "player.phonograph.plus",                  // Phonograph Plus
+            "org.oxycblt.auxio",                       // Auxio
+            "com.maloy.muzza",                         // Muzza
+            "uk.co.projectneon.echo",                  // Echo
+            "com.shabinder.spotiflyer",                // SpotiFlyer
+            "com.kapp.youtube.final",                  // YMusic
+            "org.schabi.newpipe",                      // NewPipe
+            "org.polymorphicshade.newpipe",            // NewPipe (Fork)
+            
+            // Popular Offline Players
+            "com.rhmsoft.pulsar",                      // Pulsar
+            "com.neutroncode.mp",                      // Neutron Player
+            "gonemad.gmmp",                            // GoneMad
+            "code.name.monkey.retromusic",             // Retro Music Player
+            "com.piyush.music",                        // Oto Music
+            "com.simplecity.amp_pro",                  // Shuttle+
+            "ru.stellio.player",                       // Stellio
+            "io.stellio.music",                        // Stellio (Alt)
+            "com.frolo.musp",                          // Frolomuse
+            "com.rhmsoft.omnia",                       // Omnia
+            "ru.yandex.music"                          // Yandex Music
         )
         
         // Podcast apps - filtered by content filtering settings
@@ -161,6 +201,7 @@ class MusicTrackingService : NotificationListenerService() {
             // Video streaming
             "com.google.android.youtube",             // YouTube (video)
             "com.google.android.apps.youtube",        // YouTube (alternative)
+            "app.revanced.android.youtube",           // YouTube ReVanced (Video)
             "com.netflix.mediaclient",                // Netflix
             "com.amazon.avod.thirdpartyclient",       // Prime Video
             "com.disney.disneyplus",                  // Disney+

@@ -33,6 +33,12 @@ interface ListeningEventDao {
     @Query("SELECT * FROM listening_events WHERE timestamp >= :startTime AND timestamp <= :endTime ORDER BY timestamp DESC")
     suspend fun getEventsInRange(startTime: Long, endTime: Long): List<ListeningEvent>
 
+    /**
+     * Get only timestamps and durations for session calculation (memory efficient).
+     */
+    @Query("SELECT timestamp, playDuration FROM listening_events WHERE timestamp >= :startTime AND timestamp <= :endTime ORDER BY timestamp ASC")
+    suspend fun getSessionPointsInRange(startTime: Long, endTime: Long): List<me.avinas.tempo.data.stats.SessionPoint>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(event: ListeningEvent): Long
     
@@ -162,4 +168,10 @@ interface ListeningEventDao {
         WHERE track_id IN (SELECT id FROM tracks WHERE LOWER(artist) = LOWER(:artistName))
     """)
     suspend fun deleteByArtist(artistName: String): Int
+
+    /**
+     * Get the timestamp of the very first listening event (earliest data point).
+     */
+    @Query("SELECT MIN(timestamp) FROM listening_events")
+    suspend fun getEarliestEventTimestamp(): Long?
 }

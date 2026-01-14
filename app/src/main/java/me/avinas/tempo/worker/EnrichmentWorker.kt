@@ -1,10 +1,16 @@
 package me.avinas.tempo.worker
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
+import me.avinas.tempo.R
 import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.data.enrichment.LastFmEnrichmentService
 import me.avinas.tempo.data.enrichment.MusicBrainzEnrichmentService
@@ -131,6 +137,8 @@ class EnrichmentWorker @AssistedInject constructor(
         private const val TAG = "EnrichmentWorker"
         private const val WORK_NAME = "music_enrichment"
         private const val WORK_NAME_IMMEDIATE = "music_enrichment_immediate"
+        private const val NOTIFICATION_CHANNEL_ID = "enrichment_worker"
+        private const val NOTIFICATION_ID = 3002
         
         // How many tracks to process per run
         private const val BATCH_SIZE = 10
@@ -526,5 +534,34 @@ class EnrichmentWorker @AssistedInject constructor(
         }
 
         Log.i(TAG, "Batch complete: enriched=$enrichedCount, failed=$failedCount")
+    }
+    
+    /**
+     * Required for expedited work on Android 10 (SDK 29).
+     * Returns ForegroundInfo with notification when work runs as foreground service.
+     */
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        
+        val channel = NotificationChannel(
+            NOTIFICATION_CHANNEL_ID,
+            "Music Enrichment",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        notificationManager.createNotificationChannel(channel)
+        
+        val notification = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("Enriching music data")
+            .setContentText("Adding metadata to your tracks...")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .build()
+        
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            ForegroundInfo(NOTIFICATION_ID, notification)
+        }
     }
 }

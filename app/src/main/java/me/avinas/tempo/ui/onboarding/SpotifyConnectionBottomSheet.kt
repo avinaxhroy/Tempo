@@ -18,9 +18,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import me.avinas.tempo.ui.utils.adaptiveSize
-import me.avinas.tempo.ui.utils.adaptiveTextUnit
+import me.avinas.tempo.ui.utils.adaptiveSizeByCategory
+import me.avinas.tempo.ui.utils.adaptiveTextUnitByCategory
 import me.avinas.tempo.ui.utils.isSmallScreen
+import me.avinas.tempo.ui.utils.scaledSize
 
 @Composable
 fun SpotifyConnectionBottomSheet(
@@ -33,9 +34,9 @@ fun SpotifyConnectionBottomSheet(
             .fillMaxWidth()
             .background(Color(0xFF1E1B24).copy(alpha = 0.95f)) // Charcoal Surface
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = adaptiveSizeByCategory(24.dp, 20.dp, 18.dp))
             .verticalScroll(rememberScrollState())
-            .padding(vertical = adaptiveSize(16.dp, 12.dp)), // Reduced vertical padding
+            .padding(vertical = adaptiveSizeByCategory(16.dp, 14.dp, 12.dp)),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Handle bar
@@ -46,7 +47,7 @@ fun SpotifyConnectionBottomSheet(
                 .background(Color.Gray.copy(alpha = 0.3f), RoundedCornerShape(2.dp))
         )
 
-        Spacer(modifier = Modifier.height(adaptiveSize(16.dp, 12.dp))) // Reduced
+        Spacer(modifier = Modifier.height(adaptiveSizeByCategory(16.dp, 14.dp, 12.dp)))
 
         // Key message: Works WITHOUT Spotify
         Box(
@@ -55,61 +56,61 @@ fun SpotifyConnectionBottomSheet(
                     color = Color(0xFF22C55E).copy(alpha = 0.15f),
                     shape = RoundedCornerShape(20.dp)
                 )
-                .padding(horizontal = 16.dp, vertical = 6.dp) // Compact padding
+                .padding(horizontal = 16.dp, vertical = 6.dp) 
         ) {
             Text(
-                text = "✓ Tempo works great without Spotify!",
+                text = "✓ Tempo works with any music app!", // Simple & Direct
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = Color(0xFF22C55E)
             )
         }
 
-        Spacer(modifier = Modifier.height(adaptiveSize(16.dp, 12.dp))) // Reduced
+        Spacer(modifier = Modifier.height(adaptiveSizeByCategory(16.dp, 14.dp, 12.dp)))
 
         Text(
-            text = "Want Extra Features?",
-            style = if (isSmall) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium, // Smaller title
+            text = "Get High-Quality Art", // Focus on the visual benefit, not "Features"
+            style = if (isSmall) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = Color.White,
-            fontSize = adaptiveTextUnit(18.sp, 16.sp)
+            fontSize = adaptiveTextUnitByCategory(18.sp, 17.sp, 16.sp)
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(adaptiveSizeByCategory(4.dp, 3.dp, 2.dp)))
 
         Text(
-            text = "Connecting Spotify unlocks:",
-            style = MaterialTheme.typography.bodySmall, // Smaller body
+            text = "Connect to use Spotify nicely reliable database for metadata:", // "Nicely reliable" might be too casual? "Use Spotify's reliable database"
+            style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.7f),
-            fontSize = adaptiveTextUnit(14.sp, 12.sp)
+            fontSize = adaptiveTextUnitByCategory(14.sp, 13.sp, 12.sp)
         )
 
-        Spacer(modifier = Modifier.height(adaptiveSize(12.dp, 8.dp))) // Reduced
+        Spacer(modifier = Modifier.height(adaptiveSizeByCategory(12.dp, 10.dp, 8.dp)))
 
         // Benefits (Using compact version)
-        BenefitItem(icon = Icons.Default.Mood, text = "Mood tracking for each song")
-        BenefitItem(icon = Icons.Default.Bolt, text = "Energy & danceability analysis")
-        BenefitItem(icon = Icons.Default.GraphicEq, text = "High-resolution album art")
+        BenefitItem(icon = Icons.Default.GraphicEq, text = "Reliable album artwork")
+        BenefitItem(icon = Icons.Default.Mood, text = "Accurate genre info")
+        BenefitItem(icon = Icons.Default.Bolt, text = "Mood & energy stats")
 
-        Spacer(modifier = Modifier.height(adaptiveSize(12.dp, 8.dp))) // Reduced
+        Spacer(modifier = Modifier.height(adaptiveSizeByCategory(12.dp, 10.dp, 8.dp)))
         
         // Clarification note
         Text(
-            text = "Only used for metadata. We never access your playlists or account info.",
+            text = "This is optional. We never access your playlists or personal data.",
             style = MaterialTheme.typography.labelSmall,
             color = Color.White.copy(alpha = 0.5f),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 8.dp),
-            lineHeight = 14.sp // Tighter line height
+            lineHeight = 14.sp
         )
 
-        Spacer(modifier = Modifier.height(adaptiveSize(16.dp, 8.dp))) // Significantly reduced
+        Spacer(modifier = Modifier.height(adaptiveSizeByCategory(16.dp, 12.dp, 8.dp)))
 
         Button(
             onClick = onConnect,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp), // Slightly smaller button
+                .height(scaledSize(48.dp, 0.9f, 1.05f)),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFF1DB954), // Spotify Green
                 contentColor = Color.White
@@ -126,12 +127,17 @@ fun SpotifyConnectionBottomSheet(
 
         TextButton(onClick = onMaybeLater) {
             Text(
-                text = "Skip — I don't need this",
-                color = Color.White.copy(alpha = 0.6f)
+                text = "Skip for now", // Neutral
+                color = Color.White.copy(alpha = 0.6f), // Reduced prominence
+                fontWeight = FontWeight.Normal
             )
         }
         
-        Spacer(modifier = Modifier.height(8.dp))
+        // Add spacing for the navigation bar
+        Spacer(modifier = Modifier.height(adaptiveSizeByCategory(32.dp, 24.dp, 16.dp)))
+        
+        // Add spacing for the navigation bar specifically
+        Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
 }
 

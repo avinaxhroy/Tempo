@@ -48,7 +48,8 @@ fun HomeScreen(
     onNavigateToHistory: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToTrack: (Long) -> Unit,
-    onNavigateToSpotlight: () -> Unit
+    onNavigateToSpotlight: (TimeRange?) -> Unit,
+    onNavigateToSupportedApps: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var isRefreshing by remember { mutableStateOf(false) }
@@ -79,7 +80,8 @@ fun HomeScreen(
                     VibeHeader(
                         energy = uiState.audioFeatures?.averageEnergy ?: 0.5f,
                         valence = uiState.audioFeatures?.averageValence ?: 0.5f,
-                        userName = uiState.userName ?: "User"
+                        userName = uiState.userName ?: "User",
+                        isNewUser = uiState.isNewUser
                     )
                     
                     Column(
@@ -131,7 +133,7 @@ fun HomeScreen(
                             SpotlightStoryCard(
                                 onClick = {
                                     walkthroughController.dismiss()
-                                    onNavigateToSpotlight()
+                                    onNavigateToSpotlight(null)
                                 },
                                 modifier = Modifier.onGloballyPositioned { coordinates ->
                                     walkthroughController.registerTarget(
@@ -168,17 +170,15 @@ fun HomeScreen(
                             }
                         } else if (!uiState.isLoading) {
                             // Empty State
-                            Box(
-                                modifier = Modifier.fillMaxSize().height(300.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = me.avinas.tempo.utils.TempoCopyEngine.getEmptyStateMessage(),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = Color.White.copy(alpha = 0.7f),
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
+                            // Use dynamic height to ensure centering and prevent truncation on varying screen sizes
+                            me.avinas.tempo.ui.components.EmptyState(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(me.avinas.tempo.ui.utils.rememberScreenHeightPercentage(0.7f)),
+                                timeRange = if (uiState.isNewUser) null else uiState.selectedTimeRange,
+                                type = me.avinas.tempo.ui.components.GhostScreenType.HOME,
+                                onCheckSupportedApps = onNavigateToSupportedApps
+                            )
                         }
                     }
                 }
@@ -257,6 +257,21 @@ fun HomeScreen(
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://play.google.com/store/apps/details?id=${context.packageName}"))
                         context.startActivity(intent)
                     }
+                }
+            )
+        }
+        
+        // Spotlight Story Reminder Popup
+        val reminderType = uiState.reminderType
+        if (uiState.showSpotlightReminder && reminderType != null) {
+            me.avinas.tempo.ui.components.SpotlightReminderPopup(
+                type = reminderType,
+                onDismiss = viewModel::dismissSpotlightReminder,
+                onViewStory = {
+                    // Navigate to Spotlight with the specified time range
+                    onNavigateToSpotlight(uiState.reminderTimeRange)
+                    // Dismiss the reminder
+                    viewModel.dismissSpotlightReminder()
                 }
             )
         }

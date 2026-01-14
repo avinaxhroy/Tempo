@@ -1,9 +1,15 @@
 package me.avinas.tempo.worker
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
+import me.avinas.tempo.R
 import me.avinas.tempo.data.enrichment.SpotifyEnrichmentService
 import me.avinas.tempo.data.local.dao.EnrichedMetadataDao
 import me.avinas.tempo.data.local.dao.TrackDao
@@ -40,6 +46,8 @@ class SpotifyEnrichmentWorker @AssistedInject constructor(
         private const val TAG = "SpotifyEnrichWorker"
         private const val WORK_NAME = "spotify_enrichment"
         private const val WORK_NAME_IMMEDIATE = "spotify_enrichment_immediate"
+        private const val NOTIFICATION_CHANNEL_ID = "spotify_enrichment_worker"
+        private const val NOTIFICATION_ID = 3001
         
         // How many tracks to process per run
         private const val BATCH_SIZE = 10
@@ -215,5 +223,34 @@ class SpotifyEnrichmentWorker @AssistedInject constructor(
         }
 
         return successCount
+    }
+    
+    /**
+     * Required for expedited work on Android 10 (SDK 29).
+     * Returns ForegroundInfo with notification when work runs as foreground service.
+     */
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        
+        val channel = NotificationChannel(
+            NOTIFICATION_CHANNEL_ID,
+            "Spotify Enrichment",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        notificationManager.createNotificationChannel(channel)
+        
+        val notification = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("Enriching music data")
+            .setContentText("Adding Spotify metadata to your tracks...")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .build()
+        
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            ForegroundInfo(NOTIFICATION_ID, notification)
+        }
     }
 }

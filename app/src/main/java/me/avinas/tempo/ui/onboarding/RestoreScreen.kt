@@ -44,9 +44,12 @@ import me.avinas.tempo.ui.settings.BackupRestoreViewModel
 import me.avinas.tempo.ui.settings.DriveOperationState
 import me.avinas.tempo.ui.theme.TempoDarkBackground
 import me.avinas.tempo.ui.theme.TempoRed
-import me.avinas.tempo.ui.utils.adaptiveSize
+import me.avinas.tempo.ui.utils.adaptiveSizeByCategory
+import me.avinas.tempo.ui.utils.adaptiveTextUnitByCategory
 import me.avinas.tempo.utils.FormatUtils.formatBytes
-import me.avinas.tempo.ui.utils.adaptiveTextUnit
+import me.avinas.tempo.ui.utils.rememberScreenHeightPercentage
+import me.avinas.tempo.ui.utils.scaledSize
+import me.avinas.tempo.ui.utils.rememberClampedHeightPercentage
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -195,7 +198,7 @@ fun RestoreScreen(
                         .padding(horizontal = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.02f)))
                     
                     // Top Bar with Back Button
                     Row(
@@ -212,7 +215,7 @@ fun RestoreScreen(
                         Spacer(modifier = Modifier.weight(1f))
                     }
     
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.01f)))
                     
                     Text(
                         text = "Restore Data",
@@ -226,10 +229,10 @@ fun RestoreScreen(
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center,
                         color = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(top = 8.dp)
+                        modifier = Modifier.padding(top = rememberScreenHeightPercentage(0.01f))
                     )
         
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.03f)))
         
                     // Option 1: Google Drive
                     GlassCard(
@@ -245,9 +248,9 @@ fun RestoreScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
-                                    modifier = Modifier
-                                        .size(adaptiveSize(48.dp, 40.dp))
-                                        .background(Color(0xFF4285F4).copy(alpha = 0.2f), CircleShape),
+                                modifier = Modifier
+                                    .size(adaptiveSizeByCategory(48.dp, 44.dp, 40.dp))
+                                    .background(Color(0xFF4285F4).copy(alpha = 0.2f), CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -302,17 +305,17 @@ fun RestoreScreen(
                                              ) {
                                                  Column(modifier = Modifier.weight(1f)) {
                                                      Text(
-                                                         text = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(backup.createdAt)),
-                                                         color = Color.White,
-                                                         style = MaterialTheme.typography.bodyMedium,
-                                                         fontSize = adaptiveTextUnit(16.sp, 14.sp)
-                                                     )
-                                                     Text(
-                                                         text = formatBytes(backup.sizeBytes) + (backup.deviceName?.let { " • $it" } ?: ""),
-                                                         color = Color.White.copy(alpha = 0.6f),
-                                                         style = MaterialTheme.typography.bodySmall,
-                                                         fontSize = adaptiveTextUnit(14.sp, 12.sp)
-                                                     )
+                                                        text = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(backup.createdAt)),
+                                                        color = Color.White,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontSize = adaptiveTextUnitByCategory(16.sp, 15.sp, 14.sp)
+                                                    )
+                                                    Text(
+                                                        text = formatBytes(backup.sizeBytes) + (backup.deviceName?.let { " • $it" } ?: ""),
+                                                        color = Color.White.copy(alpha = 0.6f),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontSize = adaptiveTextUnitByCategory(14.sp, 13.sp, 12.sp)
+                                                    )
                                                  }
                                                  Icon(
                                                      Icons.Default.CloudDownload,
@@ -337,7 +340,7 @@ fun RestoreScreen(
                         }
                     }
         
-                    Spacer(modifier = Modifier.height(adaptiveSize(16.dp, 12.dp)))
+                    Spacer(modifier = Modifier.height(adaptiveSizeByCategory(16.dp, 14.dp, 12.dp)))
         
                     // Option 2: Local Backup
                     GlassCard(
@@ -352,7 +355,7 @@ fun RestoreScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(adaptiveSize(48.dp, 40.dp))
+                                    .size(adaptiveSizeByCategory(48.dp, 44.dp, 40.dp))
                                     .background(Color.White.copy(alpha = 0.1f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -381,20 +384,21 @@ fun RestoreScreen(
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.025f)))
                 }
     
                 // Start Fresh Button (Pinned Footer)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(24.dp)
+                        .padding(horizontal = adaptiveSizeByCategory(24.dp, 20.dp, 16.dp))
+                        .padding(bottom = rememberScreenHeightPercentage(0.03f))
                 ) {
                     Button(
                         onClick = onFinish,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(adaptiveSize(56.dp, 48.dp)),
+                            .height(scaledSize(54.dp, 0.85f, 1.1f)),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.White.copy(alpha = 0.1f),
                             contentColor = Color.White
@@ -403,7 +407,7 @@ fun RestoreScreen(
                     ) {
                         Text(
                             text = "Start Fresh",
-                            fontSize = 16.sp,
+                            fontSize = adaptiveTextUnitByCategory(16.sp, 15.sp, 14.sp),
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -443,8 +447,10 @@ fun RestoreScreen(
             title = { Text("Restoring from Cloud...") },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (driveOperation is DriveOperationState.Downloading) {
-                        LinearProgressIndicator(progress = { (driveOperation as DriveOperationState.Downloading).progress })
+                    val downloadingState = driveOperation as? DriveOperationState.Downloading
+                    if (downloadingState != null) {
+                        val currentProgress = downloadingState.progress
+                        LinearProgressIndicator(progress = { currentProgress })
                     } else {
                          CircularProgressIndicator()
                     }

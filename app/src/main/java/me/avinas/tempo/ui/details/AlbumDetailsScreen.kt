@@ -22,8 +22,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.palette.graphics.Palette
-import coil.compose.AsyncImage
-import coil.imageLoader
+import coil3.compose.AsyncImage
+import coil3.BitmapImage
+import coil3.imageLoader
 import me.avinas.tempo.ui.components.buildCachedImageRequest
 import me.avinas.tempo.data.stats.AlbumDetails
 import me.avinas.tempo.data.stats.TrackWithStats
@@ -210,12 +211,16 @@ fun AlbumHeroSection(
                     contentDescription = "Album Art",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    onSuccess = { result ->
-                        val bitmap = (result.result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
-                        bitmap?.let {
-                            Palette.from(it).generate { palette ->
-                                palette?.dominantSwatch?.rgb?.let { color ->
-                                    onPaletteExtracted(Color(color))
+                    onState = { state ->
+                        if (state is coil3.compose.AsyncImagePainter.State.Success) {
+                            // Extract drawable and generate palette color
+                            val image = state.result.image
+                            val bitmap = (image as? BitmapImage)?.bitmap
+                            bitmap?.let {
+                                Palette.from(it).generate { palette ->
+                                    palette?.dominantSwatch?.rgb?.let { color ->
+                                        onPaletteExtracted(Color(color))
+                                    }
                                 }
                             }
                         }

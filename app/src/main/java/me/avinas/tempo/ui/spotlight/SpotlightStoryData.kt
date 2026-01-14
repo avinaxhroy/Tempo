@@ -1,12 +1,19 @@
 package me.avinas.tempo.ui.spotlight
 
+import androidx.compose.runtime.Immutable
 import me.avinas.tempo.data.stats.TimeRange
 
+/**
+ * Sealed interface representing different pages in the Spotlight story flow.
+ * All implementations are marked @Immutable to optimize Compose recomposition.
+ */
+@Immutable
 sealed interface SpotlightStoryPage {
     val id: String
     val conversationalText: String
     val previewUrl: String?
 
+    @Immutable
     data class ListeningMinutes(
         override val id: String = "listening_minutes",
         override val conversationalText: String,
@@ -17,6 +24,7 @@ sealed interface SpotlightStoryPage {
         override val previewUrl: String? = null
     ) : SpotlightStoryPage
 
+    @Immutable
     data class TopArtist(
         override val id: String = "top_artist",
         override val conversationalText: String,
@@ -26,6 +34,7 @@ sealed interface SpotlightStoryPage {
         val topArtists: List<ArtistEntry>,
         override val previewUrl: String? = null
     ) : SpotlightStoryPage {
+        @Immutable
         data class ArtistEntry(
             val rank: Int,
             val name: String,
@@ -34,6 +43,7 @@ sealed interface SpotlightStoryPage {
         )
     }
     
+    @Immutable
     data class TopTrackSetup(
         override val id: String = "top_track_setup",
         override val conversationalText: String,
@@ -44,6 +54,7 @@ sealed interface SpotlightStoryPage {
         override val previewUrl: String?
     ) : SpotlightStoryPage
 
+    @Immutable
     data class TopSongs(
         override val id: String = "top_songs",
         override val conversationalText: String,
@@ -54,6 +65,7 @@ sealed interface SpotlightStoryPage {
         val topSongs: List<SongEntry>,
         override val previewUrl: String?
     ) : SpotlightStoryPage {
+        @Immutable
         data class SongEntry(
             val rank: Int,
             val title: String,
@@ -63,6 +75,7 @@ sealed interface SpotlightStoryPage {
         )
     }
 
+    @Immutable
     data class TopGenres(
         override val id: String = "top_genres",
         override val conversationalText: String,
@@ -71,6 +84,7 @@ sealed interface SpotlightStoryPage {
         val genres: List<GenreEntry>,
         override val previewUrl: String? = null
     ) : SpotlightStoryPage {
+        @Immutable
         data class GenreEntry(
             val rank: Int,
             val name: String,
@@ -78,6 +92,7 @@ sealed interface SpotlightStoryPage {
         )
     }
 
+    @Immutable
     data class Personality(
         override val id: String = "personality",
         override val conversationalText: String,
@@ -86,6 +101,7 @@ sealed interface SpotlightStoryPage {
         override val previewUrl: String? = null
     ) : SpotlightStoryPage
 
+    @Immutable
     data class Conclusion(
         override val id: String = "conclusion",
         override val conversationalText: String,
@@ -97,7 +113,9 @@ sealed interface SpotlightStoryPage {
         val timeRange: TimeRange = TimeRange.THIS_YEAR,
         override val previewUrl: String? = null
     ) : SpotlightStoryPage {
+        @Immutable
         data class ArtistEntry(val name: String, val imageUrl: String?)
+        @Immutable
         data class SongEntry(val title: String, val imageUrl: String?)
     }
 }

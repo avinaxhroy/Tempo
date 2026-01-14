@@ -17,11 +17,12 @@ import me.avinas.tempo.data.local.entities.*
         Album::class,
         EnrichedMetadata::class,
         UserPreferences::class,
-        TrackArtist::class,  // New junction table
-        TrackAlias::class,   // Smart metadata aliases
-        ManualContentMark::class  // Content filtering marks
+        TrackArtist::class,  // Track-Artist junction table
+        TrackAlias::class,   // Smart metadata aliases for tracks
+        ManualContentMark::class,  // Content filtering marks
+        ArtistAlias::class   // Artist merge aliases
     ],
-    version = 22, // Add walkthrough flags to user_preferences
+    version = 24, // Add Spotlight reminder tracking to UserPreferences
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -36,6 +37,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun trackArtistDao(): TrackArtistDao
     abstract fun trackAliasDao(): TrackAliasDao
     abstract fun manualContentMarkDao(): ManualContentMarkDao  // Content filtering DAO
+    abstract fun artistAliasDao(): ArtistAliasDao  // Artist merge DAO
     
     companion object {
         private const val TAG = "AppDatabase"
@@ -811,6 +813,63 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 22 to 23.
+         * 
+         * Adds artist_aliases table for artist merging feature.
+         * This allows users to merge duplicate artists (e.g., "Billie Eilish - Topic" into "Billie Eilish")
+         * and has the system remember the mapping for future plays.
+         */
+        val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 22 to 23 - Adding artist_aliases table")
+                
+                // Create artist_aliases table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS artist_aliases (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        target_artist_id INTEGER NOT NULL,
+                        original_name TEXT NOT NULL,
+                        original_name_normalized TEXT NOT NULL,
+                        created_at INTEGER NOT NULL DEFAULT 0,
+                        FOREIGN KEY(target_artist_id) REFERENCES artists(id) ON DELETE CASCADE
+                    )
+                """)
+                
+                // Create indices for efficient lookups
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_artist_aliases_original_name_normalized ON artist_aliases(original_name_normalized)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_artist_aliases_target_artist_id ON artist_aliases(target_artist_id)")
+                
+                Log.i(TAG, "Migration from version 22 to 23 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 23 to 24.
+         * 
+         * Adds Spotlight Story reminder tracking fields to user_preferences:
+         * - lastMonthlyReminderShown: Date when monthly reminder was last displayed (YYYY-MM-DD)
+         * - lastYearlyReminderShown: Date when yearly reminder was last displayed (YYYY-MM-DD)
+         */
+        val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 23 to 24 - Adding Spotlight reminder tracking")
+                
+                // Add Spotlight reminder tracking columns
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN lastMonthlyReminderShown TEXT DEFAULT NULL
+                """)
+                
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN lastYearlyReminderShown TEXT DEFAULT NULL
+                """)
+                
+                Log.i(TAG, "Migration from version 23 to 24 completed successfully")
+            }
+        }
+
+        /**
          * All migrations in order.
          */
         val ALL_MIGRATIONS = arrayOf(
@@ -829,7 +888,9 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_18_19,
             MIGRATION_19_20,
             MIGRATION_20_21,
-            MIGRATION_21_22
+            MIGRATION_21_22,
+            MIGRATION_22_23,
+            MIGRATION_23_24
         )
         
     }

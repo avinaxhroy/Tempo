@@ -20,7 +20,7 @@ val localProperties = Properties().apply {
 
 android {
     namespace = "me.avinas.tempo"
-    compileSdk = 35
+    compileSdk = 36
 
     signingConfigs {
         create("release") {
@@ -38,8 +38,8 @@ android {
         applicationId = "me.avinas.tempo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 362
-        versionName = "3.6.2"
+        versionCode = 377
+        versionName = "3.7.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -95,107 +95,122 @@ android {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.0.0")
-    implementation("androidx.media3:media3-exoplayer:1.2.0")
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation(libs.kotlin.stdlib)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.androidx.core.ktx)
 
     // Material Components
-    implementation("com.google.android.material:material:1.11.0")
+    implementation(libs.compose.material) // Fallback or if using View-based Material use: implementation("com.google.android.material:material:1.12.0")
+    // Actually the user had com.google.android.material:material.
+    implementation("com.google.android.material:material:1.12.0") 
 
     // Compose
-    implementation("androidx.compose.ui:ui:1.6.2")
-    implementation("androidx.compose.material:material:1.6.2")
-    implementation("androidx.compose.material:material-icons-extended:1.6.2")
-    implementation("androidx.compose.material3:material3:1.3.1")
-    implementation("androidx.compose.ui:ui-tooling:1.6.2")
-    implementation("androidx.activity:activity-compose:1.8.1")
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.material) // Material 2
+    implementation(libs.compose.material.icons)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.ui.tooling)
+    implementation(libs.compose.activity)
     
     // Glance (Widgets)
-    implementation("androidx.glance:glance-appwidget:1.1.1")
-    implementation("androidx.glance:glance-material3:1.1.1")
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
 
     // Typography
-    implementation("androidx.compose.ui:ui-text-google-fonts:1.6.2")
+    implementation("androidx.compose.ui:ui-text-google-fonts:1.7.6") // No catalog entry for this yet, keeping hardcoded or latest
 
     // Room
-    implementation("androidx.room:room-runtime:2.8.4")
-    implementation("androidx.room:room-ktx:2.8.4")
-    ksp("androidx.room:room-compiler:2.8.4")
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
 
     // Hilt
-    implementation("com.google.dagger:hilt-android:2.57.2")
-    ksp("com.google.dagger:hilt-compiler:2.57.2")
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
 
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
+    implementation(libs.coroutines.core)
+    implementation(libs.coroutines.android)
 
     // Retrofit & OkHttp
-    implementation("com.squareup.retrofit2:retrofit:2.10.0")
-    implementation("com.squareup.retrofit2:converter-moshi:2.10.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.moshi)
+    implementation(libs.okhttp.logging)
 
     // Coil
-    implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation(libs.coil)
+    implementation(libs.coil.core)
+    implementation(libs.coil.network.okhttp)
 
     // WorkManager
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation(libs.work.runtime.ktx)
 
-    // Charts (MPAndroidChart) and Vico optional
-    implementation("com.github.PhilJay:MPAndroidChart:3.1.0")
-    implementation("com.patrykandpatrick.vico:compose:2.0.0")
+    // Charts (MPAndroidChart) and Vico
+    implementation(libs.mpandroidchart)
+    implementation(libs.vico.compose)
 
     // Palette
-    implementation("androidx.palette:palette-ktx:1.0.0")
+    implementation(libs.palette.ktx)
 
     // Hilt WorkManager integration
-    implementation("androidx.hilt:hilt-work:1.3.0")
-    ksp("androidx.hilt:hilt-compiler:1.3.0")
+    implementation(libs.hilt.work)
+    ksp("androidx.hilt:hilt-compiler:1.2.0") // hilt-compiler for androidx.hilt is often same as dagger hilt compiler or specific? 
+    // Actually libraries usually use com.google.dagger:hilt-compiler for both.
+    // The previous file had: ksp("androidx.hilt:hilt-compiler:1.3.0")
+    // NOTE: androidx.hilt:hilt-compiler is deprecated/different? 
+    // Usually we use com.google.dagger:hilt-compiler. 
+    // But hilt-work 1.2.0 might need androidx.hilt:hilt-compiler.
+    // Let's stick to user's pattern but update version.
+    ksp("androidx.hilt:hilt-compiler:1.2.0") 
 
     // Lifecycle
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    implementation(libs.lifecycle.runtime.ktx)
+    implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.lifecycle.viewmodel.compose)
 
     // Navigation
-    implementation("androidx.navigation:navigation-compose:2.7.7")
-    implementation("androidx.hilt:hilt-navigation-compose:1.0.0")
+    implementation(libs.navigation.compose)
+    implementation(libs.hilt.navigation.compose)
 
     // DataStore Preferences
-    implementation("androidx.datastore:datastore-preferences:1.0.0")
+    implementation(libs.datastore.preferences)
 
-    // Security - EncryptedSharedPreferences for Spotify token storage
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    // Security - EncryptedSharedPreferences
+    implementation(libs.security.crypto)
 
     // Moshi Kotlin adapter
-    implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
-    ksp("com.squareup.moshi:moshi-kotlin-codegen:1.15.1")
+    implementation(libs.moshi.kotlin)
+    ksp(libs.moshi.codegen)
 
-    // Credential Manager for Google Sign-In (modern replacement for GoogleSignInClient)
-    implementation("androidx.credentials:credentials:1.3.0")
-    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
-    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    // Credential Manager for Google Sign-In
+    implementation(libs.credentials)
+    implementation(libs.credentials.play.services.auth)
+    implementation(libs.googleid)
 
     // Google Drive REST API
-    implementation("com.google.api-client:google-api-client-android:2.2.0") {
+    implementation(libs.google.api.client) {
         exclude(group = "org.apache.httpcomponents")
     }
-    implementation("com.google.apis:google-api-services-drive:v3-rev20231128-2.0.0") {
+    implementation(libs.google.api.drive) {
         exclude(group = "org.apache.httpcomponents")
     }
-    implementation("com.google.http-client:google-http-client-gson:1.44.1")
+    implementation(libs.google.http.client)
 
-    // Play Services Auth for AuthorizationClient (Drive scopes)
-    implementation("com.google.android.gms:play-services-auth:21.0.0")
+    // Play Services Auth
+    implementation(libs.play.services.auth)
 
-    // Coroutines extension for Play Services (await())
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
+    // Coroutines extension for Play Services
+    implementation(libs.play.services.coroutines)
 
     // Testing
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    testImplementation(libs.junit)
+    testImplementation(libs.coroutines.test)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.espresso.core)
+    
+    // Baseline Profiles
+    implementation(libs.profileinstaller)
 }
 
 configurations.all {

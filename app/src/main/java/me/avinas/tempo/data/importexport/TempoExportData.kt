@@ -30,6 +30,9 @@ data class TempoExportData(
     val enrichedMetadata: List<EnrichedMetadata> = emptyList(),
     val userPreferences: UserPreferences? = null,
     
+    // Artist merge aliases (v5)
+    val artistAliases: List<ArtistAlias> = emptyList(),
+    
     // v4: Local images bundled in ZIP (bundledFilename -> originalFilePath)
     val localImageManifest: Map<String, String> = emptyMap(),
     

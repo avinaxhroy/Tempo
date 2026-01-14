@@ -1,6 +1,7 @@
 package me.avinas.tempo.data.repository
 
 import android.util.Log
+import me.avinas.tempo.data.local.dao.ArtistAliasDao
 import me.avinas.tempo.data.local.dao.ArtistDao
 import me.avinas.tempo.data.local.dao.TrackArtistDao
 import me.avinas.tempo.data.local.dao.TrackDao
@@ -29,7 +30,8 @@ import javax.inject.Singleton
 class ArtistLinkingService @Inject constructor(
     private val trackDao: TrackDao,
     private val artistDao: ArtistDao,
-    private val trackArtistDao: TrackArtistDao
+    private val trackArtistDao: TrackArtistDao,
+    private val artistAliasDao: ArtistAliasDao
 ) {
     companion object {
         private const val TAG = "ArtistLinkingService"
@@ -108,9 +110,20 @@ class ArtistLinkingService @Inject constructor(
     
     /**
      * Get or create an artist by name.
+     * 
+     * First checks if this artist name has been merged (aliased) to another artist.
+     * If so, returns the target artist instead of creating a duplicate.
      */
     suspend fun getOrCreateArtist(name: String, imageUrl: String? = null): Artist {
         val normalizedName = Artist.normalizeName(name)
+        
+        // NEW: Check if this name has an alias (was merged into another artist)
+        artistAliasDao.findAlias(normalizedName)?.let { alias ->
+            artistDao.getArtistById(alias.targetArtistId)?.let { targetArtist ->
+                Log.d(TAG, "Resolved alias: '$name' -> '${targetArtist.name}'")
+                return targetArtist
+            }
+        }
         
         // Try to find existing artist by normalized name
         artistDao.getArtistByNormalizedName(normalizedName)?.let { return it }

@@ -121,7 +121,7 @@ fun TempoApp(
     }
 
     // Bottom Sheet for Spotify
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     var showSpotifySheet by remember { mutableStateOf(false) }
 

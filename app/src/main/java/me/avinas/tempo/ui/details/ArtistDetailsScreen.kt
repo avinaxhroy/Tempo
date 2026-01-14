@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MergeType
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.LocationOn
@@ -31,8 +32,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
-import coil.imageLoader
+import coil3.compose.AsyncImage
+import coil3.imageLoader
 import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.ui.components.buildCachedImageRequest
 import me.avinas.tempo.data.stats.ArtistDetails
@@ -47,6 +48,7 @@ import me.avinas.tempo.ui.components.SharePreviewDialog
 import me.avinas.tempo.ui.components.ArtistShareCard
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.MergeType
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.SpanStyle
@@ -146,8 +148,8 @@ fun ArtistDetailsContent(
     onNavigateToSong: (Long) -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
-
     var showShareDialog by remember { mutableStateOf(false) }
+    var showMergeDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     
     Column(modifier = Modifier.fillMaxSize()) {
@@ -187,6 +189,44 @@ fun ArtistDetailsContent(
                 )
             ) {
                 Icon(Icons.Default.Share, contentDescription = "Share")
+            }
+            
+            // More options menu
+            Box {
+                IconButton(
+                    onClick = { showMenu = true },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.White.copy(alpha = 0.1f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                }
+                
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(Color(0xFF1E293B))
+                ) {
+                    DropdownMenuItem(
+                        text = { 
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.MergeType,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Merge with...", color = Color.White)
+                            }
+                        },
+                        onClick = {
+                            showMenu = false
+                            showMergeDialog = true
+                        }
+                    )
+                }
             }
         }
 
@@ -286,6 +326,19 @@ fun ArtistDetailsContent(
                 onDismiss = { showShareDialog = false },
                 contentToShare = {
                     ArtistShareCard(artistDetails = artistDetails)
+                }
+            )
+        }
+        
+        // Artist Merge Dialog
+        if (showMergeDialog) {
+            ArtistMergeSearchDialog(
+                sourceArtistId = artistDetails.artist.id,
+                sourceArtistName = artistDetails.artist.name,
+                onDismiss = { showMergeDialog = false },
+                onMergeComplete = {
+                    // Navigate back after successful merge
+                    onNavigateBack()
                 }
             )
         }

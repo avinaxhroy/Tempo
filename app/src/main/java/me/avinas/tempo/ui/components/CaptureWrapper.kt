@@ -7,6 +7,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 
+// CompositionLocal to indicate we're inside a CaptureWrapper
+// Images should use software bitmaps (allowHardware = false) when true
+val LocalInCaptureContext = compositionLocalOf { false }
+
 class CaptureController {
     private val _captureRequest = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val captureRequest = _captureRequest.asSharedFlow()
@@ -42,19 +46,20 @@ fun CaptureWrapper(
                 try {
                     android.util.Log.d("CaptureWrapper", "Capture requested. View dims: ${view.width}x${view.height}")
                     if (view.width > 0 && view.height > 0) {
-                    // Draw directly to Bitmap Canvas to avoid Picture hardware acceleration issues
-                    val bitmap = Bitmap.createBitmap(
-                        view.width,
-                        view.height,
-                        Bitmap.Config.ARGB_8888
-                    )
-                    val canvas = android.graphics.Canvas(bitmap)
-                    
-                    // Force software rendering for the view hierarchy to this canvas
-                    view.draw(canvas)
-                    
-                    android.util.Log.d("CaptureWrapper", "Bitmap captured successfully. Size: ${bitmap.byteCount} bytes")
-                    controller.onCaptured(bitmap)
+                        // Create bitmap and canvas for capture
+                        val bitmap = Bitmap.createBitmap(
+                            view.width,
+                            view.height,
+                            Bitmap.Config.ARGB_8888
+                        )
+                        val canvas = android.graphics.Canvas(bitmap)
+                        
+                        // Draw the view hierarchy to the canvas
+                        // Safe because LocalInCaptureContext ensures software bitmaps
+                        view.draw(canvas)
+                        
+                        android.util.Log.d("CaptureWrapper", "Bitmap captured successfully. Size: ${bitmap.byteCount} bytes")
+                        controller.onCaptured(bitmap)
                     } else {
                         android.util.Log.e("CaptureWrapper", "View has 0 dimensions: w=${view.width}, h=${view.height}")
                     }
@@ -72,7 +77,11 @@ fun CaptureWrapper(
         factory = { ctx ->
             androidx.compose.ui.platform.ComposeView(ctx).apply {
                 setContent {
-                    content()
+                    // Provide capture context to all children
+                    // This signals that images should use software bitmaps
+                    CompositionLocalProvider(LocalInCaptureContext provides true) {
+                        content()
+                    }
                 }
             }
         },

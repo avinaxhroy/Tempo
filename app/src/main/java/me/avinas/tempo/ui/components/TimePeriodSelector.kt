@@ -37,11 +37,11 @@ fun TimePeriodSelector(
             .padding(horizontal = 4.dp)
             .background(Color.Black, RoundedCornerShape(24.dp)) // Dark Pill for better visibility
             .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp)) // Subtle border
-            .padding(4.dp)
+            .padding(2.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             availableRanges.forEach { range ->
                 val isSelected = range == selectedRange
@@ -52,9 +52,21 @@ fun TimePeriodSelector(
                     if (isSelected) Color.White else Color.White.copy(alpha = 0.7f), label = "textColor"
                 )
 
+                val displayText = when (range) {
+                    TimeRange.THIS_WEEK -> "Week"
+                    TimeRange.THIS_MONTH -> "Month"
+                    TimeRange.THIS_YEAR -> "Year"
+                    TimeRange.ALL_TIME -> "All Time"
+                    else -> range.name
+                }
+                
+                // Calculate weight based on text length to allow "All Time" more space
+                // Base weight of 2f + length ensures shorter text still gets decent space
+                val itemWeight = 2f + displayText.length.toFloat()
+
                 Box(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(itemWeight)
                         .height(36.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .background(if (isSelected) backgroundColor else Color.Transparent)
@@ -62,16 +74,12 @@ fun TimePeriodSelector(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = when (range) {
-                            TimeRange.THIS_WEEK -> "Week"
-                            TimeRange.THIS_MONTH -> "Month"
-                            TimeRange.THIS_YEAR -> "Year"
-                            TimeRange.ALL_TIME -> "All Time"
-                            else -> range.name
-                        },
+                        text = displayText,
                         color = contentColor,
                         style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
             }

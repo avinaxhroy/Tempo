@@ -12,6 +12,8 @@ import me.avinas.tempo.BuildConfig
 import me.avinas.tempo.data.local.AppDatabase
 import me.avinas.tempo.data.local.entities.*
 import me.avinas.tempo.worker.PostRestoreCacheWorker
+import okio.buffer
+import okio.source
 import java.io.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -32,7 +34,8 @@ import javax.inject.Singleton
 @Singleton
 class ImportExportManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val database: AppDatabase
+    private val database: AppDatabase,
+    private val statsRepository: me.avinas.tempo.data.repository.StatsRepository
 ) {
     companion object {
         private const val TAG = "ImportExportManager"
@@ -66,6 +69,7 @@ class ImportExportManager @Inject constructor(
             val listeningEvents = database.listeningEventDao().getAllEventsSync()
             val enrichedMetadata = database.enrichedMetadataDao().getAllSync()
             val userPrefs = database.userPreferencesDao().getSync()
+            val artistAliases = database.artistAliasDao().getAllSync()
             
             _progress.value = ImportExportProgress("Analyzing images...", 20, 100)
             
@@ -110,7 +114,7 @@ class ImportExportManager @Inject constructor(
                     // Create export data using current database schema version
                     val exportData = TempoExportData(
                         appVersion = BuildConfig.VERSION_NAME,
-                        schemaVersion = 18, // Keep in sync with AppDatabase version
+                        schemaVersion = 23, // Keep in sync with AppDatabase version
                         tracks = tracks,
                         artists = artists,
                         albums = albums,
@@ -118,6 +122,7 @@ class ImportExportManager @Inject constructor(
                         listeningEvents = listeningEvents,
                         enrichedMetadata = enrichedMetadata,
                         userPreferences = userPrefs,
+                        artistAliases = artistAliases,
                         localImageManifest = localImageManifest,
                         hotlinkedUrls = hotlinkUrls
                     )
@@ -174,9 +179,10 @@ class ImportExportManager @Inject constructor(
                     while (entry != null) {
                         when {
                             entry.name == TempoExportData.DATA_FILENAME -> {
-                                val json = zipIn.readBytes().toString(Charsets.UTF_8)
+                                // Use streaming to avoid loading entire JSON into memory
                                 val adapter = moshi.adapter(TempoExportData::class.java)
-                                exportData = adapter.fromJson(json)
+                                val bufferedSource = zipIn.source().buffer()
+                                exportData = adapter.fromJson(bufferedSource)
                             }
                             entry.name.startsWith(IMAGES_DIR) && !entry.isDirectory -> {
                                 // Extract image to local storage
@@ -337,11 +343,29 @@ class ImportExportManager @Inject constructor(
                 database.userPreferencesDao().upsert(prefs)
             }
             
+            // Import Artist Aliases (for merged artists)
+            var importedAliases = 0
+            for (alias in data.artistAliases) {
+                val newTargetId = artistIdMap[alias.targetArtistId]
+                if (newTargetId != null) {
+                    val remappedAlias = alias.copy(id = 0, targetArtistId = newTargetId)
+                    val existingAlias = database.artistAliasDao().findAlias(alias.originalNameNormalized)
+                    if (existingAlias == null) {
+                        database.artistAliasDao().insertAlias(remappedAlias)
+                        importedAliases++
+                    }
+                }
+            }
+            Log.i(TAG, "Imported $importedAliases artist aliases")
+            
             // Schedule pre-caching of hotlinked images
             if (data.hotlinkedUrls.isNotEmpty()) {
                 _progress.value = ImportExportProgress("Scheduling image cache...", 95, 100)
                 PostRestoreCacheWorker.schedule(context, data.hotlinkedUrls)
             }
+            
+            // Invalidate stats cache to force UI refresh (fixes "New User" state persisting)
+            statsRepository.invalidateCache()
             
             _progress.value = ImportExportProgress("Import complete!", 100, 100)
             

@@ -31,5 +31,9 @@ data class UserPreferences(
     // Walkthrough Flags (Passive Game)
     val hasSeenSpotlightTutorial: Boolean = false,
     val hasSeenStatsSortTutorial: Boolean = false,
-    val hasSeenStatsItemClickTutorial: Boolean = false
+    val hasSeenStatsItemClickTutorial: Boolean = false,
+    
+    // Spotlight Story Reminders: Track when reminders were last shown (YYYY-MM-DD format)
+    val lastMonthlyReminderShown: String? = null, // Last date monthly reminder was shown
+    val lastYearlyReminderShown: String? = null  // Last date yearly reminder was shown
 )

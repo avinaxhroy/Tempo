@@ -1,9 +1,14 @@
 package me.avinas.tempo.worker
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
+import me.avinas.tempo.R
 import me.avinas.tempo.data.repository.RoomStatsRepository
 import me.avinas.tempo.data.stats.TimeRange
 import dagger.assisted.Assisted
@@ -25,6 +30,8 @@ class StatsPrecomputeWorker @AssistedInject constructor(
     companion object {
         private const val TAG = "StatsPrecomputeWorker"
         const val WORK_NAME = "stats_precompute_work"
+        private const val NOTIFICATION_CHANNEL_ID = "stats_precompute_worker"
+        private const val NOTIFICATION_ID = 3006
 
         /**
          * Schedule periodic precomputation of stats.
@@ -106,6 +113,29 @@ class StatsPrecomputeWorker @AssistedInject constructor(
             }
         }
     }
+
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Stats Processing",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            notificationManager.createNotificationChannel(channel)
+        }
+        
+        val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("Computing Statistics")
+            .setContentText("Updating your music stats...")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .build()
+        
+        return ForegroundInfo(NOTIFICATION_ID, notification)
+    }
 }
 
 /**
@@ -123,6 +153,8 @@ class StatsCacheInvalidationWorker @AssistedInject constructor(
         private const val TAG = "StatsCacheInvalidation"
         const val WORK_NAME = "stats_cache_invalidation"
         const val KEY_EVENT_TIMESTAMP = "event_timestamp"
+        private const val NOTIFICATION_CHANNEL_ID = "stats_cache_worker"
+        private const val NOTIFICATION_ID = 3007
 
         /**
          * Trigger cache invalidation after a new listening event.
@@ -150,5 +182,28 @@ class StatsCacheInvalidationWorker @AssistedInject constructor(
         statsRepository.onNewListeningEvent(eventTimestamp)
         
         return Result.success()
+    }
+
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Cache Update",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            notificationManager.createNotificationChannel(channel)
+        }
+        
+        val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("Updating Cache")
+            .setContentText("Refreshing stats...")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .build()
+        
+        return ForegroundInfo(NOTIFICATION_ID, notification)
     }
 }

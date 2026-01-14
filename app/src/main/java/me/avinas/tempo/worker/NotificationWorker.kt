@@ -30,6 +30,7 @@ class NotificationWorker @AssistedInject constructor(
         private const val DAILY_WORK_NAME = "daily_notification_work"
         private const val WEEKLY_WORK_NAME = "weekly_notification_work"
         private const val CHANNEL_ID = "tempo_updates"
+        private const val NOTIFICATION_ID = 3004
 
         fun scheduleDaily(context: Context) {
             val now = Calendar.getInstance()
@@ -167,5 +168,19 @@ class NotificationWorker @AssistedInject constructor(
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
         }
+    }
+
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        createNotificationChannel()
+        
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Preparing Notification")
+            .setContentText("Calculating your music stats...")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .build()
+        
+        return ForegroundInfo(NOTIFICATION_ID, notification)
     }
 }

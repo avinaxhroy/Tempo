@@ -163,6 +163,12 @@ git clone https://github.com/avinaxhroy/Tempo.git
 
 ---
 
+## Contribution
+
+We welcome contributions! Please see our [CONTRIBUTION.md](CONTRIBUTION.md) for details on how to get involved, our code of conduct, and the process for submitting pull requests.
+
+---
+
 ## License
 
 Tempo is open-source software. You are free to view, learn from, and modify the code for personal use.

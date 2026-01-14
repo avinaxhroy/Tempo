@@ -1,11 +1,16 @@
 package me.avinas.tempo.worker
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
+import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
+import me.avinas.tempo.R
 import me.avinas.tempo.service.MusicTrackingService
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -27,6 +32,8 @@ class ServiceHealthWorker @AssistedInject constructor(
     companion object {
         private const val TAG = "ServiceHealthWorker"
         private const val WORK_NAME = "service_health_check"
+        private const val NOTIFICATION_CHANNEL_ID = "service_health_worker"
+        private const val NOTIFICATION_ID = 3005
 
         /**
          * Schedule periodic health checks for the tracking service.
@@ -140,5 +147,28 @@ class ServiceHealthWorker @AssistedInject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to restart service", e)
         }
+    }
+
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Service Health Check",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            notificationManager.createNotificationChannel(channel)
+        }
+        
+        val notification = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("Service Health Check")
+            .setContentText("Monitoring music tracking service...")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .build()
+        
+        return ForegroundInfo(NOTIFICATION_ID, notification)
     }
 }

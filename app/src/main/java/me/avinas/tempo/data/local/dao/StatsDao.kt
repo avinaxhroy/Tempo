@@ -2031,6 +2031,7 @@ interface StatsDao {
     /**
      * Get all artist stats raw with content type filtering.
      * Used for splitting multi-artist entries and aggregation.
+     * Limited to top N artists by play count to optimize performance.
      */
     @Query("""
         SELECT 
@@ -2046,12 +2047,15 @@ interface StatsDao {
             AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
             AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
         GROUP BY t.artist
+        ORDER BY play_count DESC
+        LIMIT :maxArtists
     """)
     suspend fun getAllArtistStatsRawFiltered(
         startTime: Long,
         endTime: Long,
         filterPodcasts: Boolean,
-        filterAudiobooks: Boolean
+        filterAudiobooks: Boolean,
+        maxArtists: Int = 500
     ): List<RawArtistStats>
 
     /**

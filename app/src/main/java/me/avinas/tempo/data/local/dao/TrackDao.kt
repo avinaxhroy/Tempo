@@ -157,5 +157,27 @@ interface TrackDao {
      */
     @Query("DELETE FROM tracks WHERE LOWER(artist) = LOWER(:artistName)")
     suspend fun deleteByArtist(artistName: String): Int
+    
+    // =====================
+    // Artist Merge Operations
+    // =====================
+    
+    /**
+     * Replace old artist name with new artist name in the artist column.
+     * Used during artist merge to update the raw artist string.
+     * Handles exact matches only.
+     */
+    @Query("UPDATE tracks SET artist = :newArtistName WHERE LOWER(artist) = LOWER(:oldArtistName)")
+    suspend fun replaceArtistName(oldArtistName: String, newArtistName: String): Int
+    
+    /**
+     * Replace old artist name within multi-artist strings.
+     * For example: "OldArtist, OtherArtist" -> "NewArtist, OtherArtist"
+     */
+    @Query("""
+        UPDATE tracks SET artist = REPLACE(artist, :oldArtistName, :newArtistName) 
+        WHERE LOWER(artist) LIKE '%' || LOWER(:oldArtistName) || '%'
+    """)
+    suspend fun replaceArtistNameInMultiArtist(oldArtistName: String, newArtistName: String): Int
 }
 

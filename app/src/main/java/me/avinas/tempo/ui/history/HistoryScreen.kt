@@ -38,6 +38,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import kotlinx.coroutines.launch
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -62,8 +63,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
 import kotlinx.coroutines.delay
 import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.data.local.dao.HistoryItem
@@ -448,17 +449,17 @@ fun SwipeToDeleteHistoryItem(
 ) {
     // Use item.id as key for all state to prevent state reuse when items shift
     var showDeleteDialog by remember(item.id) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     
     // Reset dismiss state when item.id changes (item was deleted and a new one appeared)
     val dismissState = key(item.id) {
-        rememberSwipeToDismissBoxState(
-            confirmValueChange = { value ->
-                if (value == SwipeToDismissBoxValue.EndToStart) {
-                    showDeleteDialog = true
-                }
-                false // Don't auto-dismiss, wait for user confirmation
-            }
-        )
+        rememberSwipeToDismissBoxState()
+    }
+    
+    LaunchedEffect(dismissState.currentValue) {
+        if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
+            showDeleteDialog = true
+        }
     }
 
     // Delete confirmation dialog
@@ -490,7 +491,10 @@ fun SwipeToDeleteHistoryItem(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
+                TextButton(onClick = { 
+                    showDeleteDialog = false 
+                    scope.launch { dismissState.snapTo(SwipeToDismissBoxValue.Settled) }
+                }) {
                     Text("Cancel")
                 }
             },

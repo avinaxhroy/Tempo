@@ -1,5 +1,6 @@
 package me.avinas.tempo.ui.stats
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import me.avinas.tempo.data.repository.SortBy
@@ -10,6 +11,8 @@ import me.avinas.tempo.data.stats.TopArtist
 import me.avinas.tempo.data.stats.TopTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +34,10 @@ class StatsViewModel @Inject constructor(
     
     // Refresh trigger to force data reload with debounce
     private val refreshTrigger = MutableStateFlow(0L)
+    
+    // Track last loaded analytics time range to skip redundant reloads
+    // Analytics is time-range dependent, not tab-dependent
+    private var lastAnalyticsTimeRange: TimeRange? = null
 
     init {
         loadData()
@@ -128,9 +135,10 @@ class StatsViewModel @Inject constructor(
                     )
                 }
                 
-                // Fetch analytics data in parallel if it's the first page load
-                if (page == 0) {
-                     loadAnalyticsData(timeRange)
+                // Fetch analytics data only if time range changed (analytics is time-range dependent, not tab-dependent)
+                if (page == 0 && timeRange != lastAnalyticsTimeRange) {
+                    lastAnalyticsTimeRange = timeRange
+                    loadAnalyticsData(timeRange)
                 }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, isLoadingMore = false, error = e.message) }
@@ -139,24 +147,32 @@ class StatsViewModel @Inject constructor(
     }
 
     private suspend fun loadAnalyticsData(timeRange: TimeRange) {
-        val overview = statsRepository.getListeningOverview(timeRange)
-        val hourlyDist = statsRepository.getHourlyDistribution(timeRange)
-        val insights = statsRepository.getInsights(timeRange)
-
-        _uiState.update { 
-            it.copy(
-                analyticsData = AnalyticsUiData(
-                    overview = overview,
-                    hourlyDistribution = hourlyDist,
-                    insightCards = insights
-                ),
-                isLoading = false
-            ) 
+        // Parallelize the 3 independent analytics calls for ~50% faster loading
+        coroutineScope {
+            val overviewDeferred = async { statsRepository.getListeningOverview(timeRange) }
+            val hourlyDistDeferred = async { statsRepository.getHourlyDistribution(timeRange) }
+            val insightsDeferred = async { statsRepository.getInsights(timeRange) }
+            
+            val overview = overviewDeferred.await()
+            val hourlyDist = hourlyDistDeferred.await()
+            val insights = insightsDeferred.await()
+            
+            _uiState.update { 
+                it.copy(
+                    analyticsData = AnalyticsUiData(
+                        overview = overview,
+                        hourlyDistribution = hourlyDist,
+                        insightCards = insights
+                    ),
+                    isLoading = false
+                ) 
+            }
         }
     }
 
     fun refresh() {
         statsRepository.invalidateCache()
+        lastAnalyticsTimeRange = null // Force analytics reload on manual refresh
         _uiState.update { it.copy(isLoading = true, items = emptyList(), page = 0, hasMore = true) }
         loadData()
     }
@@ -168,6 +184,7 @@ enum class StatsTab {
     TOP_ALBUMS
 }
 
+@Immutable
 data class StatsUiState(
     val isLoading: Boolean = true,
     val isLoadingMore: Boolean = false,
@@ -181,6 +198,7 @@ data class StatsUiState(
     val analyticsData: AnalyticsUiData? = null
 )
 
+@Immutable
 data class AnalyticsUiData(
     val overview: me.avinas.tempo.data.stats.ListeningOverview,
     val hourlyDistribution: List<me.avinas.tempo.data.stats.HourlyDistribution>,

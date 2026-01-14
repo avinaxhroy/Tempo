@@ -7,7 +7,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -18,7 +17,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -31,11 +29,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.theme.TempoRed
-import me.avinas.tempo.ui.utils.adaptiveSize
-import me.avinas.tempo.ui.utils.adaptiveTextUnit
+import me.avinas.tempo.ui.utils.adaptiveSizeByCategory
+import me.avinas.tempo.ui.utils.adaptiveTextUnitByCategory
 import me.avinas.tempo.ui.utils.isSmallScreen
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import me.avinas.tempo.ui.utils.rememberScreenHeightPercentage
+import me.avinas.tempo.ui.utils.scaledSize
+import me.avinas.tempo.ui.utils.rememberClampedHeightPercentage
 
 @Composable
 fun BatteryOptimizationScreen(
@@ -80,14 +79,19 @@ fun BatteryOptimizationScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = adaptiveSizeByCategory(24.dp, 20.dp, 16.dp)),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Hero Illustration
+            // Top flexible spacer
+            Spacer(modifier = Modifier.weight(0.15f))
+            
+            // Hero Illustration with clamped sizing
+            val heroSize = rememberClampedHeightPercentage(0.16f, 90.dp, 160.dp)
+            val innerGlowSize = rememberClampedHeightPercentage(0.10f, 55.dp, 100.dp)
+            val iconSize = rememberClampedHeightPercentage(0.08f, 45.dp, 80.dp)
+            
             GlassCard(
-                modifier = Modifier.size(adaptiveSize(160.dp, 120.dp, 100.dp)),
+                modifier = Modifier.size(heroSize),
                 backgroundColor = Color(0xFF22C55E).copy(alpha = 0.1f), // Green tint for battery
                 contentPadding = PaddingValues(0.dp)
             ) {
@@ -98,7 +102,7 @@ fun BatteryOptimizationScreen(
                     // Inner glow
                     Box(
                         modifier = Modifier
-                            .size(adaptiveSize(100.dp, 70.dp, 60.dp))
+                            .size(innerGlowSize)
                             .background(
                                 brush = Brush.radialGradient(
                                     colors = listOf(Color(0xFF22C55E).copy(alpha = 0.4f), Color.Transparent)
@@ -110,13 +114,14 @@ fun BatteryOptimizationScreen(
                     Icon(
                         imageVector = Icons.Default.BatteryFull,
                         contentDescription = null,
-                        modifier = Modifier.size(adaptiveSize(80.dp, 56.dp, 48.dp)),
+                        modifier = Modifier.size(iconSize),
                         tint = Color.White
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 24.dp)))
+            // Proportional spacing after hero
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.045f)))
 
             Text(
                 text = "One more thing for better accuracy",
@@ -124,22 +129,23 @@ fun BatteryOptimizationScreen(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 color = Color.White,
-                fontSize = adaptiveTextUnit(24.sp, 20.sp),
-                lineHeight = adaptiveTextUnit(32.sp, 26.sp)
+                fontSize = adaptiveTextUnitByCategory(24.sp, 22.sp, 20.sp),
+                lineHeight = adaptiveTextUnitByCategory(32.sp, 28.sp, 26.sp)
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(16.dp, 8.dp)))
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.02f)))
 
             Text(
                 text = "Let Tempo run in the background for continuous tracking. This ensures we don't miss any songs while your screen is off.",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = Color.White.copy(alpha = 0.7f),
-                lineHeight = adaptiveTextUnit(24.sp, 20.sp),
-                fontSize = adaptiveTextUnit(16.sp, 14.sp)
+                lineHeight = adaptiveTextUnitByCategory(24.sp, 22.sp, 20.sp),
+                fontSize = adaptiveTextUnitByCategory(16.sp, 15.sp, 14.sp)
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 24.dp)))
+            // Flexible spacer between content and buttons
+            Spacer(modifier = Modifier.weight(0.2f))
 
             Button(
                 onClick = {
@@ -147,7 +153,7 @@ fun BatteryOptimizationScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(adaptiveSize(56.dp, 48.dp)),
+                    .height(scaledSize(54.dp, 0.85f, 1.1f)),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = TempoRed,
                     contentColor = Color.White
@@ -160,12 +166,12 @@ fun BatteryOptimizationScreen(
             ) {
                 Text(
                     text = "Optimize",
-                    fontSize = 18.sp,
+                    fontSize = adaptiveTextUnitByCategory(18.sp, 17.sp, 16.sp),
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.015f)))
 
             TextButton(onClick = onSkip) {
                 Text(
@@ -174,6 +180,9 @@ fun BatteryOptimizationScreen(
                     style = MaterialTheme.typography.labelLarge
                 )
             }
+            
+            // Bottom padding - proportional to screen
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.03f)))
         }
     }
 }

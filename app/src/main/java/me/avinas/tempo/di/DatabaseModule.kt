@@ -154,7 +154,9 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_18_19,  // Content filtering support
                 AppDatabase.MIGRATION_19_20,  // History coach mark
                 AppDatabase.MIGRATION_20_21,  // Remove foreign key from manual_content_marks
-                AppDatabase.MIGRATION_21_22   // Walkthrough flags
+                AppDatabase.MIGRATION_21_22,  // Walkthrough flags
+                AppDatabase.MIGRATION_22_23,  // Artist aliases for artist merging
+                AppDatabase.MIGRATION_23_24   // Spotlight reminder tracking
             )
             // Enable Write-Ahead Logging for better concurrent read/write performance
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
@@ -209,4 +211,7 @@ object DatabaseModule {
     
     @Provides
     fun provideManualContentMarkDao(db: AppDatabase) = db.manualContentMarkDao()
+    
+    @Provides
+    fun provideArtistAliasDao(db: AppDatabase) = db.artistAliasDao()
 }

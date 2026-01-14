@@ -28,9 +28,13 @@ import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.ui.utils.adaptiveSize
 import me.avinas.tempo.ui.utils.adaptiveTextUnit
+import me.avinas.tempo.ui.utils.adaptiveTextUnitByCategory
+import me.avinas.tempo.ui.utils.adaptiveSizeByCategory
 import me.avinas.tempo.ui.utils.isSmallScreen
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import me.avinas.tempo.ui.utils.isCompactScreen
+import me.avinas.tempo.ui.utils.rememberScreenHeightPercentage
+import me.avinas.tempo.ui.utils.scaledSize
+import me.avinas.tempo.ui.utils.rememberClampedHeightPercentage
 
 /**
  * Onboarding screen that lets users configure data/privacy settings
@@ -54,15 +58,18 @@ fun AdvancedSettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(adaptiveSize(24.dp, 16.dp))
-                .verticalScroll(rememberScrollState()),
+                .padding(horizontal = adaptiveSizeByCategory(24.dp, 20.dp, 16.dp)),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 16.dp)))
+            // Top flexible spacing
+            Spacer(modifier = Modifier.weight(0.06f))
             
-            // Header Icon
+            // Header Icon with clamped sizing
+            val iconCardSize = rememberClampedHeightPercentage(0.06f, 45.dp, 55.dp)
+            val iconSize = rememberClampedHeightPercentage(0.035f, 26.dp, 32.dp)
+            
             GlassCard(
-                modifier = Modifier.size(adaptiveSize(80.dp, 50.dp)),
+                modifier = Modifier.size(iconCardSize),
                 backgroundColor = Color(0xFF3B82F6).copy(alpha = 0.1f),
                 contentPadding = PaddingValues(0.dp)
             ) {
@@ -73,13 +80,13 @@ fun AdvancedSettingsScreen(
                     Icon(
                         imageVector = Icons.Default.Analytics,
                         contentDescription = null,
-                        modifier = Modifier.size(adaptiveSize(40.dp, 24.dp)),
+                        modifier = Modifier.size(iconSize),
                         tint = Color.White
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(adaptiveSize(24.dp, 8.dp)))
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.025f)))
 
             Text(
                 text = "Data Preferences",
@@ -87,20 +94,20 @@ fun AdvancedSettingsScreen(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 color = Color.White,
-                fontSize = adaptiveTextUnit(24.sp, 18.sp)
+                fontSize = adaptiveTextUnitByCategory(26.sp, 22.sp, 19.sp)
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(8.dp, 2.dp)))
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.01f)))
 
             Text(
                 text = "Choose how much data Tempo uses for audio analysis",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 color = Color.White.copy(alpha = 0.7f),
-                fontSize = adaptiveTextUnit(14.sp, 12.sp)
+                fontSize = adaptiveTextUnitByCategory(15.sp, 13.sp, 12.sp)
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 12.dp)))
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.03f)))
 
             // Default (free) option - always enabled
             SettingOptionCard(
@@ -113,7 +120,7 @@ fun AdvancedSettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(16.dp, 8.dp)))
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.02f)))
 
             // Extended analysis option
             SettingOptionCard(
@@ -127,7 +134,7 @@ fun AdvancedSettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(16.dp, 8.dp)))
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.02f)))
 
             // Smart Merge option
             SettingOptionCard(
@@ -141,7 +148,7 @@ fun AdvancedSettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 16.dp)))
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.04f)))
 
             // Info text
             Text(
@@ -149,16 +156,17 @@ fun AdvancedSettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.5f),
                 textAlign = TextAlign.Center,
-                fontSize = adaptiveTextUnit(12.sp, 10.sp)
+                fontSize = adaptiveTextUnitByCategory(12.sp, 11.sp, 10.sp)
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(16.dp, 8.dp)))
+            // Flexible spacer before button
+            Spacer(modifier = Modifier.weight(0.1f))
 
             Button(
                 onClick = onContinue,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(adaptiveSize(56.dp, 48.dp)),
+                    .height(scaledSize(54.dp, 0.85f, 1.1f)),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = TempoRed,
                     contentColor = Color.White
@@ -167,12 +175,13 @@ fun AdvancedSettingsScreen(
             ) {
                 Text(
                     text = "Continue",
-                    fontSize = adaptiveTextUnit(18.sp, 16.sp),
+                    fontSize = adaptiveTextUnitByCategory(18.sp, 17.sp, 16.sp),
                     fontWeight = FontWeight.Bold
                 )
             }
             
-            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 16.dp)))
+            // Bottom padding
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.03f)))
         }
     }
 }
@@ -191,7 +200,7 @@ private fun SettingOptionCard(
     GlassCard(
         modifier = modifier,
         backgroundColor = if (isEnabled) Color(0xFF1E40AF).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f),
-        contentPadding = PaddingValues(adaptiveSize(16.dp, 10.dp))
+        contentPadding = PaddingValues(horizontal = adaptiveSizeByCategory(16.dp, 14.dp, 12.dp), vertical = rememberScreenHeightPercentage(0.016f))
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -200,7 +209,7 @@ private fun SettingOptionCard(
             // Icon
             Box(
                 modifier = Modifier
-                    .size(adaptiveSize(48.dp, 36.dp))
+                    .size(rememberScreenHeightPercentage(0.057f))
                     .background(
                         color = if (isEnabled) TempoRed.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
                         shape = RoundedCornerShape(12.dp)
@@ -210,12 +219,12 @@ private fun SettingOptionCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    modifier = Modifier.size(adaptiveSize(24.dp, 18.dp)),
+                    modifier = Modifier.size(rememberScreenHeightPercentage(0.029f)),
                     tint = if (isEnabled) TempoRed else Color.White.copy(alpha = 0.5f)
                 )
             }
 
-            Spacer(modifier = Modifier.width(adaptiveSize(16.dp, 12.dp)))
+            Spacer(modifier = Modifier.width(adaptiveSizeByCategory(16.dp, 14.dp, 12.dp)))
 
             // Text content
             Column(modifier = Modifier.weight(1f)) {
@@ -224,22 +233,22 @@ private fun SettingOptionCard(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
-                    fontSize = adaptiveTextUnit(14.sp, 13.sp)
+                    fontSize = adaptiveTextUnitByCategory(15.sp, 14.sp, 13.sp)
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = adaptiveTextUnit(12.sp, 11.sp),
-                    lineHeight = adaptiveTextUnit(16.sp, 14.sp)
+                    fontSize = adaptiveTextUnitByCategory(12.sp, 11.sp, 10.sp),
+                    lineHeight = adaptiveTextUnitByCategory(17.sp, 15.sp, 14.sp)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = detail,
                     style = MaterialTheme.typography.labelSmall,
                     color = if (isEnabled) Color(0xFF34D399) else Color.White.copy(alpha = 0.4f),
-                    fontSize = adaptiveTextUnit(11.sp, 10.sp)
+                    fontSize = adaptiveTextUnitByCategory(11.sp, 10.sp, 9.sp)
                 )
             }
 
@@ -248,7 +257,7 @@ private fun SettingOptionCard(
                 Switch(
                     checked = isEnabled,
                     onCheckedChange = onToggle,
-                    modifier = Modifier.scale(if (isSmallScreen()) 0.8f else 1f),
+                    modifier = Modifier.scale(if (isCompactScreen()) 0.7f else if (isSmallScreen()) 0.8f else 0.9f),
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
                         checkedTrackColor = TempoRed,
@@ -260,7 +269,7 @@ private fun SettingOptionCard(
                 // Always-on indicator
                 Box(
                     modifier = Modifier
-                        .size(adaptiveSize(24.dp, 20.dp))
+                        .size(rememberScreenHeightPercentage(0.028f))
                         .background(
                             color = Color(0xFF34D399).copy(alpha = 0.2f),
                             shape = RoundedCornerShape(6.dp)

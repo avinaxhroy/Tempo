@@ -567,9 +567,11 @@ class MusicBrainzEnrichmentService @Inject constructor(
             Log.i(TAG, "Successfully enriched track ${track.id}: '${track.title}'")
             
             // Smart album association: Create Artist and Album entities if album info is available
+            // IMPORTANT: Use track.artist (from music player notification) instead of allArtistNames (from MusicBrainz)
+            // This prevents MusicBrainz artist credit concatenation from creating malformed names like "REAL REAL BOSS"
             if (primaryRelease?.title != null && primaryArtist != null) {
                 createOrUpdateAlbumAssociation(
-                    artistName = allArtistNames ?: primaryArtist.name,
+                    artistName = track.artist,  // Use original from notification, not MusicBrainz
                     artistMbid = primaryArtist.id,
                     artistCountry = primaryArtist.country,
                     artistType = primaryArtist.type,

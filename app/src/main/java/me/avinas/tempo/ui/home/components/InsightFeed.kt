@@ -72,6 +72,7 @@ fun VibeHeader(
     energy: Float,
     valence: Float,
     userName: String,
+    isNewUser: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     // Generate colors based on Audio Features - RED SHIFT APPLIED
@@ -131,18 +132,18 @@ fun VibeHeader(
             modifier = Modifier
                 .statusBarsPadding() // Account for status bar
                 .align(Alignment.TopStart)
-                .padding(horizontal = 24.dp, vertical = 8.dp) // Aligned up
-                .padding(end = 64.dp) // Leave space for settings icon
+                .padding(start = 16.dp, end = 64.dp) // Leave space for settings icon
         ) {
+            val greeting = if (isNewUser) "Welcome to Tempo" else me.avinas.tempo.utils.TempoCopyEngine.getDynamicGreeting(userName)
             ResponsiveText(
-                text = me.avinas.tempo.utils.TempoCopyEngine.getDynamicGreeting(userName),
+                text = greeting,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
             
             // Vibe Description
-            val vibeText = me.avinas.tempo.utils.TempoCopyEngine.getVibeDescription(energy, valence)
+            val vibeText = if (isNewUser) "Your music journey starts here" else me.avinas.tempo.utils.TempoCopyEngine.getVibeDescription(energy, valence)
             
             Text(
                 text = vibeText,

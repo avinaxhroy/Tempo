@@ -1,12 +1,16 @@
 package me.avinas.tempo.di
 
+import android.app.ActivityManager
 import android.content.Context
+import android.graphics.Bitmap
 import android.util.Log
-import coil.ImageLoader
-import coil.disk.DiskCache
-import coil.memory.MemoryCache
-import coil.request.CachePolicy
-import coil.util.DebugLogger
+import coil3.ImageLoader
+import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.CachePolicy
+import coil3.request.crossfade
+import coil3.util.DebugLogger
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -17,6 +21,7 @@ import okhttp3.Cache
 import okhttp3.CacheControl
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import okio.Path.Companion.toOkioPath
 import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
@@ -44,7 +49,7 @@ annotation class ImageCache
  * 
  * This implements a multi-layer caching strategy:
  * 
- * 1. **Memory Cache (15% of RAM)**: Fastest access for recently viewed images
+ * 1. **Memory Cache (10-15% of RAM)**: Fastest access for recently viewed images
  * 2. **Coil Disk Cache (100MB)**: Decoded images ready for display
  * 3. **OkHttp Cache (50MB)**: Raw HTTP responses to avoid network requests entirely
  * 
@@ -53,6 +58,7 @@ annotation class ImageCache
  * - Uses INEXACT precision to reuse cached images across different sizes
  * - Custom OkHttp interceptor to add long cache lifetime to responses
  * - Strong references in memory cache to prevent premature eviction
+ * - **Smart low-RAM detection**: Uses RGB_565 (half memory) on constrained devices
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -132,43 +138,48 @@ object CoilModule {
         @ApplicationContext context: Context,
         @ImageClient okHttpClient: OkHttpClient
     ): ImageLoader {
+        // Detect low-RAM devices for adaptive memory management
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val isLowRamDevice = activityManager.isLowRamDevice
+        
+        // Use lower memory cache percentage on constrained devices
+        val memoryCachePercent = if (isLowRamDevice) 0.10 else 0.15
+        
+        // Use RGB_565 (16-bit, half memory) on low-RAM devices
+        // Use ARGB_8888 (32-bit, better quality) on normal devices
+        val bitmapConfig = if (isLowRamDevice) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
+        
+        Log.d(TAG, "Coil configured: isLowRam=$isLowRamDevice, memCache=${(memoryCachePercent * 100).toInt()}%, bitmapConfig=$bitmapConfig")
+        
         return ImageLoader.Builder(context)
             // Use our custom OkHttpClient with caching
-            .okHttpClient(okHttpClient)
-            // Memory cache: ~15% of available memory
+            .components {
+                add(OkHttpNetworkFetcherFactory(
+                    callFactory = { okHttpClient }
+                ))
+            }
+            // Memory cache: 10% on low-RAM, 15% on normal devices
             .memoryCache {
-                MemoryCache.Builder(context)
-                    .maxSizePercent(0.15)
-                    .strongReferencesEnabled(true)
-                    .weakReferencesEnabled(true)
+                MemoryCache.Builder()
+                    .maxSizePercent(context, memoryCachePercent)
                     .build()
             }
-            // Disk cache: 100MB for decoded album art
+            // Disk cache: 100MB for decoded album art (reduced to 50MB on low-RAM)
             // This is separate from the OkHttp cache and stores decoded images
             .diskCache {
+                val diskCacheSize = if (isLowRamDevice) 50L * 1024 * 1024 else 100L * 1024 * 1024
                 DiskCache.Builder()
-                    .directory(context.cacheDir.resolve("coil_cache"))
-                    .maxSizeBytes(100L * 1024 * 1024) // 100MB
+                    .directory(context.cacheDir.resolve("coil_cache").toOkioPath())
+                    .maxSizeBytes(diskCacheSize)
                     .build()
             }
             // Enable all caching policies
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
             .networkCachePolicy(CachePolicy.ENABLED)
-            // Short crossfade for perceived performance
+            // Short crossfade for perceived performance (150ms)
             .crossfade(150)
-            // CRITICAL: Ignore HTTP cache headers from the original request
-            // Our interceptor adds proper cache headers, but this ensures
-            // Coil doesn't override our caching decisions
-            .respectCacheHeaders(false)
-            // Allow RGB_565 for lower memory usage on older devices
-            .allowRgb565(true)
-            // Debug logging only in debug builds
-            .apply {
-                if (BuildConfig.DEBUG) {
-                    logger(DebugLogger())
-                }
-            }
             .build()
     }
 }
+

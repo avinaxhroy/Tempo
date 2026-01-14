@@ -1,6 +1,7 @@
 package me.avinas.tempo.ui.home
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -27,7 +28,8 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val statsRepository: StatsRepository,
-    private val tokenStorage: me.avinas.tempo.data.remote.spotify.SpotifyTokenStorage
+    private val tokenStorage: me.avinas.tempo.data.remote.spotify.SpotifyTokenStorage,
+    private val preferencesRepository: me.avinas.tempo.data.repository.PreferencesRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -36,6 +38,7 @@ class HomeViewModel @Inject constructor(
     init {
         loadData()
         observeDataChanges()
+        checkSpotlightReminder()
     }
     
     private fun observeDataChanges() {
@@ -131,8 +134,9 @@ class HomeViewModel @Inject constructor(
                     rawDailyListening
                 }
                 
-                // For spotlight, check if there are enough stats
                 val hasData = overview.totalPlayCount > 0
+                val earliestTimestamp = statsRepository.getEarliestDataTimestamp()
+                val isNewUser = earliestTimestamp == null
                 
                 _uiState.update {
                     it.copy(
@@ -148,6 +152,7 @@ class HomeViewModel @Inject constructor(
                         insights = insights,
                         userName = userName,
                         hasData = hasData,
+                        isNewUser = isNewUser,
                         showRateAppPopup = shouldShowRateApp(overview.totalListeningTimeMs, overview.totalPlayCount)
                     )
                 }
@@ -203,13 +208,110 @@ class HomeViewModel @Inject constructor(
             _uiState.update { it.copy(showRateAppPopup = false) }
         }
     }
+    
+    /**
+     * Check if we should show a Spotlight Story reminder.
+     * Shows reminder on:
+     * - Last day of the month (for THIS_MONTH story)
+     * - December 1st (for THIS_YEAR story)
+     */
+    private fun checkSpotlightReminder() {
+        viewModelScope.launch {
+            val today = java.time.LocalDate.now()
+            val todayString = today.toString() // YYYY-MM-DD format
+            
+            android.util.Log.d("HomeViewModel", "Checking Spotlight reminder for date: $todayString")
+            
+            // Get user preferences to check if reminder already shown
+            val preferences = preferencesRepository.preferences().first() ?: return@launch
+            
+            // Check for monthly reminder (last day of month)
+            val isLastDayOfMonth = today.dayOfMonth == today.lengthOfMonth()
+            if (isLastDayOfMonth && preferences.lastMonthlyReminderShown != todayString) {
+                android.util.Log.d("HomeViewModel", "Is last day of month, checking data availability...")
+                // Ensure we have data for this month
+                val overview = statsRepository.getListeningOverview(TimeRange.THIS_MONTH)
+                android.util.Log.d("HomeViewModel", "Monthly data: totalPlayCount=${overview.totalPlayCount}")
+                if (overview.totalPlayCount > 0) {
+                    android.util.Log.i("HomeViewModel", "✅ Showing MONTHLY Spotlight reminder")
+                    _uiState.update { 
+                        it.copy(
+                            showSpotlightReminder = true,
+                            reminderTimeRange = TimeRange.THIS_MONTH,
+                            reminderType = me.avinas.tempo.ui.components.SpotlightReminderType.MONTHLY
+                        ) 
+                    }
+                    return@launch
+                } else {
+                    android.util.Log.d("HomeViewModel", "❌ Skipping monthly reminder: no data for THIS_MONTH")
+                }
+            } else if (isLastDayOfMonth) {
+                android.util.Log.d("HomeViewModel", "Last day of month, but already shown: ${preferences.lastMonthlyReminderShown}")
+            }
+            
+            // Check for yearly reminder (December 1st)
+            val isDecemberFirst = today.monthValue == 12 && today.dayOfMonth == 1
+            if (isDecemberFirst && preferences.lastYearlyReminderShown != todayString) {
+                android.util.Log.d("HomeViewModel", "Is December 1st, checking data availability...")
+                // Ensure we have data for this year
+                val overview = statsRepository.getListeningOverview(TimeRange.THIS_YEAR)
+                android.util.Log.d("HomeViewModel", "Yearly data: totalPlayCount=${overview.totalPlayCount}")
+                if (overview.totalPlayCount > 0) {
+                    android.util.Log.i("HomeViewModel", "✅ Showing YEARLY Spotlight reminder")
+                    _uiState.update { 
+                        it.copy(
+                            showSpotlightReminder = true,
+                            reminderTimeRange = TimeRange.THIS_YEAR,
+                            reminderType = me.avinas.tempo.ui.components.SpotlightReminderType.YEARLY
+                        ) 
+                    }
+                } else {
+                    android.util.Log.d("HomeViewModel", "❌ Skipping yearly reminder: no data for THIS_YEAR")
+                }
+            } else if (isDecemberFirst) {
+                android.util.Log.d("HomeViewModel", "December 1st, but already shown: ${preferences.lastYearlyReminderShown}")
+            }
+        }
+    }
+    
+    /**
+     * Dismiss the Spotlight reminder and save state to prevent showing again.
+     */
+    fun dismissSpotlightReminder() {
+        viewModelScope.launch {
+            val today = java.time.LocalDate.now().toString()
+            val preferences = preferencesRepository.preferences().first() ?: return@launch
+            
+            // Update preferences based on reminder type
+            val updatedPrefs = when (_uiState.value.reminderType) {
+                me.avinas.tempo.ui.components.SpotlightReminderType.MONTHLY -> 
+                    preferences.copy(lastMonthlyReminderShown = today)
+                me.avinas.tempo.ui.components.SpotlightReminderType.YEARLY -> 
+                    preferences.copy(lastYearlyReminderShown = today)
+                null -> preferences
+            }
+            
+            preferencesRepository.upsert(updatedPrefs)
+            
+            // Hide popup
+            _uiState.update { 
+                it.copy(
+                    showSpotlightReminder = false,
+                    reminderTimeRange = null,
+                    reminderType = null
+                ) 
+            }
+        }
+    }
 }
 
+@Immutable
 data class HomeUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val selectedTimeRange: TimeRange = TimeRange.THIS_WEEK,
     val hasData: Boolean = false,
+    val isNewUser: Boolean = false,
     
     // Data fields
     val listeningOverview: me.avinas.tempo.data.stats.ListeningOverview? = null,
@@ -222,5 +324,10 @@ data class HomeUiState(
     val audioFeatures: me.avinas.tempo.data.stats.AudioFeaturesStats? = null,
     val insights: List<me.avinas.tempo.data.stats.InsightCardData> = emptyList(),
     val userName: String? = null,
-    val showRateAppPopup: Boolean = false
+    val showRateAppPopup: Boolean = false,
+    
+    // Spotlight Story Reminder
+    val showSpotlightReminder: Boolean = false,
+    val reminderTimeRange: TimeRange? = null,
+    val reminderType: me.avinas.tempo.ui.components.SpotlightReminderType? = null
 )

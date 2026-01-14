@@ -38,6 +38,7 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToOnboarding: (() -> Unit)? = null,
     onNavigateToBackup: (() -> Unit)? = null,
+    onNavigateToSupportedApps: (() -> Unit)? = null,
     viewModel: SettingsViewModel = hiltViewModel(),
     spotifyViewModel: SpotifyViewModel = hiltViewModel()
 ) {
@@ -236,6 +237,12 @@ fun SettingsScreen(
                                 context.startActivity(intent)
                             }
                         )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        SettingsOption(
+                            title = "Supported Apps",
+                            subtitle = "See which music players are supported",
+                            onClick = { onNavigateToSupportedApps?.invoke() }
+                        )
                     }
                 }
 
@@ -356,6 +363,24 @@ fun SettingsScreen(
                             subtitle = "Confused Coconut",
                             onClick = {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/confusedcoconut"))
+                                context.startActivity(intent)
+                            }
+                        )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        SettingsOption(
+                            title = "GitHub Project",
+                            subtitle = "Source code & Issue tracker",
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/avinaxhroy/Tempo"))
+                                context.startActivity(intent)
+                            }
+                        )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        SettingsOption(
+                            title = "Contribute",
+                            subtitle = "Help improve Tempo",
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/avinaxhroy/Tempo/blob/main/CONTRIBUTION.md"))
                                 context.startActivity(intent)
                             }
                         )

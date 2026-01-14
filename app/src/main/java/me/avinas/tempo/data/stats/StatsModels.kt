@@ -53,6 +53,15 @@ data class CombinedBasicStats(
     @ColumnInfo(name = "unique_albums") val uniqueAlbums: Int
 )
 
+/**
+ * Lightweight class for session calculation to avoid loading full entities.
+ */
+data class SessionPoint(
+    val timestamp: Long,
+    val playDuration: Long
+)
+
+
 // =====================
 // Basic Stats Models
 // =====================

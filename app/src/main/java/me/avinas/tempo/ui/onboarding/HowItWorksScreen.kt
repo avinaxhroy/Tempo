@@ -32,9 +32,13 @@ import me.avinas.tempo.ui.theme.TempoDarkBackground
 import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.ui.utils.adaptiveSize
 import me.avinas.tempo.ui.utils.adaptiveTextUnit
+import me.avinas.tempo.ui.utils.adaptiveTextUnitByCategory
+import me.avinas.tempo.ui.utils.adaptiveSizeByCategory
 import me.avinas.tempo.ui.utils.isSmallScreen
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import me.avinas.tempo.ui.utils.isCompactScreen
+import me.avinas.tempo.ui.utils.rememberScreenHeightPercentage
+import me.avinas.tempo.ui.utils.scaledSize
+import me.avinas.tempo.ui.utils.rememberClampedHeightPercentage
 
 /**
  * Educational screen explaining how Tempo's notification-based tracking works.
@@ -80,29 +84,14 @@ fun HowItWorksScreen(
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-
-        // Skip button
-        TextButton(
-            onClick = onSkip,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp)
-        ) {
-            Text(
-                text = "Skip",
-                color = Color.White.copy(alpha = 0.6f),
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(adaptiveSize(24.dp, 16.dp))
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = adaptiveSizeByCategory(24.dp, 20.dp, 16.dp)),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Top flexible spacing
+            Spacer(modifier = Modifier.weight(0.08f))
             val isSmall = isSmallScreen()
             // Header
             Text(
@@ -111,25 +100,26 @@ fun HowItWorksScreen(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 color = Color.White,
-                fontSize = adaptiveTextUnit(28.sp, 20.sp)
+                fontSize = adaptiveTextUnitByCategory(30.sp, 26.sp, 22.sp)
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(8.dp, 4.dp)))
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.01f)))
 
             Text(
                 text = "No login. No account. Just music.",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = Color.White.copy(alpha = 0.7f),
-                fontSize = adaptiveTextUnit(16.sp, 13.sp)
+                fontSize = adaptiveTextUnitByCategory(17.sp, 15.sp, 13.sp)
             )
 
-            Spacer(modifier = Modifier.height(adaptiveSize(32.dp, 12.dp)))
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.03f)))
 
             // Visual Flow: Three connected steps
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(adaptiveSize(16.dp, 4.dp))
+                verticalArrangement = Arrangement.spacedBy(rememberScreenHeightPercentage(0.018f))
+
             ) {
                 // Step 1: Music App
                 FlowStep(
@@ -165,7 +155,7 @@ fun HowItWorksScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 16.dp)))
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.035f)))
 
             // Bottom info badges
             Row(
@@ -177,14 +167,15 @@ fun HowItWorksScreen(
                 InfoBadge(emoji = "⚡", text = "Auto-tracks")
             }
 
-            Spacer(modifier = Modifier.height(adaptiveSize(48.dp, 16.dp)))
+            // Flexible spacer before button
+            Spacer(modifier = Modifier.weight(0.1f))
 
             // CTA Button
             Button(
                 onClick = onNext,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(adaptiveSize(56.dp, 48.dp)),
+                    .height(scaledSize(54.dp, 0.85f, 1.1f)),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = TempoRed,
                     contentColor = Color.White
@@ -197,10 +188,27 @@ fun HowItWorksScreen(
             ) {
                 Text(
                     text = "Next",
-                    fontSize = adaptiveTextUnit(18.sp, 16.sp),
+                    fontSize = adaptiveTextUnitByCategory(18.sp, 17.sp, 16.sp),
                     fontWeight = FontWeight.Bold
                 )
             }
+            
+            // Bottom padding
+            Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.03f)))
+        }
+
+        // Skip button - rendered LAST to be on top of all content (z-ordering in Box)
+        TextButton(
+            onClick = onSkip,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "Skip",
+                color = Color.White.copy(alpha = 0.6f),
+                style = MaterialTheme.typography.labelLarge
+            )
         }
     }
 }
@@ -213,53 +221,59 @@ private fun FlowStep(
     title: String,
     subtitle: String
 ) {
+    // Clamped height ensures consistent appearance across all screen sizes
+    val cardHeight = rememberClampedHeightPercentage(0.095f, 70.dp, 90.dp)
+    
     GlassCard(
         modifier = modifier
             .fillMaxWidth()
-            .height(adaptiveSize(96.dp, 64.dp)), // Compact height for small screens
-        backgroundColor = iconColor.copy(alpha = 0.08f), // Subtler background
-        contentPadding = PaddingValues(horizontal = adaptiveSize(20.dp, 12.dp), vertical = adaptiveSize(16.dp, 8.dp))
+            .height(cardHeight),
+        backgroundColor = iconColor.copy(alpha = 0.08f),
+        contentPadding = PaddingValues(horizontal = adaptiveSizeByCategory(18.dp, 14.dp, 12.dp), vertical = adaptiveSizeByCategory(14.dp, 10.dp, 8.dp))
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
             // Icon container
+            // Icon container with clamped sizing for consistency
+            val iconContainerSize = rememberClampedHeightPercentage(0.058f, 40.dp, 52.dp)
             Box(
                 modifier = Modifier
-                    .size(adaptiveSize(56.dp, 40.dp)) // Larger icon container
+                    .size(iconContainerSize)
                     .background(
                         color = iconColor.copy(alpha = 0.2f),
                         shape = CircleShape
                     ),
                 contentAlignment = Alignment.Center
             ) {
+                val innerIconSize = rememberClampedHeightPercentage(0.033f, 22.dp, 30.dp)
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    modifier = Modifier.size(adaptiveSize(32.dp, 20.dp)), // Compact icon
+                    modifier = Modifier.size(innerIconSize),
                     tint = iconColor
                 )
             }
 
-            Spacer(modifier = Modifier.width(adaptiveSize(20.dp, 12.dp)))
+            Spacer(modifier = Modifier.width(adaptiveSizeByCategory(20.dp, 16.dp, 12.dp)))
 
             Column(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
                     text = title,
-                    style = if (isSmallScreen()) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge, // Larger title
+                    style = if (isSmallScreen()) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    fontSize = adaptiveTextUnit(20.sp, 15.sp)
+                    fontSize = adaptiveTextUnitByCategory(20.sp, 18.sp, 16.sp)
                 )
-                Spacer(modifier = Modifier.height(adaptiveSize(4.dp, 0.dp)))
+                Spacer(modifier = Modifier.height(adaptiveSizeByCategory(4.dp, 2.dp, 0.dp)))
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = adaptiveTextUnit(14.sp, 11.sp),
+                    fontSize = adaptiveTextUnitByCategory(15.sp, 13.sp, 12.sp),
                     maxLines = 1
                 )
             }
@@ -272,9 +286,11 @@ private fun FlowConnector(
     progress: Float,
     alpha: Float
 ) {
+    // Clamped connector height
+    val connectorHeight = rememberClampedHeightPercentage(0.024f, 16.dp, 24.dp)
     Box(
         modifier = Modifier
-            .height(adaptiveSize(24.dp, 12.dp))
+            .height(connectorHeight)
             .alpha(alpha * 0.6f),
         contentAlignment = Alignment.Center
     ) {
@@ -299,7 +315,7 @@ private fun FlowConnector(
         Text(
             text = "↓",
             color = Color.White.copy(alpha = 0.5f),
-            fontSize = adaptiveTextUnit(16.sp, 12.sp),
+            fontSize = adaptiveTextUnitByCategory(16.sp, 14.sp, 12.sp),
             modifier = Modifier.scale(1f + (progress * 0.1f))
         )
     }
@@ -315,15 +331,15 @@ private fun InfoBadge(
     ) {
         Text(
             text = emoji,
-            fontSize = adaptiveTextUnit(32.sp, 24.sp) // Adaptive emoji
+            fontSize = adaptiveTextUnitByCategory(34.sp, 30.sp, 26.sp) // Adaptive emoji
         )
-        Spacer(modifier = Modifier.height(adaptiveSize(8.dp, 4.dp)))
+        Spacer(modifier = Modifier.height(adaptiveSizeByCategory(8.dp, 6.dp, 4.dp)))
         Text(
             text = text,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Medium,
             color = Color.White.copy(alpha = 0.8f),
-            fontSize = adaptiveTextUnit(12.sp, 10.sp)
+            fontSize = adaptiveTextUnitByCategory(13.sp, 11.sp, 10.sp)
         )
     }
 }

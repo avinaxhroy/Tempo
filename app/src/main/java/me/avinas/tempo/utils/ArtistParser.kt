@@ -101,7 +101,137 @@ object ArtistParser {
         "bruce springsteen & the e street band",
         "hootie & the blowfish",
         "kid cudi & eminem",  // Collaboration duo that performs together
-        "lil nas x & billy ray cyrus"  // Known collaboration
+        "lil nas x & billy ray cyrus",  // Known collaboration
+        
+        // Classic Rock & Oldies
+        "sly & the family stone",
+        "tommy james & the shondells",
+        "sam & dave",
+        "ike & tina turner",
+        "sonny & cher",
+        "ashford & simpson",
+        "peaches & herb",
+        "martha reeves & the vandellas",
+        "diana ross & the supremes",
+        "smokey robinson & the miracles",
+        "gladys knight & the pips",
+        "junior walker & the all stars",
+        "kc & the sunshine band",
+        "tony orlando & dawn",
+        "huey lewis & the news",
+        "echo & the bunnymen",
+        "siouxsie & the banshees",
+        "the jesus & mary chain",
+        "captain & tennille",
+        "gerry & the pacemakers",
+        "peter & gordon",
+        "chad & jeremy",
+        "george thorogood & the destroyers",
+        "elvis costello & the attractions",
+        "bob marley & the wailers",
+
+        // Indie & Modern Rock
+        "mumford & sons",
+        "florence & the machine",
+        "of monsters & men",
+        "king gizzard & the lizard wizard",
+        "fitz & the tantrums",
+        "marina & the diamonds",
+        "years & years",
+        "angus & julia stone",
+        "tegan & sara",
+        "matt & kim",
+        "she & him",
+        "edward sharpe & the magnetic zeros",
+        "grace potter & the nocturnals",
+        "judah & the lion",
+        "aly & aj",
+
+        // Country
+        "maddie & tae",
+        "dan & shay",
+        "love & theft",
+
+        // Electronic & Dance
+        "chase & status",
+        "above & beyond",
+        "aly & fila",
+        "w & w",
+        "sunnery james & ryan marciano",
+        "dimitri vegas & like mike",
+        "axwell & ingrosso",
+
+        // R&B & Soul
+        "sly & the family stone",
+        "kool & the gang",
+        "earth, wind & fire",
+        "sam & dave",
+        "peaches & herb",
+        "ashford & simpson",
+        "ike & tina turner",
+        "marvin gaye & tammi terrell",
+        "roberta flack & donny hathaway",
+        "boyz ii men", // Sometimes written as Boyz II Men
+        "tony! toni! toné!", // Has special chars but good to cover
+        "tlc", 
+
+        // Hip Hop & Rap
+        "eric b. & rakim", // Often Eric B & Rakim
+        "salt-n-pepa", // Often Salt N Pepa or Salt & Pepa
+        "dj jazzy jeff & the fresh prince",
+        "macklemore & ryan lewis",
+        "outkast", 
+        "run-dmc",
+        "black star" ,
+        "method man & redman",
+        "mobb deep",
+        "ugk",
+        "8ball & mjg",
+        "clipmap & waka flocka flame",
+        "rae sremmurd",
+        "kids see ghosts", // Kid Cudi & Kanye West
+        "city girls",
+        "earthgang",
+
+        // Jazz & Blues
+        "sonny terry & brownie mcghee",
+        "django reinhardt & stéphane grappelli",
+        "ella fitzgerald & louis armstrong",
+        
+        // Folk & Americana
+        "shovels & rope",
+        "mandolin orange",
+        "watchhouse",
+        "the civil wars",
+        "johnnyswim",
+        "jamestown revival",
+        "penny & sparrow",
+
+        // Pop & Other
+        "maroon 5",
+        "hall & oates",
+        "simon & garfunkel",
+        "tears for fears",
+        "soft cell",
+        "wham!",
+        "eurythmics", 
+        "pet shop boys",
+        "daft punk",
+        "justice",
+        "empire of the sun",
+        "mgmt",
+        "foster the people",
+        "phoenix",
+        "passion pit",
+        "chromeo",
+        "flight facilities",
+        "duck sauce",
+        "disclosure",
+        "rudimental",
+        "clean bandit",
+        "chainsmokers",
+        "marshmello",
+        "galantis"
     )
     
     // Patterns that indicate the ampersand is part of a band name (Option 1: Pattern-Based Whitelist)

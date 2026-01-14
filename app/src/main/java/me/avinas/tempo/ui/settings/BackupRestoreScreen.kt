@@ -167,13 +167,13 @@ fun BackupRestoreScreen(
     
     // Show Drive operation results
     LaunchedEffect(driveOperation) {
-        when (driveOperation) {
+        when (val op = driveOperation) {
             is DriveOperationState.Success -> {
-                snackbarHostState.showSnackbar((driveOperation as DriveOperationState.Success).message)
+                snackbarHostState.showSnackbar(op.message)
                 viewModel.clearDriveOperation()
             }
             is DriveOperationState.Error -> {
-                snackbarHostState.showSnackbar((driveOperation as DriveOperationState.Error).message)
+                snackbarHostState.showSnackbar(op.message)
                 viewModel.clearDriveOperation()
             }
             else -> {}

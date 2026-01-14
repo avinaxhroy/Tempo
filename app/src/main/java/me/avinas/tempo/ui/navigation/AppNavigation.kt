@@ -10,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import me.avinas.tempo.ui.home.HomeScreen
 import me.avinas.tempo.ui.settings.SettingsScreen
+import me.avinas.tempo.ui.settings.SupportedAppsScreen
 import me.avinas.tempo.ui.settings.BackupRestoreScreen
 import me.avinas.tempo.ui.spotlight.SpotlightScreen
 import me.avinas.tempo.ui.components.DeepOceanBackground
@@ -29,7 +30,15 @@ sealed class Screen(val route: String) {
     object Stats : Screen("stats")
     object History : Screen("history")
     object Settings : Screen("settings")
-    object Spotlight : Screen("spotlight")
+    object Spotlight : Screen("spotlight?timeRange={timeRange}") {
+        fun createRoute(timeRange: String? = null): String {
+            return if (timeRange != null) {
+                "spotlight?timeRange=$timeRange"
+            } else {
+                "spotlight"
+            }
+        }
+    }
     object SongDetails : Screen("song_details/{trackId}") {
         fun createRoute(trackId: Long) = "song_details/$trackId"
     }
@@ -44,7 +53,12 @@ sealed class Screen(val route: String) {
         fun createRoute(albumId: Long) = "album_details/$albumId"
     }
     object Insights : Screen("insights")
-    object BackupRestore : Screen("backup_restore")
+    data object BackupRestore : Screen("backup_restore")
+    data object SupportedApps : Screen("supported_apps")
+    object ShareCanvas : Screen("share_canvas/{initialCardId}") {
+        fun createRoute(initialCardId: String) = "share_canvas/$initialCardId"
+        fun createRouteEmpty() = "share_canvas/_empty_"
+    }
 }
 
 @Composable
@@ -98,7 +112,15 @@ fun AppNavigation(
                             },
                             onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                             onNavigateToTrack = { trackId -> navController.navigate(Screen.SongDetails.createRoute(trackId)) },
-                            onNavigateToSpotlight = { navController.navigate(Screen.Spotlight.route) }
+                            onNavigateToSpotlight = { timeRange ->
+                                val route = if (timeRange != null) {
+                                    Screen.Spotlight.createRoute(timeRange.name)
+                                } else {
+                                    Screen.Spotlight.createRoute()
+                                }
+                                navController.navigate(route)
+                            },
+                            onNavigateToSupportedApps = { navController.navigate(Screen.SupportedApps.route) } // Added
                         )
                     }
 
@@ -128,7 +150,8 @@ fun AppNavigation(
                                         }
                                     }
                                 }
-                            }
+                            },
+                            onNavigateToSupportedApps = { navController.navigate(Screen.SupportedApps.route) }
                         )
                     }
 
@@ -142,7 +165,8 @@ fun AppNavigation(
                         SettingsScreen(
                             onNavigateBack = { navController.popBackStack() },
                             onNavigateToOnboarding = onResetToOnboarding,
-                            onNavigateToBackup = { navController.navigate(Screen.BackupRestore.route) }
+                            onNavigateToBackup = { navController.navigate(Screen.BackupRestore.route) },
+                            onNavigateToSupportedApps = { navController.navigate(Screen.SupportedApps.route) }
                         )
                     }
 
@@ -152,9 +176,32 @@ fun AppNavigation(
                         )
                     }
 
-                    composable(Screen.Spotlight.route) {
+                    composable(Screen.SupportedApps.route) {
+                        SupportedAppsScreen(
+                            onNavigateBack = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable(
+                        route = Screen.Spotlight.route,
+                        arguments = listOf(
+                            androidx.navigation.navArgument("timeRange") {
+                                type = androidx.navigation.NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            }
+                        )
+                    ) { backStackEntry ->
+                        val timeRangeString = backStackEntry.arguments?.getString("timeRange")
+                        val initialTimeRange = when (timeRangeString) {
+                            "THIS_MONTH" -> me.avinas.tempo.data.stats.TimeRange.THIS_MONTH
+                            "THIS_YEAR" -> me.avinas.tempo.data.stats.TimeRange.THIS_YEAR
+                            else -> null
+                        }
+                        
                         me.avinas.tempo.ui.spotlight.SpotlightScreen(
-                            navController = navController
+                            navController = navController,
+                            initialTimeRange = initialTimeRange
                         )
                     }
 
@@ -216,6 +263,21 @@ fun AppNavigation(
                             albumId = albumId,
                             onNavigateBack = { navController.popBackStack() },
                             onNavigateToSong = { trackId -> navController.navigate(Screen.SongDetails.createRoute(trackId)) }
+                        )
+                    }
+
+                    composable(
+                        route = Screen.ShareCanvas.route,
+                        arguments = listOf(
+                            androidx.navigation.navArgument("initialCardId") {
+                                type = androidx.navigation.NavType.StringType
+                            }
+                        )
+                    ) { backStackEntry ->
+                        val initialCardId = backStackEntry.arguments?.getString("initialCardId")
+                        me.avinas.tempo.ui.spotlight.canvas.ShareCanvasScreen(
+                            initialCardId = initialCardId,
+                            onClose = { navController.popBackStack() }
                         )
                     }
                 }

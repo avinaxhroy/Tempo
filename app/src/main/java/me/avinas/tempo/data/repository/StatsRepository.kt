@@ -370,6 +370,28 @@ interface StatsRepository {
      * Get the exact timestamp of when an artist was first discovered (first listen).
      */
     suspend fun getArtistDiscoveryDate(artistId: Long): Long?
+    
+    // =====================
+    // Batch Operations (Spotlight Performance)
+    // =====================
+    
+    /**
+     * Get play counts for multiple artists in a single batch query.
+     * Used by Spotlight card generators to avoid N+1 query problems.
+     */
+    suspend fun getArtistPlayCountsBatch(artistNames: List<String>): Map<String, Int>
+    
+    /**
+     * Get image URLs for multiple artists in a single batch query.
+     * Used by Spotlight card generators to avoid N+1 query problems.
+     */
+    suspend fun getArtistImageUrlsBatch(artistNames: List<String>): Map<String, String?>
+
+    /**
+     * Get the timestamp of the earliest data point in the repository.
+     * Used for determining if "All Time" stats are mature enough to show.
+     */
+    suspend fun getEarliestDataTimestamp(): Long?
 }
 
 /**

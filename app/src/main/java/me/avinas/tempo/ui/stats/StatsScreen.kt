@@ -56,24 +56,23 @@ fun StatsScreen(
     viewModel: StatsViewModel = hiltViewModel(),
     onNavigateToTrack: (Long) -> Unit,
     onNavigateToArtist: (String) -> Unit,
-    onNavigateToAlbum: (String) -> Unit
+    onNavigateToAlbum: (String) -> Unit,
+    onNavigateToSupportedApps: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val walkthroughController = me.avinas.tempo.ui.components.LocalWalkthroughController.current
 
-    // Pagination Logic
+    // Pagination Logic - simplified for better scroll performance
     val isAtBottom by remember {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
-            val visibleItemsInfo = layoutInfo.visibleItemsInfo
             if (layoutInfo.totalItemsCount == 0) {
                 false
             } else {
-                val lastVisibleItem = visibleItemsInfo.last()
-                val viewportHeight = layoutInfo.viewportEndOffset + layoutInfo.viewportStartOffset
-                (lastVisibleItem.index + 1 == layoutInfo.totalItemsCount) &&
-                        (lastVisibleItem.offset + lastVisibleItem.size <= viewportHeight)
+                // Trigger pagination 3 items before reaching end for smoother loading
+                val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                lastVisibleIndex >= layoutInfo.totalItemsCount - 3
             }
         }
     }
@@ -135,7 +134,14 @@ fun StatsScreen(
                 // 2. Stats Items
                 if (!uiState.isLoading && uiState.items.isEmpty()) {
                     item {
-                        EmptyStatsState()
+                        me.avinas.tempo.ui.components.EmptyState(
+                             modifier = Modifier
+                                 .fillMaxWidth()
+                                 .fillParentMaxHeight(0.7f), // Dynamic height relative to parent container
+                             timeRange = uiState.selectedTimeRange,
+                             type = me.avinas.tempo.ui.components.GhostScreenType.STATS,
+                             onCheckSupportedApps = onNavigateToSupportedApps
+                        )
                     }
                 } else if (!uiState.isLoading && uiState.items.isNotEmpty()) {
                     // Separate #1 Item for Hero Treatment
@@ -289,7 +295,8 @@ fun HeroStatItem(item: Any, onNavigate: () -> Unit) {
                         imageUrl = imageUrl,
                         contentDescription = null,
                         modifier = Modifier.size(80.dp).clip(CircleShape),
-                        contentScale = ContentScale.Crop
+                        contentScale = ContentScale.Crop,
+                        targetSizeDp = 80 // Downsample for faster decode & less memory
                     )
                 } else {
                      Box(modifier = Modifier.size(80.dp).clip(CircleShape).background(Color.DarkGray), contentAlignment = Alignment.Center) {
@@ -375,7 +382,8 @@ fun GlassStatItem(rank: Int, item: Any, onClick: () -> Unit) {
                         imageUrl = imageUrl,
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+                        contentScale = ContentScale.Crop,
+                        targetSizeDp = 48 // Downsample for faster decode & less memory
                     )
                 } else {
                     Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Color.White.copy(alpha = 0.5f))

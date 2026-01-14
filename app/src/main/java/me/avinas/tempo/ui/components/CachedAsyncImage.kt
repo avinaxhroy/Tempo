@@ -17,14 +17,15 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import coil.compose.AsyncImage
-import coil.compose.AsyncImagePainter
-import coil.compose.rememberAsyncImagePainter
-import coil.imageLoader
-import coil.request.CachePolicy
-import coil.request.ImageRequest
-import coil.size.Precision
-import coil.size.Scale
+import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
+import coil3.compose.rememberAsyncImagePainter
+import coil3.imageLoader
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import coil3.size.Precision
+import coil3.size.Scale
+import coil3.request.allowHardware
 import me.avinas.tempo.data.enrichment.MusicBrainzEnrichmentService
 
 private const val TAG = "CachedAsyncImage"
@@ -42,6 +43,9 @@ private const val TAG = "CachedAsyncImage"
  * @param contentDescription Accessibility description
  * @param modifier Modifier for the image
  * @param contentScale How to scale the image
+ * @param targetSizeDp Target display size in dp - when provided, Coil will downsample
+ *                     the image during decode to use less memory and decode faster.
+ *                     Use for thumbnails and small images to improve performance.
  * @param placeholder Optional placeholder to show while loading
  * @param error Optional fallback to show on error
  * @param showLoadingIndicator Whether to show a loading indicator
@@ -55,15 +59,22 @@ fun CachedAsyncImage(
     contentDescription: String? = null,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
+    targetSizeDp: Int? = null,
     placeholder: @Composable (() -> Unit)? = null,
     error: @Composable (() -> Unit)? = null,
     showLoadingIndicator: Boolean = false,
+    colorFilter: ColorFilter? = null,
     onSuccess: ((AsyncImagePainter.State.Success) -> Unit)? = null,
     onError: ((AsyncImagePainter.State.Error) -> Unit)? = null,
     allowHardware: Boolean = true
 ) {
     val context = LocalContext.current
     val imageLoader = context.imageLoader
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    
+    // Check if we're inside a CaptureWrapper - if so, disable hardware bitmaps
+    val inCaptureContext = LocalInCaptureContext.current
+    val effectiveAllowHardware = allowHardware && !inCaptureContext
     
     // Early return for null/blank URLs
     if (imageUrl.isNullOrBlank()) {
@@ -87,24 +98,35 @@ fun CachedAsyncImage(
         createCacheKey(fixedUrl)
     }
     
+    // Calculate target size in pixels if provided
+    val targetSizePx = remember(targetSizeDp, density) {
+        targetSizeDp?.let { dp -> with(density) { dp.toFloat() * this.density }.toInt() }
+    }
+    
     // Build the image request with aggressive caching
-    val imageRequest = remember(fixedUrl, cacheKey, allowHardware) {
+    // Include effectiveAllowHardware in the key so request rebuilds when capture context changes
+    val imageRequest = remember(fixedUrl, cacheKey, targetSizePx, effectiveAllowHardware) {
         ImageRequest.Builder(context)
             .data(fixedUrl)
             // Use URL-based cache keys, ignoring size
-            .memoryCacheKey(cacheKey)
+            // Include hardware flag in memory cache key so software/hardware bitmaps are cached separately
+            .memoryCacheKey(if (effectiveAllowHardware) cacheKey else "${cacheKey}_sw")
             .diskCacheKey(cacheKey)
             // INEXACT precision allows cached images of any size to be reused
             .precision(Precision.INEXACT)
             .scale(Scale.FILL)
+            // Apply target size for memory optimization (if provided)
+            .apply {
+                if (targetSizePx != null) {
+                    size(targetSizePx)
+                }
+            }
+            // Disable hardware bitmaps when inside CaptureWrapper (software rendering)
+            .allowHardware(effectiveAllowHardware)
             // Aggressive caching policies
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
             .networkCachePolicy(CachePolicy.ENABLED)
-            // Short crossfade for better UX
-            .crossfade(150)
-            // Hardware bitmap control (disable for screenshots)
-            .allowHardware(allowHardware)
             .build()
     }
     
@@ -115,7 +137,7 @@ fun CachedAsyncImage(
     )
     
     // Track state and handle callbacks
-    val painterState = painter.state
+    val painterState = painter.state.value
     
     LaunchedEffect(painterState) {
         when (painterState) {
@@ -171,6 +193,7 @@ fun CachedAsyncImage(
             painter = painter,
             contentDescription = contentDescription,
             contentScale = contentScale,
+            colorFilter = colorFilter,
             modifier = Modifier.fillMaxSize()
         )
     }
@@ -288,8 +311,6 @@ fun buildCachedImageRequest(
         .memoryCachePolicy(CachePolicy.ENABLED)
         .diskCachePolicy(CachePolicy.ENABLED)
         .networkCachePolicy(CachePolicy.ENABLED)
-        .crossfade(crossfade)
-        .allowHardware(allowHardware)
         .build()
 }
 

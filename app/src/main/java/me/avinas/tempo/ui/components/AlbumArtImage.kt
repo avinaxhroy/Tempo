@@ -14,14 +14,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
-import coil.ImageLoader
-import coil.compose.AsyncImagePainter
-import coil.compose.rememberAsyncImagePainter
-import coil.imageLoader
-import coil.request.CachePolicy
-import coil.request.ImageRequest
-import coil.size.Precision
-import coil.size.Scale
+import coil3.ImageLoader
+import coil3.compose.AsyncImagePainter
+import coil3.compose.rememberAsyncImagePainter
+import coil3.imageLoader
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import coil3.size.Precision
+import coil3.size.Scale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -109,7 +109,6 @@ fun AlbumArtImage(
                 // INEXACT precision lets Coil reuse cached images even if size doesn't match
                 .precision(Precision.INEXACT)
                 .scale(Scale.FILL)
-                .crossfade(150)
                 .build()
         }
         
@@ -121,28 +120,23 @@ fun AlbumArtImage(
         )
         
         // Handle load state separately from the request
-        when (val state = painter.state) {
-            is AsyncImagePainter.State.Success -> {
-                // Image loaded successfully
-                if (isHotlink && !localArtUrl.isNullOrBlank() && localArtUrl.startsWith("file://")) {
-                    // Hotlink worked! Clean up local backup in background
-                    LaunchedEffect(urlToLoad) {
-                        deleteLocalArtFile(localArtUrl)
-                    }
-                    onHotlinkSuccess?.invoke(albumArtUrl!!)
+        val state = painter.state.value
+        if (state is AsyncImagePainter.State.Success) {
+            // Image loaded successfully
+            if (isHotlink && !localArtUrl.isNullOrBlank() && localArtUrl.startsWith("file://")) {
+                // Hotlink worked! Clean up local backup in background
+                LaunchedEffect(urlToLoad) {
+                    deleteLocalArtFile(localArtUrl)
                 }
+                onHotlinkSuccess?.invoke(albumArtUrl!!)
             }
-            is AsyncImagePainter.State.Error -> {
-                // Image failed to load
-                if (isHotlink && !localArtUrl.isNullOrBlank()) {
-                    // Hotlink failed, try local fallback
-                    Log.w(TAG, "Hotlink failed: $urlToLoad, falling back to local")
-                    useLocalFallback = true
-                }
-            }
-            else -> {
-                // Loading or Empty - do nothing
-            }
+        } else if (state is AsyncImagePainter.State.Error) {
+             // Image failed to load
+             if (isHotlink && !localArtUrl.isNullOrBlank()) {
+                 // Hotlink failed, try local fallback
+                 Log.w(TAG, "Hotlink failed: $urlToLoad, falling back to local")
+                 useLocalFallback = true
+             }
         }
         
         Image(
