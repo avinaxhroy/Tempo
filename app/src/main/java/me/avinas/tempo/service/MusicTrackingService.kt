@@ -2421,7 +2421,12 @@ class MusicTrackingService : NotificationListenerService() {
         
         // Clean old entries from cache (older than replay threshold)
         val oldThreshold = currentTime - REPLAY_THRESHOLD_MS
-        recentPlaysCache.entries.removeAll { it.value < oldThreshold }
+        val iterator = recentPlaysCache.entries.iterator()
+        while (iterator.hasNext()) {
+            if (iterator.next().value < oldThreshold) {
+                iterator.remove()
+            }
+        }
         
         // Record duration with smart estimator for future learning (only full plays are reliable)
         // Record duration with smart estimator for future learning (only full plays are reliable)

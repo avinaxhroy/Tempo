@@ -1,13 +1,11 @@
 import java.util.Properties
 
 plugins {
-    id("com.android.application")
-    kotlin("android")
-    // kotlin("kapt") // Removed Kapt
-    id("com.google.devtools.ksp")
-    kotlin("plugin.compose")
-    id("dagger.hilt.android.plugin")
-
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.hilt)
 }
 
 // Load local.properties for API keys
@@ -37,9 +35,9 @@ android {
     defaultConfig {
         applicationId = "me.avinas.tempo"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 377
-        versionName = "3.7.7"
+        targetSdk = 36
+        versionCode = 378
+        versionName = "3.7.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -78,8 +76,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
 
     packaging {
@@ -100,8 +100,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
 
     // Material Components
-    implementation(libs.compose.material) // Fallback or if using View-based Material use: implementation("com.google.android.material:material:1.12.0")
-    // Actually the user had com.google.android.material:material.
     implementation("com.google.android.material:material:1.12.0") 
 
     // Compose
@@ -118,7 +116,7 @@ dependencies {
     implementation(libs.glance.material3)
 
     // Typography
-    implementation("androidx.compose.ui:ui-text-google-fonts:1.7.6") // No catalog entry for this yet, keeping hardcoded or latest
+    implementation("androidx.compose.ui:ui-text-google-fonts:1.7.6")
 
     // Room
     implementation(libs.room.runtime)
@@ -155,13 +153,6 @@ dependencies {
 
     // Hilt WorkManager integration
     implementation(libs.hilt.work)
-    ksp("androidx.hilt:hilt-compiler:1.2.0") // hilt-compiler for androidx.hilt is often same as dagger hilt compiler or specific? 
-    // Actually libraries usually use com.google.dagger:hilt-compiler for both.
-    // The previous file had: ksp("androidx.hilt:hilt-compiler:1.3.0")
-    // NOTE: androidx.hilt:hilt-compiler is deprecated/different? 
-    // Usually we use com.google.dagger:hilt-compiler. 
-    // But hilt-work 1.2.0 might need androidx.hilt:hilt-compiler.
-    // Let's stick to user's pattern but update version.
     ksp("androidx.hilt:hilt-compiler:1.2.0") 
 
     // Lifecycle
