@@ -112,15 +112,19 @@ fun HomeScreen(
                             }
                             
                             // Trend data
-                            val trendData = uiState.dailyListening.map { it.totalTimeMs.toFloat() }
+                            val trendData = uiState.dailyListening.map { it.totalTimeMs.toFloat() / 1000 / 60 } // Convert to minutes
+                            
+                            // Use labels from ViewModel (already processed)
+                            val dailyLabels = uiState.chartLabels
 
                             HeroCard(
-                                userName = uiState.userName ?: "User", // Kept for Hero internal logic, visually hidden title
+                                userName = uiState.userName ?: "User",
                                 listeningTime = timeString,
                                 periodLabel = uiState.selectedTimeRange.name.replace("_", " ").lowercase(),
                                 timeChangePercent = uiState.periodComparison?.timeChangePercent ?: 0.0,
                                 trendData = trendData,
-                                selectedRange = uiState.selectedTimeRange
+                                selectedRange = uiState.selectedTimeRange,
+                                dailyLabels = dailyLabels
                             )
 
 
