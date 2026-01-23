@@ -16,7 +16,11 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,8 +49,18 @@ fun HeroCard(
     timeChangePercent: Double,
     trendData: List<Float>,
     selectedRange: TimeRange,
+    dailyLabels: List<String> = emptyList(),
     modifier: Modifier = Modifier
 ) {
+    var scrubbingTime by remember { mutableStateOf<String?>(null) }
+    var scrubbingLabel by remember { mutableStateOf<String?>(null) }
+    
+    // Reset scrubbing state when time range changes
+    LaunchedEffect(selectedRange) {
+        scrubbingTime = null
+        scrubbingLabel = null
+    }
+    
     GlassCard(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(24.dp) // Increased padding
@@ -58,7 +72,7 @@ fun HeroCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Header with Selector
+                // Header with Greeting
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -82,26 +96,35 @@ fun HeroCard(
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
-                    
-
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Hero Time Display
-                Text(
-                    text = listeningTime,
-                    style = MaterialTheme.typography.displayMedium, // Updated to displayMedium
-                    color = Color.White,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = scrubbingTime ?: listeningTime,
+                        style = MaterialTheme.typography.displayMedium,
+                        color = Color.White,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                    
+                    if (scrubbingLabel != null) {
+                        Text(
+                            text = "• $scrubbingLabel",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                }
                 
-                // Smart Copy Logic with Pulse
                 val isPositive = timeChangePercent >= 0
                 val percentString = "${if (isPositive) "+" else ""}${timeChangePercent.toInt()}%"
-                val comparisonColor = if (isPositive) Color(0xFF4ADE80) else Color(0xFFFBBF24) // Green vs Amber
+                val comparisonColor = if (isPositive) Color(0xFF4ADE80) else Color(0xFFFBBF24)
                 
-                // Pulse Animation for badge
                 val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "BadgePulse")
                 val pulseAlpha by infiniteTransition.animateFloat(
                     initialValue = 0.1f,
@@ -114,7 +137,6 @@ fun HeroCard(
                 )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Badge
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
@@ -141,19 +163,46 @@ fun HeroCard(
             
             Spacer(modifier = Modifier.height(32.dp))
             
-            // Chart area
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(96.dp)
             ) {
-                TrendLine(
-                    dataPoints = trendData,
-                    modifier = Modifier.fillMaxSize(),
-                    lineColor = me.avinas.tempo.ui.theme.TempoSecondary,
-                    fillColor = me.avinas.tempo.ui.theme.TempoSecondary.copy(alpha = 0.2f),
-                    strokeWidth = 3.dp // Thicker line
-                )
+                if (dailyLabels.isNotEmpty() && trendData.size == dailyLabels.size) {
+                    InteractiveTrendLine(
+                        dataPoints = trendData,
+                        labels = dailyLabels,
+                        modifier = Modifier.fillMaxSize(),
+                        lineColor = me.avinas.tempo.ui.theme.TempoSecondary,
+                        fillColor = me.avinas.tempo.ui.theme.TempoSecondary.copy(alpha = 0.2f),
+                        strokeWidth = 3.dp,
+                        formatValue = { value ->
+                            val minutes = value.toLong()
+                            val hours = minutes / 60
+                            val mins = minutes % 60
+                            if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
+                        },
+                        onValueSelected = { value, label ->
+                            val minutes = value.toLong()
+                            val hours = minutes / 60
+                            val mins = minutes % 60
+                            scrubbingTime = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
+                            scrubbingLabel = label
+                        },
+                        onSelectionCleared = {
+                            scrubbingTime = null
+                            scrubbingLabel = null
+                        }
+                    )
+                } else {
+                    TrendLine(
+                        dataPoints = trendData,
+                        modifier = Modifier.fillMaxSize(),
+                        lineColor = me.avinas.tempo.ui.theme.TempoSecondary,
+                        fillColor = me.avinas.tempo.ui.theme.TempoSecondary.copy(alpha = 0.2f),
+                        strokeWidth = 3.dp
+                    )
+                }
             }
         }
     }
