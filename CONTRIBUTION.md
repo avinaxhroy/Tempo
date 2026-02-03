@@ -3,7 +3,7 @@
 First of all — thank you for your interest in Tempo.
 The fact that people want to contribute is genuinely appreciated.
 
-Tempo started as (and currently remains) a personal project built to solve a very specific problem I personally faced. While the repository is open source, contributions are handled with care to preserve the product’s direction, consistency, and long-term vision.
+Tempo started as (and currently remains) a personal project built to solve a very specific problem I personally faced. While the repository is **source-available**, contributions are handled with care to preserve the product’s direction, consistency, and long-term vision.
 
 Please read this document carefully before contributing.
 
@@ -108,7 +108,7 @@ Tempo is currently a single-owner project.
 
 If your goal is:
 - Learning
-- Improving an open-source project
+- Improving a source-available project
 - Thoughtful collaboration
 
 **You are welcome here.**
@@ -127,7 +127,7 @@ By contributing to Tempo, you agree that your contributions will be licensed und
 
 ## Final Words
 
-Tempo is open source by choice, not by obligation.
+Tempo is **source-available** by choice. This model protects the project from commercial exploitation while keeping the code open for you to read, learn from, and—most importantly—**contribute to**.
 
 If you respect the project, its users, and its philosophy — contributions are welcome.
 

@@ -1,11 +1,13 @@
 # Tempo: Your Music Journey, Preserved.
 
-![Tempo Banner](https://raw.githubusercontent.com/Avinaxh/Tempo/master/fastlane/metadata/android/en-US/images/featureGraphic.png)
+![Tempo Logo](TempoICON.png)
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9.0-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org)
 [![Android](https://img.shields.io/badge/Android-14-green.svg?style=flat&logo=android)](https://developer.android.com)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0)
+[![License](https://img.shields.io/badge/License-Source%20Available-blue.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Active_Development-success.svg)]()
+ 
+ <a href='https://play.google.com/store/apps/details?id=me.avinas.tempo.release'><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' height='80'/></a>
 
 **Tempo** is the ultimate **local-first music companion** that turns your listening history into a permanent, stunningly visualized journal. It connects with all your favorite players, preserves your data privately on your device, and transforms raw stats into deep insights and beautiful memory stories.
 
@@ -100,11 +102,6 @@ A 0-100 metric that judges how *engaged* you are with your music.
 - **Smart Merge**: Automatically treats "Live", "Remix", or "Deluxe Edition" versions as the same song to keep your charts clean.
 - **Cloud Backup**: Encrypted Google Drive backup with **Smart Conflict Resolution** to merge imported data with existing local stats.
 
-### 📱 Adaptive Widgets
-Built with **Jetpack Glance**, Tempo's widgets are responsive ($110dp - 200dp$) and interactive.
-- **Live Charts**: Bar charts of your listening history directly on the home screen.
-- **Dynamic Stats**: Updates streak, top artist, and daily vibe in real-time.
-
 ---
 
 ## 🔒 Privacy & Architecture
@@ -125,21 +122,25 @@ Tempo uses a **Local-First** architecture built on **Room Database**.
 - **Charts**: Vico & MPAndroidChart
 - **Image Loading**: Coil
 
----
-
-## 📥 Download
-
-<a href='https://play.google.com/store/apps/details?id=me.avinas.tempo.release'><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' height='80'/></a>
 
 ---
 
 ## 🤝 Contribution
 
-Tempo is open-source and thriving.
-1. Fork the repo.
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`).
-3. Commit your changes.
-4. Open a Pull Request.
+> Tempo follows a **User-first, Privacy-first, Local-first** philosophy. Check [CONTRIBUTION.md](CONTRIBUTION.md) for full guidelines.
+> - **Flow**: Fork → Branch → PR.
+> - **Note**: Major UI changes or architectural rewrites require prior discussion. We prioritize stability over feature volume.
 
-**License**: Apache 2.0
+## 📄 License
+
+> **Tempo Source Available License**
+> Free for personal, non-commercial use.
+> - ❌ **No Commercial Use**: Cannot be sold or used for commercial services.
+> - ❌ **No Monetization**: No ads, IAP, or donations.
+> - ❌ **No Redistribution**: Do not publish on app stores.
+> - ✅ **Education**: Source provided for learning and security auditing.
+>
+> See [LICENSE](LICENSE) for the full text.
+
+**License**: Tempo Source Available License
 Made with ❤️ by [Avinash](https://github.com/Avinaxh)
