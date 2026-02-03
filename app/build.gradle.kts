@@ -36,8 +36,8 @@ android {
         applicationId = "me.avinas.tempo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 378
-        versionName = "3.7.8"
+        versionCode = 410
+        versionName = "4.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -86,12 +86,22 @@ android {
         resources {
             excludes += "META-INF/*"
         }
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
     
     lint {
         abortOnError = false
         checkReleaseBuilds = false
     }
+}
+
+// Configure Hilt to use KSP
+ksp {
+    arg("dagger.formatGeneratedSource", "disabled")
+    arg("dagger.fastInit", "enabled")
+    arg("correctErrorTypes", "true")
 }
 
 dependencies {

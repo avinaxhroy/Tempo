@@ -20,9 +20,12 @@ import me.avinas.tempo.data.local.entities.*
         TrackArtist::class,  // Track-Artist junction table
         TrackAlias::class,   // Smart metadata aliases for tracks
         ManualContentMark::class,  // Content filtering marks
-        ArtistAlias::class   // Artist merge aliases
+        ArtistAlias::class,  // Artist merge aliases
+        AppPreference::class, // User-controlled app tracking preferences
+        LastFmImportMetadata::class, // Last.fm import session tracking
+        ScrobbleArchive::class // Compressed archive for long-tail scrobbles
     ],
-    version = 24, // Add Spotlight reminder tracking to UserPreferences
+    version = 29, // Add source index for Last.fm query performance
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -38,6 +41,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun trackAliasDao(): TrackAliasDao
     abstract fun manualContentMarkDao(): ManualContentMarkDao  // Content filtering DAO
     abstract fun artistAliasDao(): ArtistAliasDao  // Artist merge DAO
+    abstract fun appPreferenceDao(): AppPreferenceDao  // User app preferences DAO
+    abstract fun lastFmImportMetadataDao(): LastFmImportMetadataDao  // Last.fm import tracking
+    abstract fun scrobbleArchiveDao(): ScrobbleArchiveDao  // Scrobble archive DAO
     
     companion object {
         private const val TAG = "AppDatabase"
@@ -870,6 +876,436 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 24 to 25.
+         * 
+         * Adds app_preferences table for user-controlled app selection.
+         * Seeds the table with ALL apps from the original hardcoded sets to ensure
+         * existing users don't lose tracking for any apps they were using.
+         * 
+         * DATA PRESERVATION: This migration ONLY creates a new table - it does NOT
+         * modify or delete any existing data (tracks, listening_events, etc.).
+         */
+        val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 24 to 25 - Adding app_preferences table")
+                
+                // Create app_preferences table
+                // NOTE: Do NOT use DEFAULT clauses or create indices here - the entity
+                // class doesn't declare @ColumnInfo(defaultValue=...) or @Index annotations,
+                // so Room's schema validation will fail if these are present in the table.
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS app_preferences (
+                        packageName TEXT NOT NULL PRIMARY KEY,
+                        displayName TEXT NOT NULL,
+                        isEnabled INTEGER NOT NULL,
+                        isUserAdded INTEGER NOT NULL,
+                        isBlocked INTEGER NOT NULL,
+                        category TEXT NOT NULL,
+                        addedAt INTEGER NOT NULL
+                    )
+                """)
+                
+
+                val currentTime = System.currentTimeMillis()
+                
+                // =====================================================================
+                // MUSIC APPS - ALL apps from the original MUSIC_APPS set (enabled)
+                // This ensures existing users can continue tracking all apps they used
+                // =====================================================================
+                val musicApps = listOf(
+                    // Major Streaming Services
+                    Pair("com.spotify.music", "Spotify"),
+                    Pair("com.google.android.apps.youtube.music", "YouTube Music"),
+                    Pair("com.apple.android.music", "Apple Music"),
+                    Pair("com.amazon.mp3", "Amazon Music"),
+                    Pair("com.soundcloud.android", "SoundCloud"),
+                    Pair("deezer.android.app", "Deezer"),
+                    Pair("com.pandora.android", "Pandora"),
+                    Pair("com.aspiro.tidal", "Tidal"),
+                    Pair("com.tidal.android", "Tidal (Old)"),
+                    Pair("com.qobuz.music", "Qobuz"),
+                    Pair("ru.yandex.music", "Yandex Music"),
+                    
+                    // Indian Music Services
+                    Pair("com.jio.media.jiobeats", "JioSaavn"),
+                    Pair("com.gaana", "Gaana"),
+                    Pair("com.bsbportal.music", "Wynk Music"),
+                    Pair("com.hungama.myplay.activity", "Hungama Music"),
+                    Pair("in.startv.hotstar.music", "Hotstar Music"),
+                    Pair("com.moonvideo.android.resso", "Resso"),
+                    
+                    // Device Manufacturers
+                    Pair("com.samsung.android.app.music", "Samsung Music"),
+                    Pair("com.sec.android.app.music", "Samsung Music (Old)"),
+                    Pair("com.miui.player", "Mi Music"),
+                    
+                    // Revanced/Vanced Variants
+                    Pair("app.revanced.android.youtube.music", "YouTube Music ReVanced"),
+                    Pair("app.revanced.android.apps.youtube.music", "YouTube Music ReVanced"),
+                    Pair("com.vanced.android.youtube.music", "YouTube Music Vanced"),
+                    
+                    // Other Streaming
+                    Pair("com.audiomack", "Audiomack"),
+                    Pair("com.mmm.trebelmusic", "Trebel"),
+                    Pair("nugs.net", "Nugs.net"),
+                    Pair("net.nugs.multiband", "Nugs.net (Multiband)"),
+                    
+                    // Open Source / FOSS Music Clients
+                    Pair("com.dd3boh.outertune", "OuterTune"),
+                    Pair("com.zionhuang.music", "InnerTune"),
+                    Pair("it.vfsfitvnm.vimusic", "ViMusic"),
+                    Pair("oss.krtirtho.spotube", "Spotube"),
+                    Pair("com.shadow.blackhole", "BlackHole"),
+                    Pair("com.anandnet.harmonymusic", "Harmony Music"),
+                    Pair("it.fast4x.rimusic", "RiMusic"),
+                    Pair("com.msob7y.namida", "Namida"),
+                    Pair("com.metrolist.music", "Metrolist"),
+                    Pair("com.gokadzev.musify", "Musify"),
+                    Pair("com.gokadzev.musify.fdroid", "Musify (F-Droid)"),
+                    Pair("ls.bloomee.musicplayer", "BloomeeTunes"),
+                    Pair("com.maxrave.simpmusic", "SimpMusic"),
+                    Pair("it.ncaferra.pixelplayerfree", "Pixel Player"),
+                    Pair("com.theveloper.pixelplay", "PixelPlay"),
+                    Pair("com.singularity.gramophone", "Gramophone"),
+                    Pair("player.phonograph.plus", "Phonograph Plus"),
+                    Pair("org.oxycblt.auxio", "Auxio"),
+                    Pair("com.maloy.muzza", "Muzza"),
+                    Pair("uk.co.projectneon.echo", "Echo"),
+                    Pair("com.shabinder.spotiflyer", "SpotiFlyer"),
+                    Pair("com.kapp.youtube.final", "YMusic"),
+                    Pair("org.schabi.newpipe", "NewPipe"),
+                    Pair("org.polymorphicshade.newpipe", "NewPipe (Fork)"),
+                    
+                    // Popular Offline Players
+                    Pair("com.maxmpz.audioplayer", "Poweramp"),
+                    Pair("in.krosbits.musicolet", "Musicolet"),
+                    Pair("com.kodarkooperativet.blackplayerfree", "BlackPlayer Free"),
+                    Pair("com.kodarkooperativet.blackplayerex", "BlackPlayer EX"),
+                    Pair("com.rhmsoft.pulsar", "Pulsar"),
+                    Pair("com.neutroncode.mp", "Neutron Player"),
+                    Pair("gonemad.gmmp", "GoneMad"),
+                    Pair("code.name.monkey.retromusic", "Retro Music Player"),
+                    Pair("com.piyush.music", "Oto Music"),
+                    Pair("com.simplecity.amp_pro", "Shuttle+"),
+                    Pair("ru.stellio.player", "Stellio"),
+                    Pair("io.stellio.music", "Stellio (Alt)"),
+                    Pair("com.frolo.musp", "Frolomuse"),
+                    Pair("com.rhmsoft.omnia", "Omnia")
+                )
+                
+                musicApps.forEach { (pkg, name) ->
+                    db.execSQL("""
+                        INSERT OR IGNORE INTO app_preferences 
+                        (packageName, displayName, isEnabled, isUserAdded, isBlocked, category, addedAt)
+                        VALUES ('$pkg', '$name', 1, 0, 0, 'MUSIC', $currentTime)
+                    """)
+                }
+                
+                // =====================================================================
+                // PODCAST APPS - Seed as enabled (user can disable if they don't want)
+                // =====================================================================
+                val podcastApps = listOf(
+                    Pair("com.google.android.apps.podcasts", "Google Podcasts"),
+                    Pair("fm.player", "Player FM"),
+                    Pair("au.com.shiftyjelly.pocketcasts", "Pocket Casts"),
+                    Pair("com.bambuna.podcastaddict", "Podcast Addict"),
+                    Pair("com.clearchannel.iheartradio.controller", "iHeartRadio"),
+                    Pair("app.tunein.player", "TuneIn Radio"),
+                    Pair("com.stitcher.app", "Stitcher"),
+                    Pair("com.castbox.player", "Castbox"),
+                    Pair("com.apple.android.podcasts", "Apple Podcasts"),
+                    Pair("fm.castbox.audiobook.radio.podcast", "Castbox Variant")
+                )
+                
+                podcastApps.forEach { (pkg, name) ->
+                    db.execSQL("""
+                        INSERT OR IGNORE INTO app_preferences 
+                        (packageName, displayName, isEnabled, isUserAdded, isBlocked, category, addedAt)
+                        VALUES ('$pkg', '$name', 1, 0, 0, 'PODCAST', $currentTime)
+                    """)
+                }
+                
+                // =====================================================================
+                // AUDIOBOOK APPS - Seed as enabled 
+                // =====================================================================
+                val audiobookApps = listOf(
+                    Pair("com.audible.application", "Audible"),
+                    Pair("com.google.android.apps.books", "Google Play Books"),
+                    Pair("com.audiobooks.android.audiobooks", "Audiobooks.com"),
+                    Pair("com.scribd.app.reader0", "Scribd"),
+                    Pair("com.storytel", "Storytel"),
+                    Pair("fm.libro", "Libro.fm"),
+                    Pair("com.kobo.books.ereader", "Kobo Books")
+                )
+                
+                audiobookApps.forEach { (pkg, name) ->
+                    db.execSQL("""
+                        INSERT OR IGNORE INTO app_preferences 
+                        (packageName, displayName, isEnabled, isUserAdded, isBlocked, category, addedAt)
+                        VALUES ('$pkg', '$name', 1, 0, 0, 'AUDIOBOOK', $currentTime)
+                    """)
+                }
+                
+                // =====================================================================
+                // BLOCKED APPS - Video apps, social media, browsers (blocked by default)
+                // These were always blocked and should remain blocked
+                // =====================================================================
+                val blockedApps = listOf(
+                    // Video Streaming
+                    Triple("com.google.android.youtube", "YouTube", "VIDEO"),
+                    Triple("com.google.android.apps.youtube", "YouTube", "VIDEO"),
+                    Triple("app.revanced.android.youtube", "YouTube ReVanced", "VIDEO"),
+                    Triple("com.netflix.mediaclient", "Netflix", "VIDEO"),
+                    Triple("com.amazon.avod.thirdpartyclient", "Prime Video", "VIDEO"),
+                    Triple("com.disney.disneyplus", "Disney+", "VIDEO"),
+                    Triple("in.startv.hotstar", "Hotstar", "VIDEO"),
+                    Triple("com.hotstar.android", "Hotstar", "VIDEO"),
+                    Triple("tv.twitch.android.app", "Twitch", "VIDEO"),
+                    
+                    // Social Media
+                    Triple("com.zhiliaoapp.musically", "TikTok", "VIDEO"),
+                    Triple("com.ss.android.ugc.trill", "TikTok", "VIDEO"),
+                    Triple("com.instagram.android", "Instagram", "VIDEO"),
+                    Triple("com.facebook.katana", "Facebook", "VIDEO"),
+                    Triple("com.snapchat.android", "Snapchat", "VIDEO"),
+                    
+                    // Video Players
+                    Triple("com.vimeo.android.videoapp", "Vimeo", "VIDEO"),
+                    Triple("com.mxtech.videoplayer.ad", "MX Player", "VIDEO"),
+                    Triple("com.mxtech.videoplayer.pro", "MX Player Pro", "VIDEO"),
+                    Triple("org.videolan.vlc", "VLC", "VIDEO"),
+                    Triple("com.google.android.apps.photos", "Google Photos", "VIDEO"),
+                    Triple("com.whatsapp", "WhatsApp", "VIDEO"),
+                    Triple("org.telegram.messenger", "Telegram", "VIDEO"),
+                    Triple("com.google.android.gm", "Gmail", "OTHER"),
+                    
+                    // Browsers
+                    Triple("com.android.chrome", "Chrome", "OTHER"),
+                    Triple("com.chrome.beta", "Chrome Beta", "OTHER"),
+                    Triple("com.chrome.dev", "Chrome Dev", "OTHER"),
+                    Triple("org.mozilla.firefox", "Firefox", "OTHER"),
+                    Triple("org.mozilla.firefox_beta", "Firefox Beta", "OTHER"),
+                    Triple("com.opera.browser", "Opera", "OTHER"),
+                    Triple("com.brave.browser", "Brave", "OTHER"),
+                    Triple("com.microsoft.edge", "Microsoft Edge", "OTHER"),
+                    Triple("com.sec.android.app.sbrowser", "Samsung Browser", "OTHER"),
+                    
+                    // Device Gallery/Video Apps
+                    Triple("com.samsung.android.video", "Samsung Video", "VIDEO"),
+                    Triple("com.miui.videoplayer", "Mi Video", "VIDEO"),
+                    Triple("com.miui.gallery", "Mi Gallery", "VIDEO"),
+                    Triple("com.google.android.videos", "Google Play Movies", "VIDEO"),
+                    Triple("com.google.android.apps.youtube.kids", "YouTube Kids", "VIDEO")
+                )
+                
+                blockedApps.forEach { (pkg, name, category) ->
+                    db.execSQL("""
+                        INSERT OR IGNORE INTO app_preferences 
+                        (packageName, displayName, isEnabled, isUserAdded, isBlocked, category, addedAt)
+                        VALUES ('$pkg', '$name', 0, 0, 1, '$category', $currentTime)
+                    """)
+                }
+                
+                Log.i(TAG, "Migration from version 24 to 25 completed successfully - seeded ${musicApps.size} music, ${podcastApps.size} podcast, ${audiobookApps.size} audiobook, ${blockedApps.size} blocked apps")
+            }
+        }
+
+        /**
+         * Migration from version 25 to 26.
+         * 
+         * Adds Spotify Import feature support:
+         * - spotifyApiOnlyMode: Boolean flag for using Spotify API instead of notifications
+         * - spotifyImportCursor: Cursor for incremental polling
+         * - lastSpotifyImportTimestamp: Timestamp of last successful import
+         */
+        val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 25 to 26 - Adding Spotify Import fields")
+                
+                // Add Spotify-API-Only mode flag
+                // Default 0 (false) = use notification tracking for all apps including Spotify
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN spotifyApiOnlyMode INTEGER NOT NULL DEFAULT 0
+                """)
+                
+                // Add cursor for incremental polling
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN spotifyImportCursor TEXT DEFAULT NULL
+                """)
+                
+                // Add last import timestamp
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN lastSpotifyImportTimestamp INTEGER DEFAULT NULL
+                """)
+                
+                Log.i(TAG, "Migration from version 25 to 26 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 26 to 27.
+         * 
+         * Adds All-Time Story reminder tracking to user_preferences:
+         * - lastAllTimeReminderShown: Date when all-time story notification was sent (YYYY-MM-DD)
+         *   This tracks when the 6-month milestone notification was shown to avoid duplicate notifications.
+         */
+        val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 26 to 27 - Adding All-Time story reminder tracking")
+                
+                // Add All-Time story reminder tracking column
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN lastAllTimeReminderShown TEXT DEFAULT NULL
+                """)
+                
+                Log.i(TAG, "Migration from version 26 to 27 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 27 to 28.
+         * 
+         * Adds Last.fm import support:
+         * 1. lastfm_import_metadata table - Tracks import sessions and progress
+         * 2. scrobbles_archive table - Compressed storage for long-tail scrobbles
+         * 3. New columns in user_preferences for Last.fm settings
+         * 
+         * The two-tier architecture (active + archive) allows importing massive
+         * Last.fm histories (200K+ scrobbles) without impacting query performance.
+         */
+        val MIGRATION_27_28 = object : Migration(27, 28) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 27 to 28 - Adding Last.fm import support")
+                
+                // =====================================================
+                // Step 1: Create lastfm_import_metadata table
+                // NOTE: Do NOT use DEFAULT clauses - the entity class doesn't declare
+                // @ColumnInfo(defaultValue=...) so Room expects no defaults in schema
+                // =====================================================
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS lastfm_import_metadata (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        lastfm_username TEXT NOT NULL,
+                        import_tier TEXT NOT NULL,
+                        active_track_threshold INTEGER NOT NULL,
+                        recent_months_included INTEGER NOT NULL,
+                        total_scrobbles_found INTEGER NOT NULL,
+                        earliest_scrobble INTEGER,
+                        latest_scrobble INTEGER,
+                        status TEXT NOT NULL,
+                        current_page INTEGER NOT NULL,
+                        total_pages INTEGER NOT NULL,
+                        scrobbles_processed INTEGER NOT NULL,
+                        events_imported INTEGER NOT NULL,
+                        tracks_created INTEGER NOT NULL,
+                        artists_created INTEGER NOT NULL,
+                        scrobbles_archived INTEGER NOT NULL,
+                        duplicates_skipped INTEGER NOT NULL,
+                        last_sync_cursor INTEGER,
+                        last_sync_timestamp INTEGER,
+                        import_started_at INTEGER NOT NULL,
+                        import_completed_at INTEGER,
+                        error_message TEXT
+                    )
+                """)
+                
+                // NOTE: Do NOT create indices here - the entity class doesn't declare
+                // @Index annotations, so Room expects no indices in schema validation
+                
+                // =====================================================
+                // Step 2: Create scrobbles_archive table
+                // =====================================================
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS scrobbles_archive (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        track_hash TEXT NOT NULL,
+                        track_title TEXT NOT NULL,
+                        artist_name TEXT NOT NULL,
+                        artist_name_normalized TEXT NOT NULL,
+                        album_name TEXT,
+                        musicbrainz_id TEXT,
+                        timestamps_blob BLOB NOT NULL,
+                        play_count INTEGER NOT NULL,
+                        first_scrobble INTEGER NOT NULL,
+                        last_scrobble INTEGER NOT NULL,
+                        album_art_url TEXT,
+                        was_loved INTEGER NOT NULL,
+                        import_id INTEGER NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL
+                    )
+                """)
+                
+                // Create indices for scrobbles_archive (matching @Index annotations in entity)
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_scrobbles_archive_track_hash ON scrobbles_archive(track_hash)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_scrobbles_archive_artist_name_normalized ON scrobbles_archive(artist_name_normalized)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_scrobbles_archive_first_scrobble ON scrobbles_archive(first_scrobble)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_scrobbles_archive_last_scrobble ON scrobbles_archive(last_scrobble)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_scrobbles_archive_play_count ON scrobbles_archive(play_count)")
+                
+                // =====================================================
+                // Step 3: Add Last.fm columns to user_preferences
+                // NOTE: These use DEFAULT because the entity has default values in Kotlin
+                // and Room handles this differently for ALTER TABLE vs CREATE TABLE
+                // =====================================================
+                
+                // Last.fm username for syncing
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN lastfmUsername TEXT
+                """)
+                
+                // Whether Last.fm is connected
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN lastfmConnected INTEGER NOT NULL DEFAULT 0
+                """)
+                
+                // Auto-sync frequency: NONE, DAILY, WEEKLY
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN lastfmSyncFrequency TEXT NOT NULL DEFAULT 'NONE'
+                """)
+                
+                Log.i(TAG, "Migration from version 27 to 28 completed successfully")
+            }
+        }
+        
+        /**
+         * Migration from version 28 to 29: Add source index for Last.fm query performance.
+         * 
+         * The new History screen filters by source to separate:
+         * - Recent Activity (source != 'fm.last.import')
+         * - Last.fm History (source = 'fm.last.import')
+         * 
+         * Without an index on source, these queries cause full table scans which
+         * severely impacts performance on large listening_events tables.
+         */
+        val MIGRATION_28_29 = object : Migration(28, 29) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 28 to 29 - Adding source index")
+                
+                // Index for filtering by source (Last.fm vs live tracking)
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_listening_events_source 
+                    ON listening_events(source)
+                """)
+                
+                // Composite index for source + timestamp queries (common pattern)
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_listening_events_source_timestamp 
+                    ON listening_events(source, timestamp DESC)
+                """)
+                
+                Log.i(TAG, "Migration from version 28 to 29 completed successfully")
+            }
+        }
+
+        /**
          * All migrations in order.
          */
         val ALL_MIGRATIONS = arrayOf(
@@ -890,7 +1326,12 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_20_21,
             MIGRATION_21_22,
             MIGRATION_22_23,
-            MIGRATION_23_24
+            MIGRATION_23_24,
+            MIGRATION_24_25,
+            MIGRATION_25_26,
+            MIGRATION_26_27,
+            MIGRATION_27_28,
+            MIGRATION_28_29
         )
         
     }

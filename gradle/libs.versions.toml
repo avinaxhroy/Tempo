@@ -1,6 +1,6 @@
 [versions]
 kotlin = "2.1.0"
-agp = "8.13.2"
+agp = "9.0.0"
 compose = "2025.12.01" # BOM version
 composeCompiler = "1.5.11" # Deprecated with Kotlin 2.0 but keeping for safety if needed, usually managed by plugin now
 room = "2.8.4"

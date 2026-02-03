@@ -227,7 +227,7 @@ class TrackingHealthMonitor(
         } else 0.0
         
         if (errorRate > MAX_ERROR_RATE_PERCENT) {
-            issues.add("High error rate: ${String.format("%.1f", errorRate)}%")
+            issues.add("High error rate: ${String.format(java.util.Locale.US, "%.1f", errorRate)}%")
         }
         
         // Check drop rate
@@ -237,7 +237,7 @@ class TrackingHealthMonitor(
         } else 0.0
         
         if (dropRate > MAX_ERROR_RATE_PERCENT) {
-            issues.add("High drop rate: ${String.format("%.1f", dropRate)}%")
+            issues.add("High drop rate: ${String.format(java.util.Locale.US, "%.1f", dropRate)}%")
         }
         
         // Check save latency

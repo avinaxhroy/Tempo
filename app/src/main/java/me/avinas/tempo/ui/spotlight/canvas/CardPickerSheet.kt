@@ -107,7 +107,10 @@ fun CardPickerSheet(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(availableCards) { card ->
+                    items(
+                        items = availableCards,
+                        key = { card -> card.id }
+                    ) { card ->
                         val isOnCanvas = cardsOnCanvas.any { it.id == card.id }
                         CardPickerThumbnail(
                             cardData = card,

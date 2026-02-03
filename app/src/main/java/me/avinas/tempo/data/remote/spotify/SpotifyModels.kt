@@ -70,17 +70,17 @@ data class SpotifyTrack(
     val name: String,
     val artists: List<SpotifyArtist>,
     val album: SpotifyAlbum,
-    @Json(name = "duration_ms") val durationMs: Long,
+    @param:Json(name = "duration_ms") val durationMs: Long,
     val popularity: Int,
-    @Json(name = "explicit") val isExplicit: Boolean,
-    @Json(name = "external_ids") val externalIds: SpotifyExternalIds?,
-    @Json(name = "external_urls") val externalUrls: SpotifyExternalUrls,
+    @param:Json(name = "explicit") val isExplicit: Boolean,
+    @param:Json(name = "external_ids") val externalIds: SpotifyExternalIds?,
+    @param:Json(name = "external_urls") val externalUrls: SpotifyExternalUrls,
     val href: String,
     val uri: String,
-    @Json(name = "preview_url") val previewUrl: String?,
-    @Json(name = "track_number") val trackNumber: Int,
-    @Json(name = "disc_number") val discNumber: Int,
-    @Json(name = "is_local") val isLocal: Boolean = false
+    @param:Json(name = "preview_url") val previewUrl: String?,
+    @param:Json(name = "track_number") val trackNumber: Int,
+    @param:Json(name = "disc_number") val discNumber: Int,
+    @param:Json(name = "is_local") val isLocal: Boolean = false
 ) {
     /**
      * Get primary artist name.
@@ -99,7 +99,7 @@ data class SpotifyTrack(
 data class SpotifyArtist(
     val id: String,
     val name: String,
-    @Json(name = "external_urls") val externalUrls: SpotifyExternalUrls,
+    @param:Json(name = "external_urls") val externalUrls: SpotifyExternalUrls,
     val href: String,
     val uri: String,
     val type: String = "artist"
@@ -117,7 +117,7 @@ data class SpotifyFullArtist(
     val images: List<SpotifyImage>,
     val popularity: Int,
     val followers: SpotifyFollowers?,
-    @Json(name = "external_urls") val externalUrls: SpotifyExternalUrls,
+    @param:Json(name = "external_urls") val externalUrls: SpotifyExternalUrls,
     val href: String,
     val uri: String,
     val type: String = "artist"
@@ -152,13 +152,13 @@ data class SpotifyFollowers(
 data class SpotifyAlbum(
     val id: String,
     val name: String,
-    @Json(name = "album_type") val albumType: String, // album, single, compilation
+    @param:Json(name = "album_type") val albumType: String, // album, single, compilation
     val artists: List<SpotifyArtist>,
     val images: List<SpotifyImage>,
-    @Json(name = "release_date") val releaseDate: String,
-    @Json(name = "release_date_precision") val releaseDatePrecision: String, // year, month, day
-    @Json(name = "total_tracks") val totalTracks: Int,
-    @Json(name = "external_urls") val externalUrls: SpotifyExternalUrls,
+    @param:Json(name = "release_date") val releaseDate: String,
+    @param:Json(name = "release_date_precision") val releaseDatePrecision: String, // year, month, day
+    @param:Json(name = "total_tracks") val totalTracks: Int,
+    @param:Json(name = "external_urls") val externalUrls: SpotifyExternalUrls,
     val href: String,
     val uri: String
 ) {
@@ -295,12 +295,12 @@ data class SpotifyAudioFeatures(
      * convention to specify how many beats are in each bar (or measure).
      * Range: 3 to 7 indicating 3/4 to 7/4 time signatures.
      */
-    @Json(name = "time_signature") val timeSignature: Int,
+    @param:Json(name = "time_signature") val timeSignature: Int,
     
     /**
      * The duration of the track in milliseconds.
      */
-    @Json(name = "duration_ms") val durationMs: Long,
+    @param:Json(name = "duration_ms") val durationMs: Long,
     
     /**
      * The Spotify URI for the track.
@@ -310,7 +310,7 @@ data class SpotifyAudioFeatures(
     /**
      * A link to the Web API endpoint providing full details of the track.
      */
-    @Json(name = "track_href") val trackHref: String,
+    @param:Json(name = "track_href") val trackHref: String,
     
     /**
      * The object type. Always "audio_features".
@@ -320,7 +320,7 @@ data class SpotifyAudioFeatures(
     /**
      * A link to the Web API endpoint providing analysis data.
      */
-    @Json(name = "analysis_url") val analysisUrl: String
+    @param:Json(name = "analysis_url") val analysisUrl: String
 ) {
     /**
      * Get a human-readable mood description based on valence.
@@ -407,7 +407,7 @@ data class SpotifyAudioFeatures(
  */
 @JsonClass(generateAdapter = true)
 data class SpotifyAudioFeaturesResponse(
-    @Json(name = "audio_features") val audioFeatures: List<SpotifyAudioFeatures?>
+    @param:Json(name = "audio_features") val audioFeatures: List<SpotifyAudioFeatures?>
 )
 
 // =====================
@@ -417,12 +417,12 @@ data class SpotifyAudioFeaturesResponse(
 @JsonClass(generateAdapter = true)
 data class SpotifyUser(
     val id: String,
-    @Json(name = "display_name") val displayName: String?,
+    @param:Json(name = "display_name") val displayName: String?,
     val email: String?,
     val country: String?,
     val product: String?, // free, premium, etc.
     val images: List<SpotifyImage>?,
-    @Json(name = "external_urls") val externalUrls: SpotifyExternalUrls,
+    @param:Json(name = "external_urls") val externalUrls: SpotifyExternalUrls,
     val href: String,
     val uri: String
 ) {
@@ -448,11 +448,11 @@ data class SpotifyUser(
  */
 @JsonClass(generateAdapter = true)
 data class SpotifyTokenResponse(
-    @Json(name = "access_token") val accessToken: String,
-    @Json(name = "token_type") val tokenType: String,
+    @param:Json(name = "access_token") val accessToken: String,
+    @param:Json(name = "token_type") val tokenType: String,
     val scope: String?,
-    @Json(name = "expires_in") val expiresIn: Int, // seconds
-    @Json(name = "refresh_token") val refreshToken: String?
+    @param:Json(name = "expires_in") val expiresIn: Int, // seconds
+    @param:Json(name = "refresh_token") val refreshToken: String?
 )
 
 // =====================
@@ -491,3 +491,308 @@ data class SpotifyArtistTopTracksResponse(
 data class SpotifyMultipleArtistsResponse(
     val artists: List<SpotifyFullArtist?>
 )
+
+// =====================
+// Recently Played (Import Feature)
+// =====================
+
+/**
+ * Response from GET /me/player/recently-played endpoint.
+ * Returns the user's recently played tracks (up to 50).
+ * 
+ * Note: This endpoint only returns tracks played in approximately the last 24 hours.
+ * It's designed for onboarding import when user's Tempo data is empty.
+ */
+@JsonClass(generateAdapter = true)
+data class SpotifyRecentlyPlayedResponse(
+    val items: List<PlayHistoryObject>,
+    val next: String?,
+    val cursors: SpotifyCursors?,
+    val limit: Int,
+    val href: String
+)
+
+/**
+ * A play history object containing a track and when it was played.
+ * Used in the recently-played response.
+ */
+@JsonClass(generateAdapter = true)
+data class PlayHistoryObject(
+    val track: SpotifyTrack,
+    @param:Json(name = "played_at") val playedAt: String, // ISO 8601 timestamp
+    val context: PlaybackContext?
+) {
+    /**
+     * Parse the ISO 8601 timestamp to epoch milliseconds.
+     * Format: "2016-12-10T18:20:06.816Z"
+     * 
+     * CRITICAL: Do NOT fall back to current time on parse failure.
+     * This would cause all imported tracks to show "0m ago" instead of actual play time.
+     * If parsing fails, we throw an exception that should be handled by the caller.
+     */
+    val playedAtMillis: Long
+        get() = try {
+            java.time.Instant.parse(playedAt).toEpochMilli()
+        } catch (e: Exception) {
+            // Log the error but still try alternative parsing methods
+            android.util.Log.e("PlayHistoryObject", "Failed to parse played_at timestamp: '$playedAt'", e)
+            
+            // Try alternative parsing methods for ISO 8601 variants
+            try {
+                // Handle format without milliseconds: "2016-12-10T18:20:06Z"
+                java.time.ZonedDateTime.parse(playedAt).toInstant().toEpochMilli()
+            } catch (e2: Exception) {
+                try {
+                    // Handle format with offset: "2016-12-10T18:20:06+00:00"
+                    java.time.OffsetDateTime.parse(playedAt).toInstant().toEpochMilli()
+                } catch (e3: Exception) {
+                    // Last resort: return 0 to indicate invalid timestamp
+                    // The import service should check for this and skip the item
+                    android.util.Log.e("PlayHistoryObject", "All parsing methods failed for: '$playedAt'")
+                    0L
+                }
+            }
+        }
+}
+
+/**
+ * Context for where the track was played from (playlist, album, artist).
+ */
+@JsonClass(generateAdapter = true)
+data class PlaybackContext(
+    val type: String, // "album", "playlist", "artist", "show"
+    val href: String?,
+    val uri: String?,
+    @param:Json(name = "external_urls") val externalUrls: SpotifyExternalUrls?
+)
+
+/**
+ * Cursor-based pagination for recently played endpoint.
+ * Used for incremental polling to avoid re-fetching already imported tracks.
+ */
+@JsonClass(generateAdapter = true)
+data class SpotifyCursors(
+    val after: String?, // Unix timestamp in ms - use as "after" param to get newer
+    val before: String? // Unix timestamp in ms - use as "before" param to get older
+)
+
+// =====================================================
+// User Top Items (Stats.fm style endpoints)
+// =====================================================
+
+/**
+ * Response from GET /me/top/tracks endpoint.
+ * Returns the user's top tracks based on Spotify's affinity calculation.
+ * 
+ * This is how Stats.fm gets "all time" stats without importing full history!
+ * Spotify internally tracks all your listening and computes affinity.
+ * 
+ * Time ranges available via query param:
+ * - short_term: ~4 weeks
+ * - medium_term: ~6 months
+ * - long_term: Several years of data
+ */
+@JsonClass(generateAdapter = true)
+data class SpotifyUserTopTracksResponse(
+    val items: List<SpotifyTrack>,
+    val total: Int,
+    val limit: Int,
+    val offset: Int,
+    val href: String,
+    val next: String?,
+    val previous: String?
+)
+
+/**
+ * Response from GET /me/top/artists endpoint.
+ * Returns the user's top artists based on Spotify's affinity calculation.
+ */
+@JsonClass(generateAdapter = true)
+data class SpotifyUserTopArtistsResponse(
+    val items: List<SpotifyFullArtist>,
+    val total: Int,
+    val limit: Int,
+    val offset: Int,
+    val href: String,
+    val next: String?,
+    val previous: String?
+)
+
+// =====================================================
+// User's Saved Tracks (Time Machine - Exact Timestamps!)
+// =====================================================
+
+/**
+ * Response from GET /me/tracks endpoint.
+ * Returns the user's saved/liked tracks with EXACT added_at timestamps.
+ * 
+ * This is the foundation of the "Time Machine" feature:
+ * - Unlike top tracks (which just show ranking), saved tracks have precise dates
+ * - If a user liked a song on June 12, 2023, we KNOW they were listening then
+ * - We can generate listening events clustered around these real dates
+ * - Provides pixel-perfect timeline accuracy for the last 1-2 years
+ */
+@JsonClass(generateAdapter = true)
+data class SpotifySavedTracksResponse(
+    val items: List<SavedTrackObject>,
+    val total: Int,
+    val limit: Int,
+    val offset: Int,
+    val href: String,
+    val next: String?,
+    val previous: String?
+)
+
+/**
+ * A saved track with its timestamp - the core of accurate history reconstruction.
+ */
+@JsonClass(generateAdapter = true)
+data class SavedTrackObject(
+    @param:Json(name = "added_at") val addedAt: String, // ISO 8601 timestamp - THE KEY DATA!
+    val track: SpotifyTrack
+) {
+    /**
+     * Parse the ISO 8601 timestamp to epoch milliseconds.
+     * This is when the user ACTUALLY liked/saved the track.
+     */
+    val addedAtMillis: Long
+        get() = try {
+            java.time.Instant.parse(addedAt).toEpochMilli()
+        } catch (e: Exception) {
+            try {
+                java.time.ZonedDateTime.parse(addedAt).toInstant().toEpochMilli()
+            } catch (e2: Exception) {
+                try {
+                    java.time.OffsetDateTime.parse(addedAt).toInstant().toEpochMilli()
+                } catch (e3: Exception) {
+                    0L
+                }
+            }
+        }
+}
+
+// =====================================================
+// User's Playlists (Artifact Hunter)
+// =====================================================
+
+/**
+ * Response from GET /me/playlists endpoint.
+ * Used to discover historical artifacts like "Your Top Songs 20XX".
+ */
+@JsonClass(generateAdapter = true)
+data class SpotifyUserPlaylistsResponse(
+    val items: List<SpotifySimplifiedPlaylist>,
+    val total: Int,
+    val limit: Int,
+    val offset: Int,
+    val href: String,
+    val next: String?,
+    val previous: String?
+)
+
+/**
+ * Simplified playlist object - used in playlist list responses.
+ */
+@JsonClass(generateAdapter = true)
+data class SpotifySimplifiedPlaylist(
+    val id: String,
+    val name: String,
+    val description: String?,
+    val images: List<SpotifyImage>?,
+    val owner: SpotifyPlaylistOwner,
+    val tracks: SpotifyPlaylistTracksRef,
+    val public: Boolean?,
+    @param:Json(name = "collaborative") val isCollaborative: Boolean,
+    @param:Json(name = "external_urls") val externalUrls: SpotifyExternalUrls,
+    val href: String,
+    val uri: String,
+    @param:Json(name = "snapshot_id") val snapshotId: String
+) {
+    /**
+     * Check if this is a Spotify-generated "Your Top Songs" playlist.
+     * These playlists contain the user's top tracks from a specific year.
+     */
+    val isYearlyTopSongs: Boolean
+        get() = name.startsWith("Your Top Songs", ignoreCase = true)
+    
+    /**
+     * Extract the year from "Your Top Songs 20XX" playlist name.
+     * Returns null if not a yearly playlist.
+     */
+    val yearFromName: Int?
+        get() {
+            if (!isYearlyTopSongs) return null
+            val yearPattern = Regex("\\d{4}")
+            return yearPattern.find(name)?.value?.toIntOrNull()
+        }
+    
+    /**
+     * Check if this is "On Repeat" or "Repeat Rewind" playlist.
+     */
+    val isRepeatPlaylist: Boolean
+        get() = name.equals("On Repeat", ignoreCase = true) ||
+                name.equals("Repeat Rewind", ignoreCase = true)
+    
+    /**
+     * Check if this is owned by Spotify (official playlist).
+     */
+    val isSpotifyOwned: Boolean
+        get() = owner.id == "spotify"
+}
+
+@JsonClass(generateAdapter = true)
+data class SpotifyPlaylistOwner(
+    val id: String,
+    @param:Json(name = "display_name") val displayName: String?,
+    @param:Json(name = "external_urls") val externalUrls: SpotifyExternalUrls,
+    val href: String,
+    val uri: String
+)
+
+@JsonClass(generateAdapter = true)
+data class SpotifyPlaylistTracksRef(
+    val href: String,
+    val total: Int
+)
+
+/**
+ * Response from GET /playlists/{id}/tracks endpoint.
+ * Contains the actual tracks from a playlist with timestamps.
+ */
+@JsonClass(generateAdapter = true)
+data class SpotifyPlaylistTracksResponse(
+    val items: List<PlaylistTrackObject>,
+    val total: Int,
+    val next: String?
+)
+
+/**
+ * A track within a playlist, with optional added_at timestamp.
+ */
+@JsonClass(generateAdapter = true)
+data class PlaylistTrackObject(
+    @param:Json(name = "added_at") val addedAt: String?, // ISO 8601 timestamp (can be null)
+    val track: SpotifyTrack?  // Can be null if track was removed from Spotify
+) {
+    /**
+     * Parse the added_at timestamp to epoch milliseconds.
+     * Returns null if not available.
+     */
+    val addedAtMillis: Long?
+        get() {
+            if (addedAt.isNullOrBlank()) return null
+            return try {
+                java.time.Instant.parse(addedAt).toEpochMilli()
+            } catch (e: Exception) {
+                try {
+                    java.time.ZonedDateTime.parse(addedAt).toInstant().toEpochMilli()
+                } catch (e2: Exception) {
+                    try {
+                        java.time.OffsetDateTime.parse(addedAt).toInstant().toEpochMilli()
+                    } catch (e3: Exception) {
+                        null
+                    }
+                }
+            }
+        }
+}

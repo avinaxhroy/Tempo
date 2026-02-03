@@ -31,6 +31,9 @@ import me.avinas.tempo.ui.components.SettingsSectionHeader
 import me.avinas.tempo.ui.components.SettingsSwitch
 import me.avinas.tempo.ui.spotify.SpotifyViewModel
 import me.avinas.tempo.ui.theme.TempoRed
+import me.avinas.tempo.utils.OemBackgroundHelper
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,12 +42,15 @@ fun SettingsScreen(
     onNavigateToOnboarding: (() -> Unit)? = null,
     onNavigateToBackup: (() -> Unit)? = null,
     onNavigateToSupportedApps: (() -> Unit)? = null,
+    onNavigateToBackgroundProtection: (() -> Unit)? = null,
+    onNavigateToLastFmImport: (() -> Unit)? = null,
     viewModel: SettingsViewModel = hiltViewModel(),
     spotifyViewModel: SpotifyViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val spotifyAuthState by spotifyViewModel.authState.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val versionName = remember {
         try {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
@@ -61,6 +67,23 @@ fun SettingsScreen(
     val importExportProgress by viewModel.importExportProgress.collectAsState()
     val importExportResult by viewModel.importExportResult.collectAsState()
     val conflictDialogUri by viewModel.showConflictDialog.collectAsState()
+    
+    // OEM detection for Background Protection
+    val isXiaomiDevice = remember { OemBackgroundHelper.isXiaomiDevice() }
+    var autostartState by remember { mutableStateOf(OemBackgroundHelper.getAutostartState(context)) }
+    
+    // Refresh autostart state when returning from BackgroundProtectionScreen
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                autostartState = OemBackgroundHelper.getAutostartState(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
     
     // File picker for import (ZIP)
     val importLauncher = rememberLauncherForActivityResult(
@@ -239,14 +262,35 @@ fun SettingsScreen(
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsOption(
-                            title = "Supported Apps",
-                            subtitle = "See which music players are supported",
+                            title = "Manage Supported Apps",
+                            subtitle = "Choose which apps Tempo tracks",
                             onClick = { onNavigateToSupportedApps?.invoke() }
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
+                
+                // Background Protection - Only for Xiaomi/MIUI devices
+                if (isXiaomiDevice) {
+                    SettingsSectionHeader("Background Protection")
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(0.dp),
+                        variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
+                    ) {
+                        SettingsOption(
+                            title = if (autostartState == OemBackgroundHelper.AutostartState.DISABLED) 
+                                "⚠️ Configure Required Settings" 
+                            else 
+                                "Xiaomi Device Settings",
+                            subtitle = "Prevent Tempo from being killed in background",
+                            onClick = { onNavigateToBackgroundProtection?.invoke() }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
                 
                 // Content Filtering
                 SettingsSectionHeader("Content Filtering")
@@ -288,6 +332,17 @@ fun SettingsScreen(
                                     subtitle = "Tap to disconnect",
                                     onClick = { showDisconnectDialog = true }
                                 )
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                                // Spotify-API-Only Mode toggle (only shown when connected)
+                                SettingsSwitch(
+                                    title = "Spotify-API-Only Mode",
+                                    subtitle = if (uiState.spotifyApiOnlyMode) 
+                                        "ON: Tracking via Spotify servers (syncs periodically)" 
+                                    else 
+                                        "OFF: Tracking via phone notifications (real-time)",
+                                    checked = uiState.spotifyApiOnlyMode,
+                                    onCheckedChange = viewModel::toggleSpotifyApiOnlyMode
+                                )
                             }
                             else -> {
                                 SettingsOption(
@@ -307,6 +362,35 @@ fun SettingsScreen(
                             checked = uiState.extendedAudioAnalysisEnabled,
                             onCheckedChange = viewModel::toggleExtendedAudioAnalysis
                         )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Last.fm Import
+                SettingsSectionHeader("Import History")
+                GlassCard(
+                    contentPadding = PaddingValues(0.dp),
+                    variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
+                ) {
+                    Column {
+                        if (uiState.isLastFmConnected) {
+                            SettingsOption(
+                                title = "Last.fm: ${uiState.lastFmUsername ?: "Connected"}",
+                                subtitle = when (uiState.lastFmSyncFrequency) {
+                                    "DAILY" -> "Syncing daily"
+                                    "WEEKLY" -> "Syncing weekly"
+                                    else -> "Import complete • Tap to manage"
+                                },
+                                onClick = { onNavigateToLastFmImport?.invoke() }
+                            )
+                        } else {
+                            SettingsOption(
+                                title = "Import from Last.fm",
+                                subtitle = "Import your scrobble history for deeper insights",
+                                onClick = { onNavigateToLastFmImport?.invoke() }
+                            )
+                        }
                     }
                 }
 

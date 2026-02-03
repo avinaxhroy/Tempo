@@ -20,7 +20,7 @@ val Context.dataStore by preferencesDataStore(name = "settings")
 
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val userPreferencesDao: me.avinas.tempo.data.local.dao.UserPreferencesDao
 ) : ViewModel() {
 

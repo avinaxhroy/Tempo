@@ -71,6 +71,11 @@ class ArtistLinkingService @Inject constructor(
         val updatedTrack = if (primaryArtist != null && track.primaryArtistId != primaryArtist.id) {
             trackDao.updatePrimaryArtistId(track.id, primaryArtist.id)
             track.copy(primaryArtistId = primaryArtist.id)
+        } else if (primaryArtist == null && track.primaryArtistId == null) {
+            // No valid artist found - use "Unknown Artist" placeholder to prevent infinite loop
+            val unknownArtist = getOrCreateUnknownArtist()
+            trackDao.updatePrimaryArtistId(track.id, unknownArtist.id)
+            track.copy(primaryArtistId = unknownArtist.id)
         } else {
             track
         }
@@ -103,8 +108,6 @@ class ArtistLinkingService @Inject constructor(
             )
         }
         
-        Log.d(TAG, "Linked track ${track.id} '${track.title}' to ${primaryArtists.size} primary + ${featuredArtists.size} featured artists")
-        
         updatedTrack
     }
     
@@ -120,7 +123,7 @@ class ArtistLinkingService @Inject constructor(
         // NEW: Check if this name has an alias (was merged into another artist)
         artistAliasDao.findAlias(normalizedName)?.let { alias ->
             artistDao.getArtistById(alias.targetArtistId)?.let { targetArtist ->
-                Log.d(TAG, "Resolved alias: '$name' -> '${targetArtist.name}'")
+                // Alias resolved silently - no need to log every resolution
                 return targetArtist
             }
         }
@@ -232,29 +235,101 @@ class ArtistLinkingService @Inject constructor(
     }
     
     /**
+     * Get or create the "Unknown Artist" placeholder.
+     * This is used for tracks that have no valid artist data,
+     * allowing us to mark them as processed without violating FK constraints.
+     */
+    private suspend fun getOrCreateUnknownArtist(): Artist {
+        val unknownName = "Unknown Artist"
+        val normalizedName = Artist.normalizeName(unknownName)
+        
+        // Try to find existing Unknown Artist
+        artistDao.getArtistByNormalizedName(normalizedName)?.let { return it }
+        
+        // Create new Unknown Artist
+        val newArtist = Artist(
+            name = unknownName,
+            normalizedName = normalizedName,
+            imageUrl = null,
+            genres = emptyList(),
+            musicbrainzId = null,
+            spotifyId = null
+        )
+        
+        val id = artistDao.insert(newArtist)
+        return if (id > 0) {
+            newArtist.copy(id = id)
+        } else {
+            artistDao.getArtistByNormalizedName(normalizedName) ?: newArtist
+        }
+    }
+    
+    /**
      * Process all tracks that don't have a primary artist linked.
      * This is used for migration and background cleanup.
+     * 
+     * IMPORTANT: Limited to prevent runaway processing.
      */
     suspend fun processUnlinkedTracks(batchSize: Int = 100): Int = withContext(Dispatchers.IO) {
         var totalProcessed = 0
+        var totalFeatured = 0
+        val maxIterations = 1000 // Safety limit: max 100,000 tracks per call
+        var iterations = 0
         
-        while (true) {
+        // Track failed track IDs in memory to avoid reprocessing in this run
+        val failedTrackIds = mutableSetOf<Long>()
+        
+        Log.i(TAG, "Starting to process unlinked tracks...")
+        
+        while (iterations < maxIterations) {
+            iterations++
             val unlinkedTracks = trackDao.getTracksWithoutPrimaryArtist(batchSize)
+                .filter { it.id !in failedTrackIds } // Skip tracks that already failed
+            
             if (unlinkedTracks.isEmpty()) break
             
             unlinkedTracks.forEach { track ->
                 try {
-                    linkArtistsForTrack(track)
+                    val result = linkArtistsForTrack(track)
                     totalProcessed++
+                    
+                    // Count tracks with featured artists for batch summary
+                    val parsed = ArtistParser.parse(track.artist)
+                    if (parsed.featuredArtists.isNotEmpty()) {
+                        totalFeatured++
+                    }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error linking artists for track ${track.id}: ${e.message}")
+                    // Mark as failed in memory to skip in subsequent iterations
+                    failedTrackIds.add(track.id)
+                    
+                    // Try to mark with Unknown Artist to prevent future reruns
+                    try {
+                        val unknownArtist = getOrCreateUnknownArtist()
+                        trackDao.updatePrimaryArtistId(track.id, unknownArtist.id)
+                    } catch (updateError: Exception) {
+                        // Silently fail - will be retried next time
+                    }
                 }
             }
             
-            Log.i(TAG, "Processed $totalProcessed unlinked tracks so far")
+            // Batch log every 500 tracks to avoid log bloat
+            if (totalProcessed % 500 == 0 && totalProcessed > 0) {
+                Log.i(TAG, "Progress: $totalProcessed tracks linked ($totalFeatured with featured artists)")
+            }
         }
         
-        Log.i(TAG, "Finished processing unlinked tracks. Total: $totalProcessed")
+        if (iterations >= maxIterations) {
+            Log.w(TAG, "Reached iteration limit ($maxIterations). Stopping to prevent runaway.")
+        }
+        
+        // Final summary log
+        val failedCount = failedTrackIds.size
+        if (failedCount > 0) {
+            Log.i(TAG, "Completed: $totalProcessed linked, $totalFeatured with featured artists, $failedCount failed")
+        } else {
+            Log.i(TAG, "Completed: $totalProcessed tracks linked ($totalFeatured with featured artists)")
+        }
+        
         totalProcessed
     }
     

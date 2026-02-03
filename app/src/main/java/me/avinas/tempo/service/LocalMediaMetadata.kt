@@ -178,10 +178,10 @@ data class LocalMediaMetadata(
         
         // CONSERVATIVE title patterns - require "Episode" or "Ep." prefix/suffix
         // Avoid matching song titles that happen to contain "ep" or numbers
-        if (lowerTitle.matches(Regex("^episode\\s+\\d+.*")) ||
-            lowerTitle.matches(Regex(".*[:\\-]\\s*episode\\s+\\d+.*")) ||
-            lowerTitle.matches(Regex("^ep\\.?\\s*\\d+.*")) ||
-            lowerTitle.matches(Regex(".*[:\\-]\\s*ep\\.?\\s*\\d+.*"))) {
+        if (lowerTitle.matches(PODCAST_EPISODE_PREFIX_PATTERN) ||
+            lowerTitle.matches(PODCAST_EPISODE_SEPARATOR_PATTERN) ||
+            lowerTitle.matches(PODCAST_EP_PREFIX_PATTERN) ||
+            lowerTitle.matches(PODCAST_EP_SEPARATOR_PATTERN)) {
             return true
         }
         
@@ -219,16 +219,16 @@ data class LocalMediaMetadata(
         
         // CONSERVATIVE chapter patterns - require specific format
         // "Chapter 1", "Chapter 1: Title", etc.
-        if (lowerTitle.matches(Regex("^chapter\\s+\\d+.*")) ||
-            lowerTitle.matches(Regex(".*[:\\-]\\s*chapter\\s+\\d+.*")) ||
-            lowerTitle.matches(Regex("^part\\s+\\d+\\s*:.*"))) {
+        if (lowerTitle.matches(AUDIOBOOK_CHAPTER_PREFIX_PATTERN) ||
+            lowerTitle.matches(AUDIOBOOK_CHAPTER_SEPARATOR_PATTERN) ||
+            lowerTitle.matches(AUDIOBOOK_PART_PREFIX_PATTERN)) {
             return true
         }
         
         // Very long duration + chapter pattern + no genre
         // This is very specific to avoid false positives
         if (durationMs != null && durationMs > 40 * 60 * 1000L &&
-            lowerTitle.matches(Regex("^(chapter|part)\\s+\\d+.*")) &&
+            lowerTitle.matches(AUDIOBOOK_CHAPTER_PART_PATTERN) &&
             (genre == null || genre.isBlank())) {
             return true
         }
@@ -255,6 +255,21 @@ data class LocalMediaMetadata(
             Regex("""^(.+?)\s+by\s+(.+)$""", RegexOption.IGNORE_CASE),  // "Title by Artist"
         )
         
+        // Podcast detection patterns - pre-compiled for performance
+        private val PODCAST_EPISODE_PREFIX_PATTERN = Regex("^episode\\s+\\d+.*")
+        private val PODCAST_EPISODE_SEPARATOR_PATTERN = Regex(".*[:\\-]\\s*episode\\s+\\d+.*")
+        private val PODCAST_EP_PREFIX_PATTERN = Regex("^ep\\.?\\s*\\d+.*")
+        private val PODCAST_EP_SEPARATOR_PATTERN = Regex(".*[:\\-]\\s*ep\\.?\\s*\\d+.*")
+        
+        // Audiobook detection patterns - pre-compiled for performance
+        private val AUDIOBOOK_CHAPTER_PREFIX_PATTERN = Regex("^chapter\\s+\\d+.*")
+        private val AUDIOBOOK_CHAPTER_SEPARATOR_PATTERN = Regex(".*[:\\-]\\s*chapter\\s+\\d+.*")
+        private val AUDIOBOOK_PART_PREFIX_PATTERN = Regex("^part\\s+\\d+\\s*:.*")
+        private val AUDIOBOOK_CHAPTER_PART_PATTERN = Regex("^(chapter|part)\\s+\\d+.*")
+        
+        // Placeholder artist detection pattern - pre-compiled for performance
+        private val NUMERIC_ONLY_PATTERN = Regex("^\\d+$")
+        
         private val PLACEHOLDER_ARTISTS = setOf(
             "unknown", "unknown artist", "<unknown>", "various artists",
             "various", "n/a", "na", "none", "null", "", " ",
@@ -265,7 +280,7 @@ data class LocalMediaMetadata(
             val lower = artist.lowercase().trim()
             return lower in PLACEHOLDER_ARTISTS || 
                    lower.startsWith("track ") || 
-                   lower.matches(Regex("^\\d+$"))
+                   lower.matches(NUMERIC_ONLY_PATTERN)
         }
         
         private fun extractArtistFromTitle(title: String): String? {
@@ -362,7 +377,7 @@ data class LocalMediaMetadata(
                 mediaUri = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)?.takeIf { it.isNotBlank() },
                 
                 // Compilation
-                isCompilation = metadata.getLong(MediaMetadata.METADATA_KEY_COMPILATION) == 1L,
+                isCompilation = metadata.getString(MediaMetadata.METADATA_KEY_COMPILATION) == "1",
                 
                 // Source
                 sourcePackage = sourcePackage

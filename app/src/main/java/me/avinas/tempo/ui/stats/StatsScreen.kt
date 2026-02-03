@@ -139,7 +139,6 @@ fun StatsScreen(
                                  .fillMaxWidth()
                                  .fillParentMaxHeight(0.7f), // Dynamic height relative to parent container
                              timeRange = uiState.selectedTimeRange,
-                             type = me.avinas.tempo.ui.components.GhostScreenType.STATS,
                              onCheckSupportedApps = onNavigateToSupportedApps
                         )
                     }
@@ -180,7 +179,17 @@ fun StatsScreen(
                     }
 
                     // Remaining Items
-                    itemsIndexed(remainingItems) { index, item ->
+                    itemsIndexed(
+                        items = remainingItems,
+                        key = { index, item -> 
+                            when (item) {
+                                is TopTrack -> "track_${item.trackId}"
+                                is TopArtist -> "artist_${item.artist}"
+                                is TopAlbum -> "album_${item.album}_${item.artist}"
+                                else -> "item_$index"
+                            }
+                        }
+                    ) { index, item ->
                         val rank = index + 2 // Start from 2
                         GlassStatItem(
                             rank = rank,

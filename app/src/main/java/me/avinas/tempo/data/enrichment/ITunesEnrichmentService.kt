@@ -26,6 +26,10 @@ class ITunesEnrichmentService @Inject constructor(
     companion object {
         private const val TAG = "iTunesEnrichment"
         private const val RATE_LIMIT_DELAY_MS = 500L // 500ms between requests (iTunes has relaxed rate limits)
+        
+        // Pre-compiled regex patterns to avoid repeated native memory allocation
+        private val WEBP_SOURCE_PATTERN = Regex("""<source[^>]+srcset="([^"]+)"[^>]+type="image/webp""""", RegexOption.IGNORE_CASE)
+        private val OG_IMAGE_PATTERN = Regex("""<meta\\s+property="og:image"\\s+content="([^"]+)""""", RegexOption.IGNORE_CASE)
     }
     
     /**
@@ -311,8 +315,7 @@ class ITunesEnrichmentService @Inject constructor(
             
             try {
                 // Regex to find source tag with type="image/webp" and capture its srcset
-                val webpSourceRegex = "<source[^>]+srcset=\"([^\"]+)\"[^>]+type=\"image/webp\"".toRegex(RegexOption.IGNORE_CASE)
-                val webpMatch = webpSourceRegex.find(pageContent)
+                val webpMatch = WEBP_SOURCE_PATTERN.find(pageContent)
                 
                 if (webpMatch != null) {
                     val srcset = webpMatch.groupValues[1]
@@ -345,8 +348,7 @@ class ITunesEnrichmentService @Inject constructor(
             // Priority 2: Fallback to og:image if WebP not found
             if (imageUrl == null) {
                 // Look for: <meta property="og:image" content="...">
-                val ogImageRegex = "<meta\\s+property=\"og:image\"\\s+content=\"([^\"]+)\"".toRegex(RegexOption.IGNORE_CASE)
-                val matchResult = ogImageRegex.find(pageContent)
+                val matchResult = OG_IMAGE_PATTERN.find(pageContent)
                 imageUrl = matchResult?.groupValues?.get(1)
                 
                 if (imageUrl != null) {

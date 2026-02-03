@@ -1,6 +1,7 @@
 package me.avinas.tempo
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -44,10 +45,17 @@ class MainActivity : ComponentActivity() {
 
     @javax.inject.Inject
     lateinit var walkthroughController: me.avinas.tempo.ui.components.WalkthroughController
+    
+    // Observable state for triggering Spotify import after auth callback
+    private val spotifyImportTrigger = mutableStateOf(0)
+    private val spotifyAuthFailed = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // Check if we're returning from Spotify auth callback
+        checkSpotifyAuthIntent(intent)
 
         // Request notification permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -71,10 +79,39 @@ class MainActivity : ComponentActivity() {
                         onSetupComplete = {
                             // Schedule the health worker after setup is complete
                             ServiceHealthWorker.schedule(this)
-                        }
+                        },
+                        spotifyImportTrigger = spotifyImportTrigger.value,
+                        spotifyAuthFailed = spotifyAuthFailed.value
                     )
                 }
             }
+        }
+    }
+    
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Handle when activity is already running and receives new intent
+        checkSpotifyAuthIntent(intent)
+    }
+    
+    private fun checkSpotifyAuthIntent(intent: Intent?) {
+        val hasSpotifyExtra = intent?.hasExtra(
+            me.avinas.tempo.ui.spotify.SpotifyCallbackActivity.EXTRA_SPOTIFY_AUTH_SUCCESS
+        ) ?: false
+        
+        if (!hasSpotifyExtra) return
+        
+        val spotifyAuthSuccess = intent?.getBooleanExtra(
+            me.avinas.tempo.ui.spotify.SpotifyCallbackActivity.EXTRA_SPOTIFY_AUTH_SUCCESS,
+            false
+        ) ?: false
+        
+        if (spotifyAuthSuccess) {
+            // Increment to trigger LaunchedEffect in Compose
+            spotifyImportTrigger.value++
+        } else {
+            // Auth failed - signal to clear pending state
+            spotifyAuthFailed.value = true
         }
     }
 }
@@ -88,11 +125,34 @@ enum class OnboardingStep {
 fun TempoApp(
     walkthroughController: me.avinas.tempo.ui.components.WalkthroughController,
     onSetupComplete: () -> Unit,
+    spotifyImportTrigger: Int = 0,
+    spotifyAuthFailed: Boolean = false,
     viewModel: OnboardingViewModel = hiltViewModel(),
     spotifyViewModel: SpotifyViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    
+    // Trigger Spotify history reconstruction when returning from successful auth
+    // Using trigger counter to handle both onCreate and onNewIntent cases
+    // This uses the "honest data only" approach: liked tracks + yearly playlists + top tracks
+    LaunchedEffect(spotifyImportTrigger) {
+        if (spotifyImportTrigger > 0) {
+            android.util.Log.i("MainActivity", "Triggering Spotify history reconstruction after auth callback (trigger=$spotifyImportTrigger)")
+            // Clear pending auth state since we're now starting the actual import
+            spotifyViewModel.clearPendingAuth()
+            // Use reconstructHistory() for honest data - only creates events when we have real timing data
+            spotifyViewModel.reconstructHistory()
+        }
+    }
+    
+    // Clear pending auth when auth fails
+    LaunchedEffect(spotifyAuthFailed) {
+        if (spotifyAuthFailed) {
+            android.util.Log.i("MainActivity", "Spotify auth failed, clearing pending state")
+            spotifyViewModel.clearPendingAuth()
+        }
+    }
     
     // Wait for onboarding status to be loaded before deciding the initial step
     val initialStep = remember(uiState.isLoading, uiState.isOnboardingCompleted) {
@@ -189,7 +249,10 @@ fun TempoApp(
                     onFinish = {
                         viewModel.completeOnboarding()
                         currentStep = OnboardingStep.COMPLETED
-                        showSpotifySheet = true
+                        // Only show Spotify sheet if not already connected
+                        if (!spotifyViewModel.isConnected()) {
+                            showSpotifySheet = true
+                        }
                     },
                     onBack = {
                         currentStep = OnboardingStep.SETTINGS

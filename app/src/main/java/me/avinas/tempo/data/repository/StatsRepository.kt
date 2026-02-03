@@ -307,6 +307,35 @@ interface StatsRepository {
         page: Int = 0,
         pageSize: Int = 20
     ): PaginatedResult<HistoryItem>
+    
+    /**
+     * Get listening history EXCLUDING Last.fm imported events.
+     * Shows only "live" activity from Spotify/notification tracking.
+     */
+    suspend fun getHistoryExcludingLastFm(
+        searchQuery: String? = null,
+        startTime: Long? = null,
+        endTime: Long? = null,
+        includeSkips: Boolean = true,
+        filterPodcasts: Boolean = true,
+        filterAudiobooks: Boolean = true,
+        page: Int = 0,
+        pageSize: Int = 20
+    ): PaginatedResult<HistoryItem>
+    
+    /**
+     * Get listening history ONLY from Last.fm imported events (active set).
+     */
+    suspend fun getHistoryLastFmOnly(
+        searchQuery: String? = null,
+        startTime: Long? = null,
+        endTime: Long? = null,
+        includeSkips: Boolean = true,
+        filterPodcasts: Boolean = true,
+        filterAudiobooks: Boolean = true,
+        page: Int = 0,
+        pageSize: Int = 20
+    ): PaginatedResult<HistoryItem>
 
     // =====================
     // Detail Screens

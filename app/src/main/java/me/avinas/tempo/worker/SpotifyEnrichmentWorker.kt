@@ -15,6 +15,7 @@ import me.avinas.tempo.data.local.dao.EnrichedMetadataDao
 import me.avinas.tempo.data.local.dao.TrackDao
 import me.avinas.tempo.data.local.entities.SpotifyEnrichmentStatus
 import me.avinas.tempo.data.remote.spotify.SpotifyAuthManager
+import me.avinas.tempo.worker.LastFmImportWorker
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
@@ -124,6 +125,12 @@ class SpotifyEnrichmentWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         Log.i(TAG, "Starting Spotify enrichment work")
+
+        // Check if Last.fm import is running - defer to avoid resource contention
+        if (LastFmImportWorker.isImportRunning(applicationContext)) {
+            Log.i(TAG, "Last.fm import in progress - deferring Spotify enrichment")
+            return Result.success()
+        }
 
         // Check if Spotify is connected
         if (!authManager.isConnected()) {

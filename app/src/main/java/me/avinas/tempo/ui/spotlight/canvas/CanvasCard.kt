@@ -222,7 +222,6 @@ fun CanvasCard(
                 is SpotlightCardData.ListeningPeak -> DashboardListeningPeakCard(data = cardData, showShareButton = false)
                 is SpotlightCardData.ArtistLoyalty -> DashboardArtistLoyaltyCard(data = cardData, showShareButton = false)
                 is SpotlightCardData.Discovery -> DashboardDiscoveryCard(data = cardData, showShareButton = false)
-                else -> { /* Unsupported card type */ }
             }
         }
         
@@ -288,7 +287,6 @@ fun CardPickerThumbnail(
                     is SpotlightCardData.ListeningPeak -> DashboardListeningPeakCard(data = cardData, showShareButton = false)
                     is SpotlightCardData.ArtistLoyalty -> DashboardArtistLoyaltyCard(data = cardData, showShareButton = false)
                     is SpotlightCardData.Discovery -> DashboardDiscoveryCard(data = cardData, showShareButton = false)
-                    else -> { }
                 }
             }
             

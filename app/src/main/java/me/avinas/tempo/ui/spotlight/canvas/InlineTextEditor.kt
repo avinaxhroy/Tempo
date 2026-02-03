@@ -185,7 +185,10 @@ fun InlineTextEditor(
                     contentPadding = PaddingValues(horizontal = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(TextColors.presets) { color ->
+                    items(
+                        items = TextColors.presets,
+                        key = { color -> color.value.toLong() }
+                    ) { color ->
                         ColorDot(
                             color = color,
                             isSelected = localStyle.color == color,

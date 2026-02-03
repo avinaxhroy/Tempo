@@ -156,7 +156,12 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_20_21,  // Remove foreign key from manual_content_marks
                 AppDatabase.MIGRATION_21_22,  // Walkthrough flags
                 AppDatabase.MIGRATION_22_23,  // Artist aliases for artist merging
-                AppDatabase.MIGRATION_23_24   // Spotlight reminder tracking
+                AppDatabase.MIGRATION_23_24,  // Spotlight reminder tracking
+                AppDatabase.MIGRATION_24_25,  // User-controlled app selection
+                AppDatabase.MIGRATION_25_26,  // Spotify Import feature
+                AppDatabase.MIGRATION_26_27,  // All-Time story reminder tracking
+                AppDatabase.MIGRATION_27_28,  // Last.fm import support
+                AppDatabase.MIGRATION_28_29   // Source index for Last.fm query performance
             )
             // Enable Write-Ahead Logging for better concurrent read/write performance
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
@@ -173,6 +178,11 @@ object DatabaseModule {
                         db.query("PRAGMA cache_size = -8000").close()    // 8MB cache
                         db.query("PRAGMA temp_store = MEMORY").close()   // Keep temp tables in memory
                         db.query("PRAGMA mmap_size = 268435456").close() // 256MB memory-mapped I/O
+                        // Add busy timeout to prevent "Too many inflation attempts" crashes
+                        // This gives SQLite 30 seconds to retry on lock contention instead of failing immediately
+                        db.query("PRAGMA busy_timeout = 30000").close()  // 30 second timeout
+                        // Enable WAL2 mode checkpoint for better performance
+                        db.query("PRAGMA wal_autocheckpoint = 1000").close() // Checkpoint every 1000 pages
                     } catch (e: Exception) {
                         // Log but don't crash - these are optimizations, not requirements
                         android.util.Log.w("DatabaseModule", "Failed to apply PRAGMA optimizations", e)
@@ -214,4 +224,13 @@ object DatabaseModule {
     
     @Provides
     fun provideArtistAliasDao(db: AppDatabase) = db.artistAliasDao()
+    
+    @Provides
+    fun provideAppPreferenceDao(db: AppDatabase) = db.appPreferenceDao()
+    
+    @Provides
+    fun provideLastFmImportMetadataDao(db: AppDatabase) = db.lastFmImportMetadataDao()
+    
+    @Provides
+    fun provideScrobbleArchiveDao(db: AppDatabase) = db.scrobbleArchiveDao()
 }

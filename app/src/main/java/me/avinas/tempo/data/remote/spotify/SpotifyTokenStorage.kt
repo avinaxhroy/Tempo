@@ -17,7 +17,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class SpotifyTokenStorage @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     companion object {
         private const val TAG = "SpotifyTokenStorage"
@@ -227,6 +227,25 @@ class SpotifyTokenStorage @Inject constructor(
             apply()
         }
         Log.d(TAG, "Pending auth cleared")
+    }
+    
+    /**
+     * Check if there's a pending auth flow (user went to browser but hasn't completed).
+     * Returns true if there's valid non-expired pending auth data.
+     */
+    fun hasPendingAuth(): Boolean {
+        val state = encryptedPrefs.getString(KEY_AUTH_STATE, null) ?: return false
+        val codeVerifier = encryptedPrefs.getString(KEY_CODE_VERIFIER, null) ?: return false
+        val timestamp = encryptedPrefs.getLong(KEY_AUTH_TIMESTAMP, -1)
+        
+        // Check if expired (older than 10 minutes)
+        if (timestamp > 0 && System.currentTimeMillis() - timestamp > AUTH_TIMEOUT_MS) {
+            Log.d(TAG, "Pending auth expired, clearing")
+            clearPendingAuth()
+            return false
+        }
+        
+        return state.isNotEmpty() && codeVerifier.isNotEmpty()
     }
 
     /**

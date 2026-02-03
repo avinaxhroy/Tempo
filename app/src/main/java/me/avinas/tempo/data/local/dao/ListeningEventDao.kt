@@ -10,6 +10,10 @@ interface ListeningEventDao {
     companion object {
         // SQLite variable limit is 999, ListeningEvent has ~12 columns
         const val BATCH_SIZE = 80
+        
+        // Timestamp tolerance for deduplication (5 seconds)
+        // Two events within 5 seconds for the same track are considered duplicates
+        const val DUPLICATE_TOLERANCE_MS = 5000L
     }
     
     @Query("SELECT * FROM listening_events WHERE id = :id")
@@ -46,6 +50,69 @@ interface ListeningEventDao {
     suspend fun insertAll(events: List<ListeningEvent>): List<Long>
     
     /**
+     * Check if an event already exists for this track within the tolerance window.
+     * Used for deduplication during imports.
+     */
+    @Query("""
+        SELECT COUNT(*) FROM listening_events 
+        WHERE track_id = :trackId 
+        AND timestamp BETWEEN :timestampMin AND :timestampMax
+    """)
+    suspend fun countEventsNearTimestamp(trackId: Long, timestampMin: Long, timestampMax: Long): Int
+    
+    /**
+     * Get all existing timestamps for a set of tracks (for batch deduplication).
+     * Returns pairs of (track_id, timestamp) for efficient lookup.
+     */
+    @Query("""
+        SELECT track_id, timestamp FROM listening_events 
+        WHERE track_id IN (:trackIds)
+        ORDER BY track_id, timestamp
+    """)
+    suspend fun getTimestampsForTracks(trackIds: List<Long>): List<TrackTimestamp>
+    
+    /**
+     * Batch insert with deduplication.
+     * Filters out events that would duplicate existing events (same track within tolerance window).
+     */
+    @Transaction
+    suspend fun insertAllBatchedWithDedup(events: List<ListeningEvent>): InsertResult {
+        if (events.isEmpty()) return InsertResult(0, 0)
+        
+        // Get all track IDs from events to insert
+        val trackIds = events.map { it.track_id }.distinct()
+        
+        // Fetch existing timestamps for these tracks
+        val existingTimestamps = getTimestampsForTracks(trackIds)
+        
+        // Build a lookup map: trackId -> set of existing timestamps
+        val existingMap = mutableMapOf<Long, MutableSet<Long>>()
+        existingTimestamps.forEach { tt ->
+            existingMap.getOrPut(tt.track_id) { mutableSetOf() }.add(tt.timestamp)
+        }
+        
+        // Filter out duplicates
+        val eventsToInsert = events.filter { event ->
+            val existingForTrack = existingMap[event.track_id] ?: return@filter true
+            // Check if any existing timestamp is within tolerance
+            val isDuplicate = existingForTrack.any { existingTs ->
+                kotlin.math.abs(existingTs - event.timestamp) <= DUPLICATE_TOLERANCE_MS
+            }
+            !isDuplicate
+        }
+        
+        val skipped = events.size - eventsToInsert.size
+        
+        // Insert non-duplicates
+        val results = mutableListOf<Long>()
+        eventsToInsert.chunked(BATCH_SIZE).forEach { batch ->
+            results.addAll(insertAll(batch))
+        }
+        
+        return InsertResult(inserted = results.size, skipped = skipped)
+    }
+    
+    /**
      * Batch insert with chunking for large imports.
      */
     @Transaction
@@ -56,6 +123,24 @@ interface ListeningEventDao {
         }
         return results
     }
+    
+    /**
+     * Result of a deduplicating insert operation.
+     */
+    data class InsertResult(
+        val inserted: Int,
+        val skipped: Int
+    ) {
+        val total: Int get() = inserted + skipped
+    }
+    
+    /**
+     * Simple data class for timestamp lookup.
+     */
+    data class TrackTimestamp(
+        val track_id: Long,
+        val timestamp: Long
+    )
 
     @Delete
     suspend fun delete(event: ListeningEvent)
@@ -111,6 +196,12 @@ interface ListeningEventDao {
      */
     @Query("SELECT MIN(timestamp) FROM listening_events WHERE track_id = :trackId")
     suspend fun getFirstPlayTimestampForTrack(trackId: Long): Long?
+    
+    /**
+     * Get total play count for a specific track.
+     */
+    @Query("SELECT COUNT(*) FROM listening_events WHERE track_id = :trackId")
+    suspend fun countByTrackId(trackId: Long): Int
     
     /**
      * Check if a track was recently played (within specified milliseconds).
@@ -174,4 +265,24 @@ interface ListeningEventDao {
      */
     @Query("SELECT MIN(timestamp) FROM listening_events")
     suspend fun getEarliestEventTimestamp(): Long?
+    
+    /**
+     * Get total listening time excluding imported events.
+     * Only counts events from actual app usage (real-time tracking).
+     */
+    @Query("""
+        SELECT COALESCE(SUM(playDuration), 0) FROM listening_events 
+        WHERE source NOT LIKE '%import%'
+    """)
+    suspend fun getRealListeningTimeMs(): Long
+    
+    /**
+     * Get total play count excluding imported events.
+     * Only counts events from actual app usage (real-time tracking).
+     */
+    @Query("""
+        SELECT COUNT(*) FROM listening_events 
+        WHERE source NOT LIKE '%import%'
+    """)
+    suspend fun getRealPlayCount(): Int
 }

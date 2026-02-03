@@ -154,7 +154,10 @@ fun AlbumDetailsContent(
                 )
             }
 
-            items(albumDetails.tracks) { track ->
+            items(
+                items = albumDetails.tracks,
+                key = { track -> track.track.id }
+            ) { track ->
                 AlbumTrackItem(track = track, onClick = { onNavigateToSong(track.track.id) })
                 Spacer(modifier = Modifier.height(8.dp))
             }

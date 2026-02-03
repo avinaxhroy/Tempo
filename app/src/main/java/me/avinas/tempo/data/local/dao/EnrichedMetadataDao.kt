@@ -21,6 +21,9 @@ interface EnrichedMetadataDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(metadata: EnrichedMetadata): Long
     
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(metadata: List<EnrichedMetadata>): List<Long>
+    
     @Update
     suspend fun update(metadata: EnrichedMetadata)
 
@@ -301,6 +304,33 @@ interface EnrichedMetadataDao {
      */
     @Query("SELECT * FROM enriched_metadata")
     suspend fun getAllSync(): List<EnrichedMetadata>
+    
+    /**
+     * Get count of tracks pending enrichment from Last.fm imports.
+     * Joins with listening_events to identify tracks that came from Last.fm import.
+     */
+    @Query("""
+        SELECT COUNT(DISTINCT em.track_id) FROM enriched_metadata em
+        INNER JOIN listening_events le ON em.track_id = le.track_id
+        WHERE em.enrichment_status = :status
+        AND le.source = 'fm.last.import'
+    """)
+    suspend fun countPendingFromLastFmImport(
+        status: EnrichmentStatus = EnrichmentStatus.PENDING
+    ): Int
+    
+    /**
+     * Get count of successfully enriched tracks from Last.fm imports.
+     */
+    @Query("""
+        SELECT COUNT(DISTINCT em.track_id) FROM enriched_metadata em
+        INNER JOIN listening_events le ON em.track_id = le.track_id
+        WHERE em.enrichment_status = :status
+        AND le.source = 'fm.last.import'
+    """)
+    suspend fun countEnrichedFromLastFmImport(
+        status: EnrichmentStatus = EnrichmentStatus.ENRICHED
+    ): Int
 }
 
 data class EnrichmentStatusCount(

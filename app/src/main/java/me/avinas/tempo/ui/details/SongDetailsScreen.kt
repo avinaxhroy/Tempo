@@ -869,7 +869,7 @@ fun EngagementSection(engagement: TrackEngagement) {
             if (engagement.averagePauseCount > 0.5f) {
                 Spacer(modifier = Modifier.height(8.dp))
                 val pauseText = when {
-                    engagement.averagePauseCount >= 3f -> "⏸️ Frequently paused (avg ${String.format("%.1f", engagement.averagePauseCount)} pauses/play)"
+                    engagement.averagePauseCount >= 3f -> "⏸️ Frequently paused (avg ${String.format(java.util.Locale.US, "%.1f", engagement.averagePauseCount)} pauses/play)"
                     engagement.averagePauseCount >= 1f -> "⏸️ Occasionally paused"
                     else -> "⏸️ Rarely paused"
                 }

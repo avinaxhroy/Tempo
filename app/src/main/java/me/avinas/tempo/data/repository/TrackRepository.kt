@@ -6,7 +6,10 @@ import kotlinx.coroutines.flow.Flow
 interface TrackRepository {
     fun getById(id: Long): Flow<Track?>
     suspend fun findBySpotifyId(spotifyId: String): Track?
+    suspend fun findByTitleAndArtist(title: String, artist: String): Track?
+    suspend fun findByTitleAndArtistFuzzy(title: String, artist: String): Track?
     suspend fun insert(track: Track): Long
+    suspend fun insertAll(tracks: List<Track>): List<Long>
     suspend fun update(track: Track)
     fun all(): Flow<List<Track>>
     suspend fun searchTracks(query: String): List<Track>

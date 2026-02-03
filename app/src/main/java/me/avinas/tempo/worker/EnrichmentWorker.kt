@@ -26,6 +26,7 @@ import me.avinas.tempo.data.local.entities.EnrichedMetadata
 import me.avinas.tempo.data.local.entities.EnrichmentStatus
 import me.avinas.tempo.ui.onboarding.dataStore
 import me.avinas.tempo.utils.ArtistParser
+import me.avinas.tempo.worker.LastFmImportWorker
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
@@ -112,6 +113,7 @@ class EnrichmentWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val spotifyEnrichmentSource: me.avinas.tempo.data.enrichment.SpotifyEnrichmentSource,
+    private val lastFmMbidPreEnrichmentSource: me.avinas.tempo.data.enrichment.LastFmMbidPreEnrichmentSource,
     private val musicBrainzEnrichmentSource: me.avinas.tempo.data.enrichment.MusicBrainzEnrichmentSource,
     private val lastFmEnrichmentSource: me.avinas.tempo.data.enrichment.LastFmEnrichmentSource,
     private val iTunesEnrichmentSource: me.avinas.tempo.data.enrichment.ITunesEnrichmentSource,
@@ -120,11 +122,13 @@ class EnrichmentWorker @AssistedInject constructor(
     private val spotifyArtistFeaturesSource: me.avinas.tempo.data.enrichment.SpotifyArtistFeaturesSource,
     private val enrichedMetadataDao: EnrichedMetadataDao,
     private val trackDao: TrackDao,
-    private val statsRepository: StatsRepository
+    private val statsRepository: StatsRepository,
+    private val artistLinkingService: me.avinas.tempo.data.repository.ArtistLinkingService
 ) : CoroutineWorker(appContext, workerParams) {
 
     private val strategies: List<EnrichmentSource> = listOf(
         spotifyEnrichmentSource,
+        lastFmMbidPreEnrichmentSource,  // Pre-enrich with MBIDs from Last.fm before MusicBrainz
         musicBrainzEnrichmentSource,
         lastFmEnrichmentSource,
         iTunesEnrichmentSource,
@@ -137,6 +141,7 @@ class EnrichmentWorker @AssistedInject constructor(
         private const val TAG = "EnrichmentWorker"
         private const val WORK_NAME = "music_enrichment"
         private const val WORK_NAME_IMMEDIATE = "music_enrichment_immediate"
+        private const val WORK_NAME_POST_IMPORT = "music_enrichment_post_import"
         private const val NOTIFICATION_CHANNEL_ID = "enrichment_worker"
         private const val NOTIFICATION_ID = 3002
         
@@ -144,8 +149,14 @@ class EnrichmentWorker @AssistedInject constructor(
         private const val BATCH_SIZE = 10
         private const val RETRY_BATCH_SIZE = 5
         
+        // Larger batch size for post-import accelerated enrichment
+        private const val POST_IMPORT_BATCH_SIZE = 50
+        
         // Delay between processing each track (respects rate limit)
         private const val INTER_TRACK_DELAY_MS = 1500L
+        
+        // Shorter delay for post-import (still respects rate limits but processes faster)
+        private const val POST_IMPORT_INTER_TRACK_DELAY_MS = 1000L
 
         /**
          * Schedule periodic enrichment work.
@@ -217,7 +228,67 @@ class EnrichmentWorker @AssistedInject constructor(
         fun cancel(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
             WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME_IMMEDIATE)
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME_POST_IMPORT)
             Log.i(TAG, "Enrichment work cancelled")
+        }
+        
+        /**
+         * Schedule accelerated post-import enrichment.
+         * 
+         * This runs more frequently with larger batches to quickly enrich
+         * imported tracks. It automatically stops when the backlog is cleared.
+         * 
+         * Features:
+         * - Larger batch size (50 tracks per run vs 10 normal)
+         * - Runs every 15 minutes until backlog cleared
+         * - Prioritizes by play count (most played = enriched first)
+         * - Respects rate limits but optimized for throughput
+         * - Battery-aware: requires battery not low
+         * 
+         * @param context Application context
+         * @param tracksCreated Number of tracks created during import (for logging)
+         */
+        fun schedulePostImportEnrichment(context: Context, tracksCreated: Long = 0) {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .setRequiresBatteryNotLow(true)
+                .build()
+            
+            val inputData = workDataOf(
+                "is_post_import" to true,
+                "tracks_to_enrich" to tracksCreated
+            )
+
+            // Run every 15 minutes with 5 minute flex
+            val workRequest = PeriodicWorkRequestBuilder<EnrichmentWorker>(
+                15, TimeUnit.MINUTES,
+                5, TimeUnit.MINUTES
+            )
+                .setConstraints(constraints)
+                .setInputData(inputData)
+                .setBackoffCriteria(
+                    BackoffPolicy.LINEAR,
+                    1, TimeUnit.MINUTES
+                )
+                .addTag("enrichment_post_import")
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                WORK_NAME_POST_IMPORT,
+                ExistingPeriodicWorkPolicy.REPLACE,
+                workRequest
+            )
+
+            Log.i(TAG, "Post-import accelerated enrichment scheduled for $tracksCreated tracks")
+        }
+        
+        /**
+         * Cancel only the post-import accelerated enrichment.
+         * Called when the backlog is cleared or user cancels.
+         */
+        fun cancelPostImportEnrichment(context: Context) {
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME_POST_IMPORT)
+            Log.i(TAG, "Post-import enrichment cancelled")
         }
     }
 
@@ -226,13 +297,30 @@ class EnrichmentWorker @AssistedInject constructor(
 
         // Check if specific track ID was provided
         val specificTrackId = inputData.getLong("track_id", -1).takeIf { it > 0 }
+        val isPostImport = inputData.getBoolean("is_post_import", false)
+
+        // Check if a Last.fm import is currently running - pause ALL enrichment to avoid resource contention
+        // The import is the priority - enrichment happens AFTER import completes.
+        // Exception: post-import enrichment runs after import completes (by design).
+        val isImportRunning = LastFmImportWorker.isImportRunning(applicationContext)
+        if (!isPostImport && isImportRunning) {
+            Log.i(TAG, "Last.fm import in progress - deferring ALL enrichment to avoid resource contention")
+            // Return success but don't do work - periodic will retry later
+            return Result.success()
+        }
 
         return try {
-            // First, backfill any missing album art URLs to tracks table
+            // First, link any unlinked artists (fixes imported tracks without artist relationships)
+            // Skip during active import to reduce DB contention
+            if (!isImportRunning) {
+                linkUnlinkedArtists()
+            }
+            
+            // Second, backfill any missing album art URLs to tracks table
             backfillAlbumArtUrls()
             
             if (specificTrackId != null) {
-                // Enrich specific track
+                // Enrich specific track (only for real-time listening, not during import)
                 enrichSpecificTrack(specificTrackId)
             } else {
                 // Batch enrichment
@@ -252,6 +340,21 @@ class EnrichmentWorker @AssistedInject constructor(
             } else {
                 Result.failure()
             }
+        }
+    }
+    
+    /**
+     * Link artists for tracks that don't have artist relationships.
+     * This fixes imported Spotify tracks and any legacy tracks without proper linking.
+     */
+    private suspend fun linkUnlinkedArtists() {
+        try {
+            val linkedCount = artistLinkingService.processUnlinkedTracks(50)
+            if (linkedCount > 0) {
+                Log.i(TAG, "Linked artists for $linkedCount tracks")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error linking unlinked artists", e)
         }
     }
     
@@ -438,17 +541,47 @@ class EnrichmentWorker @AssistedInject constructor(
         var enrichedCount = 0
         var failedCount = 0
         
-        // Check if this is an immediate enrichment (triggered on app start)
-        // If so, only process completely unenriched tracks to avoid hammering APIs
+        // Check enrichment mode
         val isImmediateEnrichment = inputData.getBoolean("is_immediate", false)
+        val isPostImportEnrichment = inputData.getBoolean("is_post_import", false)
+        
+        // Determine batch size and delay based on mode
+        val batchSize = when {
+            isPostImportEnrichment -> POST_IMPORT_BATCH_SIZE
+            else -> BATCH_SIZE
+        }
+        val interTrackDelay = when {
+            isPostImportEnrichment -> POST_IMPORT_INTER_TRACK_DELAY_MS
+            else -> INTER_TRACK_DELAY_MS
+        }
+        
+        // For post-import mode, check if we should continue or stop
+        if (isPostImportEnrichment) {
+            val pendingCount = enrichedMetadataDao.countByStatus(EnrichmentStatus.PENDING)
+            
+            if (pendingCount == 0) {
+                Log.i(TAG, "Post-import enrichment complete: no more pending tracks")
+                // Cancel the periodic work since we're done
+                cancelPostImportEnrichment(applicationContext)
+                return
+            }
+            
+            Log.i(TAG, "Post-import enrichment: $pendingCount tracks remaining")
+        }
 
         // 1. Process pending tracks (completely unenriched)
         val pendingTracks = enrichedMetadataDao.getTracksNeedingEnrichment(
             status = EnrichmentStatus.PENDING,
-            limit = BATCH_SIZE
+            limit = batchSize
         )
         
-        Log.d(TAG, "Found ${pendingTracks.size} pending tracks to enrich")
+        Log.d(TAG, "Found ${pendingTracks.size} pending tracks to enrich (mode: ${
+            when {
+                isPostImportEnrichment -> "post-import"
+                isImmediateEnrichment -> "immediate"
+                else -> "periodic"
+            }
+        })")
         
         for (metadata in pendingTracks) {
             if (isStopped) break
@@ -464,12 +597,14 @@ class EnrichmentWorker @AssistedInject constructor(
             
             if (success) enrichedCount++ else failedCount++
 
-            kotlinx.coroutines.delay(INTER_TRACK_DELAY_MS)
+            kotlinx.coroutines.delay(interTrackDelay)
         }
         
-        // Skip retry/refresh steps for immediate enrichment to avoid excessive API calls on app start
-        if (isImmediateEnrichment) {
-            Log.d(TAG, "Immediate enrichment complete: ${enrichedCount} enriched, ${failedCount} failed")
+        // Skip retry/refresh steps for immediate or post-import enrichment
+        // Post-import focuses on clearing the backlog first; retries happen later via periodic work
+        if (isImmediateEnrichment || isPostImportEnrichment) {
+            val mode = if (isPostImportEnrichment) "Post-import" else "Immediate"
+            Log.d(TAG, "$mode enrichment complete: ${enrichedCount} enriched, ${failedCount} failed")
             Log.i(TAG, "Batch complete: enriched=$enrichedCount, failed=$failedCount")
             return
         }
@@ -488,7 +623,7 @@ class EnrichmentWorker @AssistedInject constructor(
                 
                 Log.d(TAG, "Re-enriching incomplete track ${metadata.trackId}")
                 enrichSpecificTrack(metadata.trackId)
-                kotlinx.coroutines.delay(INTER_TRACK_DELAY_MS)
+                kotlinx.coroutines.delay(interTrackDelay)
             }
         }
 
@@ -506,7 +641,7 @@ class EnrichmentWorker @AssistedInject constructor(
                 if (isStopped) break
                 
                 enrichSpecificTrack(metadata.trackId) // This will try all strategies again
-                kotlinx.coroutines.delay(INTER_TRACK_DELAY_MS)
+                kotlinx.coroutines.delay(interTrackDelay)
             }
         }
 
@@ -529,7 +664,7 @@ class EnrichmentWorker @AssistedInject constructor(
                      // Since we have the ID, calling enrichSpecificTrack is safer and consistent
                      enrichSpecificTrack(metadata.trackId) 
                  }
-                 kotlinx.coroutines.delay(INTER_TRACK_DELAY_MS)
+                 kotlinx.coroutines.delay(interTrackDelay)
              }
         }
 

@@ -72,9 +72,9 @@ object ArtistParser {
         Regex("\\[ft\\.?\\s*", RegexOption.IGNORE_CASE)
     )
 
-    // Known bands with ampersands in their name (Option 3: Known Band Database)
-    // This list can be expanded as more bands are discovered
-    private val KNOWN_AMPERSAND_BANDS = setOf(
+    // Known bands that contain separators like &, and, +, etc.
+    // This whitelist prevents them from being split into multiple artists.
+    private val KNOWN_COMPLEX_BANDS = setOf(
         "dead & company",
         "derek & the dominos",
         "belle & sebastian",
@@ -93,6 +93,7 @@ object ArtistParser {
         "kool & the gang",
         "rob base & dj ez rock",
         "eric b & rakim",
+        "eric b. & rakim",
         "salt n pepa",  // Sometimes written with &
         "outkast",  // Sometimes written as "Andre 3000 & Big Boi"
         "tears for fears",  // Context: Sometimes listed as "Curt Smith & Roland Orzabal"
@@ -132,9 +133,14 @@ object ArtistParser {
 
         // Indie & Modern Rock
         "mumford & sons",
+        "mumford and sons",
         "florence & the machine",
+        "florence and the machine",
+        "florence + the machine",
         "of monsters & men",
         "king gizzard & the lizard wizard",
+        "catfish and the bottlemen",
+        "catfish & the bottlemen",
         "fitz & the tantrums",
         "marina & the diamonds",
         "years & years",
@@ -174,6 +180,7 @@ object ArtistParser {
         "boyz ii men", // Sometimes written as Boyz II Men
         "tony! toni! toné!", // Has special chars but good to cover
         "tlc", 
+        "run the jewels",
 
         // Hip Hop & Rap
         "eric b. & rakim", // Often Eric B & Rakim
@@ -244,18 +251,31 @@ object ArtistParser {
         // REMOVED: Short-form pattern was too aggressive and caught real collaborations
     )
 
-    // Patterns that indicate artist collaboration (split into multiple artists)
-    // Note: Ampersand is now handled separately with smart detection
-    private val COLLABORATION_PATTERNS = listOf(
+    // Safe splitters that almost always indicate multiple artists
+    private val SAFE_SPLIT_PATTERNS = listOf(
         Regex("\\s*,\\s*"),                           // Comma
         Regex("\\s*\\|\\s*"),                         // Pipe/Vertical bar
-        // Ampersand is handled separately in splitByAmpersandSmartly()
+        Regex("\\s*/\\s*")                            // Slash
+    )
+
+    // Complex splitters that might be part of a band name (require checking against known bands)
+    private val COMPLEX_SPLIT_PATTERNS = listOf(
         Regex("\\s+and\\s+", RegexOption.IGNORE_CASE), // "and"
         Regex("\\s+x\\s+", RegexOption.IGNORE_CASE),  // "x" collaboration
-        Regex("\\s*/\\s*"),                           // Slash
         Regex("\\s+vs\\.?\\s+", RegexOption.IGNORE_CASE), // "vs" or "vs."
         Regex("\\s*\\+\\s*")                          // Plus sign (flexible spaces)
     )
+    
+    // Pre-compiled regex patterns for normalization - avoid repeated native memory allocation
+    private val CLOSING_BRACKET_PATTERN = Regex("[)\\]]+.*$")
+    private val WHITESPACE_PATTERN = Regex("\\s+")
+    private val TRAILING_BRACKETS_PATTERN = Regex("[)\\]]+$")
+    private val LEADING_BRACKETS_PATTERN = Regex("^[(&\\[]+")
+    private val SPECIAL_CHARS_PATTERN = Regex("[^a-z0-9\\s]")
+    private val EMBEDDED_FEAT_PATTERN = Regex("\\s*[\\[(]\\s*(?:feat\\.?|ft\\.?|featuring|with)\\s+[^)\\]]+[)\\]]", RegexOption.IGNORE_CASE)
+    private val TRAILING_FEAT_PATTERN = Regex("\\s+(?:feat\\.?|ft\\.?)\\s+.*$", RegexOption.IGNORE_CASE)
+    private val VERSION_INFO_PATTERN = Regex("\\s*[\\[(]\\s*(?:Remaster(?:ed)?|Deluxe|Radio Edit|Single Version|Album Version)\\s*[)\\]]", RegexOption.IGNORE_CASE)
+    private val AMPERSAND_SPLIT_PATTERN = Regex("\\s*&\\s*")
 
     /**
      * Parse an artist string into its component parts.
@@ -288,7 +308,7 @@ object ArtistParser {
                 val endIndex = match.range.last + 1
                 if (endIndex < cleaned.length) {
                     featuredPart = cleaned.substring(endIndex)
-                        .replace(Regex("[)\\]]$"), "") // Remove closing brackets
+                        .replace(CLOSING_BRACKET_PATTERN, "") // Remove closing brackets
                         .trim()
                 }
                 break
@@ -318,23 +338,44 @@ object ArtistParser {
 
     /**
      * Split an artist string by collaboration patterns.
-     * Uses smart ampersand detection to avoid splitting band names.
+     * Uses smart detection to avoid splitting known band names.
      */
     private fun splitArtists(artistString: String): List<String> {
+        // Optimization: If the whole string is a known band, don't try to split at all
+        if (isKnownBand(artistString)) {
+            Log.d("ArtistParser", "Preserved known band: '$artistString'")
+            return listOf(artistString)
+        }
+        
         var parts = listOf(artistString)
 
-        // First, handle all non-ampersand collaboration patterns
-        for (pattern in COLLABORATION_PATTERNS) {
+        // 1. Handle SAFE separators (comma, pipe, slash) - always split
+        for (pattern in SAFE_SPLIT_PATTERNS) {
             val beforeSize = parts.size
             parts = parts.flatMap { part ->
                 part.split(pattern).map { it.trim() }
             }
             if (parts.size > beforeSize) {
-                Log.d("ArtistParser", "Split by pattern: '$artistString' -> ${parts.size} parts")
+                Log.d("ArtistParser", "Split by safe pattern: '$artistString' -> ${parts.size} parts")
             }
         }
 
-        // Then, smartly handle ampersands for each part
+        // 2. Handle COMPLEX separators (and, x, vs, +) - check for known bands
+        for (pattern in COMPLEX_SPLIT_PATTERNS) {
+            parts = parts.flatMap { part ->
+                if (isKnownBand(part)) {
+                    listOf(part) // Keep known band intact
+                } else {
+                    val split = part.split(pattern).map { it.trim() }
+                    if (split.size > 1) {
+                         Log.d("ArtistParser", "Split by complex pattern: '$part' -> ${split.size} parts")
+                    }
+                    split
+                }
+            }
+        }
+
+        // 3. Handle Ampersands smartly
         parts = parts.flatMap { part ->
             splitByAmpersandSmartly(part)
         }
@@ -345,8 +386,9 @@ object ArtistParser {
             .distinct()
             .ifEmpty { listOf(artistString.trim()) }
         
-        if (result.size > 1) {
-            Log.i("ArtistParser", "Final split: '$artistString' -> [${result.joinToString(", ")}]")
+        // Only log splits of 3+ artists (unusual/interesting cases)
+        if (result.size >= 3) {
+            Log.d("ArtistParser", "Final split: '$artistString' -> [${result.joinToString(", ")}]")
         }
         
         return result
@@ -362,17 +404,13 @@ object ArtistParser {
             return listOf(artistString)
         }
         
-        val normalized = normalizeForSearch(artistString)
-        
-        // Option 3: Check against known bands database
-        if (KNOWN_AMPERSAND_BANDS.any { knownBand ->
-            normalized.contains(knownBand) || knownBand.contains(normalized)
-        }) {
-            Log.d("ArtistParser", "Preserving band name: '$artistString'")
-            return listOf(artistString) // Keep as single artist
+        // Check against known bands database
+        if (isKnownBand(artistString)) {
+            Log.d("ArtistParser", "Preserving band name (known): '$artistString'")
+            return listOf(artistString)
         }
         
-        // Option 1: Check against pattern-based whitelist
+        // Check against pattern-based whitelist
         if (AMPERSAND_BAND_PATTERNS.any { pattern ->
             pattern.containsMatchIn(artistString)
         }) {
@@ -381,9 +419,20 @@ object ArtistParser {
         }
         
         // If none of the above match, treat ampersand as a separator
-        val split = artistString.split(Regex("\\s*&\\s*")).map { it.trim() }
+        val split = artistString.split(AMPERSAND_SPLIT_PATTERN).map { it.trim() }
         Log.d("ArtistParser", "Splitting artists by &: '$artistString' -> ${split.joinToString(", ")}")
         return split
+    }
+
+    /**
+     * Check if the artist name found in the known complex bands list.
+     * Uses case-insensitive comparison (but not full normalization to preserve &).
+     */
+    private fun isKnownBand(artist: String): Boolean {
+        val lower = artist.trim().lowercase()
+        return KNOWN_COMPLEX_BANDS.any { known -> 
+            lower == known
+        }
     }
 
     /**
@@ -392,9 +441,9 @@ object ArtistParser {
     fun normalizeArtistName(name: String): String {
         return name
             .trim()
-            .replace(Regex("\\s+"), " ") // Normalize whitespace
-            .replace(Regex("[)\\]]+$"), "") // Remove trailing brackets
-            .replace(Regex("^[(&\\[]+"), "") // Remove leading brackets
+            .replace(WHITESPACE_PATTERN, " ") // Normalize whitespace
+            .replace(TRAILING_BRACKETS_PATTERN, "") // Remove trailing brackets
+            .replace(LEADING_BRACKETS_PATTERN, "") // Remove leading brackets
             .trim()
     }
 
@@ -429,9 +478,9 @@ object ArtistParser {
     fun normalizeForSearch(artistString: String): String {
         return artistString
             .lowercase()
-            .replace("$", "s") // Handle stylized '$' as 's' (e.g. KR$NA -> krsna, Ke$ha -> kesha)
-            .replace(Regex("[^a-z0-9\\s]"), "")
-            .replace(Regex("\\s+"), " ")
+            .replace("$", "s") // Handle stylized '$' as 's' (e.g. KR$ NA -> krsna, Ke$ha -> kesha)
+            .replace(SPECIAL_CHARS_PATTERN, "")
+            .replace(WHITESPACE_PATTERN, " ")
             .trim()
     }
 
@@ -521,13 +570,13 @@ object ArtistParser {
         var cleaned = title
 
         // Remove (feat. ...) or [feat. ...] patterns
-        cleaned = cleaned.replace(Regex("\\s*[\\[(]\\s*(?:feat\\.?|ft\\.?|featuring|with)\\s+[^)\\]]+[)\\]]", RegexOption.IGNORE_CASE), "")
+        cleaned = cleaned.replace(EMBEDDED_FEAT_PATTERN, "")
 
         // Remove trailing feat. patterns without brackets
-        cleaned = cleaned.replace(Regex("\\s+(?:feat\\.?|ft\\.?)\\s+.*$", RegexOption.IGNORE_CASE), "")
+        cleaned = cleaned.replace(TRAILING_FEAT_PATTERN, "")
 
         // Remove common remix/version indicators for cleaner matching
-        cleaned = cleaned.replace(Regex("\\s*[\\[(]\\s*(?:Remaster(?:ed)?|Deluxe|Radio Edit|Single Version|Album Version)\\s*[)\\]]", RegexOption.IGNORE_CASE), "")
+        cleaned = cleaned.replace(VERSION_INFO_PATTERN, "")
 
         return cleaned.trim()
     }
@@ -543,7 +592,7 @@ object ArtistParser {
             val match = pattern.find(title)
             if (match != null) {
                 val afterMatch = title.substring(match.range.last + 1)
-                    .replace(Regex("[)\\]]+.*$"), "") // Remove closing bracket and anything after
+                    .replace(CLOSING_BRACKET_PATTERN, "") // Remove closing bracket and anything after
                     .trim()
                 if (afterMatch.isNotEmpty()) {
                     return splitArtists(afterMatch)

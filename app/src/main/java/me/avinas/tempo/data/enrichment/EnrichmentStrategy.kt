@@ -92,12 +92,51 @@ class SpotifyEnrichmentSource @Inject constructor(
     fun isAvailable(): Boolean = spotifyService.isAvailable()
 }
 
+/**
+ * Pre-enrichment source that fetches MusicBrainz IDs from Last.fm.
+ * 
+ * This runs BEFORE MusicBrainz to improve accuracy of MB lookups.
+ * When Last.fm has MBIDs (common for popular tracks and users with linked accounts),
+ * MusicBrainz can fetch directly by ID instead of searching, which is:
+ * - Faster (no search required)
+ * - More accurate (no fuzzy matching issues)
+ * - More reliable (exact ID match)
+ * 
+ * Priority 2 means it runs after Spotify (which might already have accurate data)
+ * but before MusicBrainz (which benefits from MBIDs).
+ */
+@Singleton
+class LastFmMbidPreEnrichmentSource @Inject constructor(
+    private val lastFmService: LastFmEnrichmentService
+) : EnrichmentSource {
+    override val name = "Last.fm MBID Lookup"
+    override val priority = 2 // Run before MusicBrainz (priority 3)
+
+    override fun canProvide(gap: EnrichmentGap): Boolean {
+        // Only provide if we're missing genres or album art (which MusicBrainz will handle)
+        // This is a "helper" source that improves MusicBrainz accuracy
+        return lastFmService.isAvailable() && (gap.missingGenres || gap.missingAlbumArt)
+    }
+
+    override suspend fun enrich(track: Track, currentMetadata: EnrichedMetadata?): EnrichedMetadata? {
+        if (currentMetadata == null) return null
+        
+        // Skip if we already have MBIDs
+        if (currentMetadata.musicbrainzRecordingId != null) {
+            return null
+        }
+        
+        // Try to get MBIDs from Last.fm
+        return lastFmService.preEnrichWithMbids(track, currentMetadata)
+    }
+}
+
 @Singleton
 class MusicBrainzEnrichmentSource @Inject constructor(
     private val musicBrainzService: MusicBrainzEnrichmentService
 ) : EnrichmentSource {
     override val name = "MusicBrainz"
-    override val priority = 2
+    override val priority = 3
 
     override fun canProvide(gap: EnrichmentGap): Boolean {
         // Primary source for generic metadata and genres
@@ -125,7 +164,7 @@ class LastFmEnrichmentSource @Inject constructor(
     private val lastFmService: LastFmEnrichmentService
 ) : EnrichmentSource {
     override val name = "Last.fm"
-    override val priority = 3
+    override val priority = 4
 
     override fun canProvide(gap: EnrichmentGap): Boolean {
         return lastFmService.isAvailable() && (gap.missingGenres || gap.missingArtistImage)
@@ -160,7 +199,7 @@ class ITunesEnrichmentSource @Inject constructor(
     private val artistDao: me.avinas.tempo.data.local.dao.ArtistDao
 ) : EnrichmentSource {
     override val name = "iTunes"
-    override val priority = 4
+    override val priority = 5
 
     override fun canProvide(gap: EnrichmentGap): Boolean {
         // iTunes is great for cover art, genres, and artist images
@@ -318,7 +357,7 @@ class DeezerEnrichmentSource @Inject constructor(
     private val metadataDao: me.avinas.tempo.data.local.dao.EnrichedMetadataDao
 ) : EnrichmentSource {
     override val name = "Deezer"
-    override val priority = 5
+    override val priority = 6
 
     override fun canProvide(gap: EnrichmentGap): Boolean {
         // Deezer is mainly for previews and cover art fallbacks

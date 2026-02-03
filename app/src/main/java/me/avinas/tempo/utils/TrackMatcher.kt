@@ -61,6 +61,7 @@ object TrackMatcher {
     
     private val PUNCTUATION_REGEX = Regex("""[^\p{L}\p{N}\s]""")
     private val WHITESPACE_REGEX = Regex("""\s+""")
+    private val UNICODE_MARKS_PATTERN = Regex("""\p{M}""")
     
     /**
      * Check if two tracks match, considering common variations.
@@ -209,7 +210,7 @@ object TrackMatcher {
         
         // Unicode normalization
         normalized = Normalizer.normalize(normalized, Normalizer.Form.NFD)
-            .replace(Regex("""\p{M}"""), "")
+            .replace(UNICODE_MARKS_PATTERN, "")
         
         // Normalize punctuation
         normalized = PUNCTUATION_REGEX.replace(normalized, " ")

@@ -425,4 +425,135 @@ class LastFmEnrichmentService @Inject constructor(
         Log.d(TAG, "No artist image available for any artist in '$artistName' on Last.fm")
         return null
     }
+    
+    // =====================================================
+    // MBID LOOKUP FOR MUSICBRAINZ OPTIMIZATION
+    // =====================================================
+    
+    /**
+     * Result of MBID lookup from Last.fm.
+     * Contains MusicBrainz IDs that can be used for faster/more accurate MusicBrainz lookups.
+     */
+    data class MbidLookupResult(
+        val trackMbid: String? = null,
+        val artistMbid: String? = null,
+        val albumMbid: String? = null,
+        val albumTitle: String? = null
+    ) {
+        val hasAnyMbid: Boolean get() = trackMbid != null || artistMbid != null || albumMbid != null
+    }
+    
+    /**
+     * Fetch MusicBrainz IDs from Last.fm for a track.
+     * 
+     * This is useful because:
+     * 1. Last.fm often has MBIDs for tracks (if user has linked accounts or track is popular)
+     * 2. MusicBrainz can fetch by ID instead of searching (faster, more accurate)
+     * 3. This avoids fuzzy matching issues with MusicBrainz search
+     * 
+     * Called before MusicBrainz enrichment to improve accuracy.
+     * 
+     * @param title Track title
+     * @param artist Artist name
+     * @return MbidLookupResult containing any available MBIDs
+     */
+    suspend fun fetchMbidsForTrack(title: String, artist: String): MbidLookupResult {
+        if (!isAvailable()) {
+            return MbidLookupResult()
+        }
+        
+        val apiKey = getApiKey()
+        val cleanArtist = ArtistParser.normalizeArtistName(
+            ArtistParser.getPrimaryArtist(artist)
+        )
+        
+        if (cleanArtist.isBlank()) {
+            return MbidLookupResult()
+        }
+        
+        try {
+            delay(RATE_LIMIT_DELAY_MS)
+            
+            val response = lastFmApi.getTrackInfo(
+                track = title,
+                artist = cleanArtist,
+                apiKey = apiKey
+            )
+            
+            if (!response.isSuccessful) {
+                Log.d(TAG, "MBID lookup failed for '$title' by '$cleanArtist': ${response.code()}")
+                return MbidLookupResult()
+            }
+            
+            val trackResponse = response.body()
+            
+            if (trackResponse?.error != null) {
+                Log.d(TAG, "MBID lookup error: ${trackResponse.message}")
+                return MbidLookupResult()
+            }
+            
+            val trackInfo = trackResponse?.track
+            if (trackInfo == null) {
+                Log.d(TAG, "No track info for MBID lookup: '$title' by '$cleanArtist'")
+                return MbidLookupResult()
+            }
+            
+            val result = MbidLookupResult(
+                trackMbid = trackInfo.mbid?.takeIf { it.isNotBlank() },
+                artistMbid = trackInfo.artist?.mbid?.takeIf { it.isNotBlank() },
+                albumMbid = trackInfo.album?.mbid?.takeIf { it.isNotBlank() },
+                albumTitle = trackInfo.album?.title
+            )
+            
+            if (result.hasAnyMbid) {
+                Log.d(TAG, "Found MBIDs from Last.fm for '$title': track=${result.trackMbid}, artist=${result.artistMbid}, album=${result.albumMbid}")
+            }
+            
+            return result
+            
+        } catch (e: Exception) {
+            Log.w(TAG, "Error fetching MBIDs from Last.fm", e)
+            return MbidLookupResult()
+        }
+    }
+    
+    /**
+     * Pre-enrich metadata with MBIDs from Last.fm.
+     * 
+     * This method updates the EnrichedMetadata record with MBIDs fetched from Last.fm,
+     * which can then be used by MusicBrainz for faster lookups.
+     * 
+     * @param track The track to fetch MBIDs for
+     * @param existingMetadata The existing metadata to update
+     * @return Updated metadata with MBIDs, or null if no MBIDs found
+     */
+    suspend fun preEnrichWithMbids(
+        track: Track,
+        existingMetadata: EnrichedMetadata
+    ): EnrichedMetadata? {
+        // Skip if we already have MBIDs
+        if (existingMetadata.musicbrainzRecordingId != null) {
+            return null
+        }
+        
+        val mbids = fetchMbidsForTrack(track.title, track.artist)
+        
+        if (!mbids.hasAnyMbid) {
+            return null
+        }
+        
+        // Update metadata with found MBIDs
+        val updatedMetadata = existingMetadata.copy(
+            musicbrainzRecordingId = mbids.trackMbid ?: existingMetadata.musicbrainzRecordingId,
+            musicbrainzArtistId = mbids.artistMbid ?: existingMetadata.musicbrainzArtistId,
+            musicbrainzReleaseId = mbids.albumMbid ?: existingMetadata.musicbrainzReleaseId,
+            albumTitle = mbids.albumTitle ?: existingMetadata.albumTitle
+        )
+        
+        // Save the updated metadata
+        enrichedMetadataDao.upsert(updatedMetadata)
+        
+        Log.i(TAG, "Pre-enriched track ${track.id} with Last.fm MBIDs")
+        return updatedMetadata
+    }
 }

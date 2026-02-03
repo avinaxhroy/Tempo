@@ -61,6 +61,10 @@ data class Artist(
     val artistType: String? = null
 ) {
     companion object {
+        // Pre-compiled regex patterns to avoid repeated native memory allocation
+        private val SPECIAL_CHARS_PATTERN = Regex("[^a-z0-9\\s]")
+        private val WHITESPACE_PATTERN = Regex("\\s+")
+        
         /**
          * Normalize an artist name for comparison and deduplication.
          */
@@ -68,8 +72,8 @@ data class Artist(
             return name
                 .lowercase()
                 .trim()
-                .replace(Regex("[^a-z0-9\\s]"), "") // Remove special chars
-                .replace(Regex("\\s+"), " ") // Normalize whitespace
+                .replace(SPECIAL_CHARS_PATTERN, "") // Remove special chars
+                .replace(WHITESPACE_PATTERN, " ") // Normalize whitespace
         }
     }
 }

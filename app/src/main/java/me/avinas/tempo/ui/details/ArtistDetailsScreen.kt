@@ -277,7 +277,10 @@ fun ArtistDetailsContent(
                 )
             }
 
-            items(artistDetails.topSongs.take(5)) { song ->
+            items(
+                items = artistDetails.topSongs.take(5),
+                key = { song -> song.trackId }
+            ) { song ->
                 TopSongItem(song = song, onClick = { onNavigateToSong(song.trackId) })
                 Spacer(modifier = Modifier.height(12.dp))
             }
@@ -301,7 +304,10 @@ fun ArtistDetailsContent(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         contentPadding = PaddingValues(horizontal = 4.dp)
                     ) {
-                        items(artistDetails.topAlbums) { album ->
+                        items(
+                            items = artistDetails.topAlbums,
+                            key = { album -> "${album.album}_${album.artist}" }
+                        ) { album ->
                             TopAlbumCard(album = album)
                         }
                     }
@@ -755,8 +761,8 @@ fun TopAlbumCard(album: TopAlbum) {
 
 fun formatCount(count: Long): String {
     return when {
-        count >= 1_000_000 -> String.format("%.1fM", count / 1_000_000.0)
-        count >= 1_000 -> String.format("%.1fK", count / 1_000.0)
+        count >= 1_000_000 -> String.format(java.util.Locale.US, "%.1fM", count / 1_000_000.0)
+        count >= 1_000 -> String.format(java.util.Locale.US, "%.1fK", count / 1_000.0)
         else -> count.toString()
     }
 }

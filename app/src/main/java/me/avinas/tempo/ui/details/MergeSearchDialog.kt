@@ -103,7 +103,10 @@ fun MergeSearchDialog(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(uiState.searchResults) { track ->
+                        items(
+                            items = uiState.searchResults,
+                            key = { track -> track.id }
+                        ) { track ->
                             TrackSearchItem(track = track, onClick = { 
                                 viewModel.mergeTracks(track)
                             })

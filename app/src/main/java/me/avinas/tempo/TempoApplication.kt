@@ -7,9 +7,16 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
+import me.avinas.tempo.data.local.dao.UserPreferencesDao
 import me.avinas.tempo.worker.EnrichmentWorker
 import me.avinas.tempo.worker.ServiceHealthWorker
+import me.avinas.tempo.worker.SpotifyPollingWorker
+import me.avinas.tempo.worker.SpotlightUnlockWorker
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import javax.inject.Inject
 
@@ -31,8 +38,14 @@ class TempoApplication : Application(), Configuration.Provider, SingletonImageLo
     @Inject
     lateinit var imageLoader: ImageLoader
     
+    @Inject
+    lateinit var userPreferencesDao: UserPreferencesDao
+    
     // Background executor for non-critical initialization
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
+    
+    // Coroutine scope for app-level async work
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -83,6 +96,31 @@ class TempoApplication : Application(), Configuration.Provider, SingletonImageLo
         
         // Trigger immediate enrichment to backfill any missing album art
         EnrichmentWorker.enqueueImmediate(this)
+        
+        // Schedule weekly Spotlight story unlock checks (lightweight, battery-optimized)
+        SpotlightUnlockWorker.scheduleWeekly(this)
+        
+        // Schedule Spotify polling if API-Only mode is enabled
+        scheduleSpotifyPollingIfEnabled()
+    }
+    
+    /**
+     * Check if Spotify-API-Only mode is enabled and schedule polling if so.
+     * This ensures the worker resumes after app restart.
+     */
+    private fun scheduleSpotifyPollingIfEnabled() {
+        applicationScope.launch {
+            try {
+                val prefs = userPreferencesDao.getSync()
+                if (prefs?.spotifyApiOnlyMode == true) {
+                    Handler(Looper.getMainLooper()).post {
+                        SpotifyPollingWorker.schedule(this@TempoApplication)
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore - worker will be scheduled when user enables mode
+            }
+        }
     }
     
     override fun onTerminate() {

@@ -166,7 +166,10 @@ fun ArtistMergeSearchDialog(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(uiState.searchResults) { artist ->
+                            items(
+                                items = uiState.searchResults,
+                                key = { artist -> artist.id }
+                            ) { artist ->
                                 ArtistSearchItem(
                                     artist = artist,
                                     onClick = { viewModel.mergeArtists(artist) }

@@ -5,12 +5,12 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.lifecycleScope
 import me.avinas.tempo.MainActivity
 import me.avinas.tempo.data.remote.spotify.SpotifyApi
 import me.avinas.tempo.data.remote.spotify.SpotifyAuthManager
+import me.avinas.tempo.data.repository.EnrichedMetadataRepository
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -34,6 +34,9 @@ class SpotifyCallbackActivity : ComponentActivity() {
 
     @Inject
     lateinit var authManager: SpotifyAuthManager
+    
+    @Inject
+    lateinit var enrichedMetadataRepository: EnrichedMetadataRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,12 +57,22 @@ class SpotifyCallbackActivity : ComponentActivity() {
         if (uri != null && isSpotifyCallback(uri)) {
             Log.d(TAG, "Received Spotify callback: $uri")
             
-            // Process the callback asynchronously
-            CoroutineScope(Dispatchers.Main).launch {
+            // Process the callback using lifecycleScope to prevent memory leaks
+            lifecycleScope.launch {
                 val success = authManager.handleCallback(uri)
                 Log.d(TAG, "Callback handled, success: $success")
                 
-                // Navigate back to main activity
+                if (success) {
+                    // Queue all existing tracks for Spotify enrichment
+                    enrichedMetadataRepository.queueAllForSpotifyEnrichment()
+                    
+                    // Note: History reconstruction is triggered from MainActivity
+                    // because it has a longer-lived viewModelScope that won't get cancelled
+                    // Uses the "honest data only" approach with liked tracks + yearly playlists
+                    Log.i(TAG, "Auth successful, history reconstruction will be triggered from MainActivity")
+                }
+                
+                // Navigate back to main activity (will trigger reconstruction there)
                 navigateToMain(success)
             }
         } else {

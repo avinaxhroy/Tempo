@@ -637,14 +637,33 @@ class RoomStatsRepository @Inject constructor(
      * 
      * For multi-artist tracks, we need to find the correct image for each individual artist.
      * Priority order:
+     * 0. track_artists junction table lookup (most accurate - uses relational data)
      * 1. Artists table exact match (if artist has been enriched separately)
      * 2. Artists table partial match (for featured artists in multi-artist entries)
      * 3. Tracks where this artist is the ONLY/PRIMARY artist (exact match)
      * 4. Tracks where this artist is listed FIRST (e.g., "Artist, feat. Other")
-     * 5. Any track containing this artist (may return wrong image for featured artists)
-     * 6. Spotify API search (saves result to database for future use)
+     * 5. Any track containing this artist (now filters out featured contexts)
+     * 6. iTunes API search (high quality, no auth required)
+     * 7. Spotify API search (saves result to database for future use)
      */
     private suspend fun getArtistImageUrlWithFallback(artistName: String): String? {
+        // 0. Try track_artists junction table (most accurate for properly linked artists)
+        // First, try to find the artist in the artists table to get their ID
+        val normalizedName = me.avinas.tempo.data.local.entities.Artist.normalizeName(artistName)
+        val artistEntity = artistDao.getArtistByNormalizedName(normalizedName)
+            ?: artistDao.getArtistByName(artistName)
+        
+        if (artistEntity != null) {
+            // Try to get image from tracks linked via track_artists junction table
+            val fromTrackArtists = statsDao.getArtistImageByArtistId(artistEntity.id)
+            if (!fromTrackArtists.isNullOrBlank()) {
+                Log.d(TAG, "Found artist image via track_artists junction table: $artistName")
+                // Persist to artists table for future fast lookups
+                persistImageToArtistTable(artistName, fromTrackArtists)
+                return fromTrackArtists
+            }
+        }
+        
         // 1. First try the artists table exact match (most reliable)
         val fromArtistTable = artistDao.getArtistByName(artistName)?.imageUrl
         if (!fromArtistTable.isNullOrBlank()) {
@@ -677,7 +696,7 @@ class RoomStatsRepository @Inject constructor(
             return asFirstArtist
         }
         
-        // 4. Fallback: any track containing this artist (may be incorrect for featured artists)
+        // 4. Fallback: any track containing this artist (now excludes featured contexts)
         val fromEnriched = statsDao.getArtistImageFromEnrichedMetadata(artistName)
         if (!fromEnriched.isNullOrBlank()) {
             Log.d(TAG, "Found artist image from enriched metadata: $artistName")
@@ -686,14 +705,15 @@ class RoomStatsRepository @Inject constructor(
             return fromEnriched
         }
         
+        
         // Check session cache - if we already searched for this artist in this session, skip API calls
-        val normalizedName = artistName.lowercase().trim()
-        if (normalizedName in artistImageSearchCache) {
+        val cacheKey = artistName.lowercase().trim()
+        if (cacheKey in artistImageSearchCache) {
             Log.d(TAG, "Already searched for '$artistName' this session, skipping API calls")
             return null
         }
         // Mark as searched to prevent redundant API calls
-        artistImageSearchCache.add(normalizedName)
+        artistImageSearchCache.add(cacheKey)
         
         // 5. Fallback: Search iTunes (High quality, no auth required)
         if (iTunesEnrichmentService.isAvailable()) {
@@ -1927,6 +1947,88 @@ class RoomStatsRepository @Inject constructor(
             PaginatedResult(
                 items = items,
                 totalCount = -1, // Unknown total count
+                page = page,
+                pageSize = pageSize,
+                hasMore = hasMore
+            )
+        }
+    }
+    
+    override suspend fun getHistoryExcludingLastFm(
+        searchQuery: String?,
+        startTime: Long?,
+        endTime: Long?,
+        includeSkips: Boolean,
+        filterPodcasts: Boolean,
+        filterAudiobooks: Boolean,
+        page: Int,
+        pageSize: Int
+    ): PaginatedResult<HistoryItem> {
+        val queryKey = searchQuery?.lowercase() ?: "all"
+        val skipKey = if (includeSkips) "with_skips" else "no_skips"
+        val filterKey = "pod${if (filterPodcasts) 1 else 0}_audio${if (filterAudiobooks) 1 else 0}"
+        val key = "history_live_${queryKey}_${startTime}_${endTime}_${skipKey}_${filterKey}_${page}_$pageSize"
+
+        return getCached(key) {
+            val offset = page * pageSize
+
+            val items = statsDao.getHistoryExcludingLastFm(
+                searchQuery = searchQuery,
+                startTime = startTime,
+                endTime = endTime,
+                includeSkips = includeSkips,
+                filterPodcasts = filterPodcasts,
+                filterAudiobooks = filterAudiobooks,
+                limit = pageSize,
+                offset = offset
+            )
+
+            val hasMore = items.size == pageSize
+
+            PaginatedResult(
+                items = items,
+                totalCount = -1,
+                page = page,
+                pageSize = pageSize,
+                hasMore = hasMore
+            )
+        }
+    }
+    
+    override suspend fun getHistoryLastFmOnly(
+        searchQuery: String?,
+        startTime: Long?,
+        endTime: Long?,
+        includeSkips: Boolean,
+        filterPodcasts: Boolean,
+        filterAudiobooks: Boolean,
+        page: Int,
+        pageSize: Int
+    ): PaginatedResult<HistoryItem> {
+        val queryKey = searchQuery?.lowercase() ?: "all"
+        val skipKey = if (includeSkips) "with_skips" else "no_skips"
+        val filterKey = "pod${if (filterPodcasts) 1 else 0}_audio${if (filterAudiobooks) 1 else 0}"
+        val key = "history_lastfm_${queryKey}_${startTime}_${endTime}_${skipKey}_${filterKey}_${page}_$pageSize"
+
+        return getCached(key) {
+            val offset = page * pageSize
+
+            val items = statsDao.getHistoryLastFmOnly(
+                searchQuery = searchQuery,
+                startTime = startTime,
+                endTime = endTime,
+                includeSkips = includeSkips,
+                filterPodcasts = filterPodcasts,
+                filterAudiobooks = filterAudiobooks,
+                limit = pageSize,
+                offset = offset
+            )
+
+            val hasMore = items.size == pageSize
+
+            PaginatedResult(
+                items = items,
+                totalCount = -1,
                 page = page,
                 pageSize = pageSize,
                 hasMore = hasMore

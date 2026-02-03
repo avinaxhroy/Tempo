@@ -61,6 +61,10 @@ class ReccoBeatsEnrichmentService @Inject constructor(
         
         // Match threshold for fuzzy track matching
         private const val MIN_MATCH_SCORE = 0.7
+        
+        // Pre-compiled regex patterns to avoid repeated native memory allocation
+        private val SPECIAL_CHARS_PATTERN = Regex("[^a-z0-9\\s]")
+        private val WHITESPACE_PATTERN = Regex("\\s+")
     }
 
     /**
@@ -315,8 +319,8 @@ class ReccoBeatsEnrichmentService @Inject constructor(
      */
     private fun normalizeString(str: String): String {
         return str.lowercase()
-            .replace(Regex("[^a-z0-9\\s]"), "")
-            .replace(Regex("\\s+"), " ")
+            .replace(SPECIAL_CHARS_PATTERN, "")
+            .replace(WHITESPACE_PATTERN, " ")
             .trim()
     }
 

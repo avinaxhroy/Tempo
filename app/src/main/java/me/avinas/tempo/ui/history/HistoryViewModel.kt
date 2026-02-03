@@ -4,6 +4,9 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import me.avinas.tempo.data.local.dao.HistoryItem
+import me.avinas.tempo.data.local.dao.LastFmImportMetadataDao
+import me.avinas.tempo.data.local.dao.ScrobbleArchiveDao
+import me.avinas.tempo.data.local.entities.ScrobbleArchive
 import me.avinas.tempo.data.repository.ListeningRepository
 import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.data.repository.TrackRepository
@@ -21,23 +24,105 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
+/**
+ * History view mode - controls what data is shown.
+ */
+enum class HistoryViewMode {
+    /**
+     * Unified mode: Shows all listening events combined chronologically.
+     * This is the default when no Last.fm import exists.
+     */
+    UNIFIED,
+    
+    /**
+     * Separated mode: Shows two sections:
+     * 1. "Recent Activity" - Live tracking (Spotify/notifications, source != fm.last.import)
+     * 2. "Last.fm History" - Imported history (source == fm.last.import + archive)
+     * This is the default when Last.fm import exists.
+     */
+    SEPARATED
+}
+
+/**
+ * Represents an archived scrobble expanded for display in history.
+ * Archive stores compressed timestamps, so we expand them for timeline display.
+ */
+data class ArchiveHistoryItem(
+    val archiveId: Long,
+    val timestamp: Long,
+    val trackTitle: String,
+    val artistName: String,
+    val albumName: String?,
+    val albumArtUrl: String?,
+    val playCount: Int, // Total plays of this track in archive
+    val isFromArchive: Boolean = true
+)
+
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
     private val statsRepository: StatsRepository,
     private val listeningRepository: ListeningRepository,
     private val trackRepository: TrackRepository,
     private val manualContentMarkDao: me.avinas.tempo.data.local.dao.ManualContentMarkDao,
-    private val userPreferencesDao: me.avinas.tempo.data.local.dao.UserPreferencesDao
+    private val userPreferencesDao: me.avinas.tempo.data.local.dao.UserPreferencesDao,
+    private val lastFmImportMetadataDao: LastFmImportMetadataDao,
+    private val scrobbleArchiveDao: ScrobbleArchiveDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HistoryUiState())
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
 
     private var searchJob: kotlinx.coroutines.Job? = null
+    
+    // Cached import boundary (calculated once on init)
+    private var importBoundaryTimestamp: Long? = null
+    private var hasLastFmImport: Boolean = false
 
     init {
-        loadHistory()
+        initializeViewMode()
         observeDataChanges()
+    }
+    
+    /**
+     * Initialize view mode based on import status.
+     * If user has Last.fm import, use SEPARATED mode with two sections.
+     * Otherwise, use UNIFIED mode showing all history together.
+     */
+    private fun initializeViewMode() {
+        viewModelScope.launch {
+            // Check for completed Last.fm import
+            val lastImport = lastFmImportMetadataDao.getLatestCompleted()
+            
+            if (lastImport != null) {
+                hasLastFmImport = true
+                importBoundaryTimestamp = lastImport.importStartedAt
+                
+                // Check archive size for UI hints
+                val archiveCount = scrobbleArchiveDao.getTotalCount()
+                val archivePlays = scrobbleArchiveDao.getTotalPlayCount()
+                
+                _uiState.update { it.copy(
+                    viewMode = HistoryViewMode.SEPARATED,
+                    hasArchiveData = archiveCount > 0,
+                    archiveTrackCount = archiveCount,
+                    archiveTotalPlays = archivePlays,
+                    recentBoundaryDate = importBoundaryTimestamp
+                ) }
+                
+                Log.d(TAG, "Last.fm import found. Using SEPARATED mode. " +
+                        "Archive: $archiveCount tracks, $archivePlays plays")
+            } else {
+                // No import - use unified mode
+                hasLastFmImport = false
+                importBoundaryTimestamp = null
+                _uiState.update { it.copy(
+                    viewMode = HistoryViewMode.UNIFIED,
+                    hasArchiveData = false
+                ) }
+            }
+            
+            loadHistory()
+        }
     }
     
     private fun observeDataChanges() {
@@ -60,7 +145,18 @@ class HistoryViewModel @Inject constructor(
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             kotlinx.coroutines.delay(500) // Debounce
-            _uiState.update { it.copy(page = 0, rawItems = emptyList(), groupedItems = emptyMap(), isLoading = true) }
+            _uiState.update { it.copy(
+                page = 0,
+                rawItems = emptyList(),
+                groupedItems = emptyMap(),
+                // Reset Last.fm section too
+                lastFmItems = emptyList(),
+                lastFmGroupedItems = emptyMap(),
+                lastFmPage = 0,
+                hasMoreLastFm = true,
+                archiveItems = emptyList(),
+                isLoading = true
+            ) }
             loadHistory()
         }
     }
@@ -73,6 +169,34 @@ class HistoryViewModel @Inject constructor(
             page = 0,
             rawItems = emptyList(),
             groupedItems = emptyMap(),
+            // Reset Last.fm section too
+            lastFmItems = emptyList(),
+            lastFmGroupedItems = emptyMap(),
+            lastFmPage = 0,
+            hasMoreLastFm = true,
+            archiveItems = emptyList(),
+            isLoading = true
+        ) }
+        loadHistory()
+    }
+    
+    /**
+     * Switch between RECENT and ALL_TIME view modes.
+     */
+    fun setViewMode(mode: HistoryViewMode) {
+        if (_uiState.value.viewMode == mode) return
+        
+        _uiState.update { it.copy(
+            viewMode = mode,
+            page = 0,
+            rawItems = emptyList(),
+            groupedItems = emptyMap(),
+            // Reset Last.fm section too
+            lastFmItems = emptyList(),
+            lastFmGroupedItems = emptyMap(),
+            lastFmPage = 0,
+            hasMoreLastFm = true,
+            archiveItems = emptyList(),
             isLoading = true
         ) }
         loadHistory()
@@ -83,22 +207,131 @@ class HistoryViewModel @Inject constructor(
         _uiState.update { it.copy(isLoadingMore = true) }
         loadHistory(isLoadMore = true)
     }
+    
+    /**
+     * Load more items for the Last.fm history section (separate pagination).
+     */
+    fun loadMoreLastFmHistory() {
+        if (_uiState.value.isLoadingMoreLastFm || !_uiState.value.hasMoreLastFm) return
+        _uiState.update { it.copy(isLoadingMoreLastFm = true) }
+        loadLastFmHistory(isLoadMore = true)
+    }
 
+    /**
+     * Main history loading function.
+     * In SEPARATED mode: Loads "Recent Activity" (non-Last.fm events)
+     * In UNIFIED mode: Loads all events combined
+     */
     private fun loadHistory(isLoadMore: Boolean = false) {
         viewModelScope.launch {
             try {
                 val currentState = _uiState.value
                 val page = if (isLoadMore) currentState.page + 1 else 0
                 
-                // Get user preferences for content filtering (use defaults if null)
+                // Get user preferences for content filtering
                 val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
                 val filterPodcasts = prefs.filterPodcasts
                 val filterAudiobooks = prefs.filterAudiobooks
                 
-                // Fetch filtered history
-                val result = statsRepository.getHistory(
-                    timeRange = if (currentState.startDate == null && currentState.endDate == null) TimeRange.ALL_TIME else null,
-                    searchQuery = currentState.searchQuery.takeIf { it.isNotBlank() },
+                val searchQuery = currentState.searchQuery.takeIf { it.isNotBlank() }
+                
+                if (currentState.viewMode == HistoryViewMode.SEPARATED && hasLastFmImport) {
+                    // SEPARATED MODE: Load only non-Last.fm events for "Recent Activity"
+                    val result = statsRepository.getHistoryExcludingLastFm(
+                        searchQuery = searchQuery,
+                        startTime = currentState.startDate,
+                        endTime = currentState.endDate,
+                        includeSkips = currentState.showSkips,
+                        filterPodcasts = filterPodcasts,
+                        filterAudiobooks = filterAudiobooks,
+                        page = page
+                    )
+                    
+                    val newItems = if (currentState.rawItems.isEmpty() || !isLoadMore) 
+                        result.items else currentState.rawItems + result.items
+                    
+                    val shouldShowCoachMark = checkShouldShowCoachMark(newItems)
+                    
+                    _uiState.update { state ->
+                        val grouped = groupHistoryItems(newItems)
+                        state.copy(
+                            rawItems = newItems,
+                            groupedItems = grouped,
+                            isLoading = false,
+                            isLoadingMore = false,
+                            page = page,
+                            hasMore = result.hasMore,
+                            showCoachMark = shouldShowCoachMark
+                        )
+                    }
+                    
+                    // Also load Last.fm history section if first load
+                    if (!isLoadMore) {
+                        loadLastFmHistory(isLoadMore = false)
+                    }
+                    
+                } else {
+                    // UNIFIED MODE: Load all events combined (original behavior)
+                    val result = statsRepository.getHistory(
+                        timeRange = TimeRange.ALL_TIME,
+                        searchQuery = searchQuery,
+                        startTime = currentState.startDate,
+                        endTime = currentState.endDate,
+                        includeSkips = currentState.showSkips,
+                        filterPodcasts = filterPodcasts,
+                        filterAudiobooks = filterAudiobooks,
+                        page = page
+                    )
+                    
+                    val newItems = if (currentState.rawItems.isEmpty() || !isLoadMore) 
+                        result.items else currentState.rawItems + result.items
+                    
+                    val shouldShowCoachMark = checkShouldShowCoachMark(newItems)
+                    
+                    _uiState.update { state ->
+                        val grouped = groupHistoryItems(newItems)
+                        state.copy(
+                            rawItems = newItems,
+                            groupedItems = grouped,
+                            isLoading = false,
+                            isLoadingMore = false,
+                            page = page,
+                            hasMore = result.hasMore,
+                            showCoachMark = shouldShowCoachMark
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading history", e)
+                _uiState.update { 
+                    it.copy(
+                        isLoading = false,
+                        isLoadingMore = false,
+                        error = e.message
+                    ) 
+                }
+            }
+        }
+    }
+    
+    /**
+     * Load Last.fm history section (imported events + archive).
+     * Only used in SEPARATED mode.
+     */
+    private fun loadLastFmHistory(isLoadMore: Boolean = false) {
+        viewModelScope.launch {
+            try {
+                val currentState = _uiState.value
+                val page = if (isLoadMore) currentState.lastFmPage + 1 else 0
+                
+                val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+                val filterPodcasts = prefs.filterPodcasts
+                val filterAudiobooks = prefs.filterAudiobooks
+                val searchQuery = currentState.searchQuery.takeIf { it.isNotBlank() }
+                
+                // Load Last.fm imported events from listening_events table
+                val result = statsRepository.getHistoryLastFmOnly(
+                    searchQuery = searchQuery,
                     startTime = currentState.startDate,
                     endTime = currentState.endDate,
                     includeSkips = currentState.showSkips,
@@ -107,36 +340,71 @@ class HistoryViewModel @Inject constructor(
                     page = page
                 )
                 
-                val hasMore = result.hasMore
-                val newItems = if (_uiState.value.rawItems.isEmpty() || !isLoadMore) result.items else _uiState.value.rawItems + result.items
+                val newLastFmItems = if (currentState.lastFmItems.isEmpty() || !isLoadMore) 
+                    result.items else currentState.lastFmItems + result.items
                 
-                // Compute coach mark BEFORE update (suspend function can't run in update block)
-                val shouldShowCoachMark = checkShouldShowCoachMark(newItems)
-
+                // Also load archive items (first page only, grouped by track)
+                var archiveItems = currentState.archiveItems
+                if (!isLoadMore) {
+                    archiveItems = loadArchiveItems(
+                        query = searchQuery,
+                        startTime = currentState.startDate,
+                        endTime = currentState.endDate,
+                        page = 0
+                    )
+                }
+                
                 _uiState.update { state ->
-                    val grouped = groupHistoryItems(newItems)
+                    val groupedLastFm = groupHistoryItems(newLastFmItems)
                     state.copy(
-                        rawItems = newItems,
-                        groupedItems = grouped,
-                        isLoading = false,
-                        isLoadingMore = false,
-                        page = page,
-                        hasMore = hasMore,
-                        showCoachMark = shouldShowCoachMark
+                        lastFmItems = newLastFmItems,
+                        lastFmGroupedItems = groupedLastFm,
+                        archiveItems = archiveItems,
+                        isLoadingMoreLastFm = false,
+                        lastFmPage = page,
+                        hasMoreLastFm = result.hasMore
                     )
                 }
             } catch (e: Exception) {
-                val currentItems = _uiState.value.rawItems
-                val shouldShowCoachMark = checkShouldShowCoachMark(currentItems)
+                Log.e(TAG, "Error loading Last.fm history", e)
                 _uiState.update { 
-                    it.copy(
-                        isLoading = false,
-                        isLoadingMore = false,
-                        error = e.message,
-                        showCoachMark = shouldShowCoachMark
-                    ) 
+                    it.copy(isLoadingMoreLastFm = false, error = e.message) 
                 }
             }
+        }
+    }
+    
+    /**
+     * Load archive items with pagination support.
+     */
+    private suspend fun loadArchiveItems(
+        query: String?,
+        startTime: Long?,
+        endTime: Long?,
+        page: Int,
+        pageSize: Int = 50
+    ): List<ArchiveHistoryItem> {
+        if (!hasLastFmImport) return emptyList()
+        
+        val archives = scrobbleArchiveDao.getArchivePaginated(
+            searchQuery = query,
+            startTime = startTime,
+            endTime = endTime,
+            limit = pageSize,
+            offset = page * pageSize
+        )
+        
+        return archives.map { archive ->
+            ArchiveHistoryItem(
+                archiveId = archive.id,
+                timestamp = archive.lastScrobble,
+                trackTitle = archive.trackTitle,
+                artistName = archive.artistName,
+                albumName = archive.albumName,
+                albumArtUrl = archive.albumArtUrl,
+                playCount = archive.playCount,
+                isFromArchive = true
+            )
         }
     }
 
@@ -439,10 +707,24 @@ data class HistoryUiState(
     val isLoadingMore: Boolean = false,
     val isMarking: Boolean = false, // True when marking content in progress
     val error: String? = null,
+    
+    // =====================================================
+    // Recent Activity Section (non-Last.fm events)
+    // =====================================================
     val rawItems: List<HistoryItem> = emptyList(),
     val groupedItems: Map<String, List<HistoryItem>> = emptyMap(),
     val page: Int = 0,
     val hasMore: Boolean = true,
+    
+    // =====================================================
+    // Last.fm History Section (imported events)
+    // =====================================================
+    val lastFmItems: List<HistoryItem> = emptyList(),
+    val lastFmGroupedItems: Map<String, List<HistoryItem>> = emptyMap(),
+    val lastFmPage: Int = 0,
+    val hasMoreLastFm: Boolean = true,
+    val isLoadingMoreLastFm: Boolean = false,
+    
     // Filters
     val searchQuery: String = "",
     val startDate: Long? = null,
@@ -450,5 +732,42 @@ data class HistoryUiState(
     val showSkips: Boolean = true,
     val showCoachMark: Boolean = false,
     // User feedback
-    val feedbackMessage: String? = null
+    val feedbackMessage: String? = null,
+    
+    // =====================================================
+    // View Mode & Archive Integration
+    // =====================================================
+    
+    /**
+     * Current view mode:
+     * - UNIFIED: All events combined (no Last.fm import)
+     * - SEPARATED: Two sections - Recent Activity + Last.fm History
+     */
+    val viewMode: HistoryViewMode = HistoryViewMode.UNIFIED,
+    
+    /**
+     * Whether user has archived Last.fm scrobbles.
+     */
+    val hasArchiveData: Boolean = false,
+    
+    /**
+     * Number of unique tracks in archive.
+     */
+    val archiveTrackCount: Int = 0,
+    
+    /**
+     * Total play count across all archived tracks.
+     */
+    val archiveTotalPlays: Long = 0,
+    
+    /**
+     * Timestamp of the Last.fm import (for UI display).
+     */
+    val recentBoundaryDate: Long? = null,
+    
+    /**
+     * Archived items (long-tail tracks from Last.fm import).
+     * Shown at the bottom of Last.fm History section.
+     */
+    val archiveItems: List<ArchiveHistoryItem> = emptyList()
 )

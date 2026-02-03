@@ -81,6 +81,7 @@ class MusicTrackingService : NotificationListenerService() {
         fun trackAliasRepository(): TrackAliasRepository
         fun userPreferencesDao(): UserPreferencesDao
         fun manualContentMarkDao(): ManualContentMarkDao
+        fun appPreferenceDao(): me.avinas.tempo.data.local.dao.AppPreferenceDao
     }
 
     companion object {
@@ -399,6 +400,11 @@ class MusicTrackingService : NotificationListenerService() {
             Regex("""^(.+?)\s*\|\s*(.+)$"""),              // "Title | Artist"
             Regex("""^(.+?)\s+by\s+(.+)$""", RegexOption.IGNORE_CASE),  // "Title by Artist"
         )
+        
+        // Placeholder and album detection patterns - pre-compiled for performance
+        private val NUMERIC_ONLY_PATTERN = Regex("^\\d+$")
+        private val YEAR_PATTERN = Regex(".*\\(\\d{4}\\).*")  // Contains year like "(2023)"
+        private val REMASTER_PATTERN = Regex(".*\\d{4}.*remaster.*")  // Remaster with year
     }
     
     // =====================
@@ -425,9 +431,10 @@ class MusicTrackingService : NotificationListenerService() {
             ?.takeIf { it.isNotBlank() && !isPlaceholderArtist(it) }
             ?.let { return it.trim() }
         
-        // Fallback 3: DISPLAY_SUBTITLE (often contains artist)
+        // Fallback 3: DISPLAY_SUBTITLE (often contains artist, but can be video descriptions)
+        // Additional validation to filter out video descriptions/subtitles
         metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)
-            ?.takeIf { it.isNotBlank() && !isPlaceholderArtist(it) }
+            ?.takeIf { it.isNotBlank() && !isPlaceholderArtist(it) && isLikelyArtistName(it) }
             ?.let { return it.trim() }
         
         // Fallback 4: WRITER
@@ -556,7 +563,7 @@ class MusicTrackingService : NotificationListenerService() {
             "unknown", "unknown artist", "<unknown>", "various artists",
             "various", "n/a", "na", "none", "null", "", " ",
             "artist", "track", "music", "audio", "media"
-        ) || lower.startsWith("track ") || lower.matches(Regex("^\\d+$"))
+        ) || lower.startsWith("track ") || lower.matches(NUMERIC_ONLY_PATTERN)
     }
     
     /**
@@ -571,8 +578,67 @@ class MusicTrackingService : NotificationListenerService() {
                lower.contains("collection") ||
                lower.contains("vol.") ||
                lower.contains("volume") ||
-               lower.matches(Regex(".*\\(\\d{4}\\).*")) || // Contains year like "(2023)"
-               lower.matches(Regex(".*\\d{4}.*remaster.*")) // Remaster with year
+               lower.matches(YEAR_PATTERN) || // Contains year like "(2023)"
+               lower.matches(REMASTER_PATTERN) // Remaster with year
+    }
+    
+    /**
+     * Check if a string looks like an artist name rather than a video description/subtitle.
+     * 
+     * YouTube Music and other apps sometimes put video descriptions in DISPLAY_SUBTITLE,
+     * which we incorrectly captured as artist names. This function filters those out.
+     * 
+     * Examples of what should be rejected:
+     * - "Kaisa Mera Desh (Anti Corruption anthem)" - video description
+     * - "Official Music Video - HD" - video descriptor
+     * - Very long text (> 60 chars) - likely descriptions, not artists
+     */
+    private fun isLikelyArtistName(text: String): Boolean {
+        // Too long for a typical artist name (descriptions are often longer)
+        if (text.length > 60) return false
+        
+        val lowerText = text.lowercase()
+        
+        // Video/audio quality suffixes in parentheses - very specific patterns
+        // These are clearly metadata, not artist names
+        val qualityPatterns = listOf("1080p", "720p", "480p", "4k", "hd video", "full hd")
+        if (qualityPatterns.any { lowerText.contains("($it") || lowerText.contains("[$it") }) {
+            return false
+        }
+        
+        // Clear video description patterns that indicate metadata, not artist
+        val videoPatterns = listOf(
+            "official video", "official audio", "official music video",
+            "lyric video", "lyrics video", "music video", "full video",
+            "visualizer", "full album", "audio only"
+        )
+        if (videoPatterns.any { lowerText.contains(it) }) {
+            return false
+        }
+        
+        // Specific parenthesized description patterns (more restrictive)
+        // Only reject if it's clearly a description suffix like "(Official Video)"
+        val descriptionSuffixes = listOf(
+            "(official)", "(audio)", "(video)", "(lyrics)", "(visualizer)",
+            "(official video)", "(official audio)", "(lyric video)",
+            "(theme song)", "(full video)", "(music video)", "(trailer)"
+        )
+        if (descriptionSuffixes.any { lowerText.endsWith(it) }) {
+            return false
+        }
+        
+        // The original problematic case: "Kaisa Mera Desh (Anti Corruption anthem)"
+        // Detect anthem/theme in parentheses specifically
+        if (lowerText.contains("anthem)") || lowerText.contains("theme)")) {
+            return false
+        }
+        
+        // Very long text with separator + parentheses likely indicates description format
+        if (text.length > 50 && lowerText.contains(" - ") && lowerText.contains("(")) {
+            return false
+        }
+        
+        return true
     }
     
     /**
@@ -638,6 +704,19 @@ class MusicTrackingService : NotificationListenerService() {
     private lateinit var userPreferencesDao: UserPreferencesDao
     private lateinit var trackAliasRepository: TrackAliasRepository
     private lateinit var manualContentMarkDao: ManualContentMarkDao
+    private lateinit var appPreferenceDao: me.avinas.tempo.data.local.dao.AppPreferenceDao
+    
+    // Dynamic app lists - cached from database, refreshed periodically
+    @Volatile
+    private var cachedEnabledApps: Set<String> = emptySet()
+    @Volatile
+    private var cachedBlockedApps: Set<String> = emptySet()
+    @Volatile
+    private var cachedAllKnownPackages: Set<String> = emptySet() // All packages in DB (enabled or not)
+    @Volatile
+    private var isAppPreferenceCacheInitialized: Boolean = false // Flag to track if cache has been loaded from DB
+    private var lastAppPreferenceFetch: Long = 0
+    private val APP_PREFERENCE_CACHE_TTL_MS = 30_000L // Refresh every 30 seconds
     
     /**
      * Check if content should be filtered based on user preferences and detection.
@@ -657,11 +736,17 @@ class MusicTrackingService : NotificationListenerService() {
         title: String,
         artist: String
     ): Boolean {
-        // Get user preferences - use defaults if no row exists yet
-        // CRITICAL: Don't return false if prefs is null - use default filtering values!
+        // Get user preferences - use defaults if prefs is null
         val prefs = userPreferencesDao.getSync()
         val filterPodcasts = prefs?.filterPodcasts ?: true  // Default: filter podcasts
         val filterAudiobooks = prefs?.filterAudiobooks ?: true  // Default: filter audiobooks
+        
+        // Layer 0: Spotify-API-Only mode - skip Spotify notifications entirely
+        // When enabled, we fetch plays from Spotify's API instead of notifications
+        if (prefs?.spotifyApiOnlyMode == true && packageName == "com.spotify.music") {
+            Log.d(TAG, "Filtering Spotify notification (Spotify-API-Only mode enabled)")
+            return true
+        }
         
         // Layer 1: App-level filtering (ONLY for dedicated apps, NOT Spotify!)
         // Spotify has music + podcasts + audiobooks, so we rely on metadata detection
@@ -1163,6 +1248,7 @@ class MusicTrackingService : NotificationListenerService() {
             userPreferencesDao = entryPoint.userPreferencesDao()
             trackAliasRepository = entryPoint.trackAliasRepository()
             manualContentMarkDao = entryPoint.manualContentMarkDao()
+            appPreferenceDao = entryPoint.appPreferenceDao()
             
             // Load initial preferences for caching
             serviceScope.launch {
@@ -1171,6 +1257,14 @@ class MusicTrackingService : NotificationListenerService() {
                     cachedMergeAlternateVersions = prefs.mergeAlternateVersions
                     lastPreferencesFetch = System.currentTimeMillis()
                     Log.d(TAG, "Loaded user preferences: mergeAlternateVersions=$cachedMergeAlternateVersions")
+                    
+                    // Load app preferences cache
+                    refreshAppPreferenceCache()
+                    
+                    // Load all known packages for checking disabled vs unknown apps
+                    cachedAllKnownPackages = appPreferenceDao.getAllApps().first().map { it.packageName }.toSet()
+                    isAppPreferenceCacheInitialized = true
+                    Log.i(TAG, "App preference cache initialized with ${cachedEnabledApps.size} enabled, ${cachedBlockedApps.size} blocked, ${cachedAllKnownPackages.size} total known")
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to load initial preferences, using defaults", e)
                 }
@@ -1183,6 +1277,90 @@ class MusicTrackingService : NotificationListenerService() {
         }
     }
     
+    /**
+     * Refresh the cached enabled/blocked app sets from database.
+     * Called on init and periodically when checking apps.
+     */
+    private suspend fun refreshAppPreferenceCache() {
+        try {
+            cachedEnabledApps = appPreferenceDao.getEnabledPackageNames().toSet()
+            cachedBlockedApps = appPreferenceDao.getBlockedPackageNames().toSet()
+            lastAppPreferenceFetch = System.currentTimeMillis()
+            Log.d(TAG, "Refreshed app preferences: ${cachedEnabledApps.size} enabled, ${cachedBlockedApps.size} blocked")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to refresh app preferences, using cached values", e)
+        }
+    }
+    
+    /**
+     * Check if app preference cache needs refresh and refresh if needed.
+     */
+    private suspend fun ensureAppPreferenceCacheValid() {
+        val now = System.currentTimeMillis()
+        if (now - lastAppPreferenceFetch > APP_PREFERENCE_CACHE_TTL_MS) {
+            refreshAppPreferenceCache()
+        }
+    }
+    
+    /**
+     * Check if a package is in the enabled music apps list (dynamic from database).
+     * CRITICAL: Do not fall back to static MUSIC_APPS - user preferences must be respected.
+     */
+    private fun isInEnabledApps(packageName: String): Boolean {
+        // If cache not initialized yet, don't allow any apps to prevent bypassing user preferences
+        // The service will pick up notifications once the cache loads
+        if (!isAppPreferenceCacheInitialized) {
+            Log.d(TAG, "App preference cache not initialized yet, skipping $packageName")
+            return false
+        }
+        return packageName in cachedEnabledApps
+    }
+    
+    /**
+     * Check if a package is in the blocked apps list (dynamic from database).
+     */
+    private fun isInBlockedApps(packageName: String): Boolean {
+        // If cache not initialized yet, return false (will be filtered by isInEnabledApps anyway)
+        if (!isAppPreferenceCacheInitialized) {
+            return false
+        }
+        return packageName in cachedBlockedApps
+    }
+    
+    /**
+     * Clean up any active session for a package that was just disabled or blocked.
+     * Saves any accumulated playtime and removes the session.
+     * Called reactively when app preferences change in the database.
+     */
+    private fun cleanupSessionForPackage(packageName: String) {
+        val session = playbackStates[packageName] ?: return
+        
+        Log.i(TAG, "Cleaning up session for disabled/blocked app: $packageName (${session.title})")
+        
+        // Save any accumulated play time before removing
+        if (session.calculateCurrentPlayDuration() > MIN_PLAY_DURATION_MS) {
+            saveListeningEvent(session)
+        }
+        
+        // Remove the session
+        playbackStates.remove(packageName)
+        
+        // Unregister controller callback
+        activeControllers[packageName]?.let { controller ->
+            val callback = packageSpecificCallbacks[packageName] ?: sharedCallback
+            try {
+                controller.unregisterCallback(callback)
+            } catch (e: Exception) {
+                Log.w(TAG, "Error unregistering callback for $packageName", e)
+            }
+        }
+        activeControllers.remove(packageName)
+        packageSpecificCallbacks.remove(packageName)
+        
+        // Update service lifecycle (may go idle if no more sessions)
+        updateServiceLifecycle()
+    }
+
     private fun initializeTrackingComponents() {
         try {
             // Initialize tracking manager for batched event saving
@@ -1553,13 +1731,13 @@ class MusicTrackingService : NotificationListenerService() {
         val packageName = sbn.packageName
         
         // FIRST: Explicitly block video/non-music apps
-        if (packageName in BLOCKED_APPS) {
+        if (isInBlockedApps(packageName)) {
             Log.d(TAG, "Blocking notification from video app: $packageName")
             return false
         }
         
-        // Check if it's from a known music app
-        if (packageName in MUSIC_APPS) return true
+        // Check if it's from a known music app (user-enabled)
+        if (isInEnabledApps(packageName)) return true
         
         // For unknown apps, check notification category
         val notification = sbn.notification
@@ -1866,7 +2044,7 @@ class MusicTrackingService : NotificationListenerService() {
             
             if (existingTrack != null) {
                 Log.d(TAG, "Found fuzzy match for track ${existingTrack.id}: '$title' by '$artist' " +
-                        "(score: ${String.format("%.2f", result.overallScore)}, type: ${result.matchType})")
+                        "(score: ${String.format(java.util.Locale.US, "%.2f", result.overallScore)}, type: ${result.matchType})")
                 return handleExistingTrack(existingTrack, artist, album)
             }
         }
@@ -2587,7 +2765,23 @@ class MusicTrackingService : NotificationListenerService() {
             
             // Skip if already tracked
             if (!activeControllers.containsKey(packageName)) {
-                if (packageName in MUSIC_APPS || isMusicSession(controller)) {
+                // CRITICAL: Only track if the app is explicitly enabled in user preferences,
+                // or if it's a music session from an UNKNOWN app (not in our database).
+                // Apps that user explicitly disabled (exists in DB but isEnabled=false) should NEVER be tracked.
+                val isEnabled = isInEnabledApps(packageName)
+                val isBlocked = isInBlockedApps(packageName)
+                val isKnownApp = packageName in cachedAllKnownPackages
+                
+                // App is explicitly disabled if: exists in DB AND not enabled AND not blocked
+                // (not blocked because blocked is handled separately with higher priority)
+                val isExplicitlyDisabled = isKnownApp && !isEnabled && !isBlocked
+                
+                // Track if:
+                // 1. Explicitly enabled by user, OR
+                // 2. Is music session AND is NOT a known disabled app (allows unknown apps)
+                val shouldTrack = isEnabled || (isMusicSession(controller) && !isExplicitlyDisabled)
+                
+                if (shouldTrack && !isBlocked) {
                     // Register specific callback
                     val callback = PackageSpecificCallback(packageName)
                     controller.registerCallback(callback)
@@ -2597,6 +2791,10 @@ class MusicTrackingService : NotificationListenerService() {
                     
                     // Process initial state
                     processMediaControllerState(controller)
+                } else if (isExplicitlyDisabled) {
+                    Log.d(TAG, "Skipping disabled app: $packageName (user disabled in preferences)")
+                } else if (isBlocked) {
+                    Log.d(TAG, "Skipping blocked app: $packageName")
                 }
             }
         }
@@ -2625,14 +2823,14 @@ class MusicTrackingService : NotificationListenerService() {
     private fun isMusicSession(controller: MediaController): Boolean {
         val packageName = controller.packageName
         
-        // FIRST: Block known video apps
-        if (packageName in BLOCKED_APPS) {
+        // FIRST: Block known video apps (user-blocked or default blocked)
+        if (isInBlockedApps(packageName)) {
             Log.d(TAG, "Blocking MediaSession from video app: $packageName")
             return false
         }
         
-        // Known music apps are always music
-        if (packageName in MUSIC_APPS) {
+        // Known music apps (user-enabled) are always music
+        if (isInEnabledApps(packageName)) {
             return true
         }
         

@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,7 +26,9 @@ import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.*
@@ -50,6 +53,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -59,6 +63,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -149,6 +154,7 @@ fun HistoryScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             // List Content
             HistoryListContent(
+                // Recent Activity section
                 groupedItems = uiState.groupedItems,
                 isLoading = uiState.isLoading,
                 isLoadingMore = uiState.isLoadingMore,
@@ -157,7 +163,18 @@ fun HistoryScreen(
                 onLoadMore = viewModel::loadMore,
                 viewModel = viewModel,
                 onNavigateToTrack = onNavigateToTrack,
-                onDismissCoachMark = viewModel::dismissCoachMark
+                onDismissCoachMark = viewModel::dismissCoachMark,
+                // Last.fm History section
+                viewMode = uiState.viewMode,
+                hasArchiveData = uiState.hasArchiveData,
+                lastFmGroupedItems = uiState.lastFmGroupedItems,
+                archiveItems = uiState.archiveItems,
+                archiveTrackCount = uiState.archiveTrackCount,
+                archiveTotalPlays = uiState.archiveTotalPlays,
+                isLoadingMoreLastFm = uiState.isLoadingMoreLastFm,
+                hasMoreLastFm = uiState.hasMoreLastFm,
+                onLoadMoreLastFm = viewModel::loadMoreLastFmHistory,
+                onViewModeChange = viewModel::setViewMode
             )
 
             // Snackbar for feedback messages
@@ -553,6 +570,7 @@ fun SwipeToDeleteHistoryItem(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HistoryListContent(
+    // Recent Activity section (live tracking, source != fm.last.import)
     groupedItems: Map<String, List<HistoryItem>>,
     isLoading: Boolean,
     isLoadingMore: Boolean,
@@ -561,7 +579,19 @@ fun HistoryListContent(
     onLoadMore: () -> Unit,
     viewModel: HistoryViewModel,
     onNavigateToTrack: (Long) -> Unit,
-    onDismissCoachMark: () -> Unit
+    onDismissCoachMark: () -> Unit,
+    // View mode and archive data
+    viewMode: HistoryViewMode = HistoryViewMode.UNIFIED,
+    hasArchiveData: Boolean = false,
+    archiveItems: List<ArchiveHistoryItem> = emptyList(),
+    archiveTrackCount: Int = 0,
+    archiveTotalPlays: Long = 0,
+    // Last.fm History section (source == fm.last.import)
+    lastFmGroupedItems: Map<String, List<HistoryItem>> = emptyMap(),
+    isLoadingMoreLastFm: Boolean = false,
+    hasMoreLastFm: Boolean = false,
+    onLoadMoreLastFm: () -> Unit = {},
+    onViewModeChange: (HistoryViewMode) -> Unit = {}
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -570,8 +600,19 @@ fun HistoryListContent(
             contentPadding = PaddingValues(top = 100.dp, bottom = 120.dp),
             modifier = Modifier.fillMaxSize()
         ) {
+            // View Mode Toggle Banner (only show if user has archive data in SEPARATED mode)
+            if (hasArchiveData && viewMode == HistoryViewMode.SEPARATED) {
+                item(key = "view_mode_banner") {
+                    SeparatedModeInfoBanner(
+                        archiveTrackCount = archiveTrackCount,
+                        archiveTotalPlays = archiveTotalPlays
+                    )
+                }
+            }
+            
             // Empty State
-            if (!isLoading && groupedItems.isEmpty()) {
+            val allEmpty = groupedItems.isEmpty() && lastFmGroupedItems.isEmpty() && archiveItems.isEmpty()
+            if (!isLoading && allEmpty) {
                 item {
                     Column(
                         modifier = Modifier
@@ -604,6 +645,19 @@ fun HistoryListContent(
                 }
             }
 
+            // === SECTION 1: Recent Activity (Live Tracking) ===
+            // In SEPARATED mode, show section header
+            if (viewMode == HistoryViewMode.SEPARATED && groupedItems.isNotEmpty()) {
+                item(key = "recent_activity_header") {
+                    SectionDividerHeader(
+                        title = "Recent Activity",
+                        subtitle = "From Spotify & notifications",
+                        icon = Icons.Default.PlayCircle,
+                        iconTint = TempoRed
+                    )
+                }
+            }
+            
             groupedItems.entries.forEachIndexed { groupIndex, (header, itemsList) ->
                 stickyHeader(key = "header_$header") {
                     HistorySectionHeader(header)
@@ -653,8 +707,9 @@ fun HistoryListContent(
                 }
             }
 
+            // Loading more indicator for Recent Activity
             if (isLoadingMore) {
-                item {
+                item(key = "loading_more_recent") {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -665,12 +720,351 @@ fun HistoryListContent(
                     }
                 }
             }
+            
+            // === SECTION 2: Last.fm History (only in SEPARATED mode) ===
+            if (viewMode == HistoryViewMode.SEPARATED && (lastFmGroupedItems.isNotEmpty() || archiveItems.isNotEmpty())) {
+                // Section header for Last.fm History
+                item(key = "lastfm_history_header") {
+                    SectionDividerHeader(
+                        title = "Last.fm History",
+                        subtitle = "Imported listening history",
+                        icon = Icons.Default.History,
+                        iconTint = Color(0xFFFFB74D) // Amber/Orange
+                    )
+                }
+                
+                // Last.fm imported events from listening_events table
+                lastFmGroupedItems.entries.forEachIndexed { groupIndex, (header, itemsList) ->
+                    stickyHeader(key = "lastfm_header_$header") {
+                        HistorySectionHeader(header, isLastFmSection = true)
+                    }
+
+                    items(
+                        count = itemsList.size,
+                        key = { index -> "lastfm_${itemsList[index].id}" }
+                    ) { index ->
+                        val item = itemsList[index]
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            SwipeToDeleteHistoryItem(
+                                item = item,
+                                index = index,
+                                onDelete = { viewModel.deleteListeningEvent(item.id) },
+                                onClick = { onNavigateToTrack(item.track_id) },
+                                onMarkContent = viewModel::markContent,
+                                onMarkArtist = viewModel::markArtistContent
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                }
+                
+                // Loading more indicator for Last.fm section
+                if (isLoadingMoreLastFm) {
+                    item(key = "loading_more_lastfm") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = Color(0xFFFFB74D))
+                        }
+                    }
+                }
+                
+                // Archive items (long-tail tracks)
+                if (archiveItems.isNotEmpty()) {
+                    item(key = "archive_sub_header") {
+                        ArchiveSectionHeader(
+                            itemCount = archiveItems.size,
+                            totalTracks = archiveTrackCount
+                        )
+                    }
+                    
+                    items(
+                        count = archiveItems.size,
+                        key = { index -> "archive_${archiveItems[index].archiveId}_${archiveItems[index].timestamp}" }
+                    ) { index ->
+                        val archiveItem = archiveItems[index]
+                        ArchiveHistoryListItem(item = archiveItem)
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                }
+            }
+            
+            // === UNIFIED MODE: Archive section at bottom ===
+            if (viewMode == HistoryViewMode.UNIFIED && archiveItems.isNotEmpty()) {
+                item(key = "archive_header") {
+                    ArchiveSectionHeader(
+                        itemCount = archiveItems.size,
+                        totalTracks = archiveTrackCount
+                    )
+                }
+                
+                items(
+                    count = archiveItems.size,
+                    key = { index -> "archive_${archiveItems[index].archiveId}_${archiveItems[index].timestamp}" }
+                ) { index ->
+                    val archiveItem = archiveItems[index]
+                    ArchiveHistoryListItem(item = archiveItem)
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
         }
     }
 }
 
+/**
+ * Info banner shown in SEPARATED mode to explain the two-section layout.
+ */
 @Composable
-fun HistorySectionHeader(title: String) {
+fun SeparatedModeInfoBanner(
+    archiveTrackCount: Int,
+    archiveTotalPlays: Long
+) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        backgroundColor = Color(0xFF1A1A2E).copy(alpha = 0.8f),
+        shape = RoundedCornerShape(12.dp),
+        contentPadding = PaddingValues(12.dp),
+        variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = Color(0xFFFFB74D),
+                modifier = Modifier.size(20.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Last.fm History Imported",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White
+                )
+                Text(
+                    text = "${archiveTotalPlays.formatNumber()} plays from $archiveTrackCount tracks",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFCAC4D0)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Section divider header for Recent Activity / Last.fm History sections.
+ */
+@Composable
+fun SectionDividerHeader(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    iconTint: Color
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 16.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(24.dp)
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFFCAC4D0),
+            modifier = Modifier.padding(start = 32.dp, top = 2.dp)
+        )
+        // Visual divider
+        Spacer(modifier = Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            iconTint.copy(alpha = 0.5f),
+                            iconTint.copy(alpha = 0.1f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+    }
+}
+
+/**
+ * Header for the archive section in history.
+ */
+@Composable
+fun ArchiveSectionHeader(
+    itemCount: Int,
+    totalTracks: Int
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 16.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.History,
+                contentDescription = null,
+                tint = Color(0xFFFFB74D), // Amber/Orange to distinguish
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = "From Archive",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFFB74D),
+                letterSpacing = 1.sp
+            )
+        }
+        Text(
+            text = "Showing $itemCount of $totalTracks archived tracks from Last.fm import",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFFCAC4D0),
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+/**
+ * Display item for archived scrobbles.
+ * Visually distinct from regular history items.
+ */
+@Composable
+fun ArchiveHistoryListItem(item: ArchiveHistoryItem) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        backgroundColor = Color(0xFF1A1A2E).copy(alpha = 0.6f), // Slightly different tint
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = PaddingValues(16.dp),
+        variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // Album Art with archive indicator
+            Box {
+                CachedAsyncImage(
+                    imageUrl = item.albumArtUrl,
+                    contentDescription = "Album art for ${item.trackTitle}",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    placeholder = {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF2D2A32)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.MusicNote,
+                                contentDescription = null,
+                                tint = Color(0xFF4A4458),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                )
+                // Archive badge
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = 4.dp, y = 4.dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFFB74D)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = item.playCount.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // Track Info
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.trackTitle,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = item.artistName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFCAC4D0),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                // Play count info
+                Text(
+                    text = "${item.playCount} plays in archive",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFFFB74D).copy(alpha = 0.8f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Format large numbers with K/M suffixes.
+ */
+private fun Long.formatNumber(): String {
+    return when {
+        this >= 1_000_000 -> String.format("%.1fM", this / 1_000_000.0)
+        this >= 1_000 -> String.format("%.1fK", this / 1_000.0)
+        else -> this.toString()
+    }
+}
+
+@Composable
+fun HistorySectionHeader(title: String, isLastFmSection: Boolean = false) {
+    val headerColor = if (isLastFmSection) Color(0xFFFFB74D) else TempoRed
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -680,7 +1074,7 @@ fun HistorySectionHeader(title: String) {
             text = title,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
-            color = TempoRed,
+            color = headerColor,
             letterSpacing = 1.sp
         )
     }

@@ -249,7 +249,7 @@ class ImportExportManager @Inject constructor(
             for (album in data.albums) {
                 val newArtistId = artistIdMap[album.artistId] ?: continue
                 val remappedAlbum = remapImagePath(album, pathMapping).copy(artistId = newArtistId)
-            val artistName = data.artists.find { it.id == album.artistId }?.name
+                val artistName = data.artists.find { it.id == album.artistId }?.name
                 if (artistName == null) {
                     Log.w(TAG, "Skipping album '${album.title}': artist ID ${album.artistId} not found in export")
                     continue

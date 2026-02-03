@@ -6,4 +6,9 @@ import kotlinx.coroutines.flow.Flow
 interface PreferencesRepository {
     fun preferences(): Flow<UserPreferences?>
     suspend fun upsert(prefs: UserPreferences)
+    
+    // Helper methods for updating spotlight reminder tracking
+    suspend fun updateLastMonthlyReminderShown(date: String)
+    suspend fun updateLastYearlyReminderShown(date: String)
+    suspend fun updateLastAllTimeReminderShown(date: String)
 }

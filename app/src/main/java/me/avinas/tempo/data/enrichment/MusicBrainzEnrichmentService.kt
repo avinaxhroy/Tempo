@@ -64,6 +64,9 @@ class MusicBrainzEnrichmentService @Inject constructor(
         private const val MIN_TITLE_SIMILARITY = 0.85 // Minimum title similarity to accept a match
         private const val MIN_FUZZY_TITLE_SIMILARITY = 0.70 // For fuzzy searches, require slightly lower but still reasonable match
         
+        // Pre-compiled regex pattern to avoid repeated native memory allocation
+        private val CAA_INDEX_PATTERN = Regex("""^https?://coverartarchive\.org/(release|release-group)/[a-f0-9-]+/?$""")
+        
         /**
          * Fix HTTP URLs to use HTTPS for better reliability.
          * Cover Art Archive and Internet Archive use HTTPS for actual images,
@@ -99,8 +102,7 @@ class MusicBrainzEnrichmentService @Inject constructor(
             // Reject Cover Art Archive index endpoints (return JSON)
             // Pattern: .../release/{mbid} or .../release-group/{mbid} possibly with trailing slash
             // Valid image URLs usually have /front, /back, or .jpg/.png extension
-            val isCaaIndex = url.matches(Regex("""^https?://coverartarchive\.org/(release|release-group)/[a-f0-9-]+/?$"""))
-            if (isCaaIndex) return false
+            if (CAA_INDEX_PATTERN.matches(url)) return false
             
             return true
         }

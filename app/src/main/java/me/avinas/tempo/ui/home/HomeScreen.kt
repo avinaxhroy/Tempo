@@ -100,7 +100,7 @@ fun HomeScreen(
                             val hours = totalMinutes / 60
                             val minutes = totalMinutes % 60
                             
-                            val decimalTime = String.format("%.1f", totalMinutes / 60.0)
+                            val decimalTime = String.format(java.util.Locale.US, "%.1f", totalMinutes / 60.0)
                             val timeString = if (hours == 0L) {
                                  if (minutes > 0) "${minutes}m" else "0m"
                             } else {
@@ -176,7 +176,6 @@ fun HomeScreen(
                                     .fillMaxWidth()
                                     .height(me.avinas.tempo.ui.utils.rememberScreenHeightPercentage(0.7f)),
                                 timeRange = if (uiState.isNewUser) null else uiState.selectedTimeRange,
-                                type = me.avinas.tempo.ui.components.GhostScreenType.HOME,
                                 onCheckSupportedApps = onNavigateToSupportedApps
                             )
                         }

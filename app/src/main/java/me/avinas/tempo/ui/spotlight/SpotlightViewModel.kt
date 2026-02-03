@@ -22,15 +22,15 @@ class SpotlightViewModel @Inject constructor(
     private val cardGenerator: InsightCardGenerator,
     private val statsRepository: StatsRepository,
     private val imageLoader: ImageLoader,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SpotlightUiState())
     val uiState: StateFlow<SpotlightUiState> = _uiState.asStateFlow()
 
     init {
-        checkIfStoryLocked(TimeRange.THIS_YEAR)
-        loadCards(TimeRange.THIS_YEAR)
+        checkIfStoryLocked(TimeRange.THIS_MONTH)
+        loadCards(TimeRange.THIS_MONTH)
         observeDataChanges()
     }
     
@@ -198,7 +198,7 @@ data class SpotlightUiState(
     val storyPages: List<SpotlightStoryPage> = emptyList(),
     val isLoading: Boolean = true,
     val storyLoading: Boolean = true,
-    val selectedTimeRange: TimeRange = TimeRange.THIS_YEAR,
+    val selectedTimeRange: TimeRange = TimeRange.THIS_MONTH,
     val isStoryLocked: Boolean = false,
     val storyLockMessage: String = ""
 )

@@ -64,6 +64,10 @@ class SpotifyEnrichmentService @Inject constructor(
         private const val TAG = "SpotifyEnrichment"
         private const val MIN_MATCH_SCORE = 0.7 // Minimum similarity score to accept match
         private const val RATE_LIMIT_DELAY_MS = 100L // Small delay between requests
+        
+        // Pre-compiled regex patterns to avoid repeated native memory allocation
+        private val SPECIAL_CHARS_PATTERN = Regex("[^a-z0-9\\s]")
+        private val WHITESPACE_PATTERN = Regex("\\s+")
     }
 
     /**
@@ -287,9 +291,14 @@ class SpotifyEnrichmentService @Inject constructor(
     /**
      * Clean artist name for better search matching.
      * Uses ArtistParser to get the primary artist for more focused search.
+     * Also normalizes stylized characters that might cause search mismatches.
      */
     private fun cleanArtistName(artist: String): String {
-        return me.avinas.tempo.utils.ArtistParser.getPrimaryArtist(artist)
+        val primary = me.avinas.tempo.utils.ArtistParser.getPrimaryArtist(artist)
+        // Normalize common stylizations that cause search failures
+        // Note: Only replace $ with S as this is a known pattern (KR$NA, Ke$ha)
+        // Don't replace 0 with O as it breaks legitimate names like Blink-182, 50 Cent
+        return primary.replace("\$", "S", ignoreCase = false)
     }
 
     /**
@@ -361,8 +370,8 @@ class SpotifyEnrichmentService @Inject constructor(
      */
     private fun normalizeString(str: String): String {
         return str.lowercase()
-            .replace(Regex("[^a-z0-9\\s]"), "")
-            .replace(Regex("\\s+"), " ")
+            .replace(SPECIAL_CHARS_PATTERN, "")
+            .replace(WHITESPACE_PATTERN, " ")
             .trim()
     }
 
@@ -1081,8 +1090,8 @@ class SpotifyEnrichmentService @Inject constructor(
         return name
             .lowercase()
             .trim()
-            .replace(Regex("[^a-z0-9\\s]"), "") // Remove special chars
-            .replace(Regex("\\s+"), " ") // Normalize whitespace
+            .replace(SPECIAL_CHARS_PATTERN, "") // Remove special chars
+            .replace(WHITESPACE_PATTERN, " ") // Normalize whitespace
     }
 
     /**

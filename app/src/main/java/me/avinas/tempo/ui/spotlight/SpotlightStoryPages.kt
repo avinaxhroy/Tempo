@@ -252,7 +252,7 @@ fun ListeningMinutesPage(page: SpotlightStoryPage.ListeningMinutes) {
                     Spacer(modifier = Modifier.height(dimens.spacerSmall))
 
                     Text(
-                        text = String.format("%,d", animatedMinutes.value.toInt()),
+                        text = String.format(java.util.Locale.US, "%,d", animatedMinutes.value.toInt()),
                         style = MaterialTheme.typography.displayLarge.copy(
                             fontSize = dimens.textDisplay,
                             fontWeight = FontWeight.Black,
@@ -1147,7 +1147,7 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                                 Text("Listening Time", style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel), color = Color.White.copy(alpha = 0.8f))
                                 Spacer(modifier = Modifier.height(8.dp * dimens.scale))
                                 Text(
-                                    String.format("%,d", page.totalMinutes),
+                                    String.format(java.util.Locale.US, "%,d", page.totalMinutes),
                                     style = MaterialTheme.typography.headlineSmall.copy(fontSize = dimens.textHeadline),
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White

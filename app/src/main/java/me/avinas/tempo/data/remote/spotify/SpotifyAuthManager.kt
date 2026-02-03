@@ -10,6 +10,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
@@ -66,6 +68,9 @@ class SpotifyAuthManager @Inject constructor(
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.NotConnected)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
+    
+    // Mutex to prevent race condition during token refresh
+    private val tokenRefreshMutex = Mutex()
 
     init {
         // Check if we have stored tokens on startup
@@ -89,23 +94,24 @@ class SpotifyAuthManager @Inject constructor(
     /**
      * Get a valid access token, refreshing if necessary.
      * Returns null if not authenticated or refresh fails.
+     * Uses mutex to prevent race condition when multiple coroutines call this simultaneously.
      */
-    suspend fun getValidAccessToken(): String? {
+    suspend fun getValidAccessToken(): String? = tokenRefreshMutex.withLock {
         val accessToken = tokenStorage.getAccessToken()
         val expiresAt = tokenStorage.getTokenExpiresAt()
         
         if (accessToken == null) {
             Log.d(TAG, "No access token stored")
-            return null
+            return@withLock null
         }
 
         // Check if token is expired or about to expire
         if (expiresAt != null && System.currentTimeMillis() > expiresAt - TOKEN_REFRESH_BUFFER_MS) {
             Log.d(TAG, "Token expired or expiring soon, refreshing...")
-            return refreshAccessToken()
+            return@withLock refreshAccessToken()
         }
 
-        return accessToken
+        accessToken
     }
 
     /**

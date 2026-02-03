@@ -12,6 +12,8 @@ import me.avinas.tempo.ui.home.HomeScreen
 import me.avinas.tempo.ui.settings.SettingsScreen
 import me.avinas.tempo.ui.settings.SupportedAppsScreen
 import me.avinas.tempo.ui.settings.BackupRestoreScreen
+import me.avinas.tempo.ui.settings.BackgroundProtectionScreen
+import me.avinas.tempo.ui.lastfm.LastFmImportScreen
 import me.avinas.tempo.ui.spotlight.SpotlightScreen
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import kotlinx.coroutines.launch
@@ -55,6 +57,8 @@ sealed class Screen(val route: String) {
     object Insights : Screen("insights")
     data object BackupRestore : Screen("backup_restore")
     data object SupportedApps : Screen("supported_apps")
+    data object BackgroundProtection : Screen("background_protection")
+    data object LastFmImport : Screen("lastfm_import")
     object ShareCanvas : Screen("share_canvas/{initialCardId}") {
         fun createRoute(initialCardId: String) = "share_canvas/$initialCardId"
         fun createRouteEmpty() = "share_canvas/_empty_"
@@ -166,7 +170,9 @@ fun AppNavigation(
                             onNavigateBack = { navController.popBackStack() },
                             onNavigateToOnboarding = onResetToOnboarding,
                             onNavigateToBackup = { navController.navigate(Screen.BackupRestore.route) },
-                            onNavigateToSupportedApps = { navController.navigate(Screen.SupportedApps.route) }
+                            onNavigateToSupportedApps = { navController.navigate(Screen.SupportedApps.route) },
+                            onNavigateToBackgroundProtection = { navController.navigate(Screen.BackgroundProtection.route) },
+                            onNavigateToLastFmImport = { navController.navigate(Screen.LastFmImport.route) }
                         )
                     }
 
@@ -178,6 +184,18 @@ fun AppNavigation(
 
                     composable(Screen.SupportedApps.route) {
                         SupportedAppsScreen(
+                            onNavigateBack = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable(Screen.BackgroundProtection.route) {
+                        BackgroundProtectionScreen(
+                            onNavigateBack = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable(Screen.LastFmImport.route) {
+                        LastFmImportScreen(
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }

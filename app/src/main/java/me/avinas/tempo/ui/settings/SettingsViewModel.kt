@@ -13,6 +13,7 @@ import me.avinas.tempo.data.importexport.ImportExportResult
 import me.avinas.tempo.data.local.AppDatabase
 import me.avinas.tempo.ui.onboarding.dataStore
 import me.avinas.tempo.worker.NotificationWorker
+import me.avinas.tempo.worker.SpotifyPollingWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +25,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val database: AppDatabase,
     private val importExportManager: ImportExportManager,
     private val userPreferencesDao: me.avinas.tempo.data.local.dao.UserPreferencesDao
@@ -65,21 +66,39 @@ class SettingsViewModel @Inject constructor(
                 userName = dataStorePrefs[USER_NAME_KEY] ?: "User",
                 mergeAlternateVersions = roomPrefs.mergeAlternateVersions,
                 filterPodcasts = roomPrefs.filterPodcasts,
-                filterAudiobooks = roomPrefs.filterAudiobooks
+                filterAudiobooks = roomPrefs.filterAudiobooks,
+                spotifyApiOnlyMode = roomPrefs.spotifyApiOnlyMode,
+                isLastFmConnected = roomPrefs.lastfmConnected,
+                lastFmUsername = roomPrefs.lastfmUsername,
+                lastFmSyncFrequency = roomPrefs.lastfmSyncFrequency
             )
-            
-            // Continue watching DataStore for updates
+        }
+        
+        // Watch DataStore for updates
+        viewModelScope.launch {
             context.dataStore.data.collect { preferences ->
-                val currentRoomPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
-                _uiState.value = SettingsUiState(
+                _uiState.value = _uiState.value.copy(
                     dailySummaryEnabled = preferences[NOTIF_DAILY_KEY] ?: true,
                     weeklyRecapEnabled = preferences[NOTIF_WEEKLY_KEY] ?: true,
                     achievementsEnabled = preferences[NOTIF_ACHIEVEMENTS_KEY] ?: true,
                     extendedAudioAnalysisEnabled = preferences[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
-                    userName = preferences[USER_NAME_KEY] ?: "User",
-                    mergeAlternateVersions = currentRoomPrefs.mergeAlternateVersions,
-                    filterPodcasts = currentRoomPrefs.filterPodcasts,
-                    filterAudiobooks = currentRoomPrefs.filterAudiobooks
+                    userName = preferences[USER_NAME_KEY] ?: "User"
+                )
+            }
+        }
+        
+        // Watch Room preferences for updates (Last.fm state, filters, etc.)
+        viewModelScope.launch {
+            userPreferencesDao.preferences().collect { roomPrefs ->
+                val prefs = roomPrefs ?: me.avinas.tempo.data.local.entities.UserPreferences()
+                _uiState.value = _uiState.value.copy(
+                    mergeAlternateVersions = prefs.mergeAlternateVersions,
+                    filterPodcasts = prefs.filterPodcasts,
+                    filterAudiobooks = prefs.filterAudiobooks,
+                    spotifyApiOnlyMode = prefs.spotifyApiOnlyMode,
+                    isLastFmConnected = prefs.lastfmConnected,
+                    lastFmUsername = prefs.lastfmUsername,
+                    lastFmSyncFrequency = prefs.lastfmSyncFrequency
                 )
             }
         }
@@ -149,6 +168,26 @@ class SettingsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(filterAudiobooks = enabled)
         }
     }
+    
+    /**
+     * Toggle Spotify-API-Only mode.
+     * When enabled: Spotify listening data is fetched from API instead of notifications.
+     * When disabled (default): All apps including Spotify use notification tracking.
+     */
+    fun toggleSpotifyApiOnlyMode(enabled: Boolean) {
+        viewModelScope.launch {
+            val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+            userPreferencesDao.upsert(currentPrefs.copy(spotifyApiOnlyMode = enabled))
+            _uiState.value = _uiState.value.copy(spotifyApiOnlyMode = enabled)
+            
+            // Schedule or cancel the polling worker based on mode
+            if (enabled) {
+                SpotifyPollingWorker.schedule(context)
+            } else {
+                SpotifyPollingWorker.cancel(context)
+            }
+        }
+    }
 
     fun clearAllData() {
         viewModelScope.launch {
@@ -214,5 +253,10 @@ data class SettingsUiState(
     val userName: String = "User",
     val mergeAlternateVersions: Boolean = true,
     val filterPodcasts: Boolean = true,
-    val filterAudiobooks: Boolean = true
+    val filterAudiobooks: Boolean = true,
+    val spotifyApiOnlyMode: Boolean = false,
+    // Last.fm connection state
+    val isLastFmConnected: Boolean = false,
+    val lastFmUsername: String? = null,
+    val lastFmSyncFrequency: String = "NONE"
 )

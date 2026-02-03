@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import me.avinas.tempo.data.local.dao.ListeningEventDao
 import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.data.stats.TimeRange
 import me.avinas.tempo.ui.onboarding.dataStore
@@ -26,10 +27,11 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val statsRepository: StatsRepository,
     private val tokenStorage: me.avinas.tempo.data.remote.spotify.SpotifyTokenStorage,
-    private val preferencesRepository: me.avinas.tempo.data.repository.PreferencesRepository
+    private val preferencesRepository: me.avinas.tempo.data.repository.PreferencesRepository,
+    private val listeningEventDao: ListeningEventDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -93,6 +95,8 @@ class HomeViewModel @Inject constructor(
                 val mostActiveHourDeferred = async { statsRepository.getMostActiveHour(timeRange) }
                 val audioFeaturesDeferred = async { statsRepository.getAudioFeaturesStats(timeRange) }
                 val insightsDeferred = async { statsRepository.getInsights(timeRange) }
+                // Use ALL_TIME stats for rate app check - ensures consistent behavior regardless of current filter
+                val allTimeOverviewDeferred = async { statsRepository.getListeningOverview(TimeRange.ALL_TIME) }
                 val userNameDeferred = async { 
                     val preferences = context.dataStore.data.first()
                     val savedName = preferences[stringPreferencesKey("user_name")]
@@ -113,6 +117,7 @@ class HomeViewModel @Inject constructor(
                 val mostActiveHour = mostActiveHourDeferred.await()
                 val audioFeatures = audioFeaturesDeferred.await()
                 val insights = insightsDeferred.await()
+                val allTimeOverview = allTimeOverviewDeferred.await()
                 val userName = userNameDeferred.await()
                 
                 // Ensure we have exactly 7 days of data, filling missing days with 0
@@ -153,7 +158,7 @@ class HomeViewModel @Inject constructor(
                         userName = userName,
                         hasData = hasData,
                         isNewUser = isNewUser,
-                        showRateAppPopup = shouldShowRateApp(overview.totalListeningTimeMs, overview.totalPlayCount)
+                        showRateAppPopup = shouldShowRateApp(allTimeOverview.totalListeningTimeMs, allTimeOverview.totalPlayCount)
                     )
                 }
             }
@@ -163,8 +168,13 @@ class HomeViewModel @Inject constructor(
     }
 
     private suspend fun shouldShowRateApp(totalTimeMs: Long, playCount: Int): Boolean {
-        // Engagement Check: > 2 hours listening AND > 50 plays
-        if (totalTimeMs < 2 * 60 * 60 * 1000 || playCount < 50) return false
+        // Get REAL usage stats (excluding imported data from Spotify)
+        // We want to prompt users who actually use the app, not just imported history
+        val realListeningTimeMs = listeningEventDao.getRealListeningTimeMs()
+        val realPlayCount = listeningEventDao.getRealPlayCount()
+        
+        // Engagement Check: > 2 hours REAL listening AND > 50 REAL plays
+        if (realListeningTimeMs < 2 * 60 * 60 * 1000 || realPlayCount < 50) return false
 
         val preferences = context.dataStore.data.first()
         val hasRated = preferences[booleanPreferencesKey("rate_app_rated")] ?: false

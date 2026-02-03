@@ -238,7 +238,10 @@ interface StatsDao {
      * Get top artists by play count with image and country.
      * Uses proper JOIN through track_artists junction table when available,
      * falls back to string matching for unmigrated tracks.
-     * Image URL comes from artists table or from spotify_artist_image_url in enriched_metadata.
+     * 
+     * Image URL priority:
+     * 1. artists.image_url (always correct for specific artist)
+     * 2. enriched_metadata fallback ONLY when artist is PRIMARY (prevents featured artist getting main artist's image)
      */
     @Query("""
         SELECT 
@@ -253,6 +256,7 @@ interface StatsDao {
                 (SELECT em2.spotify_artist_image_url FROM enriched_metadata em2 
                  INNER JOIN track_artists ta2 ON ta2.track_id = em2.track_id
                  WHERE ta2.artist_id = a.id
+                 AND ta2.role = 'PRIMARY'
                  AND em2.spotify_artist_image_url IS NOT NULL LIMIT 1)
             ) as image_url,
             COALESCE(a.country,
@@ -280,7 +284,10 @@ interface StatsDao {
     /**
      * Get top artists by total listening time with image and country.
      * Uses proper JOIN through track_artists junction table when available.
-     * Image URL comes from artists table or from spotify_artist_image_url in enriched_metadata.
+     * 
+     * Image URL priority:
+     * 1. artists.image_url (always correct for specific artist)
+     * 2. enriched_metadata fallback ONLY when artist is PRIMARY (prevents featured artist getting main artist's image)
      */
     @Query("""
         SELECT 
@@ -295,6 +302,7 @@ interface StatsDao {
                 (SELECT em2.spotify_artist_image_url FROM enriched_metadata em2 
                  INNER JOIN track_artists ta2 ON ta2.track_id = em2.track_id
                  WHERE ta2.artist_id = a.id
+                 AND ta2.role = 'PRIMARY'
                  AND em2.spotify_artist_image_url IS NOT NULL LIMIT 1)
             ) as image_url,
             COALESCE(a.country,
@@ -1180,6 +1188,138 @@ interface StatsDao {
         limit: Int,
         offset: Int
     ): List<HistoryItem>
+    
+    /**
+     * Get listening history EXCLUDING Last.fm imported events.
+     * This shows only "live" activity from Spotify/notification tracking.
+     * Used for the "Recent Activity" section when Last.fm import exists.
+     */
+    @Query("""
+        SELECT 
+            le.id,
+            le.track_id,
+            le.timestamp,
+            le.playDuration,
+            le.completionPercentage,
+            t.title,
+            t.artist,
+            t.album,
+            t.content_type,
+            COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url
+        FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        LEFT JOIN enriched_metadata em ON t.id = em.track_id
+        WHERE 
+            le.source != 'fm.last.import' AND
+            (:startTime IS NULL OR le.timestamp >= :startTime) AND
+            (:endTime IS NULL OR le.timestamp <= :endTime) AND
+            (:includeSkips = 1 OR (le.was_skipped = 0 AND le.completionPercentage >= 30)) AND
+            (:searchQuery IS NULL OR :searchQuery = '' OR 
+                t.title LIKE '%' || :searchQuery || '%' OR 
+                t.artist LIKE '%' || :searchQuery || '%' OR 
+                t.album LIKE '%' || :searchQuery || '%') AND
+            (:filterPodcasts = 0 OR t.content_type != 'PODCAST') AND
+            (:filterAudiobooks = 0 OR t.content_type != 'AUDIOBOOK')
+        ORDER BY le.timestamp DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getHistoryExcludingLastFm(
+        searchQuery: String? = null,
+        startTime: Long? = null,
+        endTime: Long? = null,
+        includeSkips: Boolean = true,
+        filterPodcasts: Boolean = true,
+        filterAudiobooks: Boolean = true,
+        limit: Int,
+        offset: Int
+    ): List<HistoryItem>
+    
+    /**
+     * Get listening history ONLY from Last.fm imported events.
+     * This shows the "active set" of Last.fm imports (top/loved tracks).
+     * Used for the "Last.fm History" section.
+     */
+    @Query("""
+        SELECT 
+            le.id,
+            le.track_id,
+            le.timestamp,
+            le.playDuration,
+            le.completionPercentage,
+            t.title,
+            t.artist,
+            t.album,
+            t.content_type,
+            COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url
+        FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        LEFT JOIN enriched_metadata em ON t.id = em.track_id
+        WHERE 
+            le.source = 'fm.last.import' AND
+            (:startTime IS NULL OR le.timestamp >= :startTime) AND
+            (:endTime IS NULL OR le.timestamp <= :endTime) AND
+            (:includeSkips = 1 OR (le.was_skipped = 0 AND le.completionPercentage >= 30)) AND
+            (:searchQuery IS NULL OR :searchQuery = '' OR 
+                t.title LIKE '%' || :searchQuery || '%' OR 
+                t.artist LIKE '%' || :searchQuery || '%' OR 
+                t.album LIKE '%' || :searchQuery || '%') AND
+            (:filterPodcasts = 0 OR t.content_type != 'PODCAST') AND
+            (:filterAudiobooks = 0 OR t.content_type != 'AUDIOBOOK')
+        ORDER BY le.timestamp DESC
+        LIMIT :limit OFFSET :offset
+    """)
+    suspend fun getHistoryLastFmOnly(
+        searchQuery: String? = null,
+        startTime: Long? = null,
+        endTime: Long? = null,
+        includeSkips: Boolean = true,
+        filterPodcasts: Boolean = true,
+        filterAudiobooks: Boolean = true,
+        limit: Int,
+        offset: Int
+    ): List<HistoryItem>
+    
+    /**
+     * Count total Last.fm imported events (for pagination info).
+     */
+    @Query("""
+        SELECT COUNT(*) FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        WHERE 
+            le.source = 'fm.last.import' AND
+            (:startTime IS NULL OR le.timestamp >= :startTime) AND
+            (:endTime IS NULL OR le.timestamp <= :endTime) AND
+            (:searchQuery IS NULL OR :searchQuery = '' OR 
+                t.title LIKE '%' || :searchQuery || '%' OR 
+                t.artist LIKE '%' || :searchQuery || '%' OR 
+                t.album LIKE '%' || :searchQuery || '%')
+    """)
+    suspend fun countLastFmHistory(
+        searchQuery: String? = null,
+        startTime: Long? = null,
+        endTime: Long? = null
+    ): Int
+    
+    /**
+     * Count non-Last.fm events (live activity count).
+     */
+    @Query("""
+        SELECT COUNT(*) FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        WHERE 
+            le.source != 'fm.last.import' AND
+            (:startTime IS NULL OR le.timestamp >= :startTime) AND
+            (:endTime IS NULL OR le.timestamp <= :endTime) AND
+            (:searchQuery IS NULL OR :searchQuery = '' OR 
+                t.title LIKE '%' || :searchQuery || '%' OR 
+                t.artist LIKE '%' || :searchQuery || '%' OR 
+                t.album LIKE '%' || :searchQuery || '%')
+    """)
+    suspend fun countLiveHistory(
+        searchQuery: String? = null,
+        startTime: Long? = null,
+        endTime: Long? = null
+    ): Int
 
     // =====================
     // Single Entity Stats
@@ -1471,6 +1611,7 @@ interface StatsDao {
     
     /**
      * Get artist image URL from enriched metadata (fallback - any track containing artist).
+     * Enhanced to better exclude featured artist contexts.
      * Checks all artist image sources in priority order: Spotify > iTunes > Last.fm > Deezer
      */
     @Query("""
@@ -1492,6 +1633,21 @@ interface StatsDao {
             -- Exact match (solo artist)
             OR LOWER(t.artist) = LOWER(:artistName)
         )
+        -- Exclude cases where artist appears AFTER featuring keywords (featured artist)
+        AND NOT (
+            LOWER(t.artist) LIKE '% feat. ' || LOWER(:artistName)
+            OR LOWER(t.artist) LIKE '% feat. ' || LOWER(:artistName) || ',%'
+            OR LOWER(t.artist) LIKE '% feat ' || LOWER(:artistName)
+            OR LOWER(t.artist) LIKE '% feat ' || LOWER(:artistName) || ',%'
+            OR LOWER(t.artist) LIKE '% ft. ' || LOWER(:artistName)
+            OR LOWER(t.artist) LIKE '% ft. ' || LOWER(:artistName) || ',%'
+            OR LOWER(t.artist) LIKE '% ft ' || LOWER(:artistName)
+            OR LOWER(t.artist) LIKE '% ft ' || LOWER(:artistName) || ',%'
+            OR LOWER(t.artist) LIKE '% featuring ' || LOWER(:artistName)
+            OR LOWER(t.artist) LIKE '% featuring ' || LOWER(:artistName) || ',%'
+            OR LOWER(t.artist) LIKE '% with ' || LOWER(:artistName)
+            OR LOWER(t.artist) LIKE '% with ' || LOWER(:artistName) || ',%'
+        )
         AND (em.spotify_artist_image_url IS NOT NULL OR em.itunes_artist_image_url IS NOT NULL 
              OR em.lastfm_artist_image_url IS NOT NULL OR em.deezer_artist_image_url IS NOT NULL)
         LIMIT 1
@@ -1501,6 +1657,11 @@ interface StatsDao {
     /**
      * Get artist image URL by artist ID from enriched metadata.
      * Uses the track_artists junction table to find tracks linked to this artist.
+     * 
+     * IMPORTANT: Only returns images from tracks where this artist is PRIMARY.
+     * This prevents featured artists from incorrectly getting the main artist's image,
+     * since enriched_metadata stores the track's primary artist image.
+     * 
      * Checks all artist image sources in priority order: Spotify > iTunes > Last.fm > Deezer
      */
     @Query("""
@@ -1513,6 +1674,7 @@ interface StatsDao {
         FROM enriched_metadata em
         INNER JOIN track_artists ta ON ta.track_id = em.track_id
         WHERE ta.artist_id = :artistId
+              AND ta.role = 'PRIMARY'
               AND (em.spotify_artist_image_url IS NOT NULL OR em.itunes_artist_image_url IS NOT NULL 
                    OR em.lastfm_artist_image_url IS NOT NULL OR em.deezer_artist_image_url IS NOT NULL)
         LIMIT 1

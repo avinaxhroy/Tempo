@@ -37,7 +37,7 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class BackupRestoreViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val database: AppDatabase,
     private val importExportManager: ImportExportManager,
     private val googleAuthManager: GoogleAuthManager,

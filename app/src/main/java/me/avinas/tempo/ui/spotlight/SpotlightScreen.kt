@@ -136,7 +136,10 @@ fun SpotlightScreen(
                     }
 
                     // Dynamic Feed of Insights
-                    items(uiState.cards) { card ->
+                    items(
+                        items = uiState.cards,
+                        key = { card -> card.id }
+                    ) { card ->
                         AnimatedVisibility(
                             visible = true,
                             enter = fadeIn(animationSpec = tween(500)) + 
@@ -179,7 +182,6 @@ fun SpotlightScreen(
                                     data = card,
                                     onShareClick = { onShareCard(card) }
                                 )
-                                else -> { /* Support other cards or ignore */ }
                             }
                         }
                     }
