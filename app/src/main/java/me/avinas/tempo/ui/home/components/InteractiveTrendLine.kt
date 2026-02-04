@@ -1,6 +1,5 @@
 package me.avinas.tempo.ui.home.components
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -15,8 +14,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -49,20 +48,28 @@ fun InteractiveTrendLine(
         "Labels size (${labels.size}) must match dataPoints size (${dataPoints.size})" 
     }
 
-    // Use labels as key to reset state when data changes (e.g., switching time ranges)
+    // Use labels list directly as key to avoid hashCode collisions
     // This ensures state resets even if dataPoints.size stays the same
-    val dataKey = remember(labels) { labels.hashCode() }
-    
-    var selectedIndex by remember(dataKey) { mutableStateOf<Int?>(null) }
-    var isDragging by remember(dataKey) { mutableStateOf(false) }
-    var dragPosition by remember(dataKey) { mutableStateOf<Offset?>(null) }
-    val density = LocalDensity.current
+    var selectedIndex by remember(labels) { mutableStateOf<Int?>(null) }
+    var isDragging by remember(labels) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val animatedX = remember(dataKey) { Animatable(0f) }
+    
+    // Track pending clear job to cancel it on new interactions
+    var pendingClearJob by remember(labels) { mutableStateOf<Job?>(null) }
     
     // Reset scrubbing state when data changes (e.g., switching time ranges)
-    LaunchedEffect(dataKey) {
+    LaunchedEffect(labels) {
+        // Cancel any pending clear operations from previous data
+        pendingClearJob?.cancel()
+        pendingClearJob = null
         onSelectionCleared?.invoke()
+    }
+    
+    // Cancel pending clear job when composable leaves composition
+    DisposableEffect(labels) {
+        onDispose {
+            pendingClearJob?.cancel()
+        }
     }
 
     // Helper function to calculate nearest index from X position
@@ -79,29 +86,40 @@ fun InteractiveTrendLine(
         return exactIndex.toInt().coerceIn(0, dataPoints.size - 1)
     }
     
-    // Helper function to calculate X position from index
-    fun calculateXFromIndex(index: Int, width: Float): Float {
-        if (dataPoints.size <= 1) return width / 2f
-        return (index.toFloat() / (dataPoints.size - 1)) * width
+    // Helper to clear selection state with proper job management
+    fun clearSelectionWithDelay(delayMs: Long) {
+        // Cancel any existing pending clear
+        pendingClearJob?.cancel()
+        pendingClearJob = scope.launch {
+            delay(delayMs)
+            isDragging = false
+            selectedIndex = null
+            onSelectionCleared?.invoke()
+        }
+    }
+    
+    // Helper to cancel pending clear (called when new interaction starts)
+    fun cancelPendingClear() {
+        pendingClearJob?.cancel()
+        pendingClearJob = null
     }
 
     Box(modifier = modifier) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(dataKey) {
+                .pointerInput(labels) {
                     detectDragGestures(
                         onDragStart = { offset ->
+                            // Cancel any pending clear from previous interaction
+                            cancelPendingClear()
+                            
                             isDragging = true
-                            dragPosition = offset
                             
                             val width = size.width.toFloat()
                             val nearestIndex = calculateNearestIndex(offset.x, width)
                             
                             selectedIndex = nearestIndex
-                            scope.launch {
-                                animatedX.snapTo(calculateXFromIndex(nearestIndex, width))
-                            }
                             onValueSelected?.invoke(
                                 dataPoints[nearestIndex],
                                 labels[nearestIndex]
@@ -110,7 +128,6 @@ fun InteractiveTrendLine(
                         onDrag = { change, _ ->
                             change.consume()
                             val offset = change.position
-                            dragPosition = offset
                             
                             val width = size.width.toFloat()
                             val clampedX = offset.x.coerceIn(0f, width)
@@ -118,9 +135,6 @@ fun InteractiveTrendLine(
                             
                             if (nearestIndex != selectedIndex) {
                                 selectedIndex = nearestIndex
-                                scope.launch {
-                                    animatedX.snapTo(calculateXFromIndex(nearestIndex, width))
-                                }
                                 onValueSelected?.invoke(
                                     dataPoints[nearestIndex],
                                     labels[nearestIndex]
@@ -128,43 +142,36 @@ fun InteractiveTrendLine(
                             }
                         },
                         onDragEnd = {
-                            scope.launch {
-                                delay(DRAG_END_DELAY_MS)
-                                isDragging = false
-                                selectedIndex = null
-                                dragPosition = null
-                                onSelectionCleared?.invoke()
-                            }
+                            clearSelectionWithDelay(DRAG_END_DELAY_MS)
                         },
                         onDragCancel = {
                             isDragging = false
                             selectedIndex = null
-                            dragPosition = null
+                            pendingClearJob?.cancel()
+                            pendingClearJob = null
                             onSelectionCleared?.invoke()
                         }
                     )
                 }
-                .pointerInput(dataKey) {
+                .pointerInput(labels) {
                     detectTapGestures { offset ->
+                        // Cancel any pending clear from previous interaction
+                        cancelPendingClear()
+                        
                         isDragging = true
-                        dragPosition = offset
                         
                         val width = size.width.toFloat()
                         val nearestIndex = calculateNearestIndex(offset.x, width)
                         
                         selectedIndex = nearestIndex
-                        scope.launch {
-                            animatedX.snapTo(calculateXFromIndex(nearestIndex, width))
-                            onValueSelected?.invoke(
-                                dataPoints[nearestIndex],
-                                labels[nearestIndex]
-                            )
-                            delay(TAP_DISPLAY_DURATION_MS)
-                            isDragging = false
-                            selectedIndex = null
-                            dragPosition = null
-                            onSelectionCleared?.invoke()
-                        }
+                        // Invoke callback outside of coroutine for consistent timing
+                        onValueSelected?.invoke(
+                            dataPoints[nearestIndex],
+                            labels[nearestIndex]
+                        )
+                        
+                        // Schedule clear with delay
+                        clearSelectionWithDelay(TAP_DISPLAY_DURATION_MS)
                     }
                 }
         ) {
@@ -177,40 +184,48 @@ fun InteractiveTrendLine(
             val path = Path()
             val fillPath = Path()
             
-            // Use the same calculation as in helper function for consistency
-            dataPoints.forEachIndexed { index, value ->
-                val x = if (dataPoints.size > 1) {
-                    (index.toFloat() / (dataPoints.size - 1)) * width
-                } else {
-                    width / 2f
-                }
-                val y = height - ((value - minVal) / range * height)
+            // Handle single data point case separately for proper fill
+            if (dataPoints.size == 1) {
+                val x = width / 2f
+                val y = height - ((dataPoints[0] - minVal) / range * height)
+                
+                // For single point, draw a small filled area
+                path.moveTo(x, y)
+                fillPath.moveTo(0f, height)
+                fillPath.lineTo(0f, y)
+                fillPath.lineTo(width, y)
+                fillPath.lineTo(width, height)
+                fillPath.close()
+            } else {
+                // Use the same calculation as in helper function for consistency
+                dataPoints.forEachIndexed { index, value ->
+                    val x = (index.toFloat() / (dataPoints.size - 1)) * width
+                    val y = height - ((value - minVal) / range * height)
 
-                if (index == 0) {
-                    path.moveTo(x, y)
-                    fillPath.moveTo(x, height)
-                    fillPath.lineTo(x, y)
-                } else {
-                    val prevIndex = index - 1
-                    val prevX = if (dataPoints.size > 1) {
-                        (prevIndex.toFloat() / (dataPoints.size - 1)) * width
+                    if (index == 0) {
+                        path.moveTo(x, y)
+                        fillPath.moveTo(x, height)
+                        fillPath.lineTo(x, y)
                     } else {
-                        width / 2f
+                        val prevIndex = index - 1
+                        val prevX = (prevIndex.toFloat() / (dataPoints.size - 1)) * width
+                        val prevY = height - ((dataPoints[prevIndex] - minVal) / range * height)
+                        
+                        val controlPoint1X = prevX + (x - prevX) / 2
+                        val controlPoint1Y = prevY
+                        val controlPoint2X = prevX + (x - prevX) / 2
+                        val controlPoint2Y = y
+
+                        path.cubicTo(controlPoint1X, controlPoint1Y, controlPoint2X, controlPoint2Y, x, y)
+                        fillPath.cubicTo(controlPoint1X, controlPoint1Y, controlPoint2X, controlPoint2Y, x, y)
                     }
-                    val prevY = height - ((dataPoints[prevIndex] - minVal) / range * height)
-                    
-                    val controlPoint1X = prevX + (x - prevX) / 2
-                    val controlPoint1Y = prevY
-                    val controlPoint2X = prevX + (x - prevX) / 2
-                    val controlPoint2Y = y
-
-                    path.cubicTo(controlPoint1X, controlPoint1Y, controlPoint2X, controlPoint2Y, x, y)
-                    fillPath.cubicTo(controlPoint1X, controlPoint1Y, controlPoint2X, controlPoint2Y, x, y)
                 }
-            }
 
-            fillPath.lineTo(width, height)
-            fillPath.close()
+                // Close fill path correctly - use the actual last x position
+                val lastX = ((dataPoints.size - 1).toFloat() / (dataPoints.size - 1)) * width
+                fillPath.lineTo(lastX, height)
+                fillPath.close()
+            }
 
             drawPath(
                 path = fillPath,
@@ -229,18 +244,29 @@ fun InteractiveTrendLine(
 
             // Draw vertical indicator line when scrubbing
             if (isDragging && selectedIndex != null) {
-                val x = animatedX.value
+                // Use calculated x position from selectedIndex for perfect sync with y
+                val indicatorIndex = selectedIndex!!
+                val indicatorX = if (dataPoints.size > 1) {
+                    (indicatorIndex.toFloat() / (dataPoints.size - 1)) * width
+                } else {
+                    width / 2f
+                }
                 drawLine(
                     color = lineColor.copy(alpha = 0.3f),
-                    start = Offset(x, 0f),
-                    end = Offset(x, height),
+                    start = Offset(indicatorX, 0f),
+                    end = Offset(indicatorX, height),
                     strokeWidth = 2.dp.toPx()
                 )
             }
 
             // Draw selection indicator circles
             selectedIndex?.let { index ->
-                val x = animatedX.value
+                // Calculate x from index directly to ensure x and y are in perfect sync
+                val x = if (dataPoints.size > 1) {
+                    (index.toFloat() / (dataPoints.size - 1)) * width
+                } else {
+                    width / 2f
+                }
                 val y = height - ((dataPoints[index] - minVal) / range * height)
                 
                 // Outer glow

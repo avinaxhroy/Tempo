@@ -53,7 +53,7 @@ class ReccoBeatsEnrichmentService @Inject constructor(
     private val reccoBeatsApi: ReccoBeatsApi,
     private val enrichedMetadataDao: EnrichedMetadataDao,
     private val moshi: Moshi,
-    @Named("reccobeats") private val okHttpClient: OkHttpClient
+    @param:Named("reccobeats") private val okHttpClient: OkHttpClient
 ) {
     companion object {
         private const val TAG = "ReccoBeatsEnrichment"

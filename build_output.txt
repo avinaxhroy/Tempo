@@ -1,0 +1,302 @@
+Calculating task graph as configuration cache cannot be reused because file 'app/build.gradle.kts' has changed.
+
+> Configure project :app
+WARNING: The option setting 'android.usesSdkInManifest.disallowed=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The option setting 'android.sdk.defaultTargetSdkToCompileSdkIfUnset=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The option setting 'android.enableAppCompileTimeRClass=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The option setting 'android.builtInKotlin=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The option setting 'android.newDsl=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The option setting 'android.r8.optimizedResourceShrinking=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The option setting 'android.defaults.buildfeatures.resvalues=true' is deprecated.
+The current default is 'false'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:clean
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:generateDebugResValues FROM-CACHE
+> Task :app:javaPreCompileDebug FROM-CACHE
+> Task :app:generateDebugBuildConfig FROM-CACHE
+> Task :app:desugarDebugFileDependencies FROM-CACHE
+> Task :app:processDebugNavigationResources FROM-CACHE
+> Task :app:extractDeepLinksDebug FROM-CACHE
+> Task :app:writeDebugAppMetadata
+> Task :app:compileDebugNavigationResources FROM-CACHE
+> Task :app:generateDebugResources FROM-CACHE
+> Task :app:mapDebugSourceSetPaths
+> Task :app:mergeReleaseJniLibFolders
+> Task :app:mergeDebugAssets
+> Task :app:mergeDebugJniLibFolders
+> Task :app:validateSigningDebug
+> Task :app:writeDebugSigningConfigVersions
+> Task :app:compressDebugAssets FROM-CACHE
+> Task :app:buildKotlinToolingMetadata
+> Task :app:processDebugMainManifest FROM-CACHE
+> Task :app:generateReleaseBuildConfig FROM-CACHE
+> Task :app:processDebugManifest FROM-CACHE
+> Task :app:checkReleaseAarMetadata
+> Task :app:checkDebugAarMetadata
+> Task :app:mergeReleaseNativeLibs
+> Task :app:processReleaseNavigationResources FROM-CACHE
+> Task :app:generateReleaseResValues FROM-CACHE
+> Task :app:processDebugManifestForPackage FROM-CACHE
+> Task :app:mergeDebugNativeLibs
+> Task :app:compileReleaseNavigationResources FROM-CACHE
+> Task :app:generateReleaseResources FROM-CACHE
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease FROM-CACHE
+> Task :app:processReleaseMainManifest FROM-CACHE
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:javaPreCompileRelease FROM-CACHE
+> Task :app:processReleaseManifest FROM-CACHE
+> Task :app:packageDebugResources FROM-CACHE
+> Task :app:processReleaseManifestForPackage FROM-CACHE
+> Task :app:mergeReleaseStartupProfile UP-TO-DATE
+> Task :app:parseDebugLocalResources FROM-CACHE
+> Task :app:checkDebugDuplicateClasses
+> Task :app:extractProguardFiles
+> Task :app:mergeReleaseArtProfile
+> Task :app:mergeReleaseAssets
+> Task :app:packageReleaseResources FROM-CACHE
+> Task :app:compressReleaseAssets FROM-CACHE
+> Task :app:parseReleaseLocalResources FROM-CACHE
+> Task :app:mergeLibDexDebug FROM-CACHE
+
+> Task :app:stripDebugDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so. Run with --info option to learn more.
+
+> Task :app:preDebugAndroidTestBuild SKIPPED
+
+> Task :app:stripReleaseDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so. Run with --info option to learn more.
+
+> Task :app:validateSigningRelease
+> Task :app:generateDebugAndroidTestResValues FROM-CACHE
+> Task :app:writeReleaseSigningConfigVersions
+> Task :app:writeReleaseAppMetadata
+> Task :app:extractReleaseNativeSymbolTables FROM-CACHE
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:javaPreCompileDebugUnitTest FROM-CACHE
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:mergeDebugResources FROM-CACHE
+> Task :app:processDebugResources FROM-CACHE
+> Task :app:collectReleaseDependencies
+> Task :app:mergeExtDexDebug FROM-CACHE
+> Task :app:sdkReleaseDependencyData
+> Task :app:mergeReleaseResources FROM-CACHE
+> Task :app:processReleaseResources FROM-CACHE
+> Task :app:kspDebugKotlin
+> Task :app:kspReleaseKotlin
+
+> Task :app:compileDebugKotlin
+w: file:///Users/avinash/Documents/Git/Tempo/app/src/main/java/me/avinas/tempo/data/drive/BackupSettingsManager.kt:23:5 This annotation is currently applied to the value parameter only, but in the future it will also be applied to field.
+- To opt in to applying to both value parameter and field, add '-Xannotation-default-target=param-property' to your compiler arguments.
+- To keep applying to the value parameter only, use the '@param:' annotation target.
+
+See https://youtrack.jetbrains.com/issue/KT-73255 for more details.
+w: file:///Users/avinash/Documents/Git/Tempo/app/src/main/java/me/avinas/tempo/data/remote/spotify/SpotifyAuthManager.kt:43:5 This annotation is currently applied to the value parameter only, but in the future it will also be applied to field.
+- To opt in to applying to both value parameter and field, add '-Xannotation-default-target=param-property' to your compiler arguments.
+- To keep applying to the value parameter only, use the '@param:' annotation target.
+
+See https://youtrack.jetbrains.com/issue/KT-73255 for more details.
+w: file:///Users/avinash/Documents/Git/Tempo/app/src/main/java/me/avinas/tempo/data/remote/spotify/SpotifyAuthManager.kt:45:5 This annotation is currently applied to the value parameter only, but in the future it will also be applied to property.
+- To opt in to applying to both value parameter and property, add '-Xannotation-default-target=param-property' to your compiler arguments.
+- To keep applying to the value parameter only, use the '@param:' annotation target.
+
+See https://youtrack.jetbrains.com/issue/KT-73255 for more details.
+
+> Task :app:compileReleaseKotlin
+w: file:///Users/avinash/Documents/Git/Tempo/app/src/main/java/me/avinas/tempo/data/drive/BackupSettingsManager.kt:23:5 This annotation is currently applied to the value parameter only, but in the future it will also be applied to field.
+- To opt in to applying to both value parameter and field, add '-Xannotation-default-target=param-property' to your compiler arguments.
+- To keep applying to the value parameter only, use the '@param:' annotation target.
+
+See https://youtrack.jetbrains.com/issue/KT-73255 for more details.
+w: file:///Users/avinash/Documents/Git/Tempo/app/src/main/java/me/avinas/tempo/data/remote/spotify/SpotifyAuthManager.kt:43:5 This annotation is currently applied to the value parameter only, but in the future it will also be applied to field.
+- To opt in to applying to both value parameter and field, add '-Xannotation-default-target=param-property' to your compiler arguments.
+- To keep applying to the value parameter only, use the '@param:' annotation target.
+
+See https://youtrack.jetbrains.com/issue/KT-73255 for more details.
+w: file:///Users/avinash/Documents/Git/Tempo/app/src/main/java/me/avinas/tempo/data/remote/spotify/SpotifyAuthManager.kt:45:5 This annotation is currently applied to the value parameter only, but in the future it will also be applied to property.
+- To opt in to applying to both value parameter and property, add '-Xannotation-default-target=param-property' to your compiler arguments.
+- To keep applying to the value parameter only, use the '@param:' annotation target.
+
+See https://youtrack.jetbrains.com/issue/KT-73255 for more details.
+
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:compileDebugJavaWithJavac
+> Task :app:hiltAggregateDepsDebug FROM-CACHE
+> Task :app:hiltAggregateDepsRelease FROM-CACHE
+
+> Task :app:hiltJavaCompileDebug FAILED
+/Users/avinash/Documents/Git/Tempo/app/build/generated/hilt/component_sources/debug/me/avinas/tempo/TempoApplication_HiltComponents.java:208: error: [Dagger/MissingBinding] android.content.Context cannot be provided without an @Provides-annotated method.
+  public abstract static class SingletonC implements FragmentGetContextFix.FragmentGetContextFixEntryPoint,
+                         ^
+  
+      android.content.Context is injected at
+          [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.data.enrichment.ITunesEnrichmentService(…, context)
+      me.avinas.tempo.data.enrichment.ITunesEnrichmentService is injected at
+          [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.data.repository.RoomStatsRepository(…, iTunesEnrichmentService, …)
+      me.avinas.tempo.data.repository.RoomStatsRepository is injected at
+          [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.di.RepositoryModule.bindStatsRepository(impl)
+      me.avinas.tempo.data.repository.StatsRepository is requested at
+          [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.service.MusicTrackingService.MusicTrackingServiceEntryPoint.statsRepository()
+  It is also requested at:
+      me.avinas.tempo.data.enrichment.ReccoBeatsEnrichmentSource(…, context)
+      me.avinas.tempo.data.importexport.ImportExportManager(context, …)
+      me.avinas.tempo.data.lastfm.LastFmImportService(context, …)
+      me.avinas.tempo.ui.lastfm.LastFmViewModel(context, …)
+  The following other entry points also depend on it:
+      me.avinas.tempo.TempoApplication_GeneratedInjector.injectTempoApplication(me.avinas.tempo.TempoApplication) [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC]
+      dagger.hilt.android.internal.lifecycle.HiltViewModelFactory.ViewModelFactoriesEntryPoint.getHiltViewModelMap() [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC → me.avinas.tempo.TempoApplication_HiltComponents.ActivityRetainedC → me.avinas.tempo.TempoApplication_HiltComponents.ViewModelC]
+  
+  Note: A similar binding is provided in the following other components:
+      @dagger.hilt.android.qualifiers.ApplicationContext android.content.Context is provided at:
+          [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] dagger.hilt.android.internal.modules.ApplicationContextModule.provideContext()
+      @dagger.hilt.android.qualifiers.ActivityContext android.content.Context is provided at:
+          [me.avinas.tempo.TempoApplication_HiltComponents.ActivityC] dagger.hilt.android.internal.modules.ActivityModule.provideContext(…)
+  (For Kotlin sources, you may need to use '@JvmSuppressWildcards' or '@JvmWildcard' if you need to explicitly control the wildcards at a particular usage site.)
+1 error
+
+> Task :app:hiltJavaCompileRelease FAILED
+/Users/avinash/Documents/Git/Tempo/app/build/generated/hilt/component_sources/release/me/avinas/tempo/TempoApplication_HiltComponents.java:208: error: [Dagger/MissingBinding] android.content.Context cannot be provided without an @Provides-annotated method.
+  public abstract static class SingletonC implements FragmentGetContextFix.FragmentGetContextFixEntryPoint,
+                         ^
+  
+      android.content.Context is injected at
+          [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.data.enrichment.ITunesEnrichmentService(…, context)
+      me.avinas.tempo.data.enrichment.ITunesEnrichmentService is injected at
+          [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.data.repository.RoomStatsRepository(…, iTunesEnrichmentService, …)
+      me.avinas.tempo.data.repository.RoomStatsRepository is injected at
+          [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.di.RepositoryModule.bindStatsRepository(impl)
+      me.avinas.tempo.data.repository.StatsRepository is requested at
+          [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.service.MusicTrackingService.MusicTrackingServiceEntryPoint.statsRepository()
+  It is also requested at:
+      me.avinas.tempo.data.enrichment.ReccoBeatsEnrichmentSource(…, context)
+      me.avinas.tempo.data.importexport.ImportExportManager(context, …)
+      me.avinas.tempo.data.lastfm.LastFmImportService(context, …)
+      me.avinas.tempo.ui.lastfm.LastFmViewModel(context, …)
+  The following other entry points also depend on it:
+      me.avinas.tempo.TempoApplication_GeneratedInjector.injectTempoApplication(me.avinas.tempo.TempoApplication) [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC]
+      dagger.hilt.android.internal.lifecycle.HiltViewModelFactory.ViewModelFactoriesEntryPoint.getHiltViewModelMap() [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC → me.avinas.tempo.TempoApplication_HiltComponents.ActivityRetainedC → me.avinas.tempo.TempoApplication_HiltComponents.ViewModelC]
+  
+  Note: A similar binding is provided in the following other components:
+      @dagger.hilt.android.qualifiers.ApplicationContext android.content.Context is provided at:
+          [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] dagger.hilt.android.internal.modules.ApplicationContextModule.provideContext()
+      @dagger.hilt.android.qualifiers.ActivityContext android.content.Context is provided at:
+          [me.avinas.tempo.TempoApplication_HiltComponents.ActivityC] dagger.hilt.android.internal.modules.ActivityModule.provideContext(…)
+  (For Kotlin sources, you may need to use '@JvmSuppressWildcards' or '@JvmWildcard' if you need to explicitly control the wildcards at a particular usage site.)
+1 error
+
+[Incubating] Problems report is available at: file:///Users/avinash/Documents/Git/Tempo/build/reports/problems/problems-report.html
+
+FAILURE: Build completed with 2 failures.
+
+1: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':app:hiltJavaCompileRelease'.
+> Compilation failed; see the compiler output below.
+  /Users/avinash/Documents/Git/Tempo/app/build/generated/hilt/component_sources/release/me/avinas/tempo/TempoApplication_HiltComponents.java:208: error: [Dagger/MissingBinding] android.content.Context cannot be provided without an @Provides-annotated method.
+    public abstract static class SingletonC implements FragmentGetContextFix.FragmentGetContextFixEntryPoint,
+                           ^
+    
+        android.content.Context is injected at
+            [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.data.enrichment.ITunesEnrichmentService(…, context)
+        me.avinas.tempo.data.enrichment.ITunesEnrichmentService is injected at
+            [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.data.repository.RoomStatsRepository(…, iTunesEnrichmentService, …)
+        me.avinas.tempo.data.repository.RoomStatsRepository is injected at
+            [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.di.RepositoryModule.bindStatsRepository(impl)
+        me.avinas.tempo.data.repository.StatsRepository is requested at
+            [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.service.MusicTrackingService.MusicTrackingServiceEntryPoint.statsRepository()
+    It is also requested at:
+        me.avinas.tempo.data.enrichment.ReccoBeatsEnrichmentSource(…, context)
+        me.avinas.tempo.data.importexport.ImportExportManager(context, …)
+        me.avinas.tempo.data.lastfm.LastFmImportService(context, …)
+        me.avinas.tempo.ui.lastfm.LastFmViewModel(context, …)
+    The following other entry points also depend on it:
+        me.avinas.tempo.TempoApplication_GeneratedInjector.injectTempoApplication(me.avinas.tempo.TempoApplication) [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC]
+        dagger.hilt.android.internal.lifecycle.HiltViewModelFactory.ViewModelFactoriesEntryPoint.getHiltViewModelMap() [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC → me.avinas.tempo.TempoApplication_HiltComponents.ActivityRetainedC → me.avinas.tempo.TempoApplication_HiltComponents.ViewModelC]
+    
+    Note: A similar binding is provided in the following other components:
+        @dagger.hilt.android.qualifiers.ApplicationContext android.content.Context is provided at:
+            [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] dagger.hilt.android.internal.modules.ApplicationContextModule.provideContext()
+        @dagger.hilt.android.qualifiers.ActivityContext android.content.Context is provided at:
+            [me.avinas.tempo.TempoApplication_HiltComponents.ActivityC] dagger.hilt.android.internal.modules.ActivityModule.provideContext(…)
+    (For Kotlin sources, you may need to use '@JvmSuppressWildcards' or '@JvmWildcard' if you need to explicitly control the wildcards at a particular usage site.)
+  1 error
+
+* Try:
+> Check your code and dependencies to fix the compilation error(s)
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+==============================================================================
+
+2: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':app:hiltJavaCompileDebug'.
+> Compilation failed; see the compiler output below.
+  /Users/avinash/Documents/Git/Tempo/app/build/generated/hilt/component_sources/debug/me/avinas/tempo/TempoApplication_HiltComponents.java:208: error: [Dagger/MissingBinding] android.content.Context cannot be provided without an @Provides-annotated method.
+    public abstract static class SingletonC implements FragmentGetContextFix.FragmentGetContextFixEntryPoint,
+                           ^
+    
+        android.content.Context is injected at
+            [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.data.enrichment.ITunesEnrichmentService(…, context)
+        me.avinas.tempo.data.enrichment.ITunesEnrichmentService is injected at
+            [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.data.repository.RoomStatsRepository(…, iTunesEnrichmentService, …)
+        me.avinas.tempo.data.repository.RoomStatsRepository is injected at
+            [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.di.RepositoryModule.bindStatsRepository(impl)
+        me.avinas.tempo.data.repository.StatsRepository is requested at
+            [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] me.avinas.tempo.service.MusicTrackingService.MusicTrackingServiceEntryPoint.statsRepository()
+    It is also requested at:
+        me.avinas.tempo.data.enrichment.ReccoBeatsEnrichmentSource(…, context)
+        me.avinas.tempo.data.importexport.ImportExportManager(context, …)
+        me.avinas.tempo.data.lastfm.LastFmImportService(context, …)
+        me.avinas.tempo.ui.lastfm.LastFmViewModel(context, …)
+    The following other entry points also depend on it:
+        me.avinas.tempo.TempoApplication_GeneratedInjector.injectTempoApplication(me.avinas.tempo.TempoApplication) [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC]
+        dagger.hilt.android.internal.lifecycle.HiltViewModelFactory.ViewModelFactoriesEntryPoint.getHiltViewModelMap() [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC → me.avinas.tempo.TempoApplication_HiltComponents.ActivityRetainedC → me.avinas.tempo.TempoApplication_HiltComponents.ViewModelC]
+    
+    Note: A similar binding is provided in the following other components:
+        @dagger.hilt.android.qualifiers.ApplicationContext android.content.Context is provided at:
+            [me.avinas.tempo.TempoApplication_HiltComponents.SingletonC] dagger.hilt.android.internal.modules.ApplicationContextModule.provideContext()
+        @dagger.hilt.android.qualifiers.ActivityContext android.content.Context is provided at:
+            [me.avinas.tempo.TempoApplication_HiltComponents.ActivityC] dagger.hilt.android.internal.modules.ActivityModule.provideContext(…)
+    (For Kotlin sources, you may need to use '@JvmSuppressWildcards' or '@JvmWildcard' if you need to explicitly control the wildcards at a particular usage site.)
+  1 error
+
+* Try:
+> Check your code and dependencies to fix the compilation error(s)
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+==============================================================================
+
+BUILD FAILED in 42s
+76 actionable tasks: 37 executed, 38 from cache, 1 up-to-date
+Configuration cache entry stored.

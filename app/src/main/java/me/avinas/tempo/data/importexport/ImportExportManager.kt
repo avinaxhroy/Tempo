@@ -33,7 +33,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class ImportExportManager @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val database: AppDatabase,
     private val statsRepository: me.avinas.tempo.data.repository.StatsRepository
 ) {

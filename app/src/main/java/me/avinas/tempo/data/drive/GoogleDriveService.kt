@@ -46,7 +46,7 @@ sealed class DriveException(message: String, cause: Throwable? = null) : Excepti
  */
 @Singleton
 class GoogleDriveService @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val authManager: GoogleAuthManager
 ) {
     companion object {

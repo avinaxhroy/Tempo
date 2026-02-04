@@ -40,9 +40,9 @@ import javax.inject.Singleton
  */
 @Singleton
 class SpotifyAuthManager @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val tokenStorage: SpotifyTokenStorage,
-    @Named("spotify") private val okHttpClient: OkHttpClient
+    @param:Named("spotify") private val okHttpClient: OkHttpClient
 ) {
     companion object {
         private const val TAG = "SpotifyAuthManager"

@@ -161,7 +161,8 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_25_26,  // Spotify Import feature
                 AppDatabase.MIGRATION_26_27,  // All-Time story reminder tracking
                 AppDatabase.MIGRATION_27_28,  // Last.fm import support
-                AppDatabase.MIGRATION_28_29   // Source index for Last.fm query performance
+                AppDatabase.MIGRATION_28_29,  // Source index for Last.fm query performance
+                AppDatabase.MIGRATION_29_30   // Repair indices for existing users
             )
             // Enable Write-Ahead Logging for better concurrent read/write performance
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)

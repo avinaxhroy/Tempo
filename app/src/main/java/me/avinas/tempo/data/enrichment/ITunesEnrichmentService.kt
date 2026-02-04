@@ -21,7 +21,7 @@ import javax.inject.Singleton
 @Singleton
 class ITunesEnrichmentService @Inject constructor(
     private val iTunesApi: iTunesApi,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     companion object {
         private const val TAG = "iTunesEnrichment"

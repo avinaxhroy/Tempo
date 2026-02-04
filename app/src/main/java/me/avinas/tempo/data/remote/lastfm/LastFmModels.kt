@@ -62,7 +62,7 @@ data class LastFmAlbumBasic(
     val title: String? = null,
     val mbid: String? = null,
     val url: String? = null,
-    @Json(name = "image") val images: List<LastFmImage>? = null
+    @field:Json(name = "image") val images: List<LastFmImage>? = null
 ) {
     /**
      * Get the best quality album art URL.
@@ -96,7 +96,7 @@ data class LastFmAlbumBasic(
 
 @JsonClass(generateAdapter = true)
 data class LastFmImage(
-    @Json(name = "#text") val url: String? = null,
+    @field:Json(name = "#text") val url: String? = null,
     val size: String? = null // small, medium, large, extralarge, mega
 )
 
@@ -190,7 +190,7 @@ data class LastFmTopTagsResponse(
 @JsonClass(generateAdapter = true)
 data class LastFmTagContainer(
     val tag: List<LastFmTag>? = null,
-    @Json(name = "@attr") val attr: LastFmAttr? = null
+    @field:Json(name = "@attr") val attr: LastFmAttr? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -259,9 +259,9 @@ data class LastFmUser(
     val gender: String? = null,
     val subscriber: String? = null,
     val playcount: String? = null, // Total scrobble count as string
-    @Json(name = "artist_count") val artistCount: String? = null,
-    @Json(name = "track_count") val trackCount: String? = null,
-    @Json(name = "album_count") val albumCount: String? = null,
+    @field:Json(name = "artist_count") val artistCount: String? = null,
+    @field:Json(name = "track_count") val trackCount: String? = null,
+    @field:Json(name = "album_count") val albumCount: String? = null,
     val image: List<LastFmImage>? = null,
     val registered: LastFmRegistered? = null
 ) {
@@ -291,7 +291,7 @@ data class LastFmUser(
 @JsonClass(generateAdapter = true)
 data class LastFmRegistered(
     val unixtime: String? = null, // Unix timestamp as string
-    @Json(name = "#text") val text: String? = null // Formatted date string
+    @field:Json(name = "#text") val text: String? = null // Formatted date string
 )
 
 // =====================
@@ -308,7 +308,7 @@ data class LastFmRecentTracksResponse(
 @JsonClass(generateAdapter = true)
 data class LastFmRecentTracks(
     val track: List<LastFmScrobble>? = null,
-    @Json(name = "@attr") val attr: LastFmPaginationAttr? = null
+    @field:Json(name = "@attr") val attr: LastFmPaginationAttr? = null
 )
 
 /**
@@ -325,7 +325,7 @@ data class LastFmScrobble(
     val streamable: String? = null,
     val loved: String? = null, // "0" or "1"
     val date: LastFmScrobbleDate? = null, // Null if currently playing
-    @Json(name = "@attr") val attr: LastFmNowPlayingAttr? = null
+    @field:Json(name = "@attr") val attr: LastFmNowPlayingAttr? = null
 ) {
     /**
      * Get timestamp in milliseconds.
@@ -371,7 +371,7 @@ data class LastFmScrobbleArtist(
     val name: String? = null,
     val mbid: String? = null,
     val url: String? = null,
-    @Json(name = "#text") val text: String? = null, // Alternative name field
+    @field:Json(name = "#text") val text: String? = null, // Alternative name field
     val image: List<LastFmImage>? = null // Artist images from API
 ) {
     /**
@@ -395,13 +395,13 @@ data class LastFmScrobbleArtist(
 @JsonClass(generateAdapter = true)
 data class LastFmScrobbleAlbum(
     val mbid: String? = null,
-    @Json(name = "#text") val name: String? = null
+    @field:Json(name = "#text") val name: String? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class LastFmScrobbleDate(
     val uts: String? = null, // Unix timestamp as string
-    @Json(name = "#text") val text: String? = null // Formatted date string
+    @field:Json(name = "#text") val text: String? = null // Formatted date string
 )
 
 @JsonClass(generateAdapter = true)
@@ -441,7 +441,7 @@ data class LastFmTopTracksResponse(
 @JsonClass(generateAdapter = true)
 data class LastFmTopTracks(
     val track: List<LastFmTopTrack>? = null,
-    @Json(name = "@attr") val attr: LastFmPaginationAttr? = null
+    @field:Json(name = "@attr") val attr: LastFmPaginationAttr? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -453,7 +453,7 @@ data class LastFmTopTrack(
     val duration: String? = null, // Duration in seconds as string
     val artist: LastFmScrobbleArtist? = null,
     val image: List<LastFmImage>? = null,
-    @Json(name = "@attr") val attr: LastFmRankAttr? = null
+    @field:Json(name = "@attr") val attr: LastFmRankAttr? = null
 ) {
     /**
      * Get play count as Int.
@@ -499,7 +499,7 @@ data class LastFmLovedTracksResponse(
 @JsonClass(generateAdapter = true)
 data class LastFmLovedTracks(
     val track: List<LastFmLovedTrack>? = null,
-    @Json(name = "@attr") val attr: LastFmPaginationAttr? = null
+    @field:Json(name = "@attr") val attr: LastFmPaginationAttr? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -535,7 +535,7 @@ data class LastFmTopArtistsResponse(
 @JsonClass(generateAdapter = true)
 data class LastFmTopArtists(
     val artist: List<LastFmTopArtist>? = null,
-    @Json(name = "@attr") val attr: LastFmPaginationAttr? = null
+    @field:Json(name = "@attr") val attr: LastFmPaginationAttr? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -545,7 +545,7 @@ data class LastFmTopArtist(
     val url: String? = null,
     val playcount: String? = null,
     val image: List<LastFmImage>? = null,
-    @Json(name = "@attr") val attr: LastFmRankAttr? = null
+    @field:Json(name = "@attr") val attr: LastFmRankAttr? = null
 ) {
     /**
      * Get play count as Int.

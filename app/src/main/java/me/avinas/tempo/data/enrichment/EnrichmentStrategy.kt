@@ -402,7 +402,7 @@ class DeezerEnrichmentSource @Inject constructor(
 class ReccoBeatsEnrichmentSource @Inject constructor(
     private val reccoBeatsService: ReccoBeatsEnrichmentService,
     private val enrichedMetadataDao: me.avinas.tempo.data.local.dao.EnrichedMetadataDao,
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
+    @param:dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : EnrichmentSource {
     override val name = "ReccoBeats"
     override val priority = 8 // Run LAST - requires preview URLs from earlier sources (Deezer/iTunes)

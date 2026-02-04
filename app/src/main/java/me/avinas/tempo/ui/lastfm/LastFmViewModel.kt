@@ -21,7 +21,7 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class LastFmViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val lastFmImportService: LastFmImportService,
     private val userPreferencesDao: UserPreferencesDao
 ) : ViewModel() {

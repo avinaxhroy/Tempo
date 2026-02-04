@@ -1,6 +1,8 @@
 # Tempo: Your Music Journey, Preserved.
 
-<center><img src="TempoICON.png" width="140" /></center>
+<p align="center">
+  <img src="TempoICON.png" width="140" />
+</p>
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9.0-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org)
 [![Android](https://img.shields.io/badge/Android-14-green.svg?style=flat&logo=android)](https://developer.android.com)
@@ -125,22 +127,83 @@ Tempo uses a **Local-First** architecture built on **Room Database**.
 
 ---
 
-## 🤝 Contribution
+## 🤝 Contributing to Tempo
 
-> Tempo follows a **User-first, Privacy-first, Local-first** philosophy. Check [CONTRIBUTION.md](CONTRIBUTION.md) for full guidelines.
-> - **Flow**: Fork → Branch → PR.
-> - **Note**: Major UI changes or architectural rewrites require prior discussion. We prioritize stability over feature volume.
+**Contributions are welcome and appreciated!** 🎉
 
-## 📄 License
+Tempo is a **source-available** project that operates with the collaborative spirit of open source while protecting against commercial exploitation. The code is open for you to read, learn from, modify, and contribute to — but with some guardrails to ensure the project remains user-focused and free.
 
-> **Tempo Source Available License**
-> Free for personal, non-commercial use.
-> - ❌ **No Commercial Use**: Cannot be sold or used for commercial services.
-> - ❌ **No Monetization**: No ads, IAP, or donations.
-> - ❌ **No Redistribution**: Do not publish on app stores.
-> - ✅ **Education**: Source provided for learning and security auditing.
->
-> See [LICENSE](LICENSE) for the full text.
+### Why This Approach?
 
-**License**: Tempo Source Available License
+I built Tempo to solve a real problem, and I want to keep it:
+- **Free forever** — No ads, no subscriptions, no tracking
+- **User-focused** — Not a generic playground for every possible feature
+- **Protected from misuse** — Preventing commercial knock-offs that exploit the work
+
+The license prevents commercial use and redistribution, but **you can still contribute meaningfully**:
+
+### How to Contribute
+
+1. **🐛 Bug Fixes**: Found a bug? Fix it and submit a PR!
+2. **✨ Feature Improvements**: Enhance existing features (discuss first for major changes)
+3. **📝 Documentation**: Improve guides, fix typos, add examples
+4. **🌍 Translations**: Help make Tempo accessible to more users
+5. **🔬 Code Review**: Review PRs, suggest improvements, share insights
+6. **🧪 Testing**: Report bugs, test edge cases, validate new features
+
+### Contribution Flow
+
+```
+Fork → Create Branch → Make Changes → Submit PR
+```
+
+**Before starting major work:**
+- Open an issue to discuss the change
+- Check [CONTRIBUTION.md](CONTRIBUTION.md) for detailed guidelines
+- Ensure your changes align with Tempo's philosophy: **User-first, Privacy-first, Local-first**
+
+All merged contributors are credited in commit history. Significant contributions may be highlighted in documentation.
+
+**Questions? Open an issue or discussion.** No contribution is too small — from fixing typos to refactoring core logic, all thoughtful improvements are valued.
+
+---
+
+## 📄 License & Philosophy
+
+Tempo uses a **Source Available License** — a middle ground between proprietary and fully open source.
+
+### What This Means For You
+
+✅ **You CAN:**
+- View and study the complete source code
+- Use Tempo personally and modify it for your own use
+- Contribute improvements back to the project
+- Learn from the codebase and use techniques in your own projects
+- Audit the code for security and privacy
+
+❌ **You CANNOT:**
+- Sell Tempo or use it in commercial products
+- Republish modified versions on app stores (Play Store, F-Droid, etc.)
+- Add monetization (ads, subscriptions, donations)
+- Rebrand it and distribute as your own app
+
+### Why Not Traditional Open Source?
+
+I want Tempo to remain free and user-focused. Fully open-source licenses like MIT or GPL would allow anyone to:
+- Clone the app and monetize it with ads
+- Publish competing versions that fragment the user base
+- Remove privacy protections or add tracking
+
+The current license prevents these scenarios while keeping the code transparent and collaborative.
+
+**Think of it as:** *Open source spirit, with protection against commercial exploitation.*
+
+📄 Full license details: [LICENSE](LICENSE)
+
+---
+
+## 🙏 Acknowledgments
+
 Made with ❤️ by [Avinash](https://github.com/avinaxhroy)
+
+Thanks to all contributors who help make Tempo better, and to the open-source community whose libraries and tools made this possible.

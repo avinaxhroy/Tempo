@@ -18,13 +18,13 @@ data class DeezerSearchResponse(
 data class DeezerTrack(
     val id: Long,
     val title: String,
-    @Json(name = "title_short") val titleShort: String,
+    @field:Json(name = "title_short") val titleShort: String,
     val link: String,
     val duration: Int,
     val rank: Int,
-    @Json(name = "explicit_lyrics") val explicitLyrics: Boolean,
-    @Json(name = "explicit_content_lyrics") val explicitContentLyrics: Int,
-    @Json(name = "explicit_content_cover") val explicitContentCover: Int,
+    @field:Json(name = "explicit_lyrics") val explicitLyrics: Boolean,
+    @field:Json(name = "explicit_content_lyrics") val explicitContentLyrics: Int,
+    @field:Json(name = "explicit_content_cover") val explicitContentCover: Int,
     val preview: String?, // The MP3 preview URL (30 seconds)
     val artist: DeezerArtist,
     val album: DeezerAlbum,
@@ -37,11 +37,11 @@ data class DeezerArtist(
     val name: String,
     val link: String,
     val picture: String?,
-    @Json(name = "picture_small") val pictureSmall: String?,
-    @Json(name = "picture_medium") val pictureMedium: String?,
-    @Json(name = "picture_big") val pictureBig: String?,
-    @Json(name = "picture_xl") val pictureXl: String?,
-    @Json(name = "tracklist") val tracklist: String,
+    @field:Json(name = "picture_small") val pictureSmall: String?,
+    @field:Json(name = "picture_medium") val pictureMedium: String?,
+    @field:Json(name = "picture_big") val pictureBig: String?,
+    @field:Json(name = "picture_xl") val pictureXl: String?,
+    @field:Json(name = "tracklist") val tracklist: String,
     val type: String
 )
 
@@ -50,11 +50,11 @@ data class DeezerAlbum(
     val id: Long,
     val title: String,
     val cover: String?,
-    @Json(name = "cover_small") val coverSmall: String?,
-    @Json(name = "cover_medium") val coverMedium: String?,
-    @Json(name = "cover_big") val coverBig: String?,
-    @Json(name = "cover_xl") val coverXl: String?,
-    @Json(name = "md5_image") val md5Image: String?,
-    @Json(name = "tracklist") val tracklist: String,
+    @field:Json(name = "cover_small") val coverSmall: String?,
+    @field:Json(name = "cover_medium") val coverMedium: String?,
+    @field:Json(name = "cover_big") val coverBig: String?,
+    @field:Json(name = "cover_xl") val coverXl: String?,
+    @field:Json(name = "md5_image") val md5Image: String?,
+    @field:Json(name = "tracklist") val tracklist: String,
     val type: String
 )

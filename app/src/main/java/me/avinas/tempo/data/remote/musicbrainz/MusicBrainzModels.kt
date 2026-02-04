@@ -31,11 +31,11 @@ data class MBRecording(
     val length: Long? = null, // Duration in milliseconds
     val disambiguation: String? = null,
     val video: Boolean? = null,
-    @Json(name = "artist-credit") val artistCredit: List<MBArtistCredit>? = null,
+    @field:Json(name = "artist-credit") val artistCredit: List<MBArtistCredit>? = null,
     val releases: List<MBRelease>? = null,
     val tags: List<MBTag>? = null,
     val isrcs: List<String>? = null,
-    @Json(name = "first-release-date") val firstReleaseDate: String? = null
+    @field:Json(name = "first-release-date") val firstReleaseDate: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -49,14 +49,14 @@ data class MBArtistCredit(
 data class MBArtist(
     val id: String,
     val name: String,
-    @Json(name = "sort-name") val sortName: String? = null,
+    @field:Json(name = "sort-name") val sortName: String? = null,
     val disambiguation: String? = null,
     val type: String? = null,
-    @Json(name = "type-id") val typeId: String? = null,
+    @field:Json(name = "type-id") val typeId: String? = null,
     val country: String? = null,
     val area: MBArea? = null,
-    @Json(name = "begin-area") val beginArea: MBArea? = null,
-    @Json(name = "life-span") val lifeSpan: MBLifeSpan? = null,
+    @field:Json(name = "begin-area") val beginArea: MBArea? = null,
+    @field:Json(name = "life-span") val lifeSpan: MBLifeSpan? = null,
     val tags: List<MBTag>? = null,
     val genres: List<MBGenre>? = null,
     val aliases: List<MBAlias>? = null,
@@ -67,8 +67,8 @@ data class MBArtist(
 data class MBArea(
     val id: String? = null,
     val name: String? = null,
-    @Json(name = "sort-name") val sortName: String? = null,
-    @Json(name = "iso-3166-1-codes") val isoCodes: List<String>? = null
+    @field:Json(name = "sort-name") val sortName: String? = null,
+    @field:Json(name = "iso-3166-1-codes") val isoCodes: List<String>? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -81,7 +81,7 @@ data class MBLifeSpan(
 @JsonClass(generateAdapter = true)
 data class MBAlias(
     val name: String? = null,
-    @Json(name = "sort-name") val sortName: String? = null,
+    @field:Json(name = "sort-name") val sortName: String? = null,
     val type: String? = null,
     val locale: String? = null,
     val primary: Boolean? = null
@@ -96,29 +96,29 @@ data class MBRelease(
     val id: String,
     val title: String,
     val status: String? = null,
-    @Json(name = "status-id") val statusId: String? = null,
+    @field:Json(name = "status-id") val statusId: String? = null,
     val disambiguation: String? = null,
     val packaging: String? = null,
     val date: String? = null,
     val country: String? = null,
     val quality: String? = null,
     val barcode: String? = null,
-    @Json(name = "release-group") val releaseGroup: MBReleaseGroup? = null,
-    @Json(name = "cover-art-archive") val coverArtArchive: MBCoverArtArchive? = null,
-    @Json(name = "artist-credit") val artistCredit: List<MBArtistCredit>? = null,
-    @Json(name = "label-info") val labelInfo: List<MBLabelInfo>? = null,
+    @field:Json(name = "release-group") val releaseGroup: MBReleaseGroup? = null,
+    @field:Json(name = "cover-art-archive") val coverArtArchive: MBCoverArtArchive? = null,
+    @field:Json(name = "artist-credit") val artistCredit: List<MBArtistCredit>? = null,
+    @field:Json(name = "label-info") val labelInfo: List<MBLabelInfo>? = null,
     val media: List<MBMedia>? = null,
-    @Json(name = "release-events") val releaseEvents: List<MBReleaseEvent>? = null
+    @field:Json(name = "release-events") val releaseEvents: List<MBReleaseEvent>? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class MBReleaseGroup(
     val id: String,
     val title: String? = null,
-    @Json(name = "primary-type") val primaryType: String? = null,
-    @Json(name = "primary-type-id") val primaryTypeId: String? = null,
-    @Json(name = "secondary-types") val secondaryTypes: List<String>? = null,
-    @Json(name = "first-release-date") val firstReleaseDate: String? = null,
+    @field:Json(name = "primary-type") val primaryType: String? = null,
+    @field:Json(name = "primary-type-id") val primaryTypeId: String? = null,
+    @field:Json(name = "secondary-types") val secondaryTypes: List<String>? = null,
+    @field:Json(name = "first-release-date") val firstReleaseDate: String? = null,
     val disambiguation: String? = null,
     val tags: List<MBTag>? = null,
     val genres: List<MBGenre>? = null
@@ -134,7 +134,7 @@ data class MBCoverArtArchive(
 
 @JsonClass(generateAdapter = true)
 data class MBLabelInfo(
-    @Json(name = "catalog-number") val catalogNumber: String? = null,
+    @field:Json(name = "catalog-number") val catalogNumber: String? = null,
     val label: MBLabel? = null
 )
 
@@ -142,8 +142,8 @@ data class MBLabelInfo(
 data class MBLabel(
     val id: String? = null,
     val name: String? = null,
-    @Json(name = "sort-name") val sortName: String? = null,
-    @Json(name = "label-code") val labelCode: Int? = null,
+    @field:Json(name = "sort-name") val sortName: String? = null,
+    @field:Json(name = "label-code") val labelCode: Int? = null,
     val type: String? = null,
     val country: String? = null
 )
@@ -152,10 +152,10 @@ data class MBLabel(
 data class MBMedia(
     val position: Int? = null,
     val format: String? = null,
-    @Json(name = "format-id") val formatId: String? = null,
+    @field:Json(name = "format-id") val formatId: String? = null,
     val title: String? = null,
-    @Json(name = "track-count") val trackCount: Int? = null,
-    @Json(name = "track-offset") val trackOffset: Int? = null,
+    @field:Json(name = "track-count") val trackCount: Int? = null,
+    @field:Json(name = "track-offset") val trackOffset: Int? = null,
     val tracks: List<MBTrack>? = null
 )
 
@@ -200,7 +200,7 @@ data class MBGenre(
 @JsonClass(generateAdapter = true)
 data class MBRelation(
     val type: String? = null,
-    @Json(name = "type-id") val typeId: String? = null,
+    @field:Json(name = "type-id") val typeId: String? = null,
     val direction: String? = null,
     val url: MBUrl? = null,
     val artist: MBArtist? = null,
@@ -237,9 +237,9 @@ data class CoverArtImage(
 
 @JsonClass(generateAdapter = true)
 data class CoverArtThumbnails(
-    @Json(name = "250") val small: String? = null,
-    @Json(name = "500") val medium: String? = null,
-    @Json(name = "1200") val large: String? = null,
+    @field:Json(name = "250") val small: String? = null,
+    @field:Json(name = "500") val medium: String? = null,
+    @field:Json(name = "1200") val large: String? = null,
     val small2: String? = null, // Alternative naming
     val large2: String? = null
 )
@@ -254,8 +254,8 @@ data class RecordingLookupResponse(
     val title: String,
     val length: Long? = null,
     val disambiguation: String? = null,
-    @Json(name = "first-release-date") val firstReleaseDate: String? = null,
-    @Json(name = "artist-credit") val artistCredit: List<MBArtistCredit>? = null,
+    @field:Json(name = "first-release-date") val firstReleaseDate: String? = null,
+    @field:Json(name = "artist-credit") val artistCredit: List<MBArtistCredit>? = null,
     val releases: List<MBRelease>? = null,
     val tags: List<MBTag>? = null,
     val genres: List<MBGenre>? = null,
@@ -267,18 +267,18 @@ data class RecordingLookupResponse(
 data class ArtistLookupResponse(
     val id: String,
     val name: String,
-    @Json(name = "sort-name") val sortName: String? = null,
+    @field:Json(name = "sort-name") val sortName: String? = null,
     val type: String? = null,
     val country: String? = null,
     val disambiguation: String? = null,
     val area: MBArea? = null,
-    @Json(name = "begin-area") val beginArea: MBArea? = null,
-    @Json(name = "life-span") val lifeSpan: MBLifeSpan? = null,
+    @field:Json(name = "begin-area") val beginArea: MBArea? = null,
+    @field:Json(name = "life-span") val lifeSpan: MBLifeSpan? = null,
     val tags: List<MBTag>? = null,
     val genres: List<MBGenre>? = null,
     val aliases: List<MBAlias>? = null,
     val relations: List<MBRelation>? = null,
-    @Json(name = "release-groups") val releaseGroups: List<MBReleaseGroup>? = null
+    @field:Json(name = "release-groups") val releaseGroups: List<MBReleaseGroup>? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -289,10 +289,10 @@ data class ReleaseLookupResponse(
     val date: String? = null,
     val country: String? = null,
     val barcode: String? = null,
-    @Json(name = "release-group") val releaseGroup: MBReleaseGroup? = null,
-    @Json(name = "cover-art-archive") val coverArtArchive: MBCoverArtArchive? = null,
-    @Json(name = "artist-credit") val artistCredit: List<MBArtistCredit>? = null,
-    @Json(name = "label-info") val labelInfo: List<MBLabelInfo>? = null,
+    @field:Json(name = "release-group") val releaseGroup: MBReleaseGroup? = null,
+    @field:Json(name = "cover-art-archive") val coverArtArchive: MBCoverArtArchive? = null,
+    @field:Json(name = "artist-credit") val artistCredit: List<MBArtistCredit>? = null,
+    @field:Json(name = "label-info") val labelInfo: List<MBLabelInfo>? = null,
     val media: List<MBMedia>? = null,
     val tags: List<MBTag>? = null,
     val genres: List<MBGenre>? = null,

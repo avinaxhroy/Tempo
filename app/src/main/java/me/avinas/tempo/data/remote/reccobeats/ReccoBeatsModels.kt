@@ -38,10 +38,10 @@ data class ReccoBeatsTrack(
     val name: String,
     val artists: List<ReccoBeatsArtist> = emptyList(),
     val album: ReccoBeatsAlbum? = null,
-    @Json(name = "duration_ms") val durationMs: Long? = null,
-    @Json(name = "spotify_id") val spotifyId: String? = null,
+    @field:Json(name = "duration_ms") val durationMs: Long? = null,
+    @field:Json(name = "spotify_id") val spotifyId: String? = null,
     val isrc: String? = null,
-    @Json(name = "preview_url") val previewUrl: String? = null,
+    @field:Json(name = "preview_url") val previewUrl: String? = null,
     val popularity: Int? = null
 )
 
@@ -52,7 +52,7 @@ data class ReccoBeatsTrack(
 data class ReccoBeatsArtist(
     val id: String,
     val name: String,
-    @Json(name = "spotify_id") val spotifyId: String? = null
+    @field:Json(name = "spotify_id") val spotifyId: String? = null
 )
 
 /**
@@ -62,9 +62,9 @@ data class ReccoBeatsArtist(
 data class ReccoBeatsAlbum(
     val id: String,
     val name: String,
-    @Json(name = "release_date") val releaseDate: String? = null,
+    @field:Json(name = "release_date") val releaseDate: String? = null,
     val images: List<ReccoBeatsImage>? = null,
-    @Json(name = "spotify_id") val spotifyId: String? = null
+    @field:Json(name = "spotify_id") val spotifyId: String? = null
 ) {
     val smallImageUrl: String?
         get() = images?.minByOrNull { it.width ?: Int.MAX_VALUE }?.url
@@ -123,8 +123,8 @@ data class ReccoBeatsAudioFeatures(
     val loudness: Float = 0f,
     val key: Int = -1,
     val mode: Int = 0,
-    @Json(name = "time_signature") val timeSignature: Int = 4,
-    @Json(name = "duration_ms") val durationMs: Long? = null
+    @field:Json(name = "time_signature") val timeSignature: Int = 4,
+    @field:Json(name = "duration_ms") val durationMs: Long? = null
 ) {
     /**
      * Derive mood from audio features using valence and energy.
@@ -242,7 +242,7 @@ data class ReccoBeatsArtistSearchResponse(
 data class ReccoBeatsFullArtist(
     val id: String,
     val name: String,
-    @Json(name = "spotify_id") val spotifyId: String? = null,
+    @field:Json(name = "spotify_id") val spotifyId: String? = null,
     val genres: List<String>? = null,
     val images: List<ReccoBeatsImage>? = null,
     val popularity: Int? = null
@@ -275,10 +275,10 @@ data class ReccoBeatsFullAlbum(
     val id: String,
     val name: String,
     val artists: List<ReccoBeatsArtist>? = null,
-    @Json(name = "release_date") val releaseDate: String? = null,
-    @Json(name = "total_tracks") val totalTracks: Int? = null,
+    @field:Json(name = "release_date") val releaseDate: String? = null,
+    @field:Json(name = "total_tracks") val totalTracks: Int? = null,
     val images: List<ReccoBeatsImage>? = null,
-    @Json(name = "spotify_id") val spotifyId: String? = null
+    @field:Json(name = "spotify_id") val spotifyId: String? = null
 )
 
 // =====================

@@ -20,7 +20,7 @@ private val Context.backupDataStore: DataStore<Preferences> by preferencesDataSt
  */
 @Singleton
 class BackupSettingsManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     companion object {
         // Preference keys

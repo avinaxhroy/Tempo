@@ -61,7 +61,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class LastFmImportService @Inject constructor(
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
+    @param:dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val lastFmApi: LastFmApi,
     private val trackRepository: TrackRepository,
     private val listeningRepository: ListeningRepository,

@@ -14,60 +14,60 @@ import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
 data class iTunesSearchResponse(
-    @Json(name = "resultCount") val resultCount: Int = 0,
-    @Json(name = "results") val results: List<iTunesResult> = emptyList()
+    @field:Json(name = "resultCount") val resultCount: Int = 0,
+    @field:Json(name = "results") val results: List<iTunesResult> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
 data class iTunesResult(
     // Wrapper type - tells us what kind of result this is
-    @Json(name = "wrapperType") val wrapperType: String? = null, // "track" or "collection"
-    @Json(name = "kind") val kind: String? = null, // "song", "album", etc.
+    @field:Json(name = "wrapperType") val wrapperType: String? = null, // "track" or "collection"
+    @field:Json(name = "kind") val kind: String? = null, // "song", "album", etc.
     
     // Track Info
-    @Json(name = "trackId") val trackId: Long? = null,
-    @Json(name = "trackName") val trackName: String? = null,
-    @Json(name = "trackCensoredName") val trackCensoredName: String? = null,
-    @Json(name = "trackTimeMillis") val trackTimeMillis: Long? = null,
-    @Json(name = "trackNumber") val trackNumber: Int? = null,
-    @Json(name = "trackCount") val trackCount: Int? = null,
+    @field:Json(name = "trackId") val trackId: Long? = null,
+    @field:Json(name = "trackName") val trackName: String? = null,
+    @field:Json(name = "trackCensoredName") val trackCensoredName: String? = null,
+    @field:Json(name = "trackTimeMillis") val trackTimeMillis: Long? = null,
+    @field:Json(name = "trackNumber") val trackNumber: Int? = null,
+    @field:Json(name = "trackCount") val trackCount: Int? = null,
     
     // Artist Info
-    @Json(name = "artistId") val artistId: Long? = null,
-    @Json(name = "artistName") val artistName: String? = null,
+    @field:Json(name = "artistId") val artistId: Long? = null,
+    @field:Json(name = "artistName") val artistName: String? = null,
     
     // Collection/Album Info
-    @Json(name = "collectionId") val collectionId: Long? = null,
-    @Json(name = "collectionName") val collectionName: String? = null,
-    @Json(name = "collectionCensoredName") val collectionCensoredName: String? = null,
+    @field:Json(name = "collectionId") val collectionId: Long? = null,
+    @field:Json(name = "collectionName") val collectionName: String? = null,
+    @field:Json(name = "collectionCensoredName") val collectionCensoredName: String? = null,
     
     // Album Artwork URLs (multiple sizes available)
-    @Json(name = "artworkUrl30") val artworkUrl30: String? = null,
-    @Json(name = "artworkUrl60") val artworkUrl60: String? = null,
-    @Json(name = "artworkUrl100") val artworkUrl100: String? = null,
+    @field:Json(name = "artworkUrl30") val artworkUrl30: String? = null,
+    @field:Json(name = "artworkUrl60") val artworkUrl60: String? = null,
+    @field:Json(name = "artworkUrl100") val artworkUrl100: String? = null,
     
     // Genre
-    @Json(name = "primaryGenreName") val primaryGenreName: String? = null,
-    @Json(name = "primaryGenreId") val primaryGenreId: Int? = null,
+    @field:Json(name = "primaryGenreName") val primaryGenreName: String? = null,
+    @field:Json(name = "primaryGenreId") val primaryGenreId: Int? = null,
     
     // Release Date
-    @Json(name = "releaseDate") val releaseDate: String? = null, // ISO 8601 format
+    @field:Json(name = "releaseDate") val releaseDate: String? = null, // ISO 8601 format
     
     // Preview
-    @Json(name = "previewUrl") val previewUrl: String? = null, // 30-second preview
+    @field:Json(name = "previewUrl") val previewUrl: String? = null, // 30-second preview
     
     // Country/Region
-    @Json(name = "country") val country: String? = null,
-    @Json(name = "currency") val currency: String? = null,
+    @field:Json(name = "country") val country: String? = null,
+    @field:Json(name = "currency") val currency: String? = null,
     
     // Links
-    @Json(name = "artistLinkUrl") val artistLinkUrl: String? = null,
-    @Json(name = "trackViewUrl") val trackViewUrl: String? = null,
-    @Json(name = "collectionViewUrl") val collectionViewUrl: String? = null,
+    @field:Json(name = "artistLinkUrl") val artistLinkUrl: String? = null,
+    @field:Json(name = "trackViewUrl") val trackViewUrl: String? = null,
+    @field:Json(name = "collectionViewUrl") val collectionViewUrl: String? = null,
     
     // Price (not very useful for our app)
-    @Json(name = "trackPrice") val trackPrice: Double? = null,
-    @Json(name = "collectionPrice") val collectionPrice: Double? = null
+    @field:Json(name = "trackPrice") val trackPrice: Double? = null,
+    @field:Json(name = "collectionPrice") val collectionPrice: Double? = null
 ) {
     /**
      * Get the best available album artwork URL.
