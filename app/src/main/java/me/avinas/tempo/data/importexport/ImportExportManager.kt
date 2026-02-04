@@ -71,6 +71,13 @@ class ImportExportManager @Inject constructor(
             val userPrefs = database.userPreferencesDao().getSync()
             val artistAliases = database.artistAliasDao().getAllSync()
             
+            // v5: Collect new entities
+            val trackAliases = database.trackAliasDao().getAllSync()
+            val manualContentMarks = database.manualContentMarkDao().getAllSync()
+            val appPreferences = database.appPreferenceDao().getAllSync()
+            val scrobbleArchive = database.scrobbleArchiveDao().getAll()
+            val lastFmImportMetadata = database.lastFmImportMetadataDao().getAll()
+            
             _progress.value = ImportExportProgress("Analyzing images...", 20, 100)
             
             // Classify image URLs
@@ -114,7 +121,7 @@ class ImportExportManager @Inject constructor(
                     // Create export data using current database schema version
                     val exportData = TempoExportData(
                         appVersion = BuildConfig.VERSION_NAME,
-                        schemaVersion = 23, // Keep in sync with AppDatabase version
+                        schemaVersion = 30, // Keep in sync with AppDatabase version
                         tracks = tracks,
                         artists = artists,
                         albums = albums,
@@ -123,6 +130,11 @@ class ImportExportManager @Inject constructor(
                         enrichedMetadata = enrichedMetadata,
                         userPreferences = userPrefs,
                         artistAliases = artistAliases,
+                        trackAliases = trackAliases,
+                        manualContentMarks = manualContentMarks,
+                        appPreferences = appPreferences,
+                        scrobbleArchive = scrobbleArchive,
+                        lastFmImportMetadata = lastFmImportMetadata,
                         localImageManifest = localImageManifest,
                         hotlinkedUrls = hotlinkUrls
                     )
@@ -357,6 +369,60 @@ class ImportExportManager @Inject constructor(
                 }
             }
             Log.i(TAG, "Imported $importedAliases artist aliases")
+            
+            // v5: Import Track Aliases (for merged tracks)
+            var importedTrackAliases = 0
+            for (alias in data.trackAliases) {
+                val newTargetTrackId = trackIdMap[alias.targetTrackId]
+                if (newTargetTrackId != null) {
+                    val remappedAlias = alias.copy(id = 0, targetTrackId = newTargetTrackId)
+                    val existingAlias = database.trackAliasDao().findAlias(alias.originalTitle, alias.originalArtist)
+                    if (existingAlias == null) {
+                        database.trackAliasDao().insertAlias(remappedAlias)
+                        importedTrackAliases++
+                    }
+                }
+            }
+            Log.i(TAG, "Imported $importedTrackAliases track aliases")
+            
+            // v5: Import Manual Content Marks (podcast/audiobook filters)
+            var importedContentMarks = 0
+            for (mark in data.manualContentMarks) {
+                // Remap track ID - skip if target track wasn't imported
+                val newTrackId = trackIdMap[mark.targetTrackId] ?: continue
+                val remappedMark = mark.copy(id = 0, targetTrackId = newTrackId)
+                // Check if same pattern already exists
+                val existingMark = database.manualContentMarkDao().findMatchingMark(
+                    remappedMark.originalTitle,
+                    remappedMark.originalArtist
+                )
+                if (existingMark == null) {
+                    database.manualContentMarkDao().insertMark(remappedMark)
+                    importedContentMarks++
+                }
+            }
+            Log.i(TAG, "Imported $importedContentMarks manual content marks")
+            
+            // v5: Import App Preferences (use IGNORE to not overwrite existing)
+            if (data.appPreferences.isNotEmpty()) {
+                database.appPreferenceDao().insertAll(data.appPreferences)
+                Log.i(TAG, "Imported ${data.appPreferences.size} app preferences")
+            }
+            
+            // v5: Import Scrobble Archive (Last.fm compressed history)
+            if (data.scrobbleArchive.isNotEmpty()) {
+                val remappedArchive = data.scrobbleArchive.map { it.copy(id = 0) }
+                database.scrobbleArchiveDao().insertAll(remappedArchive)
+                Log.i(TAG, "Imported ${data.scrobbleArchive.size} archived scrobble entries")
+            }
+            
+            // v5: Import Last.fm Import Metadata
+            if (data.lastFmImportMetadata.isNotEmpty()) {
+                for (metadata in data.lastFmImportMetadata) {
+                    database.lastFmImportMetadataDao().insert(metadata.copy(id = 0))
+                }
+                Log.i(TAG, "Imported ${data.lastFmImportMetadata.size} Last.fm import metadata records")
+            }
             
             // Schedule pre-caching of hotlinked images
             if (data.hotlinkedUrls.isNotEmpty()) {

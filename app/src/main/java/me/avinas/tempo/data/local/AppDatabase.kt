@@ -25,7 +25,7 @@ import me.avinas.tempo.data.local.entities.*
         LastFmImportMetadata::class, // Last.fm import session tracking
         ScrobbleArchive::class // Compressed archive for long-tail scrobbles
     ],
-    version = 29, // Add source index for Last.fm query performance
+    version = 30, // Repair indices for existing users
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -1287,7 +1287,7 @@ abstract class AppDatabase : RoomDatabase() {
          */
         val MIGRATION_28_29 = object : Migration(28, 29) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                Log.i(TAG, "Starting migration from version 28 to 29 - Adding source index")
+                Log.i(TAG, "Starting migration from version 28 to 29 - Adding listening_events indices")
                 
                 // Index for filtering by source (Last.fm vs live tracking)
                 db.execSQL("""
@@ -1295,15 +1295,84 @@ abstract class AppDatabase : RoomDatabase() {
                     ON listening_events(source)
                 """)
                 
-                // Composite index for source + timestamp queries (common pattern)
+                // Composite index for source + timestamp queries (must be ASC,ASC to match entity)
+                // DROP first in case an older version created it with wrong order (ASC,DESC)
+                db.execSQL("DROP INDEX IF EXISTS index_listening_events_source_timestamp")
                 db.execSQL("""
-                    CREATE INDEX IF NOT EXISTS index_listening_events_source_timestamp 
-                    ON listening_events(source, timestamp DESC)
+                    CREATE INDEX index_listening_events_source_timestamp 
+                    ON listening_events(source ASC, timestamp ASC)
+                """)
+
+                
+                // Composite index for timestamp + track_id queries
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_listening_events_timestamp_track_id 
+                    ON listening_events(timestamp ASC, track_id ASC)
+                """)
+                
+                // Composite index for track_id + timestamp queries
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_listening_events_track_id_timestamp 
+                    ON listening_events(track_id ASC, timestamp ASC)
+                """)
+                
+                // Composite index for stats queries
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_listening_events_stats 
+                    ON listening_events(timestamp ASC, track_id ASC, playDuration ASC, completionPercentage ASC)
                 """)
                 
                 Log.i(TAG, "Migration from version 28 to 29 completed successfully")
             }
         }
+        
+        /**
+         * Migration 29 -> 30: Repair indices for existing users.
+         * 
+         * This migration fixes users who ran the broken 28->29 migration that created
+         * the source_timestamp index with wrong order (ASC,DESC instead of ASC,ASC)
+         * and was missing several required indices.
+         * 
+         * This is a repair migration - it drops and recreates all affected indices
+         * to ensure schema consistency without data loss.
+         */
+        val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 29 to 30 - Repairing listening_events indices")
+                
+                // Drop potentially broken source_timestamp index and recreate with correct order
+                db.execSQL("DROP INDEX IF EXISTS index_listening_events_source_timestamp")
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_listening_events_source_timestamp 
+                    ON listening_events(source ASC, timestamp ASC)
+                """)
+                
+                // Ensure source index exists
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_listening_events_source 
+                    ON listening_events(source)
+                """)
+                
+                // Add any missing composite indices (these were missing in broken 28->29)
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_listening_events_timestamp_track_id 
+                    ON listening_events(timestamp ASC, track_id ASC)
+                """)
+                
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_listening_events_track_id_timestamp 
+                    ON listening_events(track_id ASC, timestamp ASC)
+                """)
+                
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_listening_events_stats 
+                    ON listening_events(timestamp ASC, track_id ASC, playDuration ASC, completionPercentage ASC)
+                """)
+                
+                Log.i(TAG, "Migration from version 29 to 30 completed successfully - Indices repaired")
+            }
+        }
+
 
         /**
          * All migrations in order.
@@ -1331,7 +1400,8 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_25_26,
             MIGRATION_26_27,
             MIGRATION_27_28,
-            MIGRATION_28_29
+            MIGRATION_28_29,
+            MIGRATION_29_30
         )
         
     }

@@ -42,7 +42,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class GoogleAuthManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val tokenStorage: GoogleDriveTokenStorage
 ) {
     companion object {
         private const val TAG = "GoogleAuthManager"
@@ -132,6 +133,13 @@ class GoogleAuthManager @Inject constructor(
                         _currentAccount.value = account
                         _isSignedIn.value = true
                         
+                        // Persist account info for background session restoration
+                        tokenStorage.saveAccountInfo(
+                            email = account.email,
+                            displayName = account.displayName,
+                            photoUrl = account.photoUrl
+                        )
+                        
                         Log.i(TAG, "Successfully signed in as ${account.email}")
                         
                         // Authorize for Drive access
@@ -173,8 +181,16 @@ class GoogleAuthManager @Inject constructor(
                 _needsDriveConsent.value = true
                 false
             } else {
-                Log.i(TAG, "Drive authorization granted, accessToken present: ${authorizationResult?.accessToken != null}")
+                val accessToken = authorizationResult?.accessToken
+                Log.i(TAG, "Drive authorization granted, accessToken present: ${accessToken != null}")
                 _needsDriveConsent.value = false
+                
+                // Persist the access token for background workers
+                if (accessToken != null) {
+                    tokenStorage.saveAccessToken(accessToken)
+                    Log.d(TAG, "Access token persisted to secure storage")
+                }
+                
                 true
             }
         } catch (e: Exception) {
@@ -198,8 +214,16 @@ class GoogleAuthManager @Inject constructor(
             
             authorizationResult = authorizationClient.authorize(authRequest).await()
             
-            val hasToken = authorizationResult?.accessToken != null
+            val accessToken = authorizationResult?.accessToken
+            val hasToken = accessToken != null
             Log.i(TAG, "Consent flow completed, accessToken present: $hasToken")
+            
+            // Persist the access token for background workers
+            if (accessToken != null) {
+                tokenStorage.saveAccessToken(accessToken)
+                Log.d(TAG, "Access token persisted to secure storage")
+            }
+            
             hasToken
         } catch (e: Exception) {
             Log.e(TAG, "Failed to complete consent flow", e)
@@ -225,30 +249,44 @@ class GoogleAuthManager @Inject constructor(
     fun updateAuthorizationResult(result: AuthorizationResult) {
         authorizationResult = result
         Log.i(TAG, "Authorization result updated, accessToken present: ${result.accessToken != null}")
+        
+        // Persist the token for background workers
+        result.accessToken?.let { token ->
+            tokenStorage.saveAccessToken(token)
+            Log.d(TAG, "Authorization result token persisted to secure storage")
+        }
     }
     
     /**
      * Get access token for Google Drive API calls.
      * Returns null if not signed in or not authorized.
+     * 
+     * Falls back to persisted token storage if in-memory token is unavailable.
      */
     suspend fun getAccessToken(): String? = withContext(Dispatchers.IO) {
         try {
-            val result = authorizationResult ?: run {
-                Log.w(TAG, "No authorization result available")
-                return@withContext null
+            // First, try to get from in-memory authorization result
+            val result = authorizationResult
+            if (result != null && !result.hasResolution()) {
+                val token = result.accessToken
+                if (token != null) {
+                    return@withContext token
+                }
             }
             
-            // Check if we have full authorization
-            if (result.hasResolution()) {
-                Log.w(TAG, "Authorization requires resolution - no access token yet")
-                return@withContext null
+            // Fallback to persisted token storage (for background workers)
+            val persistedToken = tokenStorage.getAccessToken()
+            if (persistedToken != null) {
+                if (tokenStorage.isTokenExpired()) {
+                    Log.w(TAG, "Persisted token is expired, needs refresh")
+                    // Token is expired, but we return it anyway - caller can detect 401 and refresh
+                }
+                Log.d(TAG, "Using persisted token from storage")
+                return@withContext persistedToken
             }
             
-            val token = result.accessToken
-            if (token == null) {
-                Log.w(TAG, "Authorization result has no access token")
-            }
-            token
+            Log.w(TAG, "No access token available (memory or storage)")
+            null
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get access token", e)
             null
@@ -275,8 +313,16 @@ class GoogleAuthManager @Inject constructor(
                 _needsDriveConsent.value = true
                 false
             } else {
-                val hasToken = authorizationResult?.accessToken != null
+                val accessToken = authorizationResult?.accessToken
+                val hasToken = accessToken != null
                 Log.i(TAG, "Token refreshed successfully: $hasToken")
+                
+                // Persist the refreshed token
+                if (accessToken != null) {
+                    tokenStorage.saveAccessToken(accessToken)
+                    Log.d(TAG, "Refreshed token persisted to secure storage")
+                }
+                
                 hasToken
             }
         } catch (e: Exception) {
@@ -297,6 +343,10 @@ class GoogleAuthManager @Inject constructor(
             
             // Clear Credential Manager state
             credentialManager.clearCredentialState(ClearCredentialStateRequest())
+            
+            // Clear persisted tokens and account info
+            tokenStorage.clearAll()
+            Log.d(TAG, "Cleared persisted tokens from secure storage")
             
             // Clear local state
             authorizationResult = null
@@ -350,29 +400,91 @@ class GoogleAuthManager @Inject constructor(
     
     /**
      * Attempt silent session restore without showing UI.
-     * Uses Application context - may not work in all cases.
      * For background operations like WorkManager.
      * 
-     * IMPORTANT LIMITATION: This method can only succeed if the session is already
-     * active in memory. The Credential Manager API does not support truly silent
-     * token refresh without user interaction. This means scheduled backups
-     * (daily/weekly/monthly) via WorkManager will only succeed if:
-     * 1. The app is already running in memory, OR
-     * 2. The user has recently opened the app and authenticated
+     * This method now attempts to restore from encrypted token storage first,
+     * then tries to re-authorize with Google Play Services if needed.
      * 
-     * If the app was killed and no active session exists, this returns false
-     * and scheduled backups will fail with a notification asking the user to
-     * sign in via the app.
+     * ## Session Restoration Flow:
+     * 1. Check if session is already active in memory -> return true
+     * 2. Check for persisted tokens in encrypted storage
+     * 3. If tokens exist and account info available, attempt silent re-authorization
+     * 4. If re-authorization succeeds, session is restored
+     * 5. If all else fails, UI sign-in is required
+     * 
+     * ## When this will SUCCEED:
+     * - App is actively running (memory cache)
+     * - Tokens are persisted and user has authorized Drive access before
+     * 
+     * ## When this will FAIL:
+     * - User has never signed in
+     * - User revoked app access from Google Account settings
+     * - Google requires re-consent (rare)
      */
     suspend fun restoreSessionSilently(): Boolean = withContext(Dispatchers.IO) {
-        // For background workers, we can only check if we have a cached session
-        // We cannot show UI from a background context
+        // Step 1: Check if session is already active in memory
         if (_isSignedIn.value && authorizationResult?.accessToken != null) {
-            Log.d(TAG, "Session already active")
+            Log.d(TAG, "Session already active in memory")
             return@withContext true
         }
         
-        Log.d(TAG, "No active session for silent restore - UI sign-in required")
-        false
+        // Step 2: Try to restore from encrypted storage
+        val storageStatus = tokenStorage.getStorageStatus()
+        Log.d(TAG, "Token storage status: $storageStatus")
+        
+        if (!tokenStorage.hasAccountInfo()) {
+            Log.d(TAG, "No stored account info - user needs to sign in via UI")
+            return@withContext false
+        }
+        
+        // Restore account info to state
+        val storedAccount = tokenStorage.getStoredAccount()
+        if (storedAccount != null) {
+            _currentAccount.value = storedAccount
+            Log.d(TAG, "Restored account info from storage: ${storedAccount.email}")
+        }
+        
+        // Step 3: Attempt silent re-authorization with Google Play Services
+        // This works because Google Play Services caches the authorization
+        try {
+            Log.d(TAG, "Attempting silent re-authorization with Google Play Services")
+            
+            val authRequest = AuthorizationRequest.Builder()
+                .setRequestedScopes(listOf(DRIVE_SCOPE))
+                .build()
+            
+            authorizationResult = authorizationClient.authorize(authRequest).await()
+            
+            // Check if we got a token without needing user consent
+            if (authorizationResult?.hasResolution() == true) {
+                Log.d(TAG, "Re-authorization requires user consent - cannot complete silently")
+                return@withContext false
+            }
+            
+            val accessToken = authorizationResult?.accessToken
+            if (accessToken != null) {
+                // Successfully got a fresh token
+                tokenStorage.saveAccessToken(accessToken)
+                _isSignedIn.value = true
+                Log.i(TAG, "Successfully restored session silently for ${storedAccount?.email}")
+                return@withContext true
+            }
+            
+            Log.w(TAG, "Re-authorization completed but no access token received")
+            return@withContext false
+            
+        } catch (e: Exception) {
+            Log.w(TAG, "Silent re-authorization failed: ${e.message}")
+            
+            // If we have a cached (possibly stale) token, we can try using it
+            // The Drive service will handle 401 errors and trigger refresh
+            if (tokenStorage.hasToken() && !tokenStorage.isTokenExpired()) {
+                Log.d(TAG, "Using cached token from storage (may be stale)")
+                _isSignedIn.value = true
+                return@withContext true
+            }
+            
+            return@withContext false
+        }
     }
 }

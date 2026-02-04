@@ -108,4 +108,10 @@ interface AppPreferenceDao {
      */
     @Query("SELECT COUNT(*) FROM app_preferences")
     suspend fun getCount(): Int
+    
+    /**
+     * Get all app preferences for export.
+     */
+    @Query("SELECT * FROM app_preferences")
+    suspend fun getAllSync(): List<AppPreference>
 }

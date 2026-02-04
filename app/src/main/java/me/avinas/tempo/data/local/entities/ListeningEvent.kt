@@ -24,7 +24,12 @@ import androidx.room.PrimaryKey
         Index(value = ["track_id"]),
         Index(value = ["session_id"]),
         Index(value = ["was_skipped"]),  // For skip rate queries
-        Index(value = ["is_replay"])      // For replay count queries
+        Index(value = ["is_replay"]),    // For replay count queries
+        Index(value = ["source"]),       // For filtering by source (Last.fm vs live)
+        Index(value = ["source", "timestamp"]),  // For source + time queries
+        Index(name = "index_listening_events_timestamp_track_id", value = ["timestamp", "track_id"]),
+        Index(name = "index_listening_events_track_id_timestamp", value = ["track_id", "timestamp"]),
+        Index(name = "index_listening_events_stats", value = ["timestamp", "track_id", "playDuration", "completionPercentage"])
     ]
 )
 data class ListeningEvent(

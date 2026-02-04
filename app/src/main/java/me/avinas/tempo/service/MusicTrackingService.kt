@@ -800,8 +800,8 @@ class MusicTrackingService : NotificationListenerService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     // MediaSession management
     private var mediaSessionManager: MediaSessionManager? = null
-    // Map of package name to MediaController - synchronized for thread safety
-    private val activeControllers = java.util.Collections.synchronizedMap(mutableMapOf<String, MediaController>())
+    // Map of package name to MediaController - ConcurrentHashMap for thread-safe iteration
+    private val activeControllers = java.util.concurrent.ConcurrentHashMap<String, MediaController>()
     // We no longer use a single shared callback
     // private val sessionCallback = MediaSessionCallback()
 
@@ -1593,9 +1593,13 @@ class MusicTrackingService : NotificationListenerService() {
      * Updates the corresponding PlaybackSession with accurate position data.
      */
     private fun pollMediaSessionPositions() {
-        // Create a snapshot to avoid ConcurrentModificationException
-        // when activeControllers is modified during iteration
-        val controllerSnapshot = activeControllers.toList()
+        // ConcurrentHashMap provides weakly consistent iteration that won't throw
+        // ConcurrentModificationException. Create a copy to avoid issues with
+        // entries being removed during iteration.
+        val controllerSnapshot: List<Pair<String, MediaController>>
+        synchronized(activeControllers) {
+            controllerSnapshot = activeControllers.toList()
+        }
         
         controllerSnapshot.forEach { (packageName, controller) ->
             try {
@@ -1620,7 +1624,9 @@ class MusicTrackingService : NotificationListenerService() {
     
     private suspend fun saveSessionsToPersistence() {
         try {
-            val currentSessions = playbackStates.mapNotNull { (pkg, session) ->
+            // Create a snapshot to avoid ConcurrentModificationException
+            val statesSnapshot = playbackStates.toMap()
+            val currentSessions = statesSnapshot.mapNotNull { (pkg, session) ->
                 session.trackId?.let { trackId ->
                     SessionState(
                         sessionId = session.sessionId,
@@ -2740,9 +2746,12 @@ class MusicTrackingService : NotificationListenerService() {
             lastSessionChangeLog = currentControllers.size to now
         }
         
-        // 1. Identify removed packages
+        // 1. Identify removed packages - synchronized to get consistent view of keys
         val newPackageNames = currentControllers.map { it.packageName }.toSet()
-        val removedPackages = activeControllers.keys - newPackageNames
+        val removedPackages: Set<String>
+        synchronized(activeControllers) {
+            removedPackages = activeControllers.keys.toSet() - newPackageNames
+        }
         
         removedPackages.forEach { packageName ->
             // Unregister callback
@@ -3394,7 +3403,9 @@ class MusicTrackingService : NotificationListenerService() {
         isMediaSessionManagerInitialized = false
         
         // Save all active sessions before shutdown
-        playbackStates.values.forEach { session ->
+        // Create snapshot to avoid ConcurrentModificationException
+        val playbackSnapshot = playbackStates.values.toList()
+        playbackSnapshot.forEach { session ->
             session.pause()
             saveListeningEvent(session)
         }
@@ -3402,7 +3413,10 @@ class MusicTrackingService : NotificationListenerService() {
 
         // Cleanup MediaSession callbacks
         // Create a snapshot to avoid ConcurrentModificationException during cleanup
-        val controllerSnapshot = activeControllers.toList()
+        val controllerSnapshot: List<Pair<String, MediaController>>
+        synchronized(activeControllers) {
+            controllerSnapshot = activeControllers.toList()
+        }
         
         controllerSnapshot.forEach { (packageName, controller) ->
             val callback = packageSpecificCallbacks[packageName] ?: sharedCallback

@@ -13,8 +13,9 @@ import com.google.api.services.drive.DriveScopes
 import com.google.api.services.drive.model.File as DriveFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
-
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.avinas.tempo.BuildConfig
 import java.io.File
@@ -59,6 +60,9 @@ class GoogleDriveService @Inject constructor(
     private var driveService: Drive? = null
     private var backupFolderId: String? = null
     private var cachedAccessToken: String? = null
+    
+    // Mutex to prevent race conditions when creating backup folder
+    private val folderCreationMutex = Mutex()
     
     /**
      * Initialize the Drive service with current access token.
@@ -159,6 +163,12 @@ class GoogleDriveService @Inject constructor(
         // Return cached folder ID if available and valid
         backupFolderId?.let { return@withContext it }
         
+        // Use mutex to prevent race condition where two concurrent operations
+        // might both create a backup folder
+        folderCreationMutex.withLock {
+            // Double-check after acquiring lock
+            backupFolderId?.let { return@withContext it }
+        
         val folderId = executeWithRetry { service ->
             // Search for existing folder
             val query = "name = '$BACKUP_FOLDER_NAME' and mimeType = '$MIME_TYPE_FOLDER' and trashed = false"
@@ -191,8 +201,9 @@ class GoogleDriveService @Inject constructor(
             folder.id
         }
         
-        backupFolderId = folderId
-        folderId
+            backupFolderId = folderId
+            folderId
+        }
     }
     
     /**
@@ -207,10 +218,29 @@ class GoogleDriveService @Inject constructor(
         progressCallback: ((Float) -> Unit)? = null
     ): DriveBackupResult = withContext(Dispatchers.IO) {
         try {
+            // Validate file before attempting upload
+            if (!localFile.exists()) {
+                Log.e(TAG, "Backup file does not exist: ${localFile.absolutePath}")
+                return@withContext DriveBackupResult.Error("Backup file not found")
+            }
+            
+            if (localFile.length() == 0L) {
+                Log.e(TAG, "Backup file is empty: ${localFile.absolutePath}")
+                return@withContext DriveBackupResult.Error("Backup file is empty")
+            }
+            
+            val validExtensions = listOf(".tempo", ".zip")
+            if (!validExtensions.any { localFile.name.endsWith(it, ignoreCase = true) }) {
+                Log.w(TAG, "Unexpected file extension for backup: ${localFile.name}")
+            }
+            
+            Log.d(TAG, "Uploading backup file: ${localFile.name} (${localFile.length()} bytes)")
+            progressCallback?.invoke(0.05f)
+            
             // This handles auth checks via getOrCreateBackupFolder -> executeWithRetry
             val folderId = getOrCreateBackupFolder()
             
-            progressCallback?.invoke(0.1f)
+            progressCallback?.invoke(0.15f)
             
             executeWithRetry { service ->
                 // Generate backup filename with timestamp
@@ -230,15 +260,17 @@ class GoogleDriveService @Inject constructor(
                     )
                 }
                 
-                progressCallback?.invoke(0.2f)
+                progressCallback?.invoke(0.25f)
                 
-                // Upload file
+                // Upload file with progress tracking
                 val mediaContent = FileContent(MIME_TYPE_ZIP, localFile)
+                progressCallback?.invoke(0.3f)
+                
                 val uploadedFile = service.files().create(fileMetadata, mediaContent)
                     .setFields("id, name, size, createdTime")
                     .execute()
                 
-                progressCallback?.invoke(0.9f)
+                progressCallback?.invoke(0.85f)
                 
                 Log.i(TAG, "Uploaded backup: ${uploadedFile.name} (${uploadedFile.id})")
                 

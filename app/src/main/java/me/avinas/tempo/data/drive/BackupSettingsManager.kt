@@ -71,11 +71,15 @@ class BackupSettingsManager @Inject constructor(
     }
     
     /**
-     * Update last backup timestamp and status.
+     * Update last backup status and optionally timestamp.
+     * Timestamp is only updated on SUCCESS to preserve the last successful backup time.
      */
     suspend fun updateLastBackup(status: BackupStatus, timestamp: Long = System.currentTimeMillis()) {
         context.backupDataStore.edit { preferences ->
-            preferences[LAST_BACKUP_TIME] = timestamp
+            // Only update timestamp on successful backup to preserve last success time
+            if (status == BackupStatus.SUCCESS) {
+                preferences[LAST_BACKUP_TIME] = timestamp
+            }
             preferences[LAST_BACKUP_STATUS] = status.name
         }
     }

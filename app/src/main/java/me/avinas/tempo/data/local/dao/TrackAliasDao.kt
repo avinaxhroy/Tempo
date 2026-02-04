@@ -19,4 +19,10 @@ interface TrackAliasDao {
     
     @Query("DELETE FROM track_aliases WHERE target_track_id = :trackId")
     suspend fun clearAliasesForTrack(trackId: Long)
+    
+    /**
+     * Get all track aliases for export.
+     */
+    @Query("SELECT * FROM track_aliases")
+    suspend fun getAllSync(): List<TrackAlias>
 }

@@ -110,33 +110,59 @@ class ArtistMergeRepository @Inject constructor(
                 
                 // 2. CRITICAL: Update any existing aliases that pointed to the source artist
                 // This handles "chained" merges: A->B, then B->C should result in A->C
+                // Using atomic update instead of delete+insert to avoid race conditions
                 val existingAliases = artistAliasDao.getAliasesForArtist(sourceArtistId)
                 for (existingAlias in existingAliases) {
-                    // Delete old alias and create new one pointing to target
-                    artistAliasDao.deleteById(existingAlias.id)
-                    val updatedAlias = existingAlias.copy(
-                        id = 0,  // New ID will be generated
-                        targetArtistId = targetArtistId
-                    )
-                    artistAliasDao.insertAlias(updatedAlias)
+                    artistAliasDao.updateTargetArtist(existingAlias.id, targetArtistId)
                 }
                 if (existingAliases.isNotEmpty()) {
                     Log.d(TAG, "Re-pointed ${existingAliases.size} existing aliases to target")
                 }
 
                 // 3. Re-link all track_artists from source to target
+                // Preserving role priority (PRIMARY > FEATURED) and handling credit order conflicts
                 val relationships = trackArtistDao.getRelationshipsForArtist(sourceArtistId)
+                var relinkedCount = 0
+                var upgradedRoles = 0
+                
                 for (rel in relationships) {
-                    // Check if target already has a relationship with this track
-                    val hasExisting = trackArtistDao.hasRelationship(rel.trackId, targetArtistId)
-                    if (!hasExisting) {
-                        // Create new relationship with target artist
-                        trackArtistDao.insert(rel.copy(artistId = targetArtistId))
+                    val existingRels = trackArtistDao.getRelationshipsForTrack(rel.trackId)
+                    val existingTargetRel = existingRels.find { it.artistId == targetArtistId }
+                    
+                    if (existingTargetRel == null) {
+                        // No existing relationship - create new one with adjusted credit order
+                        // Use max existing credit_order + 1 to avoid conflicts
+                        val maxOrder = existingRels.maxOfOrNull { it.creditOrder } ?: -1
+                        val newCreditOrder = if (rel.role.name == "PRIMARY") {
+                            // Primary artists should come first, use original order
+                            rel.creditOrder
+                        } else {
+                            // Featured artists come after existing ones
+                            maxOrder + 1
+                        }
+                        trackArtistDao.insert(rel.copy(
+                            artistId = targetArtistId,
+                            creditOrder = newCreditOrder
+                        ))
+                        relinkedCount++
+                    } else {
+                        // Existing relationship exists - check if we should upgrade the role
+                        // PRIMARY role takes precedence over FEATURED
+                        if (rel.role.name == "PRIMARY" && existingTargetRel.role.name == "FEATURED") {
+                            // Upgrade from FEATURED to PRIMARY
+                            trackArtistDao.delete(existingTargetRel)
+                            trackArtistDao.insert(existingTargetRel.copy(
+                                role = rel.role,
+                                creditOrder = minOf(rel.creditOrder, existingTargetRel.creditOrder)
+                            ))
+                            upgradedRoles++
+                        }
+                        // Otherwise keep existing relationship as-is
                     }
-                    // Delete the old relationship
+                    // Delete the old source relationship
                     trackArtistDao.delete(rel)
                 }
-                Log.d(TAG, "Re-linked ${relationships.size} track relationships")
+                Log.d(TAG, "Re-linked $relinkedCount track relationships, upgraded $upgradedRoles roles")
 
                 // 4. Update tracks.primary_artist_id references
                 updatePrimaryArtistReferences(sourceArtistId, targetArtistId)

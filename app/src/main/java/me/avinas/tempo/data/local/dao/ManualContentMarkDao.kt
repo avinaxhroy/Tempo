@@ -57,4 +57,10 @@ interface ManualContentMarkDao {
      */
     @Query("DELETE FROM manual_content_marks")
     suspend fun deleteAll()
+    
+    /**
+     * Get all manual content marks for export.
+     */
+    @Query("SELECT * FROM manual_content_marks")
+    suspend fun getAllSync(): List<ManualContentMark>
 }

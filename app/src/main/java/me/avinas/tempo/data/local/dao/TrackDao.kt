@@ -176,10 +176,30 @@ interface TrackDao {
     /**
      * Replace old artist name within multi-artist strings.
      * For example: "OldArtist, OtherArtist" -> "NewArtist, OtherArtist"
+     * 
+     * Uses word boundary matching to avoid partial replacements:
+     * - Matches ", OldArtist" or "OldArtist, " patterns
+     * - Avoids replacing "Art" inside "Artie Shaw"
      */
     @Query("""
-        UPDATE tracks SET artist = REPLACE(artist, :oldArtistName, :newArtistName) 
-        WHERE LOWER(artist) LIKE '%' || LOWER(:oldArtistName) || '%'
+        UPDATE tracks SET artist = 
+            CASE 
+                WHEN LOWER(artist) LIKE LOWER(:oldArtistName) || ', %' THEN 
+                    :newArtistName || SUBSTR(artist, LENGTH(:oldArtistName) + 1)
+                WHEN LOWER(artist) LIKE '%, ' || LOWER(:oldArtistName) THEN 
+                    SUBSTR(artist, 1, LENGTH(artist) - LENGTH(:oldArtistName)) || :newArtistName
+                WHEN LOWER(artist) LIKE '%, ' || LOWER(:oldArtistName) || ', %' THEN
+                    REPLACE(
+                        REPLACE(artist, ', ' || :oldArtistName || ', ', ', ' || :newArtistName || ', '),
+                        ', ' || :oldArtistName || ',', ', ' || :newArtistName || ','
+                    )
+                ELSE artist
+            END
+        WHERE (
+            LOWER(artist) LIKE LOWER(:oldArtistName) || ', %' 
+            OR LOWER(artist) LIKE '%, ' || LOWER(:oldArtistName) 
+            OR LOWER(artist) LIKE '%, ' || LOWER(:oldArtistName) || ', %'
+        )
     """)
     suspend fun replaceArtistNameInMultiArtist(oldArtistName: String, newArtistName: String): Int
 }

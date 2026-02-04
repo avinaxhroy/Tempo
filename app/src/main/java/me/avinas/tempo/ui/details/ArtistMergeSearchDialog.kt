@@ -172,8 +172,63 @@ fun ArtistMergeSearchDialog(
                             ) { artist ->
                                 ArtistSearchItem(
                                     artist = artist,
-                                    onClick = { viewModel.mergeArtists(artist) }
+                                    onClick = { viewModel.selectArtistForMerge(artist) }
                                 )
+                            }
+                        }
+                    }
+                }
+                
+                // Confirmation dialog for pending merge
+                if (uiState.pendingMergeTarget != null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "⚠️ Confirm Merge",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Merge \"$sourceArtistName\" into \"${uiState.pendingMergeTarget!!.name}\"?",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "This action cannot be undone. All listening history will be combined.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { viewModel.cancelMerge() },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Color.White
+                                    )
+                                ) {
+                                    Text("Cancel")
+                                }
+                                Button(
+                                    onClick = { viewModel.confirmMerge() },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = TempoRed
+                                    )
+                                ) {
+                                    Text("Merge", color = Color.White)
+                                }
                             }
                         }
                     }

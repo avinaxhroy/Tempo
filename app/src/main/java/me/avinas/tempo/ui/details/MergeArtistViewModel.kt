@@ -54,13 +54,12 @@ class MergeArtistViewModel @Inject constructor(
 
     /**
      * Set the source artist ID (the artist to be merged into another).
-     * This also resets the UI state for a fresh dialog.
+     * Always resets the UI state for a fresh dialog.
      */
     fun setSourceArtistId(id: Long) {
-        // Reset state when dialog opens with a new source
-        if (sourceArtistId != id) {
-            _uiState.value = MergeArtistUiState()
-        }
+        // Always reset state when dialog opens - this fixes issue where
+        // previous error/success states persisted if same artist selected again
+        _uiState.value = MergeArtistUiState()
         sourceArtistId = id
     }
 
@@ -105,14 +104,33 @@ class MergeArtistViewModel @Inject constructor(
     }
 
     /**
-     * Merge the source artist into the selected target artist.
+     * Select an artist as the merge target, showing confirmation first.
+     * This is the first step - does NOT execute the merge yet.
      * 
-     * @param targetArtist The artist to merge INTO (will receive all tracks)
+     * @param targetArtist The artist to potentially merge INTO
      */
-    fun mergeArtists(targetArtist: Artist) {
+    fun selectArtistForMerge(targetArtist: Artist) {
+        _uiState.value = _uiState.value.copy(pendingMergeTarget = targetArtist)
+    }
+    
+    /**
+     * Cancel the pending merge and clear selection.
+     */
+    fun cancelMerge() {
+        _uiState.value = _uiState.value.copy(pendingMergeTarget = null)
+    }
+    
+    /**
+     * Confirm and execute the merge with the pending target.
+     * This is the second step - actually performs the merge.
+     */
+    fun confirmMerge() {
+        val targetArtist = _uiState.value.pendingMergeTarget ?: return
+        
         if (sourceArtistId <= 0) {
             _uiState.value = _uiState.value.copy(
-                mergeStatus = ArtistMergeStatus.Error("Source artist not set")
+                mergeStatus = ArtistMergeStatus.Error("Source artist not set"),
+                pendingMergeTarget = null
             )
             return
         }
@@ -123,7 +141,10 @@ class MergeArtistViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(mergeStatus = ArtistMergeStatus.Processing)
+            _uiState.value = _uiState.value.copy(
+                mergeStatus = ArtistMergeStatus.Processing,
+                pendingMergeTarget = null
+            )
             try {
                 val success = artistMergeRepository.mergeArtists(
                     sourceArtistId = sourceArtistId,
@@ -143,6 +164,16 @@ class MergeArtistViewModel @Inject constructor(
                 )
             }
         }
+    }
+    
+    /**
+     * Legacy method for direct merge without confirmation.
+     * @deprecated Use selectArtistForMerge + confirmMerge instead
+     */
+    @Deprecated("Use selectArtistForMerge + confirmMerge for confirmation flow")
+    fun mergeArtists(targetArtist: Artist) {
+        selectArtistForMerge(targetArtist)
+        confirmMerge()
     }
 
     /**

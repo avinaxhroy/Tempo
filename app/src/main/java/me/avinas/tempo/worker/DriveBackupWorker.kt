@@ -184,13 +184,13 @@ class DriveBackupWorker @AssistedInject constructor(
                         Log.i(TAG, "Backup uploaded successfully: ${uploadResult.fileName}")
                         settingsManager.updateLastBackup(BackupStatus.SUCCESS)
                         showNotification("Backup Complete", "Your data has been backed up to Google Drive")
-                        Result.success()
+                        return@withContext Result.success()
                     }
                     is DriveBackupResult.Error -> {
                         Log.e(TAG, "Upload failed: ${uploadResult.message}")
                         settingsManager.updateLastBackup(BackupStatus.FAILED)
                         showNotification("Backup Failed", uploadResult.message)
-                        Result.retry()
+                        return@withContext Result.retry()
                     }
                 }
             } finally {

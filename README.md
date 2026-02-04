@@ -1,6 +1,6 @@
 # Tempo: Your Music Journey, Preserved.
 
-![Tempo Logo](TempoICON.png)
+<img src="TempoICON.png" width="140" />
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9.0-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org)
 [![Android](https://img.shields.io/badge/Android-14-green.svg?style=flat&logo=android)](https://developer.android.com)

@@ -13,6 +13,7 @@ import me.avinas.tempo.data.local.entities.*
  * - v2: Added image bundling (deprecated)
  * - v3: Removed image bundling for lightweight exports
  * - v4: Smart image bundling (local only) + hotlink pre-caching
+ * - v5: Added missing entities (track aliases, content marks, app prefs, scrobble archive, lastfm metadata)
  */
 @JsonClass(generateAdapter = true)
 data class TempoExportData(
@@ -33,6 +34,21 @@ data class TempoExportData(
     // Artist merge aliases (v5)
     val artistAliases: List<ArtistAlias> = emptyList(),
     
+    // v5: Track merge aliases
+    val trackAliases: List<TrackAlias> = emptyList(),
+    
+    // v5: Manual content marks (podcast/audiobook filtering)
+    val manualContentMarks: List<ManualContentMark> = emptyList(),
+    
+    // v5: App tracking preferences
+    val appPreferences: List<AppPreference> = emptyList(),
+    
+    // v5: Compressed scrobble archive (Last.fm history)
+    val scrobbleArchive: List<ScrobbleArchive> = emptyList(),
+    
+    // v5: Last.fm import session metadata
+    val lastFmImportMetadata: List<LastFmImportMetadata> = emptyList(),
+    
     // v4: Local images bundled in ZIP (bundledFilename -> originalFilePath)
     val localImageManifest: Map<String, String> = emptyMap(),
     
@@ -44,7 +60,7 @@ data class TempoExportData(
     val imageManifest: Map<String, String> = emptyMap()
 ) {
     companion object {
-        const val CURRENT_VERSION = 4
+        const val CURRENT_VERSION = 5
         const val DATA_FILENAME = "data.json"
     }
 }

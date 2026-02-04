@@ -9,6 +9,7 @@ import dagger.hilt.components.SingletonComponent
 import me.avinas.tempo.data.drive.BackupSettingsManager
 import me.avinas.tempo.data.drive.GoogleAuthManager
 import me.avinas.tempo.data.drive.GoogleDriveService
+import me.avinas.tempo.data.drive.GoogleDriveTokenStorage
 import javax.inject.Singleton
 
 /**
@@ -20,9 +21,16 @@ object DriveModule {
     
     @Provides
     @Singleton
-    fun provideGoogleAuthManager(
+    fun provideGoogleDriveTokenStorage(
         @ApplicationContext context: Context
-    ): GoogleAuthManager = GoogleAuthManager(context)
+    ): GoogleDriveTokenStorage = GoogleDriveTokenStorage(context)
+    
+    @Provides
+    @Singleton
+    fun provideGoogleAuthManager(
+        @ApplicationContext context: Context,
+        tokenStorage: GoogleDriveTokenStorage
+    ): GoogleAuthManager = GoogleAuthManager(context, tokenStorage)
     
     @Provides
     @Singleton

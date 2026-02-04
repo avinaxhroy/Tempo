@@ -29,6 +29,13 @@ interface ArtistAliasDao {
      */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(aliases: List<ArtistAlias>)
+    
+    /**
+     * Update the target artist for an alias atomically.
+     * Used during chained merges (A->B, B->C results in A->C).
+     */
+    @Query("UPDATE artist_aliases SET target_artist_id = :newTargetId WHERE id = :aliasId")
+    suspend fun updateTargetArtist(aliasId: Long, newTargetId: Long)
 
     // =====================
     // Query Operations
