@@ -4,14 +4,13 @@
   <img src="TempoICON.png" width="140" />
 </p>
 
-<p align="center"><a href='https://play.google.com/store/apps/details?id=me.avinas.tempo.release'><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' height='80'/></a>
+<p align="center"><a href='https://play.google.com/store/apps/details?id=me.avinas.tempo.release'><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' height='80'/></a></p>
 
-
+<p align="center">
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9.0-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org)
 [![Android](https://img.shields.io/badge/Android-14-green.svg?style=flat&logo=android)](https://developer.android.com)
 [![License](https://img.shields.io/badge/License-Source%20Available-blue.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Active_Development-success.svg)]()
-
 </p>
  
 
