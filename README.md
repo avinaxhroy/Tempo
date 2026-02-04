@@ -1,6 +1,6 @@
 # Tempo: Your Music Journey, Preserved.
 
-<img src="TempoICON.png" width="140" />
+<center><img src="TempoICON.png" width="140" /></center>
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9.0-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org)
 [![Android](https://img.shields.io/badge/Android-14-green.svg?style=flat&logo=android)](https://developer.android.com)
@@ -143,4 +143,4 @@ Tempo uses a **Local-First** architecture built on **Room Database**.
 > See [LICENSE](LICENSE) for the full text.
 
 **License**: Tempo Source Available License
-Made with ❤️ by [Avinash](https://github.com/Avinaxh)
+Made with ❤️ by [Avinash](https://github.com/avinaxhroy)
