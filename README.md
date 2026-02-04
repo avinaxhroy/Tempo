@@ -6,9 +6,9 @@
 
 <p align="center"><a href='https://play.google.com/store/apps/details?id=me.avinas.tempo.release'><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' height='80'/></a></p>
 
-<p align="center">
+<div align="center">
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9.0-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org) [![Android](https://img.shields.io/badge/Android-14-green.svg?style=flat&logo=android)](https://developer.android.com) [![License](https://img.shields.io/badge/License-Source%20Available-blue.svg)](LICENSE) [![Status](https://img.shields.io/badge/Status-Active_Development-success.svg)]()
-</p>
+</div>
  
 
 **Tempo** is the ultimate **local-first music companion** that turns your listening history into a permanent, stunningly visualized journal. It connects with all your favorite players, preserves your data privately on your device, and transforms raw stats into deep insights and beautiful memory stories.
