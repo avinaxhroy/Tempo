@@ -58,4 +58,19 @@ interface iTunesApi {
         @Query("id") artistId: Long,
         @Query("entity") entity: String? = null
     ): Response<iTunesSearchResponse>
+    
+    /**
+     * Lookup artist by ID and include their songs/albums for artwork.
+     * Returns the artist record PLUS song/album results with artworkUrl fields.
+     * 
+     * @param artistId iTunes artist ID
+     * @param entity "song" or "album" to include in results
+     * @param limit Max number of songs/albums to return
+     */
+    @GET("lookup")
+    suspend fun lookupArtistWithMedia(
+        @Query("id") artistId: Long,
+        @Query("entity") entity: String = "song",
+        @Query("limit") limit: Int = 3
+    ): Response<iTunesSearchResponse>
 }

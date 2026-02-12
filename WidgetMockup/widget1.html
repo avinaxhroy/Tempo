@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tempo Artist Spotlight Widget Only</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13eca4",
+                        "background-light": "#f6f8f7",
+                        "background-dark": "#10221c",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "3xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .ios-widget-shadow {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen flex items-center justify-center font-display p-8">
+<div class="w-[170px] h-[170px]">
+<div class="relative w-full h-full rounded-[1.75rem] overflow-hidden ios-widget-shadow group">
+<div class="absolute inset-0 bg-[#1e2925] dark:bg-[#0f1815]"></div>
+<div class="absolute -top-10 -right-10 w-32 h-32 bg-primary/40 rounded-full blur-[40px] opacity-60"></div>
+<div class="absolute bottom-0 left-0 w-full h-2/3 bg-gradient-to-t from-black/90 via-black/50 to-transparent z-10"></div>
+<div class="relative h-full z-20 flex flex-col justify-between p-4">
+<div class="flex justify-between items-start">
+<div class="w-5 h-5 rounded-md bg-primary flex items-center justify-center">
+<span class="material-icons text-[10px] text-black">graphic_eq</span>
+</div>
+<div class="bg-primary/20 backdrop-blur-sm border border-primary/30 rounded-full px-2 py-0.5">
+<span class="text-[9px] font-bold text-primary uppercase tracking-wider block leading-none pt-[1px]">Top Pick</span>
+</div>
+</div>
+<div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -mt-2">
+<div class="relative">
+<div class="absolute inset-0 rounded-full bg-primary blur-md opacity-30 scale-110"></div>
+<img alt="Profile of a female music artist with sunglasses" class="w-20 h-20 rounded-full object-cover border-2 border-primary/50 relative z-10 shadow-lg" data-alt="Portrait of a female artist wearing sunglasses" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBAb-XGvUyU4umNVnq8ecjMTmkNdToCQiPs2RexSnwmN5DfufwjPmaqIZ4SmL47AWOTnPmWzT2vBiHtjwAtZDIErPI6Zws7oj7V5csL6cZ8zcMWluo8m_tVTbLJ-t-6I-2FOCnVYgqtDI5BHj60wGWq-_acMHysQy2TS77jcVZAouL1KpaghFXfOSvdFDMcqpUzZlsduaLKyiI5VI8OhKB3P7PCKayP8iENPyAzR018O18FyuFJqZx13db5IhfjTA_eNnzyDLizuy48"/>
+</div>
+</div>
+<div class="space-y-1 text-center">
+<h3 class="text-white font-extrabold text-sm leading-tight truncate">
+                        Dua Lipa
+                    </h3>
+<div class="flex items-center justify-center gap-1 text-primary/90">
+<span class="material-icons text-[12px]">schedule</span>
+<span class="text-[10px] font-semibold">15h listened</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+</body></html>

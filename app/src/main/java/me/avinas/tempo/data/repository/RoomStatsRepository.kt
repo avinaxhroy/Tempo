@@ -195,6 +195,11 @@ class RoomStatsRepository @Inject constructor(
         Log.d(TAG, "Cache invalidated for $timeRange: ${keysToRemove.size} entries removed")
     }
 
+    override fun clearArtistImageSearchCache() {
+        artistImageSearchCache.clear()
+        Log.d(TAG, "Artist image search cache cleared")
+    }
+
     /**
      * Call this when a new listening event is added to trigger smart invalidation.
      */
@@ -229,10 +234,10 @@ class RoomStatsRepository @Inject constructor(
         }
     }
 
-    override suspend fun getInsights(timeRange: TimeRange): List<InsightCardData> {
+    override suspend fun getInsights(timeRange: TimeRange): List<InsightCardData> = withContext(Dispatchers.IO) {
         val (startTime, endTime) = getTimeRangeBounds(timeRange)
         
-        return try {
+        try {
             // Fetch raw JSONs and aggregate in memory
             val moodRawList = statsDao.getMoodRawData(startTime, endTime)
             val moodStats = calculateMoodAggregates(moodRawList)

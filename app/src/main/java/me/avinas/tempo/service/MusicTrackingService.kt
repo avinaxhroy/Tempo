@@ -1317,9 +1317,24 @@ class MusicTrackingService : NotificationListenerService() {
     }
     
     /**
-     * Check if a package is in the blocked apps list (dynamic from database).
+     * Check if a package is in the blocked apps list.
+     * 
+     * Uses a two-tier check:
+     * 1. Static BLOCKED_APPS set (always blocked, never tracked)
+     * 2. Database cache (user preferences)
+     * 
+     * The static list is checked FIRST to ensure video apps like YouTube
+     * are always blocked, even if they weren't properly seeded into the database.
+     * This is a performance-safe check (just a set membership lookup).
      */
     private fun isInBlockedApps(packageName: String): Boolean {
+        // FIRST: Always block apps in the static blocklist (guaranteed protection)
+        // This catches video apps, browsers, social media that should NEVER be tracked
+        if (packageName in BLOCKED_APPS) {
+            return true
+        }
+        
+        // SECOND: Check database cache for user-defined blocked apps
         // If cache not initialized yet, return false (will be filtered by isInEnabledApps anyway)
         if (!isAppPreferenceCacheInitialized) {
             return false

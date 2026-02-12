@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/widget_preview_artist,@drawable/widget_preview_dashboard,@drawable/widget_preview_discovery,@drawable/widget_preview_heatmap,@drawable/widget_preview_milestone,@drawable/widget_preview_mix,@string/widget_artist_desc,@string/widget_dashboard_desc,@string/widget_discovery_desc,@string/widget_heatmap_desc,@string/widget_milestone_desc,@string/widget_mix_desc" />

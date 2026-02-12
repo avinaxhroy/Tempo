@@ -48,8 +48,16 @@ object TrackMatcher {
         Regex("""\s*[\(\[]?\s*(?:session|performance|concert|tour)\s*[\)\]]?""", RegexOption.IGNORE_CASE)
     )
     
-    private val CONTENT_DESCRIPTOR_PATTERNS = listOf(
-        Regex("""\s*[\(\[]?\s*(?:feat\.?|ft\.?|featuring|with|w/)\s*[^\)\]]*[\)\]]?""", RegexOption.IGNORE_CASE),
+    // Feature artist patterns: removes "feat. X", "ft. X" etc. from titles
+    // Used in both title and artist normalization
+    private val FEATURING_PATTERNS = listOf(
+        Regex("""\s*[\(\[]?\s*(?:feat\.?|ft\.?|featuring|w/)\s*[^\)\]]*[\)\]]?""", RegexOption.IGNORE_CASE)
+    )
+    
+    // Artist-only separator patterns: converts multi-artist separators to spaces
+    // Only used in artist normalization (not titles, where "&" may be part of the name)
+    private val ARTIST_SEPARATOR_PATTERNS = listOf(
+        Regex("""\s*[\(\[]?\s*(?:with)\s*[^\)\]]*[\)\]]?""", RegexOption.IGNORE_CASE),
         Regex("""\s*&\s*"""),
         Regex("""\s+x\s+""", RegexOption.IGNORE_CASE)
     )
@@ -80,6 +88,17 @@ object TrackMatcher {
         artist2: String,
         strictMatching: Boolean = false // Default to merging versions (user preference default)
     ): MatchResult {
+        // Safety: handle blank inputs
+        if (title1.isBlank() || title2.isBlank() || artist1.isBlank() || artist2.isBlank()) {
+            return MatchResult(
+                isMatch = false,
+                matchType = MatchType.NONE,
+                titleSimilarity = 0.0,
+                artistSimilarity = 0.0,
+                overallScore = 0.0
+            )
+        }
+        
         // Exact match (fast path)
         if (title1.equals(title2, ignoreCase = true) && 
             artist1.equals(artist2, ignoreCase = true)) {
@@ -123,6 +142,8 @@ object TrackMatcher {
     
     /**
      * Find the best matching track from a list.
+     * Pre-normalizes the target to avoid repeated regex work per candidate.
+     * Uses quick pre-filtering to reduce the number of expensive regex normalizations.
      */
     fun findBestMatch(
         targetTitle: String,
@@ -131,20 +152,98 @@ object TrackMatcher {
         strictMatching: Boolean = false
     ): Pair<TrackCandidate, MatchResult>? {
         if (candidates.isEmpty()) return null
+        if (targetTitle.isBlank() || targetArtist.isBlank()) return null
+        
+        val targetTitleLower = targetTitle.lowercase().trim()
+        val targetArtistLower = targetArtist.lowercase().trim()
+        
+        // Quick check: exact case-insensitive match (no regex needed)
+        for (candidate in candidates) {
+            if (targetTitleLower == candidate.title.lowercase().trim() &&
+                targetArtistLower == candidate.artist.lowercase().trim()) {
+                return Pair(candidate, MatchResult(
+                    isMatch = true,
+                    matchType = MatchType.EXACT,
+                    titleSimilarity = 1.0,
+                    artistSimilarity = 1.0,
+                    overallScore = 1.0
+                ))
+            }
+        }
+        
+        // Pre-filter: only consider candidates that share at least some words with the target
+        // This drastically reduces the number of expensive regex normalizations
+        // Use length > 1 for titles (handles short titles like "Go", "If", "Up")
+        val targetTitleWords = targetTitleLower.split(" ", "-", "_")
+            .filter { it.length > 1 }.toSet()
+        val targetArtistWords = targetArtistLower.split(" ", "-", "_")
+            .filter { it.length > 1 }.toSet()
+        
+        val filteredCandidates = if (targetTitleWords.isNotEmpty()) {
+            candidates.filter { candidate ->
+                val candTitleLower = candidate.title.lowercase()
+                val candArtistLower = candidate.artist.lowercase()
+                // Must share at least one significant word in title or have artist overlap
+                targetTitleWords.any { word -> word in candTitleLower } ||
+                targetArtistWords.any { word -> word in candArtistLower }
+            }
+        } else {
+            candidates
+        }
+        
+        if (filteredCandidates.isEmpty()) return null
+        
+        // Pre-normalize target once to avoid repeated regex operations
+        val normTargetTitle = normalizeTitle(targetTitle, strictMatching)
+        val normTargetArtist = normalizeArtist(targetArtist)
         
         var bestMatch: TrackCandidate? = null
         var bestResult: MatchResult? = null
         
-        for (candidate in candidates) {
-            val result = matchTracks(
-                targetTitle, targetArtist, 
-                candidate.title, candidate.artist,
-                strictMatching
+        for (candidate in filteredCandidates) {
+            // Normalize candidate
+            val normCandTitle = normalizeTitle(candidate.title, strictMatching)
+            val normCandArtist = normalizeArtist(candidate.artist)
+            
+            // Calculate similarities using pre-normalized strings
+            val titleSimilarity = calculateSimilarity(normTargetTitle, normCandTitle)
+            
+            // Early skip: if title similarity is too low, no point checking artist
+            if (titleSimilarity < 0.4) continue
+            
+            val artistSimilarity = calculateArtistSimilarity(
+                normTargetArtist, normCandArtist, targetArtist, candidate.artist
             )
-            if (result.isMatch) {
-                if (bestResult == null || result.overallScore > bestResult.overallScore) {
+            
+            val overallScore = (titleSimilarity * 0.6 + artistSimilarity * 0.4)
+            
+            // Early exit on perfect match
+            if (overallScore >= EXACT_MATCH_THRESHOLD) {
+                return Pair(candidate, MatchResult(
+                    isMatch = true,
+                    matchType = MatchType.EXACT,
+                    titleSimilarity = titleSimilarity,
+                    artistSimilarity = artistSimilarity,
+                    overallScore = overallScore
+                ))
+            }
+            
+            val matchType = when {
+                overallScore >= HIGH_MATCH_THRESHOLD -> MatchType.HIGH
+                overallScore >= MEDIUM_MATCH_THRESHOLD -> MatchType.MEDIUM
+                else -> MatchType.NONE
+            }
+            
+            if (matchType != MatchType.NONE) {
+                if (bestResult == null || overallScore > bestResult.overallScore) {
                     bestMatch = candidate
-                    bestResult = result
+                    bestResult = MatchResult(
+                        isMatch = true,
+                        matchType = matchType,
+                        titleSimilarity = titleSimilarity,
+                        artistSimilarity = artistSimilarity,
+                        overallScore = overallScore
+                    )
                 }
             }
         }
@@ -182,13 +281,15 @@ object TrackMatcher {
         }
         
         // Remove feature artists from title (they are checked in artist match)
-        CONTENT_DESCRIPTOR_PATTERNS.forEach { pattern ->
+        // Note: only use FEATURING_PATTERNS here, not ARTIST_SEPARATOR_PATTERNS,
+        // because "&" and "x" may be part of the actual title (e.g., "Jack & Diane")
+        FEATURING_PATTERNS.forEach { pattern ->
             normalized = pattern.replace(normalized, "")
         }
         
         // Unicode normalization (NFD then remove marks)
         normalized = Normalizer.normalize(normalized, Normalizer.Form.NFD)
-            .replace(Regex("""\p{M}"""), "")
+            .replace(UNICODE_MARKS_PATTERN, "")
         
         // Normalize punctuation and whitespace
         normalized = PUNCTUATION_REGEX.replace(normalized, " ")
@@ -202,10 +303,15 @@ object TrackMatcher {
      */
     fun normalizeArtist(artist: String): String {
         var normalized = artist.trim()
+        if (normalized.isBlank()) return ""
         
         // Remove feature artists (they'll be compared separately)
-        CONTENT_DESCRIPTOR_PATTERNS.forEach { pattern ->
+        FEATURING_PATTERNS.forEach { pattern ->
             normalized = pattern.replace(normalized, "")
+        }
+        // Normalize multi-artist separators to spaces
+        ARTIST_SEPARATOR_PATTERNS.forEach { pattern ->
+            normalized = pattern.replace(normalized, " ")
         }
         
         // Unicode normalization
@@ -293,6 +399,7 @@ object TrackMatcher {
     
     /**
      * Calculate Levenshtein edit distance.
+     * Uses space-optimized O(min(m,n)) memory instead of O(m*n).
      */
     private fun levenshteinDistance(s1: String, s2: String): Int {
         val m = s1.length
@@ -301,23 +408,30 @@ object TrackMatcher {
         if (m == 0) return n
         if (n == 0) return m
         
-        val dp = Array(m + 1) { IntArray(n + 1) }
+        // Ensure s2 is the shorter string to minimize memory
+        val (short, long) = if (m < n) Pair(s1, s2) else Pair(s2, s1)
+        val shortLen = short.length
+        val longLen = long.length
         
-        for (i in 0..m) dp[i][0] = i
-        for (j in 0..n) dp[0][j] = j
+        var prev = IntArray(shortLen + 1) { it }
+        var curr = IntArray(shortLen + 1)
         
-        for (i in 1..m) {
-            for (j in 1..n) {
-                val cost = if (s1[i - 1] == s2[j - 1]) 0 else 1
-                dp[i][j] = minOf(
-                    dp[i - 1][j] + 1,      // deletion
-                    dp[i][j - 1] + 1,      // insertion
-                    dp[i - 1][j - 1] + cost // substitution
+        for (i in 1..longLen) {
+            curr[0] = i
+            for (j in 1..shortLen) {
+                val cost = if (long[i - 1] == short[j - 1]) 0 else 1
+                curr[j] = minOf(
+                    prev[j] + 1,       // deletion
+                    curr[j - 1] + 1,   // insertion
+                    prev[j - 1] + cost  // substitution
                 )
             }
+            val temp = prev
+            prev = curr
+            curr = temp
         }
         
-        return dp[m][n]
+        return prev[shortLen]
     }
     
     /**

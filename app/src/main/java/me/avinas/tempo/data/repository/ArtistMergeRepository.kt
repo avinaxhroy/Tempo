@@ -183,8 +183,11 @@ class ArtistMergeRepository @Inject constructor(
                 Log.d(TAG, "Replaced artist name in $exactReplaced tracks (exact match)")
                 
                 // Then handle multi-artist strings (e.g., "OldArtist, OtherArtist")
-                val multiReplaced = trackDao.replaceArtistNameInMultiArtist(sourceArtist.name, targetArtist.name)
-                Log.d(TAG, "Replaced artist name in multi-artist strings: $multiReplaced tracks")
+                // Skip if source and target have the same name (case-insensitive) to avoid no-op queries
+                if (!sourceArtist.name.equals(targetArtist.name, ignoreCase = true)) {
+                    val multiReplaced = trackDao.replaceArtistNameInMultiArtist(sourceArtist.name, targetArtist.name)
+                    Log.d(TAG, "Replaced artist name in multi-artist strings: $multiReplaced tracks")
+                }
 
                 // 7. Delete source artist
                 artistDao.deleteById(sourceArtistId)

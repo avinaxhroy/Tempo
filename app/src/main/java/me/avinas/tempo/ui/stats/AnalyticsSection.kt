@@ -1,5 +1,6 @@
 package me.avinas.tempo.ui.stats
 
+import me.avinas.tempo.ui.details.formatListeningTime
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape

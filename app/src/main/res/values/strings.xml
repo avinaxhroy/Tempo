@@ -28,4 +28,13 @@
     <!-- Home screen -->
     <string name="home_tracking_active">✅ Music tracking active</string>
     <string name="home_tracking_hint">Play music in YouTube Music, Spotify, or any other music app. Tempo will automatically track your listening.</string>
+    
+    <!-- Widget descriptions -->
+    <string name="widget_stats_desc">Today\'s listening stats at a glance</string>
+    <string name="widget_artist_desc">Shows your top artist statistics</string>
+    <string name="widget_dashboard_desc">Overview of your music listening stats</string>
+    <string name="widget_discovery_desc">Discover new music based on your taste</string>
+    <string name="widget_heatmap_desc">Visualize your listening patterns over time</string>
+    <string name="widget_milestone_desc">Track your listening milestones</string>
+    <string name="widget_mix_desc">Your personalized music mix</string>
 </resources>

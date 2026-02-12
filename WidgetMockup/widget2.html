@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tempo Weekly Mix Widget</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13eca4",
+                        "background-light": "#f6f8f7",
+                        "background-dark": "#10221c",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "3xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .widget-shadow {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-gray-100 dark:bg-gray-900 min-h-screen flex items-center justify-center font-display p-8">
+<div class="w-full max-w-sm">
+<div class="aspect-[2/1] w-full bg-[#151515] rounded-3xl overflow-hidden relative p-5 border border-white/5 widget-shadow">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary/20 blur-[50px] rounded-full"></div>
+<div class="relative z-10 flex flex-col h-full justify-between">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<img class="w-12 h-12 rounded-lg object-cover shadow-md" data-alt="Abstract colorful album art cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqmlS9ir54NBbcUaB1TcI2vbL6RNSGavrZ2rkReaUj1iaUclFs5ffwGbO1JsqSujVe7-EWOg-8VBRxf_5b4WvMq4enJKQT_EL-5fBIrgt6BX_ZipAKE4qlly4qurl9otk2gFH6rG-u41axaIDgDpCwTnvQUNM1vTr6gKffmHtzyi-pnOCDBWuFeYP8OS2MG-iVbQLbP7DiHioqCwwNzbH5pJ6zpiVEwhQFVjJSlG8-6JT-fQB8yJTcfftDJvxbDEIO4LR2H-AdzXx1"/>
+<div>
+<h4 class="text-white text-base font-bold">Weekly Mix</h4>
+<p class="text-xs text-primary font-medium tracking-wide">Made for you</p>
+</div>
+</div>
+</div>
+<div class="flex items-end gap-1.5 h-10 justify-between opacity-80 px-1">
+<div class="w-2 bg-primary/30 rounded-full h-4"></div>
+<div class="w-2 bg-primary/60 rounded-full h-6"></div>
+<div class="w-2 bg-primary rounded-full h-10"></div>
+<div class="w-2 bg-primary/80 rounded-full h-7"></div>
+<div class="w-2 bg-primary/40 rounded-full h-5"></div>
+<div class="w-2 bg-primary/20 rounded-full h-3"></div>
+<div class="w-2 bg-primary/50 rounded-full h-6"></div>
+<div class="w-2 bg-primary rounded-full h-9"></div>
+<div class="w-2 bg-primary/70 rounded-full h-5"></div>
+<div class="w-2 bg-primary/30 rounded-full h-4"></div>
+<div class="w-2 bg-primary/20 rounded-full h-3"></div>
+<div class="w-2 bg-primary/40 rounded-full h-5"></div>
+</div>
+</div>
+</div>
+</div>
+
+</body></html>

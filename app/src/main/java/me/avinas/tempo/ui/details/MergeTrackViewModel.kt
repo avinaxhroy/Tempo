@@ -1,5 +1,6 @@
 package me.avinas.tempo.ui.details
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,7 +17,8 @@ data class MergeTrackUiState(
     val query: String = "",
     val searchResults: List<Track> = emptyList(),
     val isSearching: Boolean = false,
-    val mergeStatus: MergeStatus = MergeStatus.Idle
+    val mergeStatus: MergeStatus = MergeStatus.Idle,
+    val pendingMergeTarget: Track? = null  // For confirmation before merge
 )
 
 sealed class MergeStatus {
@@ -32,16 +34,30 @@ class MergeTrackViewModel @Inject constructor(
     private val trackAliasRepository: TrackAliasRepository
 ) : ViewModel() {
 
+    companion object {
+        private const val TAG = "MergeTrackViewModel"
+    }
+
     private val _uiState = MutableStateFlow(MergeTrackUiState())
     val uiState: StateFlow<MergeTrackUiState> = _uiState.asStateFlow()
     
     // Store the source track ID
     private var sourceTrackId: Long = -1
 
+    /**
+     * Set the source track ID (the track to be merged into another).
+     * Always resets the UI state for a fresh dialog.
+     */
     fun setSourceTrackId(id: Long) {
+        // Always reset state when dialog opens - this fixes issue where
+        // previous error/success states persisted if same track selected again
+        _uiState.value = MergeTrackUiState()
         sourceTrackId = id
     }
 
+    /**
+     * Handle search query changes.
+     */
     fun onQueryChange(query: String) {
         _uiState.value = _uiState.value.copy(query = query)
         if (query.length >= 2) {
@@ -51,11 +67,14 @@ class MergeTrackViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Search for tracks matching the query.
+     * Excludes the source track from results.
+     */
     private fun searchTracks(query: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSearching = true)
             try {
-                // Use the searchTracks method we added to TrackRepository
                 val results = trackRepository.searchTracks(query)
                 val filtered = results.filter { 
                     it.id != sourceTrackId // Exclude self
@@ -66,33 +85,98 @@ class MergeTrackViewModel @Inject constructor(
                     isSearching = false
                 )
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isSearching = false)
+                Log.e(TAG, "Search failed: ${e.message}", e)
+                _uiState.value = _uiState.value.copy(
+                    isSearching = false,
+                    mergeStatus = MergeStatus.Error(e.message ?: "Search failed")
+                )
             }
         }
     }
 
-    fun mergeTracks(targetTrack: Track) {
-        if (sourceTrackId == -1L) return
-        
+    /**
+     * Select a track as the merge target, showing confirmation first.
+     * This is the first step - does NOT execute the merge yet.
+     *
+     * @param targetTrack The track to potentially merge INTO
+     */
+    fun selectTrackForMerge(targetTrack: Track) {
+        _uiState.value = _uiState.value.copy(pendingMergeTarget = targetTrack)
+    }
+
+    /**
+     * Cancel the pending merge and clear selection.
+     */
+    fun cancelMerge() {
+        _uiState.value = _uiState.value.copy(pendingMergeTarget = null)
+    }
+
+    /**
+     * Confirm and execute the merge with the pending target.
+     * This is the second step - actually performs the merge.
+     */
+    fun confirmMerge() {
+        val targetTrack = _uiState.value.pendingMergeTarget ?: return
+
+        if (sourceTrackId <= 0) {
+            _uiState.value = _uiState.value.copy(
+                mergeStatus = MergeStatus.Error("Source track not set"),
+                pendingMergeTarget = null
+            )
+            return
+        }
+
+        // Prevent merging while already processing
+        if (_uiState.value.mergeStatus is MergeStatus.Processing) {
+            return
+        }
+
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(mergeStatus = MergeStatus.Processing)
+            _uiState.value = _uiState.value.copy(
+                mergeStatus = MergeStatus.Processing,
+                pendingMergeTarget = null
+            )
             try {
-                // 1. Get source track details
-                // 2. Create Alias (Source -> Target)
-                // 3. Move history (ListeningEvents) from Source to Target
-                // 4. Delete Source Track
+                val success = trackAliasRepository.mergeTracks(sourceTrackId, targetTrack.id)
                 
-                // This logic should ideally be in a Repository or UseCase
-                trackAliasRepository.mergeTracks(sourceTrackId, targetTrack.id)
-                
-                _uiState.value = _uiState.value.copy(mergeStatus = MergeStatus.Success)
+                if (success) {
+                    _uiState.value = _uiState.value.copy(mergeStatus = MergeStatus.Success)
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        mergeStatus = MergeStatus.Error("Merge failed")
+                    )
+                }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(mergeStatus = MergeStatus.Error(e.message ?: "Merge failed"))
+                Log.e(TAG, "Merge failed: ${e.message}", e)
+                _uiState.value = _uiState.value.copy(
+                    mergeStatus = MergeStatus.Error(e.message ?: "Merge failed")
+                )
             }
         }
     }
-    
+
+    /**
+     * Legacy method for direct merge without confirmation.
+     * @deprecated Use selectTrackForMerge + confirmMerge instead
+     */
+    @Deprecated("Use selectTrackForMerge + confirmMerge for confirmation flow")
+    fun mergeTracks(targetTrack: Track) {
+        selectTrackForMerge(targetTrack)
+        confirmMerge()
+    }
+
+    /**
+     * Reset the merge status to idle.
+     */
     fun resetStatus() {
         _uiState.value = _uiState.value.copy(mergeStatus = MergeStatus.Idle)
+    }
+
+    /**
+     * Reset the entire UI state.
+     */
+    fun reset() {
+        sourceTrackId = -1
+        _uiState.value = MergeTrackUiState()
     }
 }

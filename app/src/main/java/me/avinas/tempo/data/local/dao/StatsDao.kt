@@ -1558,6 +1558,8 @@ interface StatsDao {
     /**
      * Get artist image URL from enriched metadata for PRIMARY artist.
      * Looks for tracks where this artist is the main/solo artist (not featured).
+     * Uses track_artists junction table to ensure we only get images from tracks
+     * where this artist is marked as PRIMARY, preventing wrong images from multi-artist tracks.
      * Uses case-insensitive matching.
      * Checks all artist image sources in priority order: Spotify > iTunes > Last.fm > Deezer
      */
@@ -1570,7 +1572,10 @@ interface StatsDao {
         )
         FROM enriched_metadata em
         INNER JOIN tracks t ON em.track_id = t.id
-        WHERE LOWER(t.artist) = LOWER(:artistName)
+        INNER JOIN track_artists ta ON ta.track_id = t.id
+        INNER JOIN artists a ON a.id = ta.artist_id
+        WHERE LOWER(a.name) = LOWER(:artistName)
+              AND ta.role = 'PRIMARY'
               AND (em.spotify_artist_image_url IS NOT NULL OR em.itunes_artist_image_url IS NOT NULL 
                    OR em.lastfm_artist_image_url IS NOT NULL OR em.deezer_artist_image_url IS NOT NULL)
         LIMIT 1
@@ -1579,7 +1584,8 @@ interface StatsDao {
     
     /**
      * Get artist image URL from enriched metadata where artist is listed first.
-     * For multi-artist tracks, the first artist usually has their image stored.
+     * Uses track_artists junction table to ensure we only get images from tracks
+     * where this artist is marked as PRIMARY (first/main artist).
      * Uses case-insensitive matching.
      * Checks all artist image sources in priority order: Spotify > iTunes > Last.fm > Deezer
      */
@@ -1592,9 +1598,12 @@ interface StatsDao {
         )
         FROM enriched_metadata em
         INNER JOIN tracks t ON em.track_id = t.id
+        INNER JOIN track_artists ta ON ta.track_id = t.id
+        INNER JOIN artists a ON a.id = ta.artist_id
         WHERE (
-            -- Artist is first, followed by a separator
-            LOWER(t.artist) LIKE LOWER(:artistName) || ',%'
+            LOWER(a.name) = LOWER(:artistName)
+            -- Artist is first, followed by a separator (legacy support)
+            OR LOWER(t.artist) LIKE LOWER(:artistName) || ',%'
             OR LOWER(t.artist) LIKE LOWER(:artistName) || ' &%'
             OR LOWER(t.artist) LIKE LOWER(:artistName) || ' and %'
             OR LOWER(t.artist) LIKE LOWER(:artistName) || ' feat%'
@@ -1603,6 +1612,7 @@ interface StatsDao {
             OR LOWER(t.artist) LIKE LOWER(:artistName) || ' /%'
             OR LOWER(t.artist) LIKE LOWER(:artistName) || ' +%'
         )
+        AND ta.role = 'PRIMARY'
         AND (em.spotify_artist_image_url IS NOT NULL OR em.itunes_artist_image_url IS NOT NULL 
              OR em.lastfm_artist_image_url IS NOT NULL OR em.deezer_artist_image_url IS NOT NULL)
         LIMIT 1
@@ -1611,7 +1621,8 @@ interface StatsDao {
     
     /**
      * Get artist image URL from enriched metadata (fallback - any track containing artist).
-     * Enhanced to better exclude featured artist contexts.
+     * Uses track_artists junction table with PRIMARY role to ensure correct artist images.
+     * This prevents multi-artist tracks from returning the wrong artist's image.
      * Checks all artist image sources in priority order: Spotify > iTunes > Last.fm > Deezer
      */
     @Query("""
@@ -1623,33 +1634,12 @@ interface StatsDao {
         )
         FROM enriched_metadata em
         INNER JOIN tracks t ON em.track_id = t.id
-        WHERE (
-            -- Match artist at start of string (most reliable for primary artist)
-            LOWER(t.artist) LIKE LOWER(:artistName) || ',%'
-            OR LOWER(t.artist) LIKE LOWER(:artistName) || ' &%'
-            OR LOWER(t.artist) LIKE LOWER(:artistName) || ' feat%'
-            OR LOWER(t.artist) LIKE LOWER(:artistName) || ' ft%'
-            OR LOWER(t.artist) LIKE LOWER(:artistName) || ' x %'
-            -- Exact match (solo artist)
-            OR LOWER(t.artist) = LOWER(:artistName)
-        )
-        -- Exclude cases where artist appears AFTER featuring keywords (featured artist)
-        AND NOT (
-            LOWER(t.artist) LIKE '% feat. ' || LOWER(:artistName)
-            OR LOWER(t.artist) LIKE '% feat. ' || LOWER(:artistName) || ',%'
-            OR LOWER(t.artist) LIKE '% feat ' || LOWER(:artistName)
-            OR LOWER(t.artist) LIKE '% feat ' || LOWER(:artistName) || ',%'
-            OR LOWER(t.artist) LIKE '% ft. ' || LOWER(:artistName)
-            OR LOWER(t.artist) LIKE '% ft. ' || LOWER(:artistName) || ',%'
-            OR LOWER(t.artist) LIKE '% ft ' || LOWER(:artistName)
-            OR LOWER(t.artist) LIKE '% ft ' || LOWER(:artistName) || ',%'
-            OR LOWER(t.artist) LIKE '% featuring ' || LOWER(:artistName)
-            OR LOWER(t.artist) LIKE '% featuring ' || LOWER(:artistName) || ',%'
-            OR LOWER(t.artist) LIKE '% with ' || LOWER(:artistName)
-            OR LOWER(t.artist) LIKE '% with ' || LOWER(:artistName) || ',%'
-        )
-        AND (em.spotify_artist_image_url IS NOT NULL OR em.itunes_artist_image_url IS NOT NULL 
-             OR em.lastfm_artist_image_url IS NOT NULL OR em.deezer_artist_image_url IS NOT NULL)
+        INNER JOIN track_artists ta ON ta.track_id = t.id
+        INNER JOIN artists a ON a.id = ta.artist_id
+        WHERE LOWER(a.name) = LOWER(:artistName)
+              AND ta.role = 'PRIMARY'
+              AND (em.spotify_artist_image_url IS NOT NULL OR em.itunes_artist_image_url IS NOT NULL 
+                   OR em.lastfm_artist_image_url IS NOT NULL OR em.deezer_artist_image_url IS NOT NULL)
         LIMIT 1
     """)
     suspend fun getArtistImageFromEnrichedMetadata(artistName: String): String?

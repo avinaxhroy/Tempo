@@ -36,8 +36,8 @@ android {
         applicationId = "me.avinas.tempo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 414
-        versionName = "4.1.4"
+        versionCode = 425
+        versionName = "4.2.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -56,6 +56,7 @@ android {
             isShrinkResources = false
         }
         release {
+            // Enable R8 for code shrinking and obfuscation
             isMinifyEnabled = true
             isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
@@ -63,6 +64,21 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+    
+    bundle {
+        language {
+            // Enable split for languages to reduce APK size
+            enableSplit = true
+        }
+        density {
+            // Enable split for screen densities to reduce APK size
+            enableSplit = true
+        }
+        abi {
+            // Enable split for ABIs to reduce APK size
+            enableSplit = true
         }
     }
 

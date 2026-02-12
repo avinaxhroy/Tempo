@@ -34,6 +34,11 @@ class AppPreferenceViewModel @Inject constructor(
     val uiState: StateFlow<AppPreferenceUiState> = _uiState.asStateFlow()
     
     init {
+        // Seed default apps for fresh installs (no-op if already seeded)
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.seedDefaultAppsIfNeeded()
+        }
+        
         // Combine all app lists with search filtering
         viewModelScope.launch {
             combine(

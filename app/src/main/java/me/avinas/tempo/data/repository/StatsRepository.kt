@@ -383,6 +383,12 @@ interface StatsRepository {
     suspend fun getArtistImageUrl(artistName: String): String?
 
     /**
+     * Clear the artist image search cache to allow retrying failed image fetches.
+     * Useful when explicitly viewing artist details to retry image loading.
+     */
+    fun clearArtistImageSearchCache()
+
+    /**
      * Get audio features for a specific track.
      * Returns null if Spotify not connected or features not available.
      */

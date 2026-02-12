@@ -24,38 +24,56 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.IntSize
 import kotlin.random.Random
 
+// Global cache for noise bitmap to avoid regeneration across all instances
+private object NoiseCache {
+    val bitmap: ImageBitmap by lazy { 
+        generateNoiseBitmap(128, 128) 
+    }
+}
+
 @Composable
 fun DeepOceanBackground(
     modifier: Modifier = Modifier,
+    enableAnimations: Boolean = true,
     content: @Composable BoxScope.() -> Unit
 ) {
     // Animation: Cinematic Drift (Very slow, subtle movement)
-    val infiniteTransition = rememberInfiniteTransition(label = "CinematicMesh")
-
-    // Point 1: Warm Slate (Top Left Drift)
-    val p1Offset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 100f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(45000, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "MeshP1"
-    )
+    // Only create animations if enabled to reduce recompositions
+    val p1Offset = if (enableAnimations) {
+        val infiniteTransition = rememberInfiniteTransition(label = "CinematicMesh")
+        val offset by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 100f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(45000, easing = EaseInOutSine),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "MeshP1"
+        )
+        offset
+    } else {
+        0f
+    }
 
     // Point 2: Deep Earth (Bottom Left Drift)
-    val p2Offset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = -80f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(55000, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "MeshP2"
-    )
+    val p2Offset = if (enableAnimations) {
+        val infiniteTransition = rememberInfiniteTransition(label = "CinematicMesh2")
+        val offset by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = -80f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(55000, easing = EaseInOutSine),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "MeshP2"
+        )
+        offset
+    } else {
+        0f
+    }
 
-    // Noise Texture (Generated once)
-    val noiseBitmap = remember { generateNoiseBitmap(128, 128) }
+    // Noise Texture (Use global cache)
+    val noiseBitmap = NoiseCache.bitmap
 
     Box(
         modifier = modifier
@@ -68,36 +86,42 @@ fun DeepOceanBackground(
 
             // 1. Mesh Gradient Layer: Subtle, structured blends
             // Top-Left: Neutral Dark (MeshGradient1)
+            val center1 = Offset(w * 0.1f + p1Offset, h * 0.1f + p1Offset)
+            val radius1 = w * 0.9f
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(MeshGradient1.copy(alpha = 0.2f), Color.Transparent),
-                    center = Offset(w * 0.1f + p1Offset, h * 0.1f + p1Offset),
-                    radius = w * 0.9f
+                    center = center1,
+                    radius = radius1
                 ),
-                center = Offset(w * 0.1f + p1Offset, h * 0.1f + p1Offset),
-                radius = w * 0.9f
+                center = center1,
+                radius = radius1
             )
 
             // Center-Right: Deepest Charcoal (MeshGradient2) - texture anchor
+            val center2 = Offset(w * 0.8f, h * 0.5f)
+            val radius2 = w * 0.8f
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(MeshGradient2.copy(alpha = 0.15f), Color.Transparent),
-                    center = Offset(w * 0.8f, h * 0.5f),
-                    radius = w * 0.8f
+                    center = center2,
+                    radius = radius2
                 ),
-                center = Offset(w * 0.8f, h * 0.5f),
-                radius = w * 0.8f
+                center = center2,
+                radius = radius2
             )
 
             // Bottom-Left: Soft Dark Overlay (MeshGradient3) - grounding
+            val center3 = Offset(w * 0.2f + p2Offset, h * 0.9f)
+            val radius3 = w * 1.0f
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(MeshGradient3.copy(alpha = 0.2f), Color.Transparent),
-                    center = Offset(w * 0.2f + p2Offset, h * 0.9f),
-                    radius = w * 1.0f
+                    center = center3,
+                    radius = radius3
                 ),
-                center = Offset(w * 0.2f + p2Offset, h * 0.9f),
-                radius = w * 1.0f
+                center = center3,
+                radius = radius3
             )
 
             // 2. Cinematic Noise Overlay (The "Premium" Texture)

@@ -58,6 +58,8 @@ class ArtistDetailsViewModel @Inject constructor(
             try {
                 // First invalidate cache to ensure fresh data
                 statsRepository.invalidateCache()
+                // Also clear artist image search cache to retry image fetching
+                statsRepository.clearArtistImageSearchCache()
                 
                 val details = statsRepository.getArtistDetails(artistId)
                 
@@ -114,6 +116,8 @@ class ArtistDetailsViewModel @Inject constructor(
             try {
                 // First invalidate cache to ensure fresh data
                 statsRepository.invalidateCache()
+                // Also clear artist image search cache to retry image fetching
+                statsRepository.clearArtistImageSearchCache()
                 
                 val details = statsRepository.getArtistDetailsByName(artistName)
                 

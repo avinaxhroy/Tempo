@@ -3,11 +3,16 @@ package me.avinas.tempo.data.enrichment
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import me.avinas.tempo.data.remote.itunes.iTunesApi
 import me.avinas.tempo.utils.ArtistParser
 import kotlinx.coroutines.delay
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.util.Locale
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 
 /**
@@ -21,15 +26,17 @@ import javax.inject.Singleton
 @Singleton
 class ITunesEnrichmentService @Inject constructor(
     private val iTunesApi: iTunesApi,
-    @param:ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context,
+    @param:Named("itunes") private val okHttpClient: OkHttpClient
 ) {
     companion object {
         private const val TAG = "iTunesEnrichment"
         private const val RATE_LIMIT_DELAY_MS = 500L // 500ms between requests (iTunes has relaxed rate limits)
         
-        // Pre-compiled regex patterns to avoid repeated native memory allocation
-        private val WEBP_SOURCE_PATTERN = Regex("""<source[^>]+srcset="([^"]+)"[^>]+type="image/webp""""", RegexOption.IGNORE_CASE)
-        private val OG_IMAGE_PATTERN = Regex("""<meta\\s+property="og:image"\\s+content="([^"]+)""""", RegexOption.IGNORE_CASE)
+        // Regex for og:image extraction from Apple Music SSR HTML
+        // Apple Music pages always include this meta tag server-side for social sharing
+        private val OG_IMAGE_REGEX = Regex("""<meta\s+property="og:image"\s+content="([^"]+)"""""", RegexOption.IGNORE_CASE)
+        private val OG_IMAGE_REGEX_ALT = Regex("""<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']"""""", RegexOption.IGNORE_CASE)
     }
     
     /**
@@ -238,20 +245,34 @@ class ITunesEnrichmentService @Inject constructor(
                 
                 val searchResponse = response.body() ?: continue
                 
-                // Find strict match for artist name
-                val artistMatch = searchResponse.results.find { result ->
+                // Find all matching artists and rank them by popularity
+                val matchingArtists = searchResponse.results.filter { result ->
                     result.artistName != null && ArtistParser.isSameArtist(result.artistName, cleanName)
                 }
                 
-                if (artistMatch?.artistId != null) {
-                    Log.d(TAG, "Found artist ID for '$cleanName': ${artistMatch.artistId}")
-                    val imageUrl = fetchArtistImage(artistMatch.artistId)
+                if (matchingArtists.isEmpty()) {
+                    Log.d(TAG, "No exact artist match found for: '$cleanName'")
+                    continue
+                }
+                
+                // Rank by: 1) Exact name match, 2) Artist score (track count, etc.)
+                val bestArtist = matchingArtists.maxByOrNull { result ->
+                    val exactMatch = result.isExactArtistMatch(cleanName)
+                    val score = result.getArtistScore()
+                    // Exact match gets huge bonus
+                    (if (exactMatch) 10000 else 0) + score
+                }
+                
+                if (bestArtist?.artistId != null) {
+                    val score = bestArtist.getArtistScore()
+                    val exactMatch = bestArtist.isExactArtistMatch(cleanName)
+                    Log.d(TAG, "Found artist ID for '$cleanName': ${bestArtist.artistId} (score: $score, exact: $exactMatch, tracks: ${bestArtist.trackCount})")
+                    
+                    val imageUrl = fetchArtistImage(bestArtist.artistId)
                     
                     if (imageUrl != null) {
                         return imageUrl // Found one, return immediately
                     }
-                } else {
-                    Log.d(TAG, "No exact artist match found for: '$cleanName'")
                 }
                 
             } catch (e: Exception) {
@@ -264,144 +285,143 @@ class ITunesEnrichmentService @Inject constructor(
     }
 
     /**
-     * Fetch artist image using proper web scraping.
+     * Fetch artist image for the given artist ID.
      * 
-     * iTunes Search API returns an 'artistLinkUrl' which points to the Apple Music artist page.
-     * That page contains the high-quality artist profile image in its Open Graph tags.
-     * We fetch that page and extract the <meta property="og:image"> content.
+     * Strategy:
+     * 1. Lookup artist → get Apple Music page URL
+     * 2. Fetch page via OkHttp → extract og:image (actual artist photo)
+     * 3. Rewrite URL to 600x600 square
+     * 4. Fallback to track/album artwork if og:image fails
      */
-    suspend fun fetchArtistImage(artistId: Long): String? {
+    suspend fun fetchArtistImage(artistId: Long, visitedIds: MutableSet<Long> = mutableSetOf()): String? {
+        if (artistId in visitedIds) {
+            Log.w(TAG, "Already visited artist ID $artistId, skipping")
+            return null
+        }
+        visitedIds.add(artistId)
+        
+        if (visitedIds.size > 3) {
+            Log.w(TAG, "Reached maximum artist lookup limit (3), stopping")
+            return null
+        }
+        
         Log.d(TAG, "Fetching artist image for artist ID: $artistId")
         
         try {
+            // Step 1: Get Apple Music artist page URL
             delay(RATE_LIMIT_DELAY_MS)
+            val lookupResponse = iTunesApi.lookupArtist(artistId = artistId)
+            val artistUrl = lookupResponse.body()?.results?.firstOrNull()?.artistLinkUrl
+                ?.split("?")?.get(0) // Remove query params like ?uo=4
             
-            // 1. Get the artist link URL from lookup API
-            val response = iTunesApi.lookupArtist(artistId = artistId)
-            
-            if (!response.isSuccessful) {
-                Log.e(TAG, "iTunes artist lookup failed: ${response.code()}")
-                return null
-            }
-            
-            val lookupResponse = response.body()
-            if (lookupResponse == null || lookupResponse.results.isEmpty()) {
-                Log.d(TAG, "No artist info found for ID: $artistId")
-                return null
-            }
-            
-            val artist = lookupResponse.results.firstOrNull()
-            val artistLinkUrl = artist?.artistLinkUrl
-            
-            if (artistLinkUrl.isNullOrBlank()) {
-                Log.d(TAG, "No Apple Music link found for artist ID: $artistId")
-                return null
-            }
-            
-            // 2. Fetch the Apple Music page HTML
-            Log.d(TAG, "Fetching Apple Music page: $artistLinkUrl")
-            val pageContent = fetchUrlContent(artistLinkUrl)
-            
-            if (pageContent == null) {
-                Log.w(TAG, "Failed to fetch Apple Music page content")
-                return null
-            }
-            
-            // 3. Extract artist image
-            // Priority 1: Try to find WebP image from <picture><source type="image/webp" ...></picture>
-            // This usually provides square cropped images (cc) which are better for avatars than og:image (cw/landscape)
-            // Example: .../380x380cc.webp
-            var imageUrl: String? = null
-            
-            try {
-                // Regex to find source tag with type="image/webp" and capture its srcset
-                val webpMatch = WEBP_SOURCE_PATTERN.find(pageContent)
-                
-                if (webpMatch != null) {
-                    val srcset = webpMatch.groupValues[1]
-                    // srcset format: "url1 190w,url2 380w"
-                    // We want the largest one. Split by comma.
-                    val bestWebpUrl = srcset.split(",")
-                        .map { it.trim() }
-                        .mapNotNull { entry ->
-                            // Entry looks like: "https://.../380x380cc.webp 380w"
-                            val parts = entry.split(" ")
-                            if (parts.isNotEmpty()) {
-                                val url = parts[0]
-                                // Try to parse width if available, otherwise assume 0
-                                val width = if (parts.size > 1) parts[1].replace("w", "").toIntOrNull() ?: 0 else 0
-                                Pair(url, width)
-                            } else null
-                        }
-                        .maxByOrNull { it.second } // Get the one with max width
-                        ?.first
-                    
-                    if (bestWebpUrl != null) {
-                        imageUrl = bestWebpUrl
-                        Log.i(TAG, "Found WebP artist image: $imageUrl")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to parse WebP source: ${e.message}")
-            }
-            
-            // Priority 2: Fallback to og:image if WebP not found
-            if (imageUrl == null) {
-                // Look for: <meta property="og:image" content="...">
-                val matchResult = OG_IMAGE_PATTERN.find(pageContent)
-                imageUrl = matchResult?.groupValues?.get(1)
-                
-                if (imageUrl != null) {
-                    Log.i(TAG, "Found og:image fallback: $imageUrl")
+            // Step 2: Fetch Apple Music page via OkHttp and extract og:image
+            if (!artistUrl.isNullOrBlank()) {
+                val ogImage = fetchOgImageViaOkHttp(artistUrl)
+                if (ogImage != null) {
+                    // Rewrite to 600x600 square (og:image is 1200x630 banner)
+                    val squareUrl = rewriteToSquare(ogImage, 600)
+                    Log.i(TAG, "Found artist photo for ID $artistId: $squareUrl")
+                    return squareUrl
                 }
             }
-
-            if (imageUrl != null) {
-                Log.i(TAG, "Final artist image for ID $artistId: $imageUrl")
-                return imageUrl
-            } else {
-                Log.d(TAG, "No artist image found (checked WebP source and og:image) for ID: $artistId")
-                return null
+            
+            // Step 3: Fallback to track artwork
+            Log.d(TAG, "og:image failed for ID $artistId, trying track artwork")
+            delay(RATE_LIMIT_DELAY_MS)
+            val songResponse = iTunesApi.lookupArtistWithMedia(
+                artistId = artistId,
+                entity = "song",
+                limit = 3
+            )
+            if (songResponse.isSuccessful) {
+                val trackArt = songResponse.body()?.results
+                    ?.firstOrNull { it.artworkUrl100 != null && it.wrapperType == "track" }
+                    ?.getBestArtworkUrl()
+                if (trackArt != null) {
+                    Log.i(TAG, "Found track artwork for artist ID $artistId: $trackArt")
+                    return trackArt
+                }
             }
             
+            // Step 4: Fallback to album artwork
+            delay(RATE_LIMIT_DELAY_MS)
+            val albumResponse = iTunesApi.lookupArtistWithMedia(
+                artistId = artistId,
+                entity = "album",
+                limit = 1
+            )
+            if (albumResponse.isSuccessful) {
+                val albumArt = albumResponse.body()?.results
+                    ?.firstOrNull { it.artworkUrl100 != null && it.wrapperType == "collection" }
+                    ?.getBestArtworkUrl()
+                if (albumArt != null) {
+                    Log.i(TAG, "Found album artwork for artist ID $artistId: $albumArt")
+                    return albumArt
+                }
+            }
+            
+            Log.d(TAG, "No artwork found for artist ID: $artistId")
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching artist image from iTunes", e)
-            return null
+            Log.w(TAG, "Error fetching artwork for artist $artistId", e)
+        }
+        return null
+    }
+    
+    /**
+     * Fetch Apple Music page via OkHttp and extract og:image URL.
+     * OkHttp handles HTTP/2, gzip, redirects, cookies properly — unlike
+     * raw HttpURLConnection which fails on Apple Music's responses.
+     */
+    private suspend fun fetchOgImageViaOkHttp(pageUrl: String): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url(pageUrl)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                    .header("Accept", "text/html")
+                    .build()
+                
+                val response = okHttpClient.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "Apple Music page fetch failed: ${response.code}")
+                    return@withContext null
+                }
+                
+                val html = response.body?.string() ?: return@withContext null
+                
+                // Extract og:image from SSR HTML
+                val match = OG_IMAGE_REGEX.find(html) ?: OG_IMAGE_REGEX_ALT.find(html)
+                val url = match?.groupValues?.get(1)
+                
+                if (url != null && url.contains("mzstatic.com")) {
+                    Log.d(TAG, "Extracted og:image: $url")
+                    return@withContext url
+                }
+                
+                Log.d(TAG, "No og:image in HTML (${html.length} chars)")
+                null
+            } catch (e: Exception) {
+                Log.w(TAG, "OkHttp fetch error: ${e.message}")
+                null
+            }
         }
     }
-
+    
     /**
-     * Helper to fetch URL content string.
-     * Uses a simple OkHttp request if available in the project, or basic Java URL connection if not.
-     * Since this project uses Retrofit/OkHttp, we should assume OkHttp is available via DI or we can create a simple client.
-     * For simplicity and robustness here without adding DI, we'll use a basic URL connection 
-     * (or better, reuse the OkHttp client if visible).
-     * 
-     * To avoid adding dependencies/DI changes, we'll use basic HttpURLConnection here 
-     * as it's just one GET request.
+     * Rewrite mzstatic.com URL to square dimensions.
+     * Apple CDN supports dynamic size via URL suffix:
+     * /1200x630cw.png → /600x600cc.png (cc = center-crop)
      */
-    private fun fetchUrlContent(urlString: String): String? {
-        var connection: java.net.HttpURLConnection? = null
-        try {
-            val url = java.net.URL(urlString)
-            connection = url.openConnection() as java.net.HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 10000
-            connection.readTimeout = 10000
-            // User agent is important to avoid being blocked
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36")
-            
-            if (connection.responseCode == 200) {
-                return connection.inputStream.bufferedReader().use { it.readText() }
-            }
-            Log.w(TAG, "Web scrape failed with code: ${connection.responseCode}")
-            return null
-        } catch (e: Exception) {
-            Log.w(TAG, "Web scrape error: ${e.message}")
-            return null
-        } finally {
-            connection?.disconnect()
+    private fun rewriteToSquare(url: String, size: Int): String {
+        val lastSlash = url.lastIndexOf('/')
+        if (lastSlash == -1) return url
+        val basePath = url.substring(0, lastSlash)
+        val ext = when {
+            url.endsWith(".png", true) -> "png"
+            url.endsWith(".webp", true) -> "webp"
+            else -> "jpg"
         }
+        return "$basePath/${size}x${size}cc.$ext"
     }
 
     /**

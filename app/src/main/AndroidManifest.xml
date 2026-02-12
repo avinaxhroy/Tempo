@@ -127,7 +127,7 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Widget Provider -->
+        <!-- Widget Providers -->
         <receiver
             android:name=".widget.TempoWidgetReceiver"
             android:exported="true">
@@ -137,6 +137,72 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TempoArtistWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tempo_artist_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TempoDashboardWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tempo_dashboard_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TempoDiscoveryWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tempo_discovery_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TempoHeatmapWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tempo_heatmap_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TempoMilestoneWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tempo_milestone_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TempoMixWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tempo_mix_widget_info" />
         </receiver>
 
     </application>

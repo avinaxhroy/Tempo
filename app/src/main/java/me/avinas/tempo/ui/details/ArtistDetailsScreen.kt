@@ -306,7 +306,7 @@ fun ArtistDetailsContent(
                     ) {
                         items(
                             items = artistDetails.topAlbums,
-                            key = { album -> "${album.album}_${album.artist}" }
+                            key = { album -> "album_${artistDetails.topAlbums.indexOf(album)}_${album.album}_${album.artist}" }
                         ) { album ->
                             TopAlbumCard(album = album)
                         }

@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import me.avinas.tempo.ui.theme.TempoRed
@@ -69,6 +70,15 @@ fun MergeSearchDialog(
                     }
                 }
                 
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Info text
+                Text(
+                    text = "Search for the correct track to merge into. All listening history will be combined.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray.copy(alpha = 0.8f)
+                )
+                
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // Search Input
@@ -90,28 +100,108 @@ fun MergeSearchDialog(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                if (uiState.isSearching) {
-                    Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = TempoRed)
-                    }
-                } else if (uiState.searchResults.isEmpty() && uiState.query.isNotEmpty()) {
-                    Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                        Text("No tracks found", color = Color.Gray)
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(
-                            items = uiState.searchResults,
-                            key = { track -> track.id }
-                        ) { track ->
-                            TrackSearchItem(track = track, onClick = { 
-                                viewModel.mergeTracks(track)
-                            })
+                when {
+                    uiState.isSearching -> {
+                        Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = TempoRed)
                         }
                     }
+                    uiState.searchResults.isEmpty() && uiState.query.length >= 2 -> {
+                        Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                            Text("No tracks found", color = Color.Gray)
+                        }
+                    }
+                    uiState.searchResults.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "Type to search for tracks",
+                                color = Color.Gray,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(
+                                items = uiState.searchResults,
+                                key = { track -> track.id }
+                            ) { track ->
+                                TrackSearchItem(track = track, onClick = { 
+                                    viewModel.selectTrackForMerge(track)
+                                })
+                            }
+                        }
+                    }
+                }
+                
+                // Confirmation dialog for pending merge
+                if (uiState.pendingMergeTarget != null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Confirm Merge",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Merge into \"${uiState.pendingMergeTarget!!.title}\" by ${uiState.pendingMergeTarget!!.artist}?",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.9f),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "This action cannot be undone. All listening history will be combined.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { viewModel.cancelMerge() },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Color.White
+                                    )
+                                ) {
+                                    Text("Cancel")
+                                }
+                                Button(
+                                    onClick = { viewModel.confirmMerge() },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = TempoRed
+                                    )
+                                ) {
+                                    Text("Merge", color = Color.White)
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Error message
+                if (uiState.mergeStatus is MergeStatus.Error) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = (uiState.mergeStatus as MergeStatus.Error).message,
+                        color = Color.Red,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
                 
                 if (uiState.mergeStatus is MergeStatus.Processing) {

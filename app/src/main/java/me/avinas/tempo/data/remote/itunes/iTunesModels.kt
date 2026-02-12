@@ -105,4 +105,41 @@ data class iTunesResult(
     fun getDurationMs(): Long? {
         return trackTimeMillis
     }
+    
+    /**
+     * Calculate artist "score" for ranking search results.
+     * Higher score = more likely to be the correct artist.
+     * 
+     * Factors:
+     * - Track count (more tracks = more established artist)
+     * - Collection count (more albums = more established)
+     * - Has both tracks and collections (bonus points)
+     */
+    fun getArtistScore(): Int {
+        var score = 0
+        
+        // Track count is a strong indicator of popularity
+        score += (trackCount ?: 0) * 10
+        
+        // Collection/album count also matters
+        // Note: For artist search results, these fields might not be populated
+        // but for track/album results they will be
+        if (collectionId != null) score += 50
+        if (trackId != null) score += 20
+        
+        // Bonus if we have both collection and track info
+        if (collectionId != null && trackId != null) score += 30
+        
+        return score
+    }
+    
+    /**
+     * Check if this result is an exact match for the given artist name.
+     * Case-insensitive comparison with normalization.
+     */
+    fun isExactArtistMatch(searchName: String): Boolean {
+        val normalizedSearch = searchName.trim().lowercase()
+        val normalizedArtist = artistName?.trim()?.lowercase() ?: return false
+        return normalizedArtist == normalizedSearch
+    }
 }

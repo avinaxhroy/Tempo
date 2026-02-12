@@ -146,12 +146,12 @@ object TagBasedMoodAnalyzer {
         
         // Count matches for each mood
         val scores = mapOf(
-            MoodCategory.HAPPY to allTags.count { tag -> happyTags.any { it in tag || tag in it } },
-            MoodCategory.MELANCHOLIC to allTags.count { tag -> melancholicTags.any { it in tag || tag in it } },
-            MoodCategory.CALM to allTags.count { tag -> calmTags.any { it in tag || tag in it } },
-            MoodCategory.ENERGETIC to allTags.count { tag -> energeticTags.any { it in tag || tag in it } },
-            MoodCategory.AGGRESSIVE to allTags.count { tag -> aggressiveTags.any { it in tag || tag in it } },
-            MoodCategory.ROMANTIC to allTags.count { tag -> romanticTags.any { it in tag || tag in it } }
+            MoodCategory.HAPPY to allTags.count { tag -> matchesAnyGenre(tag, happyTags) },
+            MoodCategory.MELANCHOLIC to allTags.count { tag -> matchesAnyGenre(tag, melancholicTags) },
+            MoodCategory.CALM to allTags.count { tag -> matchesAnyGenre(tag, calmTags) },
+            MoodCategory.ENERGETIC to allTags.count { tag -> matchesAnyGenre(tag, energeticTags) },
+            MoodCategory.AGGRESSIVE to allTags.count { tag -> matchesAnyGenre(tag, aggressiveTags) },
+            MoodCategory.ROMANTIC to allTags.count { tag -> matchesAnyGenre(tag, romanticTags) }
         )
         
         val maxScore = scores.maxByOrNull { it.value }
@@ -165,6 +165,8 @@ object TagBasedMoodAnalyzer {
     /**
      * Analyze tags/genres to estimate energy level using weighted scoring.
      * Multiple matching signals boost confidence in the result.
+     * 
+     * Optimized: Uses prefix checks to reduce O(n*m) string comparisons.
      */
     fun analyzeEnergy(tags: List<String>, genres: List<String>): EnergyLevel {
         val allTags = (tags + genres).map { it.lowercase().trim() }
@@ -178,8 +180,8 @@ object TagBasedMoodAnalyzer {
         var lowScore = 0.0
         
         for (tag in allTags) {
-            // Very High Energy indicators
-            if (highEnergyGenres.any { it in tag || tag in it }) {
+            // Very High Energy indicators - use direct contains checks
+            if (matchesAnyGenre(tag, highEnergyGenres)) {
                 // Specific subgenres get higher weight
                 veryHighScore += when {
                     tag.contains("death") || tag.contains("black") || tag.contains("grind") -> 1.5
@@ -190,7 +192,7 @@ object TagBasedMoodAnalyzer {
             }
             
             // High Energy indicators
-            if (moderateHighEnergyGenres.any { it in tag || tag in it }) {
+            if (matchesAnyGenre(tag, moderateHighEnergyGenres)) {
                 highScore += when {
                     tag.contains("bollywood") || tag.contains("filmi") || tag.contains("item") -> 1.2
                     tag.contains("salsa") || tag.contains("samba") || tag.contains("cumbia") -> 1.1
@@ -200,7 +202,7 @@ object TagBasedMoodAnalyzer {
             }
             
             // Low Energy indicators
-            if (lowEnergyGenres.any { it in tag || tag in it }) {
+            if (matchesAnyGenre(tag, lowEnergyGenres)) {
                 lowScore += when {
                     tag.contains("ghazal") || tag.contains("sufi") || tag.contains("qawwali") -> 1.3
                     tag.contains("carnatic") || tag.contains("hindustani") || tag.contains("classical") -> 1.2
@@ -210,16 +212,16 @@ object TagBasedMoodAnalyzer {
             }
             
             // Moderate Energy indicators
-            if (moderateEnergyGenres.any { it in tag || tag in it }) {
+            if (matchesAnyGenre(tag, moderateEnergyGenres)) {
                 moderateScore += 1.0
             }
             
             // Boost from descriptive mood tags (cross-reference)
-            if (energeticTags.any { it in tag }) highScore += 0.5
-            if (aggressiveTags.any { it in tag }) veryHighScore += 0.5
-            if (calmTags.any { it in tag }) lowScore += 0.5
-            if (happyTags.any { it in tag }) moderateScore += 0.3 // Happy usually moderate energy
-            if (romanticTags.any { it in tag }) lowScore += 0.3 // Romantic usually slower
+            if (matchesAnyGenre(tag, energeticTags)) highScore += 0.5
+            if (matchesAnyGenre(tag, aggressiveTags)) veryHighScore += 0.5
+            if (matchesAnyGenre(tag, calmTags)) lowScore += 0.5
+            if (matchesAnyGenre(tag, happyTags)) moderateScore += 0.3 // Happy usually moderate energy
+            if (matchesAnyGenre(tag, romanticTags)) lowScore += 0.3 // Romantic usually slower
         }
         
         // Find the winning category
@@ -238,6 +240,17 @@ object TagBasedMoodAnalyzer {
         } else {
             EnergyLevel.UNKNOWN
         }
+    }
+    
+    /**
+     * Efficiently check if a tag matches any genre in a set.
+     * Uses exact match first (O(1) HashSet lookup), then falls back to substring matching.
+     */
+    private fun matchesAnyGenre(tag: String, genreSet: Set<String>): Boolean {
+        // Fast path: exact match via HashSet lookup
+        if (tag in genreSet) return true
+        // Slow path: check substring containment only if needed
+        return genreSet.any { genre -> (genre.length > 2 && genre in tag) || (tag.length > 2 && tag in genre) }
     }
     
     /**

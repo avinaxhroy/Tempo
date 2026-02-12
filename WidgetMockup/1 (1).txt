@@ -1,0 +1,10 @@
+
+
+
+{
+ "resultCount":1,
+ "results": [
+{"wrapperType":"artist", "artistType":"Artist", "artistName":"Seedhe Maut", "artistLinkUrl":"https://music.apple.com/us/artist/seedhe-maut/1233336608?uo=4", "artistId":1233336608, "primaryGenreName":"Hip-Hop", "primaryGenreId":1073}]
+}
+
+

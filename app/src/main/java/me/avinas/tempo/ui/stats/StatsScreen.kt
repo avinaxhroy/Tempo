@@ -1,5 +1,6 @@
 package me.avinas.tempo.ui.stats
 
+import me.avinas.tempo.ui.details.formatListeningTime
 import me.avinas.tempo.ui.theme.TempoDarkBackground
 import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.ui.theme.innerShadow
@@ -183,9 +184,9 @@ fun StatsScreen(
                         items = remainingItems,
                         key = { index, item -> 
                             when (item) {
-                                is TopTrack -> "track_${item.trackId}"
-                                is TopArtist -> "artist_${item.artist}"
-                                is TopAlbum -> "album_${item.album}_${item.artist}"
+                                is TopTrack -> "track_${index}_${item.trackId}"
+                                is TopArtist -> "artist_${index}_${item.artist}"
+                                is TopAlbum -> "album_${index}_${item.album}_${item.artist}"
                                 else -> "item_$index"
                             }
                         }
@@ -517,13 +518,4 @@ fun SortBySelector(
     }
 }
 
-fun formatListeningTime(millis: Long): String {
-    val totalMinutes = millis / 1000 / 60
-    val hours = totalMinutes / 60
-    val minutes = totalMinutes % 60
-    return when {
-        hours > 0 -> "${hours}h ${minutes}m"
-        minutes > 0 -> "${minutes}m"
-        else -> "<1m"
-    }
-}
+
