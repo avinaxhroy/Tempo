@@ -1,9 +1,6 @@
-# Add project specific ProGuard rules here.
-# Optimized for Tempo - Music Listening Stats App
 
-# =====================================================
+
 # TEMPO APP-SPECIFIC RULES
-# =====================================================
 
 # Tempo service - keep everything in service package
 -keep class me.avinas.tempo.service.** { *; }
@@ -33,9 +30,9 @@
     <fields>;
 }
 
-# =====================================================
+
 # HILT / DAGGER (Updated for R8 Full Mode)
-# =====================================================
+
 -keep class dagger.hilt.** { *; }
 -keep class javax.inject.** { *; }
 -keep @dagger.hilt.android.HiltAndroidApp class * { *; }
@@ -96,9 +93,8 @@
 -keepattributes EnclosingMethod
 -keepattributes InnerClasses
 
-# =====================================================
 # MOSHI (Updated for R8 Full Mode)
-# =====================================================
+
 -keep class com.squareup.moshi.** { *; }
 -keepclassmembers class * {
     @com.squareup.moshi.FromJson *;
@@ -126,9 +122,9 @@
     public <methods>;
 }
 
-# =====================================================
+
 # RETROFIT & OKHTTP
-# =====================================================
+
 -keepattributes Signature
 -keepattributes *Annotation*
 -keep class retrofit2.** { *; }
@@ -140,9 +136,8 @@
 -keep class okhttp3.** { *; }
 -keep interface okhttp3.** { *; }
 
-# =====================================================
 # COROUTINES
-# =====================================================
+
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
 -keepclassmembers class kotlinx.coroutines.** {
@@ -150,21 +145,15 @@
 }
 -dontwarn kotlinx.coroutines.**
 
-# =====================================================
 # ROOM
-# =====================================================
 -keep class * extends androidx.room.RoomDatabase
 -keep @androidx.room.Entity class *
 -dontwarn androidx.room.paging.**
 
-# =====================================================
 # COIL
-# =====================================================
 -dontwarn coil.**
 
-# =====================================================
 # JETPACK COMPOSE (Updated for R8 Full Mode)
-# =====================================================
 -dontwarn androidx.compose.**
 -keep class androidx.compose.runtime.** { *; }
 -keep class androidx.compose.ui.** { *; }
@@ -187,9 +176,7 @@
 -keep @androidx.compose.runtime.Stable class * { *; }
 -keep @androidx.compose.runtime.Immutable class * { *; }
 
-# =====================================================
 # PERFORMANCE OPTIMIZATIONS
-# =====================================================
 # Remove debug logging in release builds
 -assumenosideeffects class android.util.Log {
     public static int v(...);
@@ -202,9 +189,7 @@
 -allowaccessmodification
 -dontpreverify
 
-# =====================================================
 # GOOGLE DRIVE API & G_CLIENT
-# =====================================================
 -keep class com.google.api.client.** { *; }
 -keep class com.google.api.services.drive.** { *; }
 -keep class com.google.gson.** { *; }
@@ -228,18 +213,14 @@
 -dontwarn org.ietf.jgss.**
 -dontwarn org.apache.http.**
 
-# =====================================================
 # CREDENTIAL MANAGER & GOOGLE AUTH
-# =====================================================
 -keep class androidx.credentials.** { *; }
 -keepattributes *Annotation*
 
 # Google Sign-In and Credential Manager
 -keep class com.google.android.libraries.identity.googleid.** { *; }
 
-# =====================================================
 # SERIALIZATION & PARCELIZE
-# =====================================================
 -keepattributes *Annotation*
 -keepclassmembers class * implements android.os.Parcelable {
     public static final ** CREATOR;
@@ -253,9 +234,7 @@
 -keepattributes Signature
 -keepattributes Exceptions
 
-# =====================================================
 # APP BUNDLE OPTIMIZATION
-# =====================================================
 # Enable aggressive code shrinking for smaller APK
 -repackageclasses ''
 -allowaccessmodification

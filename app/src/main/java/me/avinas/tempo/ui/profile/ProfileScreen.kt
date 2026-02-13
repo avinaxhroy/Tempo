@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.StarHalf
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,6 +44,7 @@ import me.avinas.tempo.ui.components.DeepOceanBackground
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.rotate
 
 // =====================
 // Badge Icon Mapping
@@ -50,7 +53,7 @@ private fun getBadgeIcon(iconName: String): ImageVector {
     return when (iconName) {
         "music_note" -> Icons.Default.MusicNote
         "century" -> Icons.Default.Star
-        "star_half" -> Icons.Default.StarHalf
+        "star_half" -> Icons.AutoMirrored.Filled.StarHalf
         "star" -> Icons.Default.Star
         "diamond" -> Icons.Default.Diamond
         "emoji_events" -> Icons.Default.EmojiEvents
@@ -69,7 +72,7 @@ private fun getBadgeIcon(iconName: String): ImageVector {
         "palette" -> Icons.Default.Palette
         "nightlight" -> Icons.Default.Nightlight
         "wb_sunny" -> Icons.Default.WbSunny
-        "directions_run" -> Icons.Default.DirectionsRun
+        "directions_run" -> Icons.AutoMirrored.Filled.DirectionsRun
         "grade" -> Icons.Default.Grade
         "looks_one" -> Icons.Default.LooksOne
         "workspace_premium" -> Icons.Default.WorkspacePremium
@@ -144,7 +147,8 @@ fun ProfileScreen(
                 StatsRow(
                     userLevel = uiState.userLevel,
                     streakAtRisk = uiState.streakAtRisk,
-                    timeRemaining = uiState.streakTimeRemaining
+                    timeRemaining = uiState.streakTimeRemaining,
+                    streakDurationMinutes = uiState.streakDurationMinutes
                 )
                 
                 // === Badge Section ===
@@ -297,23 +301,55 @@ private fun LevelRingSection(userLevel: UserLevel) {
 private fun StatsRow(
     userLevel: UserLevel,
     streakAtRisk: Boolean = false,
-    timeRemaining: String = ""
+    timeRemaining: String = "",
+    streakDurationMinutes: Long = Long.MAX_VALUE
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (streakAtRisk) {
+            // Dynamic Color Logic based on buckets
+            // > 6h: Light (0xFFFCA5A5)
+            // 3-6h: Medium (0xFFEF4444)
+            // 1-3h: Strong (0xFFB91C1C)
+            // < 1h: Deep (0xFF7F1D1D) + Pulse
+            
+            val riskColor = when {
+                streakDurationMinutes > 360 -> Color(0xFFFCA5A5)
+                streakDurationMinutes > 180 -> Color(0xFFEF4444)
+                streakDurationMinutes > 60 -> Color(0xFFB91C1C)
+                else -> Color(0xFF7F1D1D)
+            }
+            
+            val isUrgent = streakDurationMinutes < 60
+            
+            val infiniteTransition = rememberInfiniteTransition(label = "riskPulse")
+            val pulseAlpha by if (isUrgent) {
+                infiniteTransition.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 0.5f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(800, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "alpha"
+                )
+            } else {
+                remember { mutableStateOf(1f) }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .alpha(pulseAlpha)
                     .clip(RoundedCornerShape(12.dp))
                     .background(
-                        Brush.horizontalGradient(
+                        Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFFEF4444).copy(alpha = 0.2f),
-                                Color(0xFFEF4444).copy(alpha = 0.05f)
+                                riskColor.copy(alpha = 0.2f),
+                                riskColor.copy(alpha = 0.05f)
                             )
                         )
                     )
-                    .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                    .border(1.dp, riskColor.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                     .padding(12.dp)
             ) {
                 Row(
@@ -323,13 +359,13 @@ private fun StatsRow(
                     Box(
                         modifier = Modifier
                             .size(32.dp)
-                            .background(Color(0xFFEF4444).copy(alpha = 0.2f), CircleShape),
+                            .background(riskColor.copy(alpha = 0.2f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.Default.LocalFireDepartment,
                             contentDescription = "Risk",
-                            tint = Color(0xFFEF4444),
+                            tint = riskColor,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -339,7 +375,7 @@ private fun StatsRow(
                             text = "Streak Risk!",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFEF4444)
+                            color = riskColor
                         )
                         Text(
                             text = "Ends in $timeRemaining",
@@ -495,31 +531,37 @@ private fun BadgeSection(
             }
         }
         
-        // "Almost There" Section
-        val almostUnlocked = remember(allBadges) { 
-            allBadges.filter { !it.isEarned && it.progressFraction >= 0.7f } 
+        // "Almost There" Spotlight (Single closest badge)
+        val spotlightBadge = remember(allBadges) { 
+            allBadges.filter { !it.isEarned && it.progressFraction >= 0.5f }
+                     .maxByOrNull { it.progressFraction }
         }
         
-        if (almostUnlocked.isNotEmpty()) {
+        if (spotlightBadge != null) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "Almost There",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                
                 Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    almostUnlocked.forEach { badge ->
-                        BadgeCard(
-                            badge = badge,
-                            modifier = Modifier.width(160.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Almost There",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
                 }
+                
+                BadgeCard(
+                    badge = spotlightBadge,
+                    modifier = Modifier.fillMaxWidth(),
+                    isSpotlight = true
+                )
             }
             
             HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
@@ -565,115 +607,97 @@ private fun BadgeSection(
     }
 }
 
+private fun getUniqueBadgeColor(badge: Badge): Color {
+    // Generate a deterministic color based on the badge ID hash
+    val seed = badge.badgeId.hashCode()
+    
+    // Use Golden Angle (approx 137.5 degrees) to distribute colors more evenly
+    val goldenAngle = 137.508f
+    val hue = (seed * goldenAngle) % 360f
+    val finalHue = if (hue < 0) hue + 360f else hue
+    
+    // Vary saturation and value slightly for more organic feel
+    // Saturation: 0.60 - 0.80
+    val saturation = 0.6f + ((kotlin.math.abs(seed) % 20) / 100f)
+    // Value: 0.85 - 1.00
+    val value = 0.85f + ((kotlin.math.abs(seed) % 15) / 100f)
+    
+    return Color.hsv(finalHue, saturation, value)
+}
+
 @Composable
-private fun BadgeCard(badge: Badge, modifier: Modifier = Modifier) {
-    val categoryColor = getCategoryColor(badge.category)
+private fun BadgeCard(
+    badge: Badge, 
+    modifier: Modifier = Modifier,
+    isSpotlight: Boolean = false
+) {
+    // Unique color for this specific badge
+    val badgeColor = getUniqueBadgeColor(badge)
     val isEarned = badge.isEarned
     
-    // Premium card appearance
-    val cardBrush = if (isEarned) {
-        Brush.verticalGradient(
-            colors = listOf(
-                categoryColor.copy(alpha = 0.15f),
-                categoryColor.copy(alpha = 0.05f)
-            )
-        )
-    } else {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.05f),
-                Color.White.copy(alpha = 0.02f)
-            )
-        )
-    }
-
-    val borderStroke = if (isEarned) {
-        BorderStroke(1.dp, categoryColor.copy(alpha = 0.3f))
-    } else {
-        BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
-    }
+    // Animate progress fill
+    val targetProgress = if (isEarned) 1f else badge.progressFraction
+    val animatedProgress by animateFloatAsState(
+        targetValue = targetProgress,
+        animationSpec = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+        label = "fill"
+    )
     
     Card(
-        modifier = modifier
-            .animateContentSize(),
+        modifier = modifier.animateContentSize(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        border = borderStroke
+        border = BorderStroke(
+            width = if (isSpotlight) 2.dp else 1.dp, 
+            color = if (isSpotlight) badgeColor.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.1f)
+        )
     ) {
-        Box(
-            modifier = Modifier
-                .background(cardBrush)
-                .fillMaxWidth()
-        ) {
-            // Glow effect for earned badges
-            if (isEarned) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = 20.dp, y = (-20).dp)
-                        .size(100.dp)
-                        .alpha(0.2f)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = listOf(categoryColor, Color.Transparent)
+        Box(modifier = Modifier.fillMaxWidth()) {
+            // ============================================
+            // 1. BASE LAYER (Gray / Ghost)
+            // ============================================
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.05f),
+                                Color.White.copy(alpha = 0.02f)
                             )
                         )
-                )
-            }
+                    )
+            )
             
             Column(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(16.dp).fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Badge Icon with Glow
+                // Gray Icon
                 Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(64.dp)
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape),
+                    contentAlignment = Alignment.Center
                 ) {
-                    if (isEarned) {
-                        // Outer glow
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .alpha(0.3f)
-                                .background(categoryColor, CircleShape)
-                                .safeBlur(16.dp)
-                        )
-                    }
-                    
-                    // Icon Container
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isEarned) categoryColor.copy(alpha = 0.2f) 
-                                else Color.White.copy(alpha = 0.05f)
-                            )
-                            .border(
-                                1.dp,
-                                if (isEarned) categoryColor.copy(alpha = 0.5f) else Color.Transparent,
-                                CircleShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = getBadgeIcon(badge.iconName),
-                            contentDescription = badge.name,
-                            tint = if (isEarned) categoryColor else Color.White.copy(alpha = 0.2f),
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = getBadgeIcon(badge.iconName),
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.1f),
+                        modifier = Modifier.size(28.dp)
+                    )
                 }
                 
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                // Badge Name
+                // Gray Text
                 Text(
                     text = badge.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (isEarned) Color.White else Color.White.copy(alpha = 0.5f),
+                    color = Color.White.copy(alpha = 0.3f), // Dim
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -681,57 +705,180 @@ private fun BadgeCard(badge: Badge, modifier: Modifier = Modifier) {
                 
                 Spacer(modifier = Modifier.height(4.dp))
                 
-                // Description
                 Text(
                     text = badge.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.5f),
+                    color = Color.White.copy(alpha = 0.2f), // Very Dim
                     textAlign = TextAlign.Center,
-                    minLines = 2,
-                    maxLines = 2,
+                    minLines = 2, maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     lineHeight = 14.sp
                 )
                 
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                // Footer (Date or Progress)
-                if (isEarned) {
-                    val dateStr = try {
-                        val date = java.util.Date(badge.earnedAt)
-                        val formatter = java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
-                        formatter.format(date)
-                    } catch (e: Exception) {
-                        "Earned"
-                    }
-                    
-                    Text(
-                        text = "Won on $dateStr",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = categoryColor,
-                        fontWeight = FontWeight.Medium
-                    )
-                } else {
+                // Gray Footer
+                Text(
+                    text = "${badge.progress} / ${badge.maxProgress}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.2f),
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                )
+            }
+            
+            // ============================================
+            // 2. REVEAL LAYER (Colorful / Scratch Card)
+            // ============================================
+            // Only show if there is progress or it's earned
+            if (animatedProgress > 0f) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(HorizontalRevealShape(animatedProgress)) // <--- Left-to-Right Reveal
+                        .background(
+                            Brush.horizontalGradient( // Gradient matches fill direction
+                                colors = listOf(
+                                    badgeColor.copy(alpha = 0.15f),
+                                    badgeColor.copy(alpha = 0.05f)
+                                )
+                            )
+                        )
+                        .border(1.dp, badgeColor.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
+                ) {
+                    // Similar layout but with COLOR
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        LinearProgressIndicator(
-                            progress = { badge.progressFraction },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp)),
-                            color = categoryColor,
-                            trackColor = Color.White.copy(alpha = 0.1f),
-                            strokeCap = StrokeCap.Round
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        // Colored Icon
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(56.dp) // Maintain size for alignment
+                        ) {
+                             // Glow for earned/spotlight
+                             if (isEarned || isSpotlight) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .alpha(0.4f)
+                                        .background(badgeColor, CircleShape)
+                                        .safeBlur(16.dp)
+                                )
+                             }
+                             
+                             Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(CircleShape)
+                                    .background(badgeColor.copy(alpha = 0.2f))
+                                    .border(1.dp, badgeColor.copy(alpha = 0.5f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = getBadgeIcon(badge.iconName),
+                                    contentDescription = null,
+                                    tint = badgeColor,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // Bright Text
                         Text(
-                            text = "${badge.progress} / ${badge.maxProgress}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.4f),
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                            text = badge.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White, // Bright
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        Text(
+                            text = badge.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.7f), // Visible
+                            textAlign = TextAlign.Center,
+                            minLines = 2, maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            lineHeight = 14.sp
+                        )
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // Colored Footer
+                        if (isEarned) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "UNLOCKED",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = badgeColor,
+                                    letterSpacing = 1.sp
+                                )
+                                val dateStr = try {
+                                    val date = java.util.Date(badge.earnedAt)
+                                    val formatter = java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault())
+                                    formatter.format(date)
+                                } catch (e: Exception) { "" }
+                                
+                                if (dateStr.isNotEmpty()) {
+                                    Text(
+                                        text = dateStr,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.5f)
+                                    )
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "${badge.progress} / ${badge.maxProgress}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = badgeColor,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+                
+                // Shine effect for Earned Badges
+                if (isEarned) {
+                    val infiniteTransition = rememberInfiniteTransition(label = "shine")
+                    val shineOffset by infiniteTransition.animateFloat(
+                        initialValue = -100f,
+                        targetValue = 500f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(2000, delayMillis = 1000, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "shineOffset"
+                    )
+                    
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clip(RoundedCornerShape(24.dp))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(40.dp)
+                                .fillMaxHeight()
+                                .offset(x = shineOffset.dp)
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            Color.White.copy(alpha = 0.2f),
+                                            Color.Transparent
+                                        )
+                                    )
+                                )
+                                .rotate(20f)
                         )
                     }
                 }
@@ -815,6 +962,24 @@ fun CompactLevelRing(
             style = MaterialTheme.typography.labelSmall,
             color = Color.White.copy(alpha = 0.8f),
             maxLines = 1
+        )
+    }
+}
+
+private class HorizontalRevealShape(private val progress: Float) : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        density: androidx.compose.ui.unit.Density
+    ): androidx.compose.ui.graphics.Outline {
+        val cutWidth = size.width * progress.coerceIn(0f, 1f)
+        return androidx.compose.ui.graphics.Outline.Rectangle(
+            androidx.compose.ui.geometry.Rect(
+                left = 0f,
+                top = 0f,
+                right = cutWidth,
+                bottom = size.height
+            )
         )
     }
 }

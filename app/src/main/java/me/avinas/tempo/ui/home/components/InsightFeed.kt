@@ -63,7 +63,9 @@ fun InsightFeed(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        insights.forEach { insight ->
+        insights
+            .filter { it.payload !is InsightPayload.GamificationProgress }
+            .forEach { insight ->
             InsightCard(
                 insight = insight,
                 onClick = {
@@ -159,7 +161,7 @@ fun VibeHeader(
                 .statusBarsPadding()
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
-                .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 150.dp)
+                .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 120.dp) // Reduced end padding to 72dp
         ) {
             // Premium Opaque Card for Profile - Minimalist Pill Edition
             Surface(
@@ -190,7 +192,7 @@ fun VibeHeader(
                     ) {
                         // The Ring
                         Canvas(modifier = Modifier.fillMaxSize()) {
-                            val strokeWidth = 4.dp.toPx() // Thinner, more elegant stroke
+                            val strokeWidth = 5.dp.toPx() // Slightly thicker for better visibility
                             val radius = (size.minDimension - strokeWidth) / 2
                             
                             // Track - Very subtle gray
@@ -217,27 +219,35 @@ fun VibeHeader(
                             }
                         }
                         
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier.offset(y = (-1).dp) // Visual centering
+                        ) {
                             Text(
                                 text = "$level",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold, // Reduced from Black to Bold
+                                style = MaterialTheme.typography.titleLarge,
+                                fontSize = 20.sp, // Fixed size for consistency in the ring
+                                fontWeight = FontWeight.Black,
                                 color = Color(0xFF111827), // Gray 900
-                                letterSpacing = (-0.5).sp
+                                lineHeight = 20.sp
                             )
                             Text(
                                 text = "LVL",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 10.sp, // Slightly larger than 8sp
+                                fontWeight = FontWeight.Bold,
                                 color = Color(0xFF9CA3AF), // Gray 400
-                                fontSize = 8.sp,
-                                letterSpacing = 1.sp
+                                letterSpacing = 0.5.sp
                             )
                         }
                     }
 
                     // Right: User Info
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.Center
+                    ) {
                         ResponsiveText(
                             text = userName,
                             style = MaterialTheme.typography.titleLarge, 
@@ -246,16 +256,17 @@ fun VibeHeader(
                             maxLines = 1
                         )
                         
-                        if (levelTitle != null) {
+                        if (!levelTitle.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = levelTitle.uppercase(),
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium, // Upgraded from labelSmall
                                 color = Color(0xFFEC4899), // Pink 500
-                                fontWeight = FontWeight.Bold, // Reduced form ExtraBold
+                                fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.sp,
-                                maxLines = 1
+                                maxLines = 2, // Allow wrapping
+                                overflow = TextOverflow.Ellipsis
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
                         }
 
                     }
@@ -289,13 +300,7 @@ fun InsightCard(
         else -> Icons.Filled.Settings to Color.Gray
     }
 
-    if (insight.payload is InsightPayload.GamificationProgress) {
-        GamificationCard(
-            userLevel = insight.payload.level,
-            modifier = modifier.clickable(onClick = onClick)
-        )
-        return
-    }
+    // Gamification progress removed as per user request (moved to Vibe Header)
 
     GlassCard(
         modifier = modifier

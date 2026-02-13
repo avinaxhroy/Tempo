@@ -93,14 +93,20 @@ data class ProfileUiState(
             }
         }
         
+    val streakDurationMinutes: Long
+        get() {
+            if (!streakAtRisk) return Long.MAX_VALUE
+            val now = java.time.LocalTime.now()
+            val endOfDay = java.time.LocalTime.MAX
+            return java.time.Duration.between(now, endOfDay).toMinutes()
+        }
+
     val streakTimeRemaining: String
         get() {
             if (!streakAtRisk) return ""
-            val now = java.time.LocalTime.now()
-            val endOfDay = java.time.LocalTime.MAX
-            val duration = java.time.Duration.between(now, endOfDay)
-            val hours = duration.toHours()
-            val minutes = duration.toMinutes() % 60
+            val minutesTotal = streakDurationMinutes
+            val hours = minutesTotal / 60
+            val minutes = minutesTotal % 60
             return "${hours}h ${minutes}m"
         }
         
