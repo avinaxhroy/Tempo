@@ -23,9 +23,11 @@ import me.avinas.tempo.data.local.entities.*
         ArtistAlias::class,  // Artist merge aliases
         AppPreference::class, // User-controlled app tracking preferences
         LastFmImportMetadata::class, // Last.fm import session tracking
-        ScrobbleArchive::class // Compressed archive for long-tail scrobbles
+        ScrobbleArchive::class, // Compressed archive for long-tail scrobbles
+        UserLevel::class,    // Gamification: user level & XP
+        Badge::class          // Gamification: achievement badges
     ],
-    version = 30, // Repair indices for existing users
+    version = 31, // Gamification: levels & badges
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -44,6 +46,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun appPreferenceDao(): AppPreferenceDao  // User app preferences DAO
     abstract fun lastFmImportMetadataDao(): LastFmImportMetadataDao  // Last.fm import tracking
     abstract fun scrobbleArchiveDao(): ScrobbleArchiveDao  // Scrobble archive DAO
+    abstract fun gamificationDao(): GamificationDao  // Gamification: levels & badges
     
     companion object {
         private const val TAG = "AppDatabase"
@@ -1373,6 +1376,56 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Migration from version 30 to 31.
+         * 
+         * Adds gamification tables:
+         * - user_level: Single-row table for XP and level tracking
+         * - badges: Achievement badges with progress tracking
+         */
+        val MIGRATION_30_31 = object : Migration(30, 31) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 30 to 31 - Adding gamification")
+                
+                // Create user_level table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS user_level (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        total_xp INTEGER NOT NULL DEFAULT 0,
+                        current_level INTEGER NOT NULL DEFAULT 0,
+                        xp_for_current_level INTEGER NOT NULL DEFAULT 0,
+                        xp_for_next_level INTEGER NOT NULL DEFAULT 100,
+                        last_xp_awarded_at INTEGER NOT NULL DEFAULT 0,
+                        current_streak INTEGER NOT NULL DEFAULT 0,
+                        longest_streak INTEGER NOT NULL DEFAULT 0,
+                        last_streak_date TEXT NOT NULL DEFAULT ''
+                    )
+                """)
+                
+                // Create badges table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS badges (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        badge_id TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        icon_name TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        earned_at INTEGER NOT NULL DEFAULT 0,
+                        progress INTEGER NOT NULL DEFAULT 0,
+                        max_progress INTEGER NOT NULL DEFAULT 1,
+                        is_earned INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
+                
+                // Create indices for badges
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_badges_badge_id ON badges(badge_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_badges_category ON badges(category)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_badges_is_earned ON badges(is_earned)")
+                
+                Log.i(TAG, "Migration from version 30 to 31 completed successfully")
+            }
+        }
 
         /**
          * All migrations in order.
@@ -1401,7 +1454,8 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_26_27,
             MIGRATION_27_28,
             MIGRATION_28_29,
-            MIGRATION_29_30
+            MIGRATION_29_30,
+            MIGRATION_30_31
         )
         
     }

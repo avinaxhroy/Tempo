@@ -1,5 +1,8 @@
 package me.avinas.tempo.data.stats
 
+import me.avinas.tempo.data.local.entities.Badge
+import me.avinas.tempo.data.local.entities.UserLevel
+
 data class BingeSession(
     val artist: String,
     val session_play_count: Int,
@@ -33,12 +36,22 @@ data class DiscoveryTrend(
 
 data class InsightCardData(
     val title: String,
-    val description: String,
+    val description: String, // Main text or "fallback" text
     val iconRes: Int? = null,
     val type: InsightType,
-    val score: Double = 0.0, // For relevance sorting
-    val data: Any? = null
+    val score: Double = 0.0,
+    val payload: InsightPayload = InsightPayload.TextOnly
 )
+
+sealed class InsightPayload {
+    object TextOnly : InsightPayload()
+    
+    data class GamificationProgress(
+        val level: UserLevel,
+        val nextBadge: Badge?,
+        val recentBadges: List<Badge> = emptyList()
+    ) : InsightPayload()
+}
 
 enum class InsightType {
     MOOD, DISCOVERY, BINGE, GENRE, PEAK_TIME, LOYALTY, ENERGY, DANCEABILITY, TEMPO, ACOUSTICNESS, STREAK, ENGAGEMENT, RATE_APP

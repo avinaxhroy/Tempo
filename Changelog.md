@@ -10,9 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 🚀 New Features
 
 - **Google Drive Backup (Gold)**:
-    - Fully robust backup and restore system.
+    - Full backup and restore system.
     - Added "Restore from Backup" flow in Onboarding.
-    - Smart error handling and token refresh for seamless reliability.
+    - Smart error handling and token refresh for reliable operation.
 - **Smart Metadata Strategy**:
     - "Merge Live/Remix Versions" toggle to unify different versions of the same song.
     - "Merge Tracks" manual tool in Song Details to fix split stats.
@@ -50,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Added FAQ section with common user queries.
     - Integrated Privacy Policy links.
 - **Privacy & Security**:
-    - Comprehensive `PRIVACY.md` detailing data handling.
+    - Detailed `PRIVACY.md` for data handling.
     - Commercial usage restrictions in License.
 
 ### ✨ Improvements
@@ -65,7 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Enrichment**:
     - Fixed infinite API call loops in Stats screen.
     - Optimized Artist Image persistence and caching.
-    - Robust local cover art fallback mechanism.
+    - Reliable local cover art fallback mechanism.
 
 ## [3.0.0] - 2025-12-30
 
@@ -84,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Automatic background backups with retry logic.
     - Play Store AAB signing support for Drive API authentication.
 - **Export/Import**:
-    - New date-wise JSON structure for robust data portability.
+    - New date-wise JSON structure for better data portability.
     - Improved large dataset handling during import.
 
 ### 🐛 Bug Fixes & Improvements

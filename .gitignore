@@ -52,6 +52,7 @@ google-services.json
 # Gradle files
 .gradle/
 build/
+build_output.txt
 !gradle/wrapper/gradle-wrapper.jar
 !gradle/wrapper/gradle-wrapper.properties
 
@@ -81,6 +82,8 @@ docs/
 # Mockups
 MOCKUP/
 SpotlightStoryMockup/
+WidgetMockup/
+Screenshots/
 
 # Landing Page
 web/

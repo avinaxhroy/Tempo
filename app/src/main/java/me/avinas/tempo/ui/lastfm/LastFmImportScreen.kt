@@ -457,7 +457,7 @@ private fun TierCard(
     val numberFormat = remember { NumberFormat.getNumberInstance(Locale.getDefault()) }
     val description = when (tier.name) {
         "QUICK" -> 
-            "Last ${tier.recentMonths} months + loved tracks. Fast and lightweight—perfect for getting started."
+            "Last ${tier.recentMonths} months + loved tracks. Fast and lightweight. Perfect for getting started."
         "STANDARD" ->
             "Last ${tier.recentMonths} months + top ${numberFormat.format(tier.topTracksCount)} tracks + loved. Captures your listening identity. ~${tier.estimatedCoverage}% coverage."
         "DEEP" ->

@@ -813,7 +813,7 @@ class MusicBrainzEnrichmentService @Inject constructor(
                 )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Cover art fetch error for release $releaseMbid", e)
+            Log.w(TAG, "Cover art fetch error for release $releaseMbid: ${e.message}")
             null
         }
     }

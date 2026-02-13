@@ -241,7 +241,7 @@ class InsightCardGenerator @Inject constructor(
                 SpotlightCardData.CosmicClock(
                     dayPercentage = dayPct,
                     nightPercentage = nightPct,
-                    dayTopGenre = "Music", // TODO: Implement temporal genre detection
+                    dayTopGenre = "Music",
                     nightTopGenre = "Music",
                     sunListenerType = if (dayPct > nightPct) "Sun Chaser" else "Moon Owl",
                     hourlyLevels = hourlyLevels,
@@ -636,7 +636,7 @@ class InsightCardGenerator @Inject constructor(
                     artistName = candidate.artist,
                     artistImageUrl = artistImageUrl,
                     uniqueTrackCount = candidate.uniqueTracksPlayed,
-                    topTrackName = "Unknown Track", // TODO: Fetch top track for this artist if needed, or leave generic
+                    topTrackName = "Unknown Track",
                     loyaltyScore = loyaltyScore,
                     confidence = confidence
                 )
@@ -763,7 +763,7 @@ class InsightCardGenerator @Inject constructor(
             SpotlightStoryPage.ListeningMinutes(
                 conversationalText = minutesText,
                 totalMinutes = totalMinutes,
-                userName = "User", // TODO: Get actual user name
+                userName = "User",
                 year = java.time.LocalDate.now().year,
                 timeRange = timeRange,
                 previewUrl = trackForIntro?.previewUrl
@@ -1064,7 +1064,7 @@ class InsightCardGenerator @Inject constructor(
                 Triple("Balanced Enthusiast", "A little bit of everything, all of the time.", "Ideally balanced, as all things should be.")
             )
             "The Explorer" -> listOf(
-                Triple("The Explorer", "You're constantly hunting for fresh sounds and new artists.", "You don't loop comfort tracks — you hunt new ones."),
+                Triple("The Explorer", "You're constantly hunting for fresh sounds and new artists.", "You don't loop comfort tracks. You hunt new ones."),
                 Triple("The Explorer", "Your library is an ever-expanding map of sound.", "New day, new artist, new vibe."),
                 Triple("The Explorer", "Stagnation is your enemy.", "You've traveled far and wide across the musical spectrum.")
             )

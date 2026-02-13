@@ -33,10 +33,33 @@ class ITunesEnrichmentService @Inject constructor(
         private const val TAG = "iTunesEnrichment"
         private const val RATE_LIMIT_DELAY_MS = 500L // 500ms between requests (iTunes has relaxed rate limits)
         
-        // Regex for og:image extraction from Apple Music SSR HTML
-        // Apple Music pages always include this meta tag server-side for social sharing
-        private val OG_IMAGE_REGEX = Regex("""<meta\s+property="og:image"\s+content="([^"]+)"""""", RegexOption.IGNORE_CASE)
-        private val OG_IMAGE_REGEX_ALT = Regex("""<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']"""""", RegexOption.IGNORE_CASE)
+        // === Multiple regex strategies for extracting artist images from Apple Music HTML ===
+        
+        // AMCArtistImages CDN URL - Apple's dedicated artist photo path (most reliable signal)
+        private val ARTIST_IMAGE_CDN_REGEX = Regex("""(https?://is\d+-ssl\.mzstatic\.com/image/thumb/AMCArtistImages[^"'\s)}<]+)""")
+        
+        // --background-image CSS variable in artist-detail-header (contains artist banner/photo)
+        private val BACKGROUND_IMAGE_REGEX = Regex("""--background-image\s*:\s*url\(([^)]+)\)""", RegexOption.IGNORE_CASE)
+        
+        // Standard og:image meta tag
+        private val OG_IMAGE_REGEX = Regex("""<meta\s+property="og:image"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE)
+        private val OG_IMAGE_REGEX_ALT = Regex("""<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+        
+        // twitter:image meta tag
+        private val TWITTER_IMAGE_REGEX = Regex("""<meta\s+(?:name|property)=["']twitter:image["']\s+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+        private val TWITTER_IMAGE_REGEX_ALT = Regex("""<meta[^>]*content=["']([^"']*mzstatic\.com[^"']+)["'][^>]*(?:name|property)=["']twitter:image["']""", RegexOption.IGNORE_CASE)
+        
+        // JSON-LD structured data with artist image
+        private val JSON_LD_IMAGE_REGEX = Regex(""""image"\s*:\s*"(https?://[^"]*mzstatic\.com/image/thumb/[^"]+)"""")
+        
+        // Any mzstatic artist-related URL (Features/atv-catalog patterns, Music thumbnails)
+        private val MZSTATIC_ARTIST_REGEX = Regex("""(https?://is\d+-ssl\.mzstatic\.com/image/thumb/(?:Features|Music)[^"'\s)}<]*?/source/\d+x\d+[^"'\s)}<]*)""")
+        
+        // Generic mzstatic URL (broadest fallback)
+        private val MZSTATIC_GENERIC_REGEX = Regex("""(https?://is\d+-ssl\.mzstatic\.com/image/thumb/[^"'\s)}<]+)""")
+        
+        // Social media bot User-Agent - Apple Music returns SSR HTML with og:image for crawlers
+        private const val BOT_USER_AGENT = "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
     }
     
     /**
@@ -289,9 +312,9 @@ class ITunesEnrichmentService @Inject constructor(
      * 
      * Strategy:
      * 1. Lookup artist → get Apple Music page URL
-     * 2. Fetch page via OkHttp → extract og:image (actual artist photo)
+     * 2. Fetch page via OkHttp → extract artist image using multiple strategies
      * 3. Rewrite URL to 600x600 square
-     * 4. Fallback to track/album artwork if og:image fails
+     * 4. Fallback to track/album artwork if page extraction fails
      */
     suspend fun fetchArtistImage(artistId: Long, visitedIds: MutableSet<Long> = mutableSetOf()): String? {
         if (artistId in visitedIds) {
@@ -314,19 +337,19 @@ class ITunesEnrichmentService @Inject constructor(
             val artistUrl = lookupResponse.body()?.results?.firstOrNull()?.artistLinkUrl
                 ?.split("?")?.get(0) // Remove query params like ?uo=4
             
-            // Step 2: Fetch Apple Music page via OkHttp and extract og:image
+            // Step 2: Fetch Apple Music page and extract artist image using multiple strategies
             if (!artistUrl.isNullOrBlank()) {
-                val ogImage = fetchOgImageViaOkHttp(artistUrl)
-                if (ogImage != null) {
-                    // Rewrite to 600x600 square (og:image is 1200x630 banner)
-                    val squareUrl = rewriteToSquare(ogImage, 600)
+                val artistImage = extractArtistImageFromPage(artistUrl)
+                if (artistImage != null) {
+                    // Rewrite to 600x600 square
+                    val squareUrl = rewriteToSquare(artistImage, 600)
                     Log.i(TAG, "Found artist photo for ID $artistId: $squareUrl")
                     return squareUrl
                 }
             }
             
             // Step 3: Fallback to track artwork
-            Log.d(TAG, "og:image failed for ID $artistId, trying track artwork")
+            Log.d(TAG, "Page extraction failed for ID $artistId, trying track artwork")
             delay(RATE_LIMIT_DELAY_MS)
             val songResponse = iTunesApi.lookupArtistWithMedia(
                 artistId = artistId,
@@ -368,43 +391,158 @@ class ITunesEnrichmentService @Inject constructor(
     }
     
     /**
-     * Fetch Apple Music page via OkHttp and extract og:image URL.
-     * OkHttp handles HTTP/2, gzip, redirects, cookies properly — unlike
-     * raw HttpURLConnection which fails on Apple Music's responses.
+     * Extract artist image from Apple Music page using multiple strategies.
+     * 
+     * Two-phase approach:
+     * Phase 1: Fetch with social media bot User-Agent (facebookexternalhit).
+     *   Apple Music returns SSR HTML with og:image/twitter:image for crawlers,
+     *   which contains the actual artist photo (the same image shown in
+     *   WhatsApp/Twitter link previews).
+     * Phase 2: Fallback to regular browser User-Agent for SPA HTML scraping.
+     * 
+     * Extraction priority (artist images only, not album art):
+     * 1. AMCArtistImages CDN URLs (Apple's dedicated artist photo path - most reliable)
+     * 2. --background-image CSS in artist-detail-header
+     * 3. og:image / twitter:image containing AMCArtistImages
+     * 4. og:image / twitter:image (any, from bot-fetched HTML)
+     * 5. JSON-LD structured data
+     * 6. srcset-based AMCArtistImages in artwork-component divs
+     * 7. Generic mzstatic fallback (only AMCArtistImages paths)
      */
-    private suspend fun fetchOgImageViaOkHttp(pageUrl: String): String? {
+    private suspend fun extractArtistImageFromPage(pageUrl: String): String? {
         return withContext(Dispatchers.IO) {
-            try {
-                val request = Request.Builder()
-                    .url(pageUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-                    .header("Accept", "text/html")
-                    .build()
-                
-                val response = okHttpClient.newCall(request).execute()
-                if (!response.isSuccessful) {
-                    Log.w(TAG, "Apple Music page fetch failed: ${response.code}")
-                    return@withContext null
-                }
-                
-                val html = response.body?.string() ?: return@withContext null
-                
-                // Extract og:image from SSR HTML
-                val match = OG_IMAGE_REGEX.find(html) ?: OG_IMAGE_REGEX_ALT.find(html)
-                val url = match?.groupValues?.get(1)
-                
-                if (url != null && url.contains("mzstatic.com")) {
-                    Log.d(TAG, "Extracted og:image: $url")
-                    return@withContext url
-                }
-                
-                Log.d(TAG, "No og:image in HTML (${html.length} chars)")
-                null
-            } catch (e: Exception) {
-                Log.w(TAG, "OkHttp fetch error: ${e.message}")
-                null
+            // Phase 1: Fetch with bot UA for reliable og:image (same as social media previews)
+            val botResult = fetchAndExtractArtistImage(pageUrl, BOT_USER_AGENT, "bot")
+            if (botResult != null) return@withContext botResult
+            
+            // Phase 2: Fetch with browser UA for full SPA HTML with srcset/CSS data
+            val browserResult = fetchAndExtractArtistImage(
+                pageUrl,
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "browser"
+            )
+            if (browserResult != null) return@withContext browserResult
+            
+            Log.d(TAG, "No artist image found from either bot or browser fetch")
+            null
+        }
+    }
+    
+    /**
+     * Fetch Apple Music page with the given User-Agent and extract artist image.
+     */
+    private fun fetchAndExtractArtistImage(pageUrl: String, userAgent: String, phase: String): String? {
+        try {
+            val request = Request.Builder()
+                .url(pageUrl)
+                .header("User-Agent", userAgent)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .build()
+            
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                Log.w(TAG, "Apple Music page fetch failed ($phase): ${response.code}")
+                return null
+            }
+            
+            val html = response.body?.string() ?: return null
+            Log.d(TAG, "Fetched Apple Music page ($phase): ${html.length} chars")
+            
+            return extractArtistImageFromHtml(html, phase)
+        } catch (e: Exception) {
+            Log.w(TAG, "Page extraction error ($phase): ${e.message}")
+            return null
+        }
+    }
+    
+    /**
+     * Extract artist image URL from Apple Music HTML content.
+     * Strongly prefers AMCArtistImages URLs (actual artist photos) over
+     * generic artwork URLs (which are usually album covers).
+     */
+    private fun extractArtistImageFromHtml(html: String, phase: String): String? {
+        // Strategy 1: AMCArtistImages CDN URLs (actual artist photos!)
+        // These are the most reliable. Apple uses this path exclusively for genuine
+        // artist profile photos, never for album art.
+        val allArtistCdnUrls = ARTIST_IMAGE_CDN_REGEX.findAll(html)
+            .map { it.groupValues[1] }
+            .toList()
+            .distinct()
+        if (allArtistCdnUrls.isNotEmpty()) {
+            // Prefer the largest/highest quality variant
+            val bestCdnUrl = allArtistCdnUrls.firstOrNull { it.contains("cropped.png") || it.contains("cc.") }
+                ?: allArtistCdnUrls.first()
+            Log.d(TAG, "Strategy 1 ($phase): Found AMCArtistImages URL (from ${allArtistCdnUrls.size} candidates): $bestCdnUrl")
+            return bestCdnUrl
+        }
+        
+        // Strategy 2: --background-image CSS variable in artist-detail-header
+        // Contains the artist banner photo URL directly in CSS
+        val bgImageUrl = BACKGROUND_IMAGE_REGEX.find(html)?.groupValues?.get(1)
+        if (bgImageUrl != null && bgImageUrl.contains("mzstatic.com")) {
+            Log.d(TAG, "Strategy 2 ($phase): Found --background-image: $bgImageUrl")
+            return bgImageUrl
+        }
+        
+        // Strategy 3: og:image containing AMCArtistImages (verified artist photo)
+        val ogImage = (OG_IMAGE_REGEX.find(html) ?: OG_IMAGE_REGEX_ALT.find(html))
+            ?.groupValues?.get(1)
+        if (ogImage != null && ogImage.contains("AMCArtistImages")) {
+            Log.d(TAG, "Strategy 3 ($phase): Found og:image with AMCArtistImages: $ogImage")
+            return ogImage
+        }
+        
+        // Strategy 4: twitter:image containing AMCArtistImages
+        val twitterImage = (TWITTER_IMAGE_REGEX.find(html) ?: TWITTER_IMAGE_REGEX_ALT.find(html))
+            ?.groupValues?.get(1)
+        if (twitterImage != null && twitterImage.contains("AMCArtistImages")) {
+            Log.d(TAG, "Strategy 4 ($phase): Found twitter:image with AMCArtistImages: $twitterImage")
+            return twitterImage
+        }
+        
+        // Strategy 5: og:image / twitter:image from bot-fetched HTML (trusted even without AMCArtistImages)
+        // Social media previews for artist pages always show the artist photo.
+        // Only trust this from bot phase since browser HTML might have album art in og:image.
+        if (phase == "bot") {
+            if (ogImage != null && ogImage.contains("mzstatic.com")) {
+                Log.d(TAG, "Strategy 5 ($phase): Found og:image (bot-trusted): $ogImage")
+                return ogImage
+            }
+            if (twitterImage != null && twitterImage.contains("mzstatic.com")) {
+                Log.d(TAG, "Strategy 5 ($phase): Found twitter:image (bot-trusted): $twitterImage")
+                return twitterImage
             }
         }
+        
+        // Strategy 6: JSON-LD structured data
+        val jsonLdImage = JSON_LD_IMAGE_REGEX.find(html)?.groupValues?.get(1)
+        if (jsonLdImage != null && jsonLdImage.contains("AMCArtistImages")) {
+            Log.d(TAG, "Strategy 6 ($phase): Found JSON-LD artist image: $jsonLdImage")
+            return jsonLdImage
+        }
+        
+        // Strategy 7: Broad fallback - only AMCArtistImages URLs from any mzstatic match
+        // This ensures we NEVER return album art as an artist image.
+        val allMzstaticUrls = MZSTATIC_GENERIC_REGEX.findAll(html)
+            .map { it.groupValues[1] }
+            .filter { url ->
+                url.contains("AMCArtistImages") &&
+                !url.contains("/favicon") &&
+                !url.contains("Badge") &&
+                !url.contains("icon")
+            }
+            .toList()
+            .distinct()
+        
+        val preferredUrl = allMzstaticUrls.firstOrNull()
+        if (preferredUrl != null) {
+            Log.d(TAG, "Strategy 7 ($phase): Found AMCArtistImages in generic search (from ${allMzstaticUrls.size} candidates): $preferredUrl")
+            return preferredUrl
+        }
+        
+        Log.d(TAG, "No artist image found in HTML ($phase, ${html.length} chars, tried 7 strategies)")
+        return null
     }
     
     /**

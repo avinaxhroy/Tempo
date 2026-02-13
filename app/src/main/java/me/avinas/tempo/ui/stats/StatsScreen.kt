@@ -342,7 +342,7 @@ fun GlassStatItem(rank: Int, item: Any, onClick: () -> Unit) {
         Color(0xFFC026D3), // Fuchsia 600 (Orchid)
         Color(0xFFDB2777), // Pink 600 (Rose)
         Color(0xFFF59E0B), // Gold
-        Color(0xFF9333EA), // Purple 600 (slightly warmer than 500) -> Actually let's use Plum 700: 0xFFA21CAF
+        Color(0xFF9333EA), // Purple 600
         Color(0xFFBE185D), // Pink 700 (Raspberry)
         Color(0xFFE879F9)  // Orchid
     )

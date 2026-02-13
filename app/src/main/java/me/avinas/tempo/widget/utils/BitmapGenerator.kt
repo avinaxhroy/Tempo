@@ -201,7 +201,16 @@ object BitmapGenerator {
             setShadowLayer(8f, 0f, 2f, Color.BLACK)
         }
         val nameY = height * 0.73f
-        canvas.drawText(artistName, width / 2f, nameY, namePaint)
+        
+        // Use adaptive scaling
+        drawScaledText(
+            canvas, 
+            artistName, 
+            width / 2f, 
+            nameY, 
+            width * 0.9f, // Max width with padding
+            namePaint
+        )
 
         // 8. Clock icon + "Xh listened" (green, centered)
         val hoursTextPaint = Paint().apply {
@@ -314,8 +323,9 @@ object BitmapGenerator {
         }
         val textX = artX + artSize + pad * 0.8f
         val titleY = artY + artSize * 0.45f
-        canvas.drawText(mixTitle, textX, titleY, titlePaint)
-        canvas.drawText(artistName, textX, titleY + width * 0.05f, subtitlePaint)
+        // Use adaptive scaling
+        drawScaledText(canvas, mixTitle, textX, titleY, width - textX - pad, titlePaint)
+        drawScaledText(canvas, artistName, textX, titleY + width * 0.05f, width - textX - pad, subtitlePaint)
 
         // 5. Audio bars at bottom (Polished with gradient)
         val barsY = height * 0.95f
@@ -674,53 +684,43 @@ object BitmapGenerator {
         canvas.drawText("↗", width - pad - width * 0.02f, pad + pillH * 0.75f, arrowPaint)
 
         // 5. Insight text centered
+        // 5. Insight text centered
         val insightPaint = Paint().apply {
             color = Color.WHITE
             textSize = (width * 0.055f).coerceIn(24f, 60f)
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-            textAlign = Paint.Align.CENTER
             isAntiAlias = true
             letterSpacing = -0.01f
+            // Base metrics needed for helper
+            shader = null 
         }
         
-        // Calculate center Y area
+        // Paint for the highlighted artist name (Gradient)
+        val hlPaint = Paint().apply {
+            textSize = insightPaint.textSize
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            isAntiAlias = true
+            shader = LinearGradient(0f, 0f, width.toFloat(), 0f,
+               Color.parseColor("#D0BCFF"), Color.parseColor("#B39DDB"), Shader.TileMode.CLAMP)
+        }
+        
         val centerY = height * 0.45f
-        
-        // Text wrapping/handling logic could go here, but for now we trust the text is short-ish
-        // We will "highlight" the artist name manually
-        if (discoveryText.contains(artistName) && artistName.isNotEmpty()) {
-            val parts = discoveryText.split(artistName)
-            val fullWidth = insightPaint.measureText(discoveryText)
-            val artistWidth = Paint(insightPaint).apply { typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) }.measureText(artistName)
-            // Re-measure full width with bold artist
-             val totalW = insightPaint.measureText(parts[0]) + artistWidth + (if (parts.size > 1) insightPaint.measureText(parts[1]) else 0f)
-             
-            var currentX = width / 2f - totalW / 2f
-            
-            // Part 1
-            if (parts.isNotEmpty()) {
-                canvas.drawText(parts[0], currentX, centerY, insightPaint.apply { textAlign = Paint.Align.LEFT })
-                currentX += insightPaint.measureText(parts[0])
-            }
-            
-            // Artist (Gradient Text)
-            val artistPaint = Paint().apply {
-                textSize = insightPaint.textSize
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                isAntiAlias = true
-                shader = LinearGradient(0f, 0f, width.toFloat(), 0f,
-                   Color.parseColor("#D0BCFF"), Color.parseColor("#B39DDB"), Shader.TileMode.CLAMP)
-            }
-            canvas.drawText(artistName, currentX, centerY, artistPaint)
-             currentX += artistPaint.measureText(artistName)
-             
-             // Part 2
-             if (parts.size > 1) {
-                canvas.drawText(parts[1], currentX, centerY, insightPaint.apply { shader = null; color = Color.WHITE })
-             }
-        } else {
-            canvas.drawText(discoveryText, width / 2f, centerY, insightPaint)
-        }
+        // Max width for text block allowing for padding
+        val maxTextW = width - (pad * 2.5f)
+        val maxTextH = height * 0.35f 
+
+        // Use adaptive multiline drawing
+        drawDiscoveryText(
+            canvas,
+            discoveryText,
+            artistName,
+            width / 2f,
+            centerY,
+            maxTextW,
+            maxTextH,
+            insightPaint,
+            hlPaint
+        )
 
         // 6. Divider line 
         val dividerY = height * 0.65f
@@ -942,8 +942,23 @@ object BitmapGenerator {
             typeface = Typeface.create("sans-serif", Typeface.NORMAL)
         }
         val trackY = artTop + artSize + width * 0.1f
-        canvas.drawText(trackName, width / 2f, trackY, trackPaint)
-        canvas.drawText(artistName, width / 2f, trackY + width * 0.06f, artistPaint)
+        // Adaptive scaling for milestone text
+        drawScaledText(
+            canvas, 
+            trackName, 
+            width / 2f, 
+            trackY, 
+            width * 0.85f, 
+            trackPaint
+        )
+        drawScaledText(
+            canvas, 
+            artistName, 
+            width / 2f, 
+            trackY + width * 0.06f, 
+            width * 0.85f, 
+            artistPaint
+        )
 
         // 5. Badge pill at bottom
         val isSpecialMilestone = badge.contains("Stream!")
@@ -1109,11 +1124,7 @@ object BitmapGenerator {
         val hoursY = pad + labelPaint.textSize + width * 0.02f + hoursPaint.textSize * 0.9f
         canvas.drawText(weeklyHours, pad, hoursY, hoursPaint)
         
-        // Unit "h" or "hours" - currently included in string? 
-        // Assuming string is just number "3.5", we append "h" visually if needed, 
-        // but WidgetWorker implementation sends formatted number. Let's check. 
-        // WidgetWorker sends string format %.1f so just "3.5".
-        // Let's draw "h" smaller next to it.
+        // Draw unit indicator
         val unitPaint = Paint().apply {
             color = ColorUtils.setAlphaComponent(Color.WHITE, 150)
             textSize = width * 0.06f
@@ -1237,16 +1248,16 @@ object BitmapGenerator {
         val maxTextW = pillRect.right - textLayoutX - artistPillPad
         
         // Manual truncation
-        var displayName = topArtistName
-        if (artNamePaint.measureText(displayName) > maxTextW) {
-             // quick truncate logic
-             while (displayName.length > 3 && artNamePaint.measureText(displayName + "...") > maxTextW) {
-                 displayName = displayName.dropLast(1)
-             }
-             displayName += "..."
-        }
-        
-        canvas.drawText(displayName, textLayoutX, pillRect.centerY() + artNamePaint.textSize*0.35f, artNamePaint)
+        // Use adaptive scaling instead of truncation for better look
+        drawScaledText(
+            canvas, 
+            topArtistName, 
+            textLayoutX, 
+            pillRect.centerY() + artNamePaint.textSize*0.35f, 
+            maxTextW, 
+            artNamePaint,
+            minTextSize = width * 0.02f // Allow getting quite small for this pill
+        )
         
         return bitmap
     }
@@ -1317,7 +1328,8 @@ object BitmapGenerator {
         val stepX = width / (data.size - 1).coerceAtLeast(1)
         
         val maxVal = data.maxOrNull()?.coerceAtLeast(1f) ?: 1f
-        val minVal = data.minOrNull() ?: 0f
+        // Fix: Use 0 as baseline for accurate representation of magnitude
+        val minVal = 0f 
         val range = (maxVal - minVal).coerceAtLeast(0.1f)
 
         // Start at bottom-left
@@ -1370,5 +1382,138 @@ object BitmapGenerator {
             isAntiAlias = true
         }
         canvas.drawPath(path, strokePaint)
+    }
+
+    /**
+     * Draws text that scales down to fit the available width.
+     */
+    private fun drawScaledText(
+        canvas: Canvas,
+        text: String,
+        x: Float,
+        y: Float,
+        maxWidth: Float,
+        paint: Paint,
+        minTextSize: Float = 20f
+    ) {
+        val originalSize = paint.textSize
+        var currentSize = originalSize
+        paint.textSize = currentSize
+
+        // Iteratively reduce text size until it fits
+        while (paint.measureText(text) > maxWidth && currentSize > minTextSize) {
+            currentSize -= 2f
+            paint.textSize = currentSize
+        }
+
+        canvas.drawText(text, x, y, paint)
+        paint.textSize = originalSize // Restore original size
+    }
+
+    /**
+     * Draws multi-line text with adaptive sizing and highlighting.
+     * specifically suitable for the Discovery widget.
+     */
+    private fun drawDiscoveryText(
+        canvas: Canvas,
+        fullText: String,
+        highlightText: String,
+        centerX: Float,
+        centerY: Float,
+        maxWidth: Float,
+        maxHeight: Float,
+        basePaint: Paint,
+        highlightPaint: Paint
+    ) {
+        val words = fullText.split(" ")
+        val originalSize = basePaint.textSize
+        var currentSize = originalSize
+        val minSize = originalSize * 0.5f
+        
+        var bestLines: List<String> = emptyList()
+        var bestLineHeight = 0f
+        
+        // Iteratively find the best fit
+        // Limit iterations for performance
+        val maxIterations = 20
+        var iter = 0
+        
+        while (currentSize >= minSize && iter < maxIterations) {
+            iter++
+            basePaint.textSize = currentSize
+            highlightPaint.textSize = currentSize
+            val lineHeight = basePaint.descent() - basePaint.ascent()
+            val lines = mutableListOf<String>()
+            var currentLine = StringBuilder()
+            
+            for (word in words) {
+                val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+                val measurePaint = if (highlightText.contains(word, ignoreCase = true)) highlightPaint else basePaint
+                // Approximate measurement using base paint for simplicity as font metrics are usually similar
+                // or ideally use the widthest of the two.
+                
+                if (basePaint.measureText(testLine) <= maxWidth) {
+                    currentLine.append(if (currentLine.isEmpty()) word else " $word")
+                } else {
+                    lines.add(currentLine.toString())
+                    currentLine = StringBuilder(word)
+                }
+            }
+            if (currentLine.isNotEmpty()) lines.add(currentLine.toString())
+            
+            val totalHeight = lines.size * lineHeight
+            // We want at least some text, max 4 lines
+            if (totalHeight <= maxHeight && lines.size <= 5) {
+                bestLines = lines
+                bestLineHeight = lineHeight
+                break
+            }
+            currentSize -= 2f
+        }
+        
+        // If we failed to fit, stick to min size
+        if (bestLines.isEmpty()) {
+             basePaint.textSize = minSize
+             highlightPaint.textSize = minSize
+             // Recalculate one last time (simplification: just force wrap)
+             // ... for now, just fallback to simpler drawing in the else block below
+        }
+
+        // Draw the lines
+        if (bestLines.isNotEmpty()) {
+            val totalBlockHeight = bestLines.size * bestLineHeight
+            var drawY = centerY - totalBlockHeight / 2 + bestLineHeight * 0.7f // Approximate baseline adjustment
+            
+            for (line in bestLines) {
+               val lineW = basePaint.measureText(line) // Approx width
+               // Re-measure precisely if we want perfect centering... 
+               // For mixed styles, centering is tricky without full text layout.
+               // We will center the line as a whole block.
+               
+               var currentX = centerX - lineW / 2
+               
+               val lineWords = line.split(" ")
+               lineWords.forEach { word ->
+                   // Check containment widely to handle punctuation (e.g. "Artist,")
+                   val cleanWord = word.filter { it.isLetterOrDigit() }
+                   val cleanHighlight = highlightText.filter { it.isLetterOrDigit() }
+                   
+                   val isHighlight = cleanHighlight.isNotEmpty() && highlightText.contains(word, ignoreCase = true)
+                   val paintToUse = if (isHighlight) highlightPaint else basePaint
+                   
+                   canvas.drawText(word, currentX, drawY, paintToUse)
+                   currentX += paintToUse.measureText(word) + basePaint.measureText(" ")
+               }
+               
+               drawY += bestLineHeight
+            }
+        } else {
+            // Fallback: draw truncated single line
+            basePaint.textSize = minSize
+            val truncated = if (fullText.length > 25) fullText.take(25) + "..." else fullText
+            canvas.drawText(truncated, centerX, centerY, basePaint)
+        }
+        
+        basePaint.textSize = originalSize
     }
 }

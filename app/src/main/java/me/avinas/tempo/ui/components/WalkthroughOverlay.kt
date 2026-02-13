@@ -109,8 +109,6 @@ class WalkthroughController @Inject constructor(
     // Scope for background tasks (fire-and-forget UI updates)
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main + kotlinx.coroutines.SupervisorJob())
 
-    // ... (existing code)
-
     // Non-suspend helper for UI callbacks
     fun dismiss() {
         scope.launch {

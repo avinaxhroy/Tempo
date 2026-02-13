@@ -100,6 +100,10 @@ class TempoApplication : Application(), Configuration.Provider, SingletonImageLo
         // Schedule weekly Spotlight story unlock checks (lightweight, battery-optimized)
         SpotlightUnlockWorker.scheduleWeekly(this)
         
+        // Schedule gamification refresh (XP, levels, badges)
+        me.avinas.tempo.worker.GamificationWorker.enqueuePeriodicRefresh(this)
+        me.avinas.tempo.worker.GamificationWorker.enqueueImmediateRefresh(this)
+        
         // Schedule Spotify polling if API-Only mode is enabled
         scheduleSpotifyPollingIfEnabled()
     }

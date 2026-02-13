@@ -330,52 +330,10 @@ fun DashboardCosmicClockCard(
                     )
                 }
 
-                // 5. The Shadow Indicator (Pointing to Peak)
-                // We use the rotation state to animate the shadow line
-                val shadowRotation = (peakHour * 15f) - 90f // Calculate rotation for shadow. 
-                // We want to animate this. But LaunchEffect above is animating (peakHour - 18)*15. 
-                // Let's rely on the LaunchedEffect's `animatedRotation` but fix the target.
-                // The LaunchedEffect above uses `(peakHour - 18) * 15f`.
-                // My drawing logic uses `(i * 15f) - 90f`.
-                // Let's align them. To point to peakHour: 
-                // angle = (peakHour * 15) - 90.
-                // So targetRotation should be (peakHour * 15) - 90.
-                // I will update the targetRotation calculation in the next step or implicitly here by correcting the drawing logic?
-                // No, I need to update the LaunchedEffect target calculation in the code block.
-                // I'll assume I can just use `angle` derived properly.
-                // Let's just fix the usage in Canvas if I can't touch top logic?
-                // Wait, I am replacing the WHOLE function. So I can fix the top logic!
-                
-                // Correct logic for the replacement:
-                // val targetRotation = (peakHour * 15f) - 90f
-                
+                // Draw shadow indicator pointing to peak listening hour
                 Canvas(modifier = Modifier.fillMaxSize()) {
-                     // We need the animated value. 
-                     // Since I am replacing the whole function, I will define `targetRotation` correct at the top.
-                     // But I can't change the `val targetRotation` line I already wrote in the `ReplacementContent` if I don't edit it.
-                     // Ah, I wrote `(peakHour - 18) * 15f` at the top of this replacement block.
-                     // That creates -270 for 00:00 (which is +90). 
-                     // I want -90 for 00:00.
-                     // So `(peakHour * 15) - 90` is what I want.
-                     // (0 * 15) - 90 = -90. Correct.
-                     // (6 * 15) - 90 = 0. Correct.
-                     // I will trust that the `animatedRotation` will be driven by the corrected `targetRotation` if I update it? 
-                     // I am pasting a static block... 
-                     // I should have written the correct math in the replacement string.
-                     // I will accept that the shadow might be offset by 180 degrees if I don't fix it.
-                     // (peakHour - 18)*15 = peakHour*15 - 270.
-                     // peakHour*15 - 90.
-                     // Difference is 180 degrees.
-                     // So the shadow will point OPPOSITE to the time.
-                     // Visual trick: I can just draw the shadow at `rotation + 180`? 
-                     // Or I can just overwrite the whole function with CORRECT math now.
-                     // I will overwrite with CORRECT math.
-                     
-                     val currentRotation = animatedRotation.value // This will be wrong initially if I don't change the target calc.
-                     // Use a correction in the draw phase.
-                     // drawRotation = currentRotation + 180f.
-                     
-                     val angleRad = (currentRotation + 180f) * (PI / 180f).toFloat() // Correction
+                     val currentRotation = animatedRotation.value
+                     val angleRad = (currentRotation + 180f) * (PI / 180f).toFloat()
                      val shadowLen = size.minDimension / 2 * 0.85f
                      val endX = center.x + shadowLen * cos(angleRad)
                      val endY = center.y + shadowLen * sin(angleRad)

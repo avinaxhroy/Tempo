@@ -36,7 +36,7 @@ object TempoCopyEngine {
 
     fun getEmptyStateMessage(): String {
         val messages = listOf(
-            "Just getting started — more insights soon.",
+            "Just getting started. More insights soon.",
             "We'll have something interesting after a few plays.",
             "Your taste is still forming. Keep listening.",
             "Silence is golden, but music is better. Play something!"

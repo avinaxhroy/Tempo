@@ -659,9 +659,6 @@ class EnrichmentWorker @AssistedInject constructor(
              for (metadata in artistsNeedingImages) {
                  if (isStopped) break
                  if (metadata.spotifyArtistId != null) {
-                     // Trigger Spotify strategy specifically? 
-                     // Or just let enrichSpecificTrack handle it if we passed the track ID?
-                     // Since we have the ID, calling enrichSpecificTrack is safer and consistent
                      enrichSpecificTrack(metadata.trackId) 
                  }
                  kotlinx.coroutines.delay(interTrackDelay)

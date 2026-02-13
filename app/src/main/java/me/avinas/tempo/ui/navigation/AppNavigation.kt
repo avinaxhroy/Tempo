@@ -63,6 +63,7 @@ sealed class Screen(val route: String) {
         fun createRoute(initialCardId: String) = "share_canvas/$initialCardId"
         fun createRouteEmpty() = "share_canvas/_empty_"
     }
+    object Profile : Screen("profile")
 }
 
 @Composable
@@ -124,7 +125,8 @@ fun AppNavigation(
                                 }
                                 navController.navigate(route)
                             },
-                            onNavigateToSupportedApps = { navController.navigate(Screen.SupportedApps.route) } // Added
+                            onNavigateToSupportedApps = { navController.navigate(Screen.SupportedApps.route) },
+                            onNavigateToProfile = { navController.navigate(Screen.Profile.route) }
                         )
                     }
 
@@ -296,6 +298,12 @@ fun AppNavigation(
                         me.avinas.tempo.ui.spotlight.canvas.ShareCanvasScreen(
                             initialCardId = initialCardId,
                             onClose = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable(Screen.Profile.route) {
+                        me.avinas.tempo.ui.profile.ProfileScreen(
+                            onBack = { navController.popBackStack() }
                         )
                     }
                 }

@@ -272,7 +272,7 @@ private fun SetupGuideEmptyState(
                 )
                 StepItem(
                     icon = Icons.Rounded.Headphones, 
-                    text = "Play a few songs — stats appear shortly"
+                    text = "Play a few songs - stats appear shortly"
                 )
                 StepItem(
                     icon = Icons.Rounded.GraphicEq, 

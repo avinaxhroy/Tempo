@@ -78,6 +78,10 @@ class ImportExportManager @Inject constructor(
             val scrobbleArchive = database.scrobbleArchiveDao().getAll()
             val lastFmImportMetadata = database.lastFmImportMetadataDao().getAll()
             
+            // v6: Collect gamification data
+            val userLevel = database.gamificationDao().getUserLevel()
+            val badges = database.gamificationDao().getAllBadges()
+            
             _progress.value = ImportExportProgress("Analyzing images...", 20, 100)
             
             // Classify image URLs
@@ -121,7 +125,7 @@ class ImportExportManager @Inject constructor(
                     // Create export data using current database schema version
                     val exportData = TempoExportData(
                         appVersion = BuildConfig.VERSION_NAME,
-                        schemaVersion = 30, // Keep in sync with AppDatabase version
+                        schemaVersion = 31, // Keep in sync with AppDatabase version
                         tracks = tracks,
                         artists = artists,
                         albums = albums,
@@ -129,6 +133,8 @@ class ImportExportManager @Inject constructor(
                         listeningEvents = listeningEvents,
                         enrichedMetadata = enrichedMetadata,
                         userPreferences = userPrefs,
+                        userLevel = userLevel,
+                        badges = badges,
                         artistAliases = artistAliases,
                         trackAliases = trackAliases,
                         manualContentMarks = manualContentMarks,
@@ -353,6 +359,19 @@ class ImportExportManager @Inject constructor(
             // Import UserPreferences
             data.userPreferences?.let { prefs ->
                 database.userPreferencesDao().upsert(prefs)
+            }
+            
+            // v6: Import UserLevel (gamification data)
+            data.userLevel?.let { level ->
+                database.gamificationDao().upsertUserLevel(level)
+                Log.i(TAG, "Imported user level: ${level.currentLevel} (${level.totalXp} XP)")
+            }
+            
+            // v6: Import Badges
+            if (data.badges.isNotEmpty()) {
+                database.gamificationDao().upsertBadges(data.badges)
+                val earnedCount = data.badges.count { it.isEarned }
+                Log.i(TAG, "Imported ${data.badges.size} badges ($earnedCount earned)")
             }
             
             // Import Artist Aliases (for merged artists)

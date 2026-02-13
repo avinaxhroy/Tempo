@@ -12,6 +12,9 @@ import androidx.lifecycle.viewModelScope
 import me.avinas.tempo.data.local.dao.ListeningEventDao
 import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.data.stats.TimeRange
+import me.avinas.tempo.data.stats.InsightCardData
+import me.avinas.tempo.data.stats.InsightType
+import me.avinas.tempo.data.stats.InsightPayload
 import me.avinas.tempo.ui.onboarding.dataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -31,7 +34,8 @@ class HomeViewModel @Inject constructor(
     private val statsRepository: StatsRepository,
     private val tokenStorage: me.avinas.tempo.data.remote.spotify.SpotifyTokenStorage,
     private val preferencesRepository: me.avinas.tempo.data.repository.PreferencesRepository,
-    private val listeningEventDao: ListeningEventDao
+    private val listeningEventDao: ListeningEventDao,
+    val gamificationRepository: me.avinas.tempo.data.repository.GamificationRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -123,12 +127,29 @@ class HomeViewModel @Inject constructor(
                 val discoveryStats = discoveryStatsDeferred.await()
                 val mostActiveHour = mostActiveHourDeferred.await()
                 val audioFeatures = audioFeaturesDeferred.await()
-                val insights = insightsDeferred.await()
                 val allTimeOverview = allTimeOverviewDeferred.await()
                 val userName = userNameDeferred.await()
                 
+                // Fetch Gamification Data
+                val userLevel = gamificationRepository.getUserLevel()
+                val nextBadge = gamificationRepository.getNextEarnableBadge()
+                
                 // Process chart data and generate labels for interactive trend line
                 val (dailyListening, chartLabels) = processChartData(timeRange, rawDailyListening)
+                
+                // Inject Gamification Card
+                val gamificationInsight = InsightCardData(
+                    title = "Level Progress", // Not displayed by GamificationCard
+                    description = "Your current level and next badge",
+                    type = InsightType.LOYALTY,
+                    payload = InsightPayload.GamificationProgress(
+                        level = userLevel,
+                        nextBadge = nextBadge
+                    )
+                )
+                
+                // Combine insights (Gamification Card first, then others)
+                val combinedInsights = listOf(gamificationInsight) + insightsDeferred.await()
                 
                 val hasData = overview.totalPlayCount > 0
                 val earliestTimestamp = statsRepository.getEarliestDataTimestamp()
@@ -146,7 +167,7 @@ class HomeViewModel @Inject constructor(
                         discoveryStats = discoveryStats,
                         mostActiveHour = mostActiveHour,
                         audioFeatures = audioFeatures,
-                        insights = insights,
+                        insights = combinedInsights,
                         userName = userName,
                         hasData = hasData,
                         isNewUser = isNewUser,

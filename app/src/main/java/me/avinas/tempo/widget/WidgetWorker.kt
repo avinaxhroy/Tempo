@@ -286,7 +286,11 @@ class WidgetWorker @AssistedInject constructor(
 
     private suspend fun downloadImage(context: Context, url: String, fileName: String): String? {
         val file = File(context.filesDir, fileName)
-        if (file.exists() && System.currentTimeMillis() - file.lastModified() < 24 * 60 * 60 * 1000) {
+        val prefs = context.getSharedPreferences("widget_image_cache", Context.MODE_PRIVATE)
+        val lastUrl = prefs.getString(fileName, null)
+
+        // Smart Cache: Only download if URL changed or file is missing
+        if (file.exists() && url == lastUrl) {
             return file.absolutePath
         }
         
@@ -302,6 +306,8 @@ class WidgetWorker @AssistedInject constructor(
             FileOutputStream(file).use { out ->
                 it.compress(Bitmap.CompressFormat.JPEG, 85, out)
             }
+            // Update cache mapping
+            prefs.edit().putString(fileName, url).apply()
             file.absolutePath
         }
     }

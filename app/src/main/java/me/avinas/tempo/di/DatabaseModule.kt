@@ -162,7 +162,8 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_26_27,  // All-Time story reminder tracking
                 AppDatabase.MIGRATION_27_28,  // Last.fm import support
                 AppDatabase.MIGRATION_28_29,  // Source index for Last.fm query performance
-                AppDatabase.MIGRATION_29_30   // Repair indices for existing users
+                AppDatabase.MIGRATION_29_30,  // Repair indices for existing users
+                AppDatabase.MIGRATION_30_31   // Gamification: levels & badges
             )
             // Enable Write-Ahead Logging for better concurrent read/write performance
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
@@ -234,4 +235,7 @@ object DatabaseModule {
     
     @Provides
     fun provideScrobbleArchiveDao(db: AppDatabase) = db.scrobbleArchiveDao()
+    
+    @Provides
+    fun provideGamificationDao(db: AppDatabase) = db.gamificationDao()
 }

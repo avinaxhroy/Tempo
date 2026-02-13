@@ -124,8 +124,6 @@ class TempoAppWidget : GlanceAppWidget() {
         }
     }
 
-    // ... (removed invalid import)
-
     @Composable
     private fun MediumWidgetContent(prefs: Preferences, availableHeight: androidx.compose.ui.unit.Dp) {
         val chartDataStr = prefs[stringPreferencesKey(WidgetHub.PREF_WEEKLY_CHART_DATA)] ?: ""
@@ -187,8 +185,6 @@ class TempoAppWidget : GlanceAppWidget() {
             }
         }
     }
-
-    // ... (removed orphaned code)
 
     @Composable
     private fun LargeWidgetContent(prefs: Preferences, availableHeight: androidx.compose.ui.unit.Dp) {

@@ -2,7 +2,7 @@
 
 **Thank you for your interest in making Tempo better!** 🎉
 
-Your contributions—whether bug fixes, features, documentation, or testing—are genuinely valued. This guide will help you contribute effectively while understanding the project's goals and workflow.
+Your contributions (whether bug fixes, features, documentation, or testing) are genuinely valued. This guide will help you contribute effectively while understanding the project's goals and workflow.
 
 ## About the Project
 
@@ -47,7 +47,7 @@ All PRs are reviewed carefully. I may:
 - Ask questions for clarification
 - Suggest alternative approaches
 
-**Note:** Not all PRs will be merged—but that's okay! Sometimes it's about timing, fit, or project direction. A declined PR isn't a judgment of your skills.
+**Note:** Not all PRs will be merged, but that's okay! Sometimes it's about timing, fit, or project direction. A declined PR isn't a judgment of your skills.
 
 ### Types of Contributions Welcome
 
@@ -108,7 +108,7 @@ Tempo has an established visual language and interaction model built with Jetpac
 ## Feature Contributions
 
 **Before building a new feature:**
-1. Check existing issues—it might already be planned
+1. Check existing issues (it might already be planned)
 2. Open an issue to discuss the idea
 3. Describe the **problem** you're solving, not just the solution
 4. Wait for feedback before investing significant time
@@ -126,7 +126,7 @@ Tempo is maintained by a single owner with a clear vision for the product. This 
 - **Quality**: Thoughtful review of all changes
 - **Sustainability**: Manageable scope and maintenance
 
-**This doesn't mean contributions are unwelcome**—it means they're reviewed carefully to ensure they benefit users and align with the project's goals.
+**This doesn't mean contributions are unwelcome**. It means they're reviewed carefully to ensure they benefit users and align with the project's goals.
 
 If a PR is declined, it's about fit with the project direction, not a judgment of your abilities. Feedback will be provided to help you understand the decision.
 
@@ -179,13 +179,13 @@ Your contributions remain attributed to you in the git history and may be acknow
 ## Getting Help
 
 - **Questions?** Open a discussion or issue
-- **Stuck?** Ask for help—collaboration is encouraged
+- **Stuck?** Ask for help. Collaboration is encouraged
 - **Found a bug?** Report it with steps to reproduce
 - **Idea for improvement?** Share it in an issue first
 
 ## Thank You
 
-Every contribution makes Tempo better—whether it's a one-line typo fix or a major feature. Your time and effort are valued.
+Every contribution makes Tempo better, whether it's a one-line typo fix or a major feature. Your time and effort are valued.
 
 Tempo is **source-available** to protect it from commercial exploitation while keeping it open for learning, auditing, and collaboration. This approach ensures the app stays free, privacy-focused, and user-first.
 
@@ -195,4 +195,4 @@ Thank you for being part of this project. 🎵
 
 **Ready to contribute?** Fork the repo and submit your first PR!
 
-**Questions?** Open an issue or discussion—I'm happy to help.
+**Questions?** Open an issue or discussion. I'm happy to help.

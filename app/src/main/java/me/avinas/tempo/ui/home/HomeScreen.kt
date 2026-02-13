@@ -5,6 +5,7 @@ import me.avinas.tempo.ui.theme.TempoDarkBackground
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -39,6 +40,10 @@ import me.avinas.tempo.data.stats.InsightType
 import me.avinas.tempo.data.stats.TimeRange
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.layout.onGloballyPositioned
+import me.avinas.tempo.data.local.entities.UserLevel
+import me.avinas.tempo.data.repository.GamificationRepository
+import me.avinas.tempo.ui.profile.CompactLevelRing
+import me.avinas.tempo.ui.components.LevelUpOverlay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,12 +54,33 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToTrack: (Long) -> Unit,
     onNavigateToSpotlight: (TimeRange?) -> Unit,
-    onNavigateToSupportedApps: () -> Unit
+    onNavigateToSupportedApps: () -> Unit,
+    onNavigateToProfile: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var isRefreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+    
+    // Gamification state
+    val gamificationRepo = viewModel.gamificationRepository
+    val userLevel by gamificationRepo.observeUserLevel().collectAsState(initial = null)
+    
+    // Level-up detection
+    var lastKnownLevel by remember { mutableStateOf(-1) }
+    var showLevelUp by remember { mutableStateOf(false) }
+    var levelUpLevel by remember { mutableStateOf(0) }
+    var levelUpTitle by remember { mutableStateOf("") }
+    
+    LaunchedEffect(userLevel?.currentLevel) {
+        val currentLevel = userLevel?.currentLevel ?: 0
+        if (lastKnownLevel >= 0 && currentLevel > lastKnownLevel) {
+            levelUpLevel = currentLevel
+            levelUpTitle = userLevel?.title ?: ""
+            showLevelUp = true
+        }
+        if (currentLevel > 0) lastKnownLevel = currentLevel
+    }
 
     DeepOceanBackground {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -76,12 +102,16 @@ fun HomeScreen(
                         .padding(bottom = 200.dp), // Space for Bottom Nav and Floating Filter
                     verticalArrangement = Arrangement.spacedBy(0.dp) // Reset spacing to handle it manually
                 ) {
-                    // NEW: Vibe Header
+                    // NEW: Vibe Header with integrated Level Ring
                     VibeHeader(
                         energy = uiState.audioFeatures?.averageEnergy ?: 0.5f,
                         valence = uiState.audioFeatures?.averageValence ?: 0.5f,
                         userName = uiState.userName ?: "User",
-                        isNewUser = uiState.isNewUser
+                        isNewUser = uiState.isNewUser,
+                        userLevel = userLevel?.currentLevel,
+                        levelProgress = userLevel?.levelProgress ?: 0f,
+                        levelTitle = userLevel?.title,
+                        onLevelClick = onNavigateToProfile
                     )
                     
                     Column(
@@ -155,23 +185,7 @@ fun HomeScreen(
                                 topTrackImage = uiState.topTrack?.albumArtUrl
                             )
                             
-                            // NEW: Dynamic Insight Feed
-                            // Replaces WeekInReview, DiscoverySection, and HabitInsights
-                            if (uiState.insights.isNotEmpty()) {
-                                Text(
-                                    text = "Your Signal",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-                                )
-                                
-                                InsightFeed(
-                                    insights = uiState.insights,
-                                    onNavigateToTrack = onNavigateToTrack,
-                                    onNavigateToArtist = { /* Handle Artist Nav */ }
-                                )
-                            }
+
                         } else if (!uiState.isLoading) {
                             // Empty State
                             // Use dynamic height to ensure centering and prevent truncation on varying screen sizes
@@ -181,6 +195,25 @@ fun HomeScreen(
                                     .height(me.avinas.tempo.ui.utils.rememberScreenHeightPercentage(0.7f)),
                                 timeRange = if (uiState.isNewUser) null else uiState.selectedTimeRange,
                                 onCheckSupportedApps = onNavigateToSupportedApps
+                            )
+                        }
+                    }
+                    
+                    // NEW: Dynamic Insight Feed (Always visible)
+                    if (uiState.insights.isNotEmpty()) {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                             Text(
+                                text = "Your Signal",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                            )
+                            
+                            InsightFeed(
+                                insights = uiState.insights,
+                                onNavigateToTrack = onNavigateToTrack,
+                                onNavigateToArtist = { /* Handle Artist Nav */ }
                             )
                         }
                     }
@@ -198,39 +231,41 @@ fun HomeScreen(
             val backgroundColor = TempoDarkBackground.copy(alpha = headerAlpha)
             val elevation = if (scrollOffset > 0) 4.dp * headerAlpha else 0.dp
 
-            Surface(
-                color = Color.Transparent,
-                shadowElevation = elevation,
-                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth()
+            // Custom Top Bar (Non-blocking when transparent)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .background(backgroundColor)
+                    .statusBarsPadding()
+                    .height(64.dp) // Standard AppBar height
             ) {
-                TopAppBar(
-                    title = { 
-                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "Home",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White.copy(alpha = headerAlpha) // Fade in title only when scrolled
-                            )
-                        }
-                    },
-                    actions = {
-                        IconButton(
-                            onClick = onNavigateToSettings,
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = Color.White.copy(alpha = 0.1f),
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = backgroundColor,
-                        titleContentColor = Color.White,
-                        actionIconContentColor = Color.White
+                // Title
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Home",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = headerAlpha)
                     )
-                )
+                }
+                
+                // Settings Button
+                IconButton(
+                    onClick = onNavigateToSettings,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 8.dp),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = if (headerAlpha > 0.5f) Color.Transparent else Color.White.copy(alpha = 0.1f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                }
             }
             
             // Time Period Filter (Floating)
@@ -276,6 +311,15 @@ fun HomeScreen(
                     // Dismiss the reminder
                     viewModel.dismissSpotlightReminder()
                 }
+            )
+        }
+        
+        // Level Up Celebration Overlay
+        if (showLevelUp) {
+            LevelUpOverlay(
+                newLevel = levelUpLevel,
+                title = levelUpTitle,
+                onDismiss = { showLevelUp = false }
             )
         }
     }

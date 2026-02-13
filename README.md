@@ -88,7 +88,7 @@ Tempo is packed with engineering details designed for reliability and depth.
 ### 🛡️ Anti-Kill Engineering
 Android OEMs (especially Xiaomi/HyperOS) are notorious for killing background apps.
 - **OemBackgroundHelper**: A specialized module that detects the specific OS (MIUI, HyperOS) and guides users to the exact settings needed to keep Tempo alive.
-- **Robustness**: Includes `ServiceHealth` workers that self-heal if the background service is terminated.
+- **Reliability**: Includes `ServiceHealth` workers that self-heal if the background service is terminated.
 
 ### 🔊 ReccoBeats Enrichment
 When Spotify metadata fails, Tempo falls back to its own **4-Layer Enrichment Engine**:
@@ -138,14 +138,14 @@ Tempo uses a **Local-First** architecture built on **Room Database**.
 
 **Contributions are welcome and appreciated!** 🎉
 
-Tempo is a **source-available** project that operates with the collaborative spirit of open source while protecting against commercial exploitation. The code is open for you to read, learn from, modify, and contribute to — but with some guardrails to ensure the project remains user-focused and free.
+Tempo is a **source-available** project that operates with the collaborative spirit of open source while protecting against commercial exploitation. The code is open for you to read, learn from, modify, and contribute to, but with some guardrails to ensure the project remains user-focused and free.
 
 ### Why This Approach?
 
 I built Tempo to solve a real problem, and I want to keep it:
-- **Free forever** — No ads, no subscriptions, no tracking
-- **User-focused** — Not a generic playground for every possible feature
-- **Protected from misuse** — Preventing commercial knock-offs that exploit the work
+- **Free forever**: No ads, no subscriptions, no tracking
+- **User-focused**: Not a generic playground for every possible feature
+- **Protected from misuse**: Preventing commercial knock-offs that exploit the work
 
 The license prevents commercial use and redistribution, but **you can still contribute meaningfully**:
 
@@ -171,13 +171,13 @@ Fork → Create Branch → Make Changes → Submit PR
 
 All merged contributors are credited in commit history. Significant contributions may be highlighted in documentation.
 
-**Questions? Open an issue or discussion.** No contribution is too small — from fixing typos to refactoring core logic, all thoughtful improvements are valued.
+**Questions? Open an issue or discussion.** No contribution is too small. From fixing typos to refactoring core logic, all thoughtful improvements are valued.
 
 ---
 
 ## 📄 License & Philosophy
 
-Tempo uses a **Source Available License** — a middle ground between proprietary and fully open source.
+Tempo uses a **Source Available License**, a middle ground between proprietary and fully open source.
 
 ### What This Means For You
 

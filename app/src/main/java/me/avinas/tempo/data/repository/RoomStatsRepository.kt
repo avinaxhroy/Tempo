@@ -642,24 +642,30 @@ class RoomStatsRepository @Inject constructor(
      * 
      * For multi-artist tracks, we need to find the correct image for each individual artist.
      * Priority order:
-     * 0. track_artists junction table lookup (most accurate - uses relational data)
-     * 1. Artists table exact match (if artist has been enriched separately)
-     * 2. Artists table partial match (for featured artists in multi-artist entries)
-     * 3. Tracks where this artist is the ONLY/PRIMARY artist (exact match)
-     * 4. Tracks where this artist is listed FIRST (e.g., "Artist, feat. Other")
-     * 5. Any track containing this artist (now filters out featured contexts)
-     * 6. iTunes API search (high quality, no auth required)
-     * 7. Spotify API search (saves result to database for future use)
+     * 0. Artists table image_url (most reliable - directly assigned to this specific artist)
+     * 1. track_artists junction table lookup with PRIMARY role filter (enriched_metadata)
+     * 2. Tracks where this artist is the ONLY/PRIMARY artist (exact match)
+     * 3. Tracks where this artist is listed FIRST (e.g., "Artist, feat. Other")
+     * 4. Any track containing this artist (PRIMARY role only)
+     * 5. iTunes API search (high quality, no auth required)
+     * 6. Spotify API search (saves result to database for future use)
      */
     private suspend fun getArtistImageUrlWithFallback(artistName: String): String? {
-        // 0. Try track_artists junction table (most accurate for properly linked artists)
-        // First, try to find the artist in the artists table to get their ID
+        // 0. First find the artist entity in the database
         val normalizedName = me.avinas.tempo.data.local.entities.Artist.normalizeName(artistName)
         val artistEntity = artistDao.getArtistByNormalizedName(normalizedName)
             ?: artistDao.getArtistByName(artistName)
         
         if (artistEntity != null) {
-            // Try to get image from tracks linked via track_artists junction table
+            // 0a. Check artist entity's own image_url first (most reliable, matches artist details screen behavior)
+            // This image is directly assigned to this specific artist, so it's always correct.
+            if (!artistEntity.imageUrl.isNullOrBlank()) {
+                Log.d(TAG, "Found artist image from artist entity: $artistName")
+                return artistEntity.imageUrl
+            }
+            
+            // 0b. Try enriched_metadata via track_artists junction table (PRIMARY role only)
+            // This ensures featured artists don't get the main artist's image from enriched_metadata.
             val fromTrackArtists = statsDao.getArtistImageByArtistId(artistEntity.id)
             if (!fromTrackArtists.isNullOrBlank()) {
                 Log.d(TAG, "Found artist image via track_artists junction table: $artistName")
@@ -669,21 +675,7 @@ class RoomStatsRepository @Inject constructor(
             }
         }
         
-        // 1. First try the artists table exact match (most reliable)
-        val fromArtistTable = artistDao.getArtistByName(artistName)?.imageUrl
-        if (!fromArtistTable.isNullOrBlank()) {
-            Log.d(TAG, "Found artist image from artists table (exact): $artistName")
-            return fromArtistTable
-        }
-        
-        // 1b. Try artists table with partial match
-        val fromArtistTablePartial = artistDao.getArtistByNamePartial(artistName)?.imageUrl
-        if (!fromArtistTablePartial.isNullOrBlank()) {
-            Log.d(TAG, "Found artist image from artists table (partial): $artistName")
-            return fromArtistTablePartial
-        }
-        
-        // 2. Try tracks where this artist is the primary/solo artist
+        // 1. Try tracks where this artist is the primary/solo artist
         val asPrimaryArtist = statsDao.getArtistImageAsPrimaryArtist(artistName)
         if (!asPrimaryArtist.isNullOrBlank()) {
             Log.d(TAG, "Found artist image as primary artist: $artistName")
@@ -692,7 +684,7 @@ class RoomStatsRepository @Inject constructor(
             return asPrimaryArtist
         }
         
-        // 3. Try tracks where this artist is listed first in multi-artist string
+        // 2. Try tracks where this artist is listed first in multi-artist string
         val asFirstArtist = statsDao.getArtistImageAsFirstArtist(artistName)
         if (!asFirstArtist.isNullOrBlank()) {
             Log.d(TAG, "Found artist image as first artist: $artistName")

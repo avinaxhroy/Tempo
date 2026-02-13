@@ -242,6 +242,7 @@ class ReccoBeatsEnrichmentService @Inject constructor(
             
             if (!searchResponse.isSuccessful) {
                 return when (searchResponse.code()) {
+                    404 -> ReccoBeatsResult.TrackNotFound // Track not in ReccoBeats database
                     429 -> ReccoBeatsResult.Error("Rate limited", retryable = true)
                     else -> ReccoBeatsResult.Error("Search failed: ${searchResponse.code()}", retryable = searchResponse.code() >= 500)
                 }

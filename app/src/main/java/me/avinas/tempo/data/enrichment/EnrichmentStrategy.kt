@@ -175,17 +175,7 @@ class LastFmEnrichmentSource @Inject constructor(
         
         val result = lastFmService.supplementMetadata(track, currentMetadata)
         return if (result is LastFmEnrichmentService.LastFmResult.Success) {
-            // supplementMetadata updates the DB directly? Let's check. 
-            // Reading LastFmEnrichmentService.kt outline again... 
-            // `supplementMetadata` returns a Result object. It seems it DOES update the DB internally in `updateMetadataWithLastFm`.
-            // BUT, for this pure strategy approach, we'd ideally want it to return the object.
-            // Let's assume for now we re-read the metadata from DB or modify the object in place?
-            // Actually, `supplementMetadata` takes `existingMetadata` and likely saves to DB. 
-            // We should reload or assume the service acts as a side-effect.
-            // Wait, looking at `MusicBrainzEnrichmentService`, it returns the metadata object.
-            // Let's assume we return the currentMetadata because the service updated the DB.
-            // Ideally we'd return the *modified* object.
-            currentMetadata // Placeholder, strictly we rely on the side effect of service
+            currentMetadata
         } else {
             null
         }
@@ -248,25 +238,13 @@ class ITunesEnrichmentSource @Inject constructor(
             
             // Handle artist images for ALL artists
             // This ensures secondary artists (feat. X) also get their images enriched and saved
-            enrichAndPersistAllArtists(track.artist, result)
+            // Returns the primary artist's image URL (if found) to avoid a duplicate fetch
+            val primaryArtistImageUrl = enrichAndPersistAllArtists(track.artist, result)
             
-            // If the search result gave us an artist image for the primary artist (via artistId), use it for the track metadata too
-            // But checking/fetching it is now handled in enrichAndPersistAllArtists/iTunesService
-            // For the track metadata itself (iTunesArtistImageUrl), we want the PRIMARY artist's image
+            // Use the primary artist image for the track metadata if we don't have one yet
             var finalMetadata = updated
-            if (base.iTunesArtistImageUrl == null) {
-                 // Try to get it from the result if we just fetched it, or look it up
-                 if (result.artistId != null) {
-                      // We can try fetching it (cached if we just did it in enrichAndPersistAllArtists?)
-                      // Optimization: caching in iTunesService would be nice, but for now we might fetch twice if not careful.
-                      // Actually, enrichAndPersistAllArtists likely fetched it.
-                      // Let's just try to get it from the DB now? Or just fetch again (it's fast/cached by OkHttp potentially).
-                      // Better: Let's assume result.artistId corresponds to the primary artist.
-                      val primaryImg = iTunesService.fetchArtistImage(result.artistId)
-                      if (primaryImg != null) {
-                          finalMetadata = updated.copy(iTunesArtistImageUrl = primaryImg)
-                      }
-                 }
+            if (base.iTunesArtistImageUrl == null && primaryArtistImageUrl != null) {
+                finalMetadata = updated.copy(iTunesArtistImageUrl = primaryArtistImageUrl)
             }
             
             metadataDao.upsert(finalMetadata)
@@ -280,17 +258,15 @@ class ITunesEnrichmentSource @Inject constructor(
      * Persist artist images for ALL artists on the track to the artists table.
      * This prevents the Stats screen from needing to make redundant iTunes API calls.
      */
-    private suspend fun enrichAndPersistAllArtists(trackArtistString: String, result: ITunesEnrichmentService.iTunesResult.Success) {
+    /**
+     * Persist artist images for ALL artists on the track to the artists table.
+     * Returns the primary artist's image URL (if found) to avoid duplicate fetches.
+     */
+    private suspend fun enrichAndPersistAllArtists(trackArtistString: String, result: ITunesEnrichmentService.iTunesResult.Success): String? {
         // 1. Parse all artists from the track string (e.g. "Artist A & Artist B")
         val allArtists = ArtistParser.getAllArtists(trackArtistString)
-        
-        // 2. Also consider the artist returned by iTunes if different
-        val iTunesArtist = if (result.artistId != null) {
-            // Note: iTunes result doesn't give us the name directly in the Success object except via album metadata or we have to infer it.
-            // Actually result.artistId is just an ID. We don't have the name.
-            // But we can try to match the ID to one of our parsed artists later if needed.
-            null 
-        } else null
+        val primaryArtist = ArtistParser.getPrimaryArtist(trackArtistString)
+        var primaryArtistImageUrl: String? = null
 
         Log.d("EnrichmentSource", "Enriching images for artists: $allArtists")
 
@@ -303,33 +279,38 @@ class ITunesEnrichmentSource @Inject constructor(
 
                 if (existingArtist != null && !existingArtist.imageUrl.isNullOrBlank()) {
                     Log.d("EnrichmentSource", "Artist '$artistName' already has image, skipping.")
+                    // Still capture the primary artist's image for reuse
+                    if (ArtistParser.isSameArtist(artistName, primaryArtist)) {
+                        primaryArtistImageUrl = existingArtist.imageUrl
+                    }
                     continue
                 }
 
-                // If this is the primary artist and we already have the ID/Image from the main search result
-                // (The main search result `result` usually corresponds to the primary artist)
-                val primaryArtist = ArtistParser.getPrimaryArtist(trackArtistString)
-                if (ArtistParser.isSameArtist(artistName, primaryArtist) && result.artistId != null) {
-                    // We might have fetched it in the main flow, or we can fetch it now using the ID
+                // If this is the primary artist and we already have the ID from the main search result
+                val isPrimary = ArtistParser.isSameArtist(artistName, primaryArtist)
+                if (isPrimary && result.artistId != null) {
                     val imageUrl = iTunesService.fetchArtistImage(result.artistId)
                     if (imageUrl != null) {
                         persistImage(artistName, imageUrl, result.artistId.toString())
+                        primaryArtistImageUrl = imageUrl
                         continue
                     }
                 }
 
                 // For other artists (or if primary failed), do a dedicated search
-                // This is what StatsRepository was doing lazily - now we do it eagerly in background
                 Log.d("EnrichmentSource", "Fetching missing image for artist: $artistName")
                 val imageUrl = iTunesService.searchAndFetchArtistImage(artistName)
                 if (imageUrl != null) {
                     persistImage(artistName, imageUrl, null)
+                    if (isPrimary) primaryArtistImageUrl = imageUrl
                 }
 
             } catch (e: Exception) {
                 Log.w("EnrichmentSource", "Failed to enrich image for artist '$artistName': ${e.message}")
             }
         }
+        
+        return primaryArtistImageUrl
     }
 
     private suspend fun persistImage(name: String, imageUrl: String, artistId: String?) {
@@ -342,9 +323,6 @@ class ITunesEnrichmentSource @Inject constructor(
                 artistDao.updateImageUrl(artist.id, imageUrl)
                 Log.d("EnrichmentSource", "Persisted iTunes artist image for: $name")
             }
-            
-            // Update artist ID if available (store as Apple Music ID? We don't have a specific column for Apple ID, 
-            // maybe we shouldn't force it into Spotify/MB IDs. Skipping ID update for now unless we add a column).
         } catch (e: Exception) {
             Log.w("EnrichmentSource", "Failed to persist artist '$name': ${e.message}")
         }
