@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import me.avinas.tempo.data.local.entities.Badge
 import me.avinas.tempo.data.local.entities.UserLevel
 import me.avinas.tempo.data.repository.GamificationRepository
+import me.avinas.tempo.data.stats.GamificationEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -111,7 +112,7 @@ data class ProfileUiState(
         }
         
     val almostUnlockedBadges: List<Badge>
-        get() = allBadges.filter { !it.isEarned && it.progressFraction >= 0.7f }
+        get() = allBadges.filter { !it.isMaxed && it.progressFraction >= 0.7f }
 
     val filteredBadges: List<Badge>
         get() = if (selectedCategory == null) allBadges
@@ -119,6 +120,16 @@ data class ProfileUiState(
     
     val earnedCount: Int get() = allBadges.count { it.isEarned }
     val totalCount: Int get() = allBadges.size
+
+    /** Total stars earned across all progression badges (excludes beginner badges) */
+    val totalStars: Int get() = allBadges
+        .filter { it.badgeId !in GamificationEngine.BEGINNER_BADGES }
+        .sumOf { it.stars }
+
+    /** Maximum possible stars (5 per progression badge, excludes beginner badges) */
+    val maxPossibleStars: Int get() = allBadges
+        .filter { it.badgeId !in GamificationEngine.BEGINNER_BADGES }
+        .size * 5
     
     val categories: List<String>
         get() = allBadges.map { it.category }.distinct().sorted()

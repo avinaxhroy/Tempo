@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.automirrored.filled.CallMerge
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -84,7 +85,8 @@ fun SongDetailsScreen(
                 releaseYear = uiState.releaseYear,
                 recordLabel = uiState.recordLabel,
                 isSpotifyConnected = isSpotifyConnected,
-                onNavigateBack = onNavigateBack
+                onNavigateBack = onNavigateBack,
+                viewModel = viewModel
             )
         } else {
             // Error state
@@ -94,6 +96,16 @@ fun SongDetailsScreen(
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyLarge
                 )
+            }
+        }
+
+        // Handle navigation after successful deletion
+        // Guard: skip when isLoading is true to avoid racing with initial data fetch
+        // (trackDetails is null during initial load AND after deletion)
+        LaunchedEffect(uiState.showDeleteDialog, uiState.trackDetails, uiState.isLoading) {
+            if (!uiState.isLoading && !uiState.showDeleteDialog && !uiState.isDeleting && uiState.trackDetails == null) {
+                // Successfully deleted (or track not found after load), navigate back
+                onNavigateBack()
             }
         }
     }
@@ -111,7 +123,8 @@ fun SongDetailsContent(
     releaseYear: Int?,
     recordLabel: String?,
     isSpotifyConnected: Boolean,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    viewModel: SongDetailsViewModel = hiltViewModel()
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
@@ -188,6 +201,20 @@ fun SongDetailsContent(
                             onClick = {
                                 showMenu = false
                                 showMergeDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete Song", color = Color.Red) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = Color.Red
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                viewModel.showDeleteDialog()
                             }
                         )
                     }
@@ -272,6 +299,70 @@ fun SongDetailsContent(
             sourceTrackId = trackDetails.track.id,
             onDismiss = { showMergeDialog = false },
             onTrackSelected = { /* Handled in ViewModel */ }
+        )
+    }
+
+    val uiState by viewModel.uiState.collectAsState()
+    if (uiState.showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDeleteDialog() },
+            icon = {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text("Delete Song?") },
+            text = {
+                Column {
+                    Text("Are you sure you want to delete this song?")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "\"${trackDetails.track.title}\" by ${trackDetails.track.artist}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "This will permanently delete:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("• The song from your library")
+                    Text("• All listening history (${trackDetails.playCount} plays)")
+                    Text("• Any enriched metadata")
+                    Text("• Artist relationships")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "This action cannot be undone.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            confirmButton = {
+                if (uiState.isDeleting) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                } else {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteTrack()
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("DELETE")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissDeleteDialog() }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }
@@ -524,13 +615,17 @@ fun ListeningTrendsChart(history: List<DailyListening>) {
                     Text("No data available", color = Color.White.copy(alpha = 0.5f))
                 }
             } else {
+                // Cache path data to avoid recalculating on every recomposition
+                val chartData = remember(history) {
+                    val maxPlays = history.maxOfOrNull { it.playCount }?.toFloat()?.coerceAtLeast(1f) ?: 1f
+                    val yRange = maxPlays * 1.25f
+                    Triple(history, maxPlays, yRange)
+                }
                 Canvas(modifier = Modifier
                     .fillMaxWidth()
                     .height(150.dp)
                 ) {
-                    val maxPlays = history.maxOfOrNull { it.playCount }?.toFloat()?.coerceAtLeast(1f) ?: 1f
-                    // Add padding to top (max value at 80% height)
-                    val yRange = maxPlays * 1.25f
+                    val yRange = chartData.third
                     
                     val widthPerPoint = size.width / (history.size - 1).coerceAtLeast(1)
                     

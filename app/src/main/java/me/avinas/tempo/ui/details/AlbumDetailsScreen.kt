@@ -3,9 +3,11 @@ package me.avinas.tempo.ui.details
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -13,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -118,27 +121,29 @@ fun AlbumDetailsContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Tracks",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "${albumDetails.tracks.size} songs",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
+                    Column {
+                        Text(
+                            text = "Tracks",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "${albumDetails.tracks.size} ${if (albumDetails.tracks.size == 1) "song" else "songs"}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
             }
 
             // Track List
-            items(
-                items = albumDetails.tracks.distinctBy { it.track.id },
-                key = { track -> track.track.id }
-            ) { track ->
-                val index = albumDetails.tracks.indexOf(track)
+            itemsIndexed(
+                items = albumDetails.tracks,
+                key = { _, track -> track.track.id }
+            ) { index, track ->
                 AlbumTrackItem(
                     track = track,
                     trackNumber = index + 1,
@@ -394,76 +399,105 @@ fun AlbumStatsSection(albumDetails: AlbumDetails) {
 
 @Composable
 fun AlbumTrackItem(track: TrackWithStats, trackNumber: Int, onClick: () -> Unit) {
-    GlassCard(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clickable(onClick = onClick),
-        backgroundColor = Color.White.copy(alpha = 0.05f),
-        contentPadding = PaddingValues(12.dp)
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        color = Color.Transparent,
+        shape = RoundedCornerShape(12.dp),
+        onClick = onClick
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+        GlassCard(
+            modifier = Modifier.fillMaxWidth(),
+            backgroundColor = Color.White.copy(alpha = 0.05f),
+            contentPadding = PaddingValues(14.dp)
         ) {
-            // Track Number
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = trackNumber.toString(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.8f)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Track Info
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = track.track.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Track Number
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color(0xFF9333EA).copy(alpha = 0.3f),
+                                    Color(0xFFC026D3).copy(alpha = 0.3f)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "${track.playCount} plays",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f)
+                        text = trackNumber.toString(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
+                }
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                // Track Info
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "•",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.4f)
+                        text = track.track.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = formatDuration(track.track.duration ?: 0),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Play count
+                        Text(
+                            text = "${track.playCount} ${if (track.playCount == 1) "play" else "plays"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.6f)
+                        )
+                        
+                        // Duration (only if valid)
+                        val duration = track.track.duration ?: 0L
+                        if (duration > 0) {
+                            Text(
+                                text = "•",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.4f)
+                            )
+                            Text(
+                                text = formatDuration(duration),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Play Icon with background
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = "Play",
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
-
-            // Play Icon
-            Icon(
-                Icons.Default.PlayArrow,
-                contentDescription = "Play",
-                tint = Color.White.copy(alpha = 0.6f),
-                modifier = Modifier.size(24.dp)
-            )
         }
     }
 }

@@ -33,11 +33,15 @@ class AlbumDetailsViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             try {
                 val details = statsRepository.getAlbumDetails(albumId)
+                // Deduplicate tracks once in ViewModel instead of on every recomposition
+                val deduplicatedDetails = details.copy(
+                    tracks = details.tracks.distinctBy { it.track.id }
+                )
                 
                 _uiState.update { 
                     it.copy(
                         isLoading = false,
-                        albumDetails = details
+                        albumDetails = deduplicatedDetails
                     ) 
                 }
             } catch (e: Exception) {
@@ -52,6 +56,7 @@ class AlbumDetailsViewModel @Inject constructor(
     }
 }
 
+@androidx.compose.runtime.Immutable
 data class AlbumDetailsUiState(
     val isLoading: Boolean = true,
     val albumDetails: AlbumDetails? = null,

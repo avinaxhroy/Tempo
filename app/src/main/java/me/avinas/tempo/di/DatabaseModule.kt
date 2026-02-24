@@ -163,7 +163,8 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_27_28,  // Last.fm import support
                 AppDatabase.MIGRATION_28_29,  // Source index for Last.fm query performance
                 AppDatabase.MIGRATION_29_30,  // Repair indices for existing users
-                AppDatabase.MIGRATION_30_31   // Gamification: levels & badges
+                AppDatabase.MIGRATION_30_31,  // Gamification: levels & badges
+                AppDatabase.MIGRATION_31_32   // Badge star tiers
             )
             // Enable Write-Ahead Logging for better concurrent read/write performance
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)

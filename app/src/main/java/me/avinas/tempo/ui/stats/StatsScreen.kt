@@ -336,22 +336,11 @@ fun GlassStatItem(rank: Int, item: Any, onClick: () -> Unit) {
         else -> Quad("", "", null, 0L)
     }
 
-    // "Fused" Styling: Premium colors for all items
-    // Harmonized palette: Plums, Wines, Roses (No Blue-Violet)
-    val palette = listOf(
-        Color(0xFFC026D3), // Fuchsia 600 (Orchid)
-        Color(0xFFDB2777), // Pink 600 (Rose)
-        Color(0xFFF59E0B), // Gold
-        Color(0xFF9333EA), // Purple 600
-        Color(0xFFBE185D), // Pink 700 (Raspberry)
-        Color(0xFFE879F9)  // Orchid
-    )
-
     val (tintColor, bgAlpha) = when(rank) {
         1 -> Color(0xFFF59E0B) to 0.15f // Gold
         2 -> Color(0xFFE879F9) to 0.12f // Dusty Orchid
         3 -> Color(0xFFB45309) to 0.12f // Bronze
-        else -> palette[(rank - 4) % palette.size] to 0.15f // Cycle through palette (Increased to 0.15f for better visibility)
+        else -> GlassStatItemPalette[(rank - 4) % GlassStatItemPalette.size] to 0.15f // Cycle through palette
     }
     
     // Smart Composition: Rank 1-3 get 3D/HighProminence, Rest get 2D/LowProminence
@@ -411,6 +400,16 @@ fun GlassStatItem(rank: Int, item: Any, onClick: () -> Unit) {
     }
 }
 
+// Top-level palette to avoid allocation on every recomposition
+private val GlassStatItemPalette = listOf(
+    Color(0xFFC026D3), // Fuchsia 600 (Orchid)
+    Color(0xFFDB2777), // Pink 600 (Rose)
+    Color(0xFFF59E0B), // Gold
+    Color(0xFF9333EA), // Purple 600
+    Color(0xFFBE185D), // Pink 700 (Raspberry)
+    Color(0xFFE879F9)  // Orchid
+)
+
 // Utility class for destructuring
 data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
@@ -439,7 +438,7 @@ fun StatsTabSelector(selectedTab: StatsTab, onTabSelected: (StatsTab) -> Unit) {
             .padding(4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        StatsTab.values().forEach { tab ->
+        StatsTab.entries.forEach { tab ->
             val isSelected = tab == selectedTab
             val MutedFuchsia = Color(0xFFCE58E0) // Desaturated for tabs
             val backgroundColor by animateColorAsState(if (isSelected) MutedFuchsia else Color.Transparent, label = "tabBackgroundColor")
@@ -502,7 +501,7 @@ fun SortBySelector(
                 )
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                SortBy.values().forEach { sortBy ->
+                SortBy.entries.forEach { sortBy ->
                     DropdownMenuItem(
                         text = { Text(when (sortBy) {
                             SortBy.COMBINED_SCORE -> "Combined Score"

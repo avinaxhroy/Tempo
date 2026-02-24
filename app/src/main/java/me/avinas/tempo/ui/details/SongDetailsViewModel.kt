@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.data.repository.EnrichedMetadataRepository
+import me.avinas.tempo.data.repository.TrackRepository
 import me.avinas.tempo.data.stats.DailyListening
 import me.avinas.tempo.data.stats.TagBasedMoodAnalyzer
 import me.avinas.tempo.data.stats.TimeRange
@@ -20,7 +21,7 @@ import javax.inject.Inject
 
 /**
  * ViewModel for Song Details screen.
- * 
+ *
  * Data Flow Pattern: Enrichment → Database → UI
  * - This ViewModel ONLY reads from database via Repository (never makes API calls)
  * - Track metadata is fetched from database cache
@@ -33,6 +34,7 @@ import javax.inject.Inject
 class SongDetailsViewModel @Inject constructor(
     private val statsRepository: StatsRepository,
     private val enrichedMetadataRepository: EnrichedMetadataRepository,
+    private val trackRepository: TrackRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -100,8 +102,48 @@ class SongDetailsViewModel @Inject constructor(
     fun refresh() {
         loadTrackDetails()
     }
+
+    /**
+     * Delete the track and all its associated data from the database.
+     * This includes listening events, enriched metadata, artist relationships, and content marks.
+     */
+    fun deleteTrack() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeleting = true) }
+            try {
+                val result = trackRepository.deleteTrackWithAllData(trackId)
+                if (result.success) {
+                    _uiState.update { it.copy(isDeleting = false, showDeleteDialog = false, trackDetails = null) }
+                    // Navigation back is handled by LaunchedEffect in UI (detects trackDetails == null)
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isDeleting = false,
+                            error = result.error ?: "Failed to delete song"
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isDeleting = false,
+                        error = e.message ?: "Failed to delete song"
+                    )
+                }
+            }
+        }
+    }
+
+    fun showDeleteDialog() {
+        _uiState.update { it.copy(showDeleteDialog = true) }
+    }
+
+    fun dismissDeleteDialog() {
+        _uiState.update { it.copy(showDeleteDialog = false) }
+    }
 }
 
+@androidx.compose.runtime.Immutable
 data class SongDetailsUiState(
     val isLoading: Boolean = true,
     val trackDetails: TrackDetails? = null,
@@ -112,5 +154,7 @@ data class SongDetailsUiState(
     val releaseDate: String? = null,
     val releaseYear: Int? = null,
     val recordLabel: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val showDeleteDialog: Boolean = false,
+    val isDeleting: Boolean = false
 )

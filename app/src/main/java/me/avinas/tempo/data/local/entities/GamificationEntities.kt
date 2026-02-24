@@ -78,11 +78,19 @@ data class Badge(
     @ColumnInfo(name = "icon_name") val iconName: String,
     val category: String,      // MILESTONE, TIME, STREAK, DISCOVERY, ENGAGEMENT, LEVEL
     @ColumnInfo(name = "earned_at") val earnedAt: Long = 0,
-    val progress: Int = 0,     // Current progress
-    @ColumnInfo(name = "max_progress") val maxProgress: Int = 1,
-    @ColumnInfo(name = "is_earned") val isEarned: Boolean = false
+    val progress: Int = 0,     // Current progress toward next star
+    @ColumnInfo(name = "max_progress") val maxProgress: Int = 1, // Threshold for next star
+    @ColumnInfo(name = "is_earned") val isEarned: Boolean = false,
+    val stars: Int = 0         // Star count: 0=locked, 1-5=earned stars
 ) {
-    /** Progress as a fraction 0.0 to 1.0 */
+    /** Progress toward next star as a fraction 0.0 to 1.0 */
     val progressFraction: Float
         get() = if (maxProgress > 0) (progress.toFloat() / maxProgress).coerceIn(0f, 1f) else 0f
+
+    /** Whether this badge is fully maxed at 5 stars */
+    val isMaxed: Boolean get() = stars >= 5
+
+    /** Star label like "★★★☆☆" */
+    val starLabel: String
+        get() = "★".repeat(stars) + "☆".repeat((5 - stars).coerceAtLeast(0))
 }

@@ -31,7 +31,7 @@ interface GamificationDao {
     @Query("SELECT * FROM badges WHERE is_earned = 1 ORDER BY earned_at DESC")
     suspend fun getEarnedBadges(): List<Badge>
     
-    @Query("SELECT * FROM badges ORDER BY is_earned DESC, category ASC, max_progress ASC")
+    @Query("SELECT * FROM badges ORDER BY is_earned DESC, stars DESC, category ASC, max_progress ASC")
     fun observeAllBadges(): Flow<List<Badge>>
     
     @Query("SELECT * FROM badges WHERE is_earned = 1 ORDER BY earned_at DESC")

@@ -332,6 +332,13 @@ class EnrichmentWorker @AssistedInject constructor(
             // Invalidate stats cache to ensure UI picks up new metadata immediately
             statsRepository.invalidateCache()
             
+            // Only notify UI for user-triggered enrichments (e.g., refresh artist image)
+            // Background batch enrichments should not trigger global UI refreshes
+            if (specificTrackId != null) {
+                statsRepository.notifyMetadataUpdate()
+                Log.d(TAG, "Notified UI of metadata update for track $specificTrackId")
+            }
+            
             Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "Enrichment work failed", e)

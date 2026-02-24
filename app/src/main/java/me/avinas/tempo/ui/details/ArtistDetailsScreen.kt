@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MergeType
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.MusicNote
@@ -85,7 +86,8 @@ fun ArtistDetailsScreen(
                 artistDetails = artistDetails,
                 uiState = uiState,
                 onNavigateBack = onNavigateBack,
-                onNavigateToSong = onNavigateToSong
+                onNavigateToSong = onNavigateToSong,
+                onRefreshImage = { viewModel.refreshArtistImage() }
             )
         } else {
             // Error state with back button and retry option
@@ -145,7 +147,8 @@ fun ArtistDetailsContent(
     artistDetails: ArtistDetails,
     uiState: ArtistDetailsUiState,
     onNavigateBack: () -> Unit,
-    onNavigateToSong: (Long) -> Unit
+    onNavigateToSong: (Long) -> Unit,
+    onRefreshImage: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
@@ -209,7 +212,7 @@ fun ArtistDetailsContent(
                     modifier = Modifier.background(Color(0xFF1E293B))
                 ) {
                     DropdownMenuItem(
-                        text = { 
+                        text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.MergeType,
@@ -240,7 +243,11 @@ fun ArtistDetailsContent(
         ) {
             item {
                 Spacer(modifier = Modifier.height(8.dp))
-                ArtistHeroSection(artistDetails = artistDetails)
+                ArtistHeroSection(
+                    artistDetails = artistDetails,
+                    onRefreshImage = onRefreshImage,
+                    isRefreshingImage = uiState.isRefreshingImage
+                )
             }
 
             item {
@@ -306,7 +313,7 @@ fun ArtistDetailsContent(
                     ) {
                         items(
                             items = artistDetails.topAlbums,
-                            key = { album -> "album_${artistDetails.topAlbums.indexOf(album)}_${album.album}_${album.artist}" }
+                            key = { album -> "album_${album.album}_${album.artist}" }
                         ) { album ->
                             TopAlbumCard(album = album)
                         }
@@ -353,7 +360,9 @@ fun ArtistDetailsContent(
 
 @Composable
 fun ArtistHeroSection(
-    artistDetails: ArtistDetails
+    artistDetails: ArtistDetails,
+    onRefreshImage: () -> Unit,
+    isRefreshingImage: Boolean = false
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
          // Premium Glow Container
@@ -373,23 +382,34 @@ fun ArtistHeroSection(
                     )
             )
 
-            // Image Container
-            GlassCard(
+            // Image Container - Circular shape
+            Box(
                 modifier = Modifier.size(240.dp),
-                shape = RoundedCornerShape(24.dp),
-                contentPadding = PaddingValues(0.dp),
-                backgroundColor = Color.White.copy(alpha = 0.1f)
+                contentAlignment = Alignment.Center
             ) {
+                // Background glow
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    Color(0xFF6366F1).copy(alpha = 0.3f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+                )
+
                 val context = LocalContext.current
                 val imageUrl = artistDetails.artist.imageUrl
-                
-                // Log for debugging
-                android.util.Log.d("ArtistHeroSection", "Artist: ${artistDetails.artist.name}, imageUrl: $imageUrl")
-                
+
                 if (imageUrl.isNullOrBlank()) {
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .size(220.dp)
+                            .clip(CircleShape)
                             .background(
                                 Brush.linearGradient(
                                     colors = listOf(Color(0xFF6366F1), Color(0xFF8B5CF6))
@@ -406,7 +426,7 @@ fun ArtistHeroSection(
                     }
                 } else {
                     var showPlaceholder by remember { mutableStateOf(false) }
-                    
+
                     // Use cached image request for proper caching
                     val imageRequest = remember(imageUrl) {
                         buildCachedImageRequest(
@@ -416,8 +436,11 @@ fun ArtistHeroSection(
                             crossfade = 150
                         )
                     }
-                    
-                    Box(modifier = Modifier.fillMaxSize()) {
+
+                    // Image container with circular clip (no refresh button inside)
+                    Box(
+                        modifier = Modifier.size(220.dp).clip(CircleShape)
+                    ) {
                         AsyncImage(
                             model = imageRequest,
                             imageLoader = context.imageLoader,
@@ -429,7 +452,7 @@ fun ArtistHeroSection(
                                 showPlaceholder = true
                             }
                         )
-                        
+
                         // Show placeholder on error
                         if (showPlaceholder) {
                             Box(
@@ -447,6 +470,41 @@ fun ArtistHeroSection(
                                     fontSize = 64.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
+                                )
+                            }
+                        }
+                    }
+
+                    // Refresh button overlay (positioned at bottom-right of circular image)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 4.dp, bottom = 4.dp)
+                            .clickable { onRefreshImage() }
+                    ) {
+                        if (isRefreshingImage) {
+                            // Loading spinner
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(36.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            // Refresh icon
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .background(
+                                        Color.Black.copy(alpha = 0.6f),
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Refresh Artist Image",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }

@@ -137,42 +137,42 @@ object GamificationEngine {
     
     val ALL_BADGE_DEFINITIONS: List<BadgeDefinition> = listOf(
         // === Milestones ===
-        BadgeDefinition("first_play", "First Note", "Play your first song", "music_note", "MILESTONE", 1),
+        BadgeDefinition("first_play", "First Note", "Your musical journey begins", "music_note", "MILESTONE", 1),
         BadgeDefinition("plays_100", "Century", "Play 100 songs", "century", "MILESTONE", 100),
-        BadgeDefinition("plays_500", "Half Grand", "Play 500 songs", "star_half", "MILESTONE", 500),
-        BadgeDefinition("plays_1000", "Grand Maestro", "Play 1,000 songs", "star", "MILESTONE", 1_000),
-        BadgeDefinition("plays_5000", "Virtuoso", "Play 5,000 songs", "diamond", "MILESTONE", 5_000),
-        BadgeDefinition("plays_10000", "Legendary", "Play 10,000 songs", "emoji_events", "MILESTONE", 10_000),
+        BadgeDefinition("plays_500", "Sound Pilgrim", "Journey through 500 tracks", "star_half", "MILESTONE", 500),
+        BadgeDefinition("plays_1000", "Grand Maestro", "Master 1,000 tracks", "star", "MILESTONE", 1_000),
+        BadgeDefinition("plays_5000", "Virtuoso", "Conquer 5,000 tracks", "diamond", "MILESTONE", 5_000),
+        BadgeDefinition("plays_10000", "Legendary", "Transcend 10,000 tracks", "emoji_events", "MILESTONE", 10_000),
         
         // === Time ===
-        BadgeDefinition("time_1h", "First Hour", "Listen for 1 hour total", "timer", "TIME", 1),
-        BadgeDefinition("time_24h", "Day Tripper", "Listen for 24 hours total", "schedule", "TIME", 24),
-        BadgeDefinition("time_100h", "Centurion", "Listen for 100 hours total", "hourglass_full", "TIME", 100),
-        BadgeDefinition("time_500h", "Sound Sage", "Listen for 500 hours total", "headphones", "TIME", 500),
+        BadgeDefinition("time_1h", "First Hour", "Your first hour of music", "timer", "TIME", 1),
+        BadgeDefinition("time_24h", "Day Tripper", "A full day's worth of music", "schedule", "TIME", 24),
+        BadgeDefinition("time_100h", "Centurion", "100 hours of listening", "hourglass_full", "TIME", 100),
+        BadgeDefinition("time_500h", "Sound Sage", "500 hours of listening", "headphones", "TIME", 500),
         
         // === Streaks ===
         BadgeDefinition("streak_7", "Week Warrior", "7-day listening streak", "local_fire_department", "STREAK", 7),
         BadgeDefinition("streak_30", "Monthly Maven", "30-day listening streak", "whatshot", "STREAK", 30),
-        BadgeDefinition("streak_100", "Centenarian", "100-day listening streak", "military_tech", "STREAK", 100),
+        BadgeDefinition("streak_100", "Ironclad", "100-day listening streak", "military_tech", "STREAK", 100),
         BadgeDefinition("streak_365", "Year-Round", "365-day listening streak", "auto_awesome", "STREAK", 365),
         
         // === Discovery ===
-        BadgeDefinition("artists_10", "Explorer", "Listen to 10 different artists", "explore", "DISCOVERY", 10),
-        BadgeDefinition("artists_50", "Curator", "Listen to 50 different artists", "collections", "DISCOVERY", 50),
-        BadgeDefinition("artists_100", "Connoisseur", "Listen to 100 different artists", "public", "DISCOVERY", 100),
-        BadgeDefinition("genres_10", "Genre Hopper", "Listen to 10 different genres", "category", "DISCOVERY", 10),
-        BadgeDefinition("genres_25", "Eclectic", "Listen to 25 different genres", "palette", "DISCOVERY", 25),
+        BadgeDefinition("artists_10", "Explorer", "Discover unique artists", "explore", "DISCOVERY", 10),
+        BadgeDefinition("artists_50", "Curator", "Discover 50 unique artists", "collections", "DISCOVERY", 50),
+        BadgeDefinition("artists_100", "Connoisseur", "Discover 100 unique artists", "public", "DISCOVERY", 100),
+        BadgeDefinition("genres_10", "Genre Hopper", "Explore different genres", "category", "DISCOVERY", 10),
+        BadgeDefinition("genres_25", "Eclectic", "Explore 25+ genres", "palette", "DISCOVERY", 25),
         
         // === Engagement ===
-        BadgeDefinition("night_owl", "Night Owl", "100 plays between midnight and 5 AM", "nightlight", "ENGAGEMENT", 100),
-        BadgeDefinition("early_bird", "Early Bird", "100 plays between 5 AM and 8 AM", "wb_sunny", "ENGAGEMENT", 100),
-        BadgeDefinition("marathon", "Marathon", "A single session over 3 hours", "directions_run", "ENGAGEMENT", 1),
+        BadgeDefinition("night_owl", "Night Owl", "Late-night plays (12–5 AM)", "nightlight", "ENGAGEMENT", 100),
+        BadgeDefinition("early_bird", "Early Bird", "Early morning plays (5–8 AM)", "wb_sunny", "ENGAGEMENT", 100),
+        BadgeDefinition("marathon", "Marathon", "3+ hour listening session", "directions_run", "ENGAGEMENT", 1),
         
         // === Level Milestones ===
         BadgeDefinition("level_5", "Rising Star", "Reach Level 5", "grade", "LEVEL", 5),
         BadgeDefinition("level_10", "Double Digits", "Reach Level 10", "looks_one", "LEVEL", 10),
         BadgeDefinition("level_25", "Quarter Century", "Reach Level 25", "military_tech", "LEVEL", 25),
-        BadgeDefinition("level_50", "Half Way There", "Reach Level 50", "workspace_premium", "LEVEL", 50),
+        BadgeDefinition("level_50", "Halfway There", "Reach Level 50", "workspace_premium", "LEVEL", 50),
         BadgeDefinition("level_75", "Elite Listener", "Reach Level 75", "shield", "LEVEL", 75),
         BadgeDefinition("level_100", "The Centennial", "Reach Level 100", "emoji_events", "LEVEL", 100)
     )
@@ -185,7 +185,69 @@ object GamificationEngine {
         val category: String,
         val threshold: Int
     )
-    
+
+    // =====================
+    // Star Tiers
+    // =====================
+
+    /**
+     * Multipliers for each star tier (1-5). Threshold for star N = base * STAR_MULTIPLIERS[N-1].
+     * Steeper curve ensures stars feel earned:
+     *   ★1 = base (unlock), ★2 = 3× (dedicated), ★3 = 8× (committed),
+     *   ★4 = 20× (elite), ★5 = 50× (legendary)
+     */
+    val STAR_MULTIPLIERS = intArrayOf(1, 3, 8, 20, 50)
+
+    /**
+     * Beginner / introductory badges that cap at 1 star.
+     * These are participation trophies for onboarding — they should not inflate the star total.
+     * In the UI they are shown as "Unlocked" rather than with a 5-star display.
+     */
+    val BEGINNER_BADGES = setOf("first_play", "time_1h")
+
+    const val MAX_STARS = 5
+
+    /**
+     * Get the threshold for a specific star tier.
+     * @param baseThreshold The badge's base threshold (1-star unlock).
+     * @param star Star number 1-5.
+     */
+    fun getStarThreshold(baseThreshold: Int, star: Int): Int {
+        val index = (star - 1).coerceIn(0, STAR_MULTIPLIERS.lastIndex)
+        return baseThreshold * STAR_MULTIPLIERS[index]
+    }
+
+    /**
+     * Compute how many stars a badge has earned given raw progress and base threshold.
+     * @return Star count 0-5.
+     */
+    fun computeStars(rawProgress: Int, baseThreshold: Int): Int {
+        var stars = 0
+        for (i in STAR_MULTIPLIERS.indices) {
+            if (rawProgress >= baseThreshold * STAR_MULTIPLIERS[i]) {
+                stars = i + 1
+            } else {
+                break
+            }
+        }
+        return stars.coerceIn(0, MAX_STARS)
+    }
+
+    /**
+     * Get the threshold for the next star, or the max star threshold if already maxed.
+     */
+    fun getNextStarThreshold(baseThreshold: Int, currentStars: Int): Int {
+        val nextStar = (currentStars + 1).coerceAtMost(MAX_STARS)
+        return getStarThreshold(baseThreshold, nextStar)
+    }
+
+    /**
+     * Get star-tier description suffix (e.g., "★★★☆☆").
+     */
+    fun starLabel(stars: Int): String {
+        return "★".repeat(stars) + "☆".repeat((MAX_STARS - stars).coerceAtLeast(0))
+    }
+
     data class LevelState(
         val level: Int,
         val totalXp: Long,

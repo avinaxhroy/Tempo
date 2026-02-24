@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import me.avinas.tempo.data.local.entities.Badge
 import me.avinas.tempo.data.local.entities.UserLevel
+import me.avinas.tempo.data.stats.GamificationEngine
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -157,6 +158,8 @@ fun ProfileScreen(
                     filteredBadges = uiState.filteredBadges,
                     earnedCount = uiState.earnedCount,
                     totalCount = uiState.totalCount,
+                    totalStars = uiState.totalStars,
+                    maxPossibleStars = uiState.maxPossibleStars,
                     categories = uiState.categories,
                     selectedCategory = uiState.selectedCategory,
                     onCategorySelected = viewModel::onCategorySelected
@@ -455,6 +458,8 @@ private fun BadgeSection(
     filteredBadges: List<Badge>,
     earnedCount: Int,
     totalCount: Int,
+    totalStars: Int,
+    maxPossibleStars: Int,
     categories: List<String>,
     selectedCategory: String?,
     onCategorySelected: (String?) -> Unit
@@ -480,7 +485,29 @@ private fun BadgeSection(
                 )
             }
             
-            // Optional: Add a "View All" or sort button here if needed
+            // Total stars indicator
+            if (totalStars > 0) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = Color(0xFFFBBF24),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "$totalStars / $maxPossibleStars",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFBBF24)
+                    )
+                }
+            }
         }
         
         // Category filter chips (horizontally scrollable)
@@ -531,13 +558,14 @@ private fun BadgeSection(
             }
         }
         
-        // "Almost There" Spotlight (Single closest badge)
+        // "Almost There" Spotlight (closest to unlocking OR next star upgrade)
         val spotlightBadge = remember(allBadges) { 
-            allBadges.filter { !it.isEarned && it.progressFraction >= 0.5f }
+            allBadges.filter { !it.isMaxed && it.progressFraction >= 0.5f }
                      .maxByOrNull { it.progressFraction }
         }
         
         if (spotlightBadge != null) {
+            val spotlightLabel = if (spotlightBadge.isEarned) "Next Star" else "Almost There"
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -550,7 +578,7 @@ private fun BadgeSection(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "Almost There",
+                        text = spotlightLabel,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -810,28 +838,57 @@ private fun BadgeCard(
                         
                         Spacer(modifier = Modifier.height(12.dp))
                         
-                        // Colored Footer
+                        // Colored Footer with Stars
+                        val isBeginner = badge.badgeId in GamificationEngine.BEGINNER_BADGES
                         if (isEarned) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            if (isBeginner) {
+                                // Beginner badges: show "Unlocked" chip instead of star progression
                                 Text(
                                     text = "UNLOCKED",
-                                    style = MaterialTheme.typography.labelMedium,
+                                    style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Black,
                                     color = badgeColor,
                                     letterSpacing = 1.sp
                                 )
-                                val dateStr = try {
-                                    val date = java.util.Date(badge.earnedAt)
-                                    val formatter = java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault())
-                                    formatter.format(date)
-                                } catch (e: Exception) { "" }
-                                
-                                if (dateStr.isNotEmpty()) {
-                                    Text(
-                                        text = dateStr,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White.copy(alpha = 0.5f)
-                                    )
+                            } else {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    // Star display — compact row
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(1.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        for (i in 1..5) {
+                                            val starColor = if (i <= badge.stars) badgeColor else Color.White.copy(alpha = 0.2f)
+                                            Icon(
+                                                imageVector = if (i <= badge.stars) Icons.Default.Star else Icons.Default.StarOutline,
+                                                contentDescription = null,
+                                                tint = starColor,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    
+                                    if (badge.isMaxed) {
+                                        Text(
+                                            text = "MAXED",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Black,
+                                            color = badgeColor,
+                                            letterSpacing = 1.sp
+                                        )
+                                    } else {
+                                        // Progress toward next star — inline format: "15/30 for ★2"
+                                        Text(
+                                            text = "${badge.progress}/${badge.maxProgress} for ★${badge.stars + 1}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = badgeColor.copy(alpha = 0.8f),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp,
+                                            maxLines = 1
+                                        )
+                                    }
                                 }
                             }
                         } else {
@@ -846,8 +903,8 @@ private fun BadgeCard(
                     }
                 }
                 
-                // Shine effect for Earned Badges
-                if (isEarned) {
+                // Shine effect for Maxed (5-star) Badges only
+                if (isEarned && badge.isMaxed) {
                     val infiniteTransition = rememberInfiniteTransition(label = "shine")
                     val shineOffset by infiniteTransition.animateFloat(
                         initialValue = -100f,

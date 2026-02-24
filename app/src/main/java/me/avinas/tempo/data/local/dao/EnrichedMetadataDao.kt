@@ -228,6 +228,23 @@ interface EnrichedMetadataDao {
     suspend fun getEnrichedTracksWithMissingAlbumArt(limit: Int = 50): List<EnrichedMetadata>
     
     /**
+     * Clear all artist image URLs for tracks associated with a specific artist.
+     * This is used to force re-enrichment of artist images.
+     * Clears images from all sources (Spotify, iTunes, Deezer, Last.fm).
+     */
+    @Query("""
+        UPDATE enriched_metadata 
+        SET spotify_artist_image_url = NULL,
+            itunes_artist_image_url = NULL,
+            deezer_artist_image_url = NULL,
+            lastfm_artist_image_url = NULL
+        WHERE track_id IN (
+            SELECT track_id FROM track_artists WHERE artist_id = :artistId
+        )
+    """)
+    suspend fun clearArtistImagesForArtist(artistId: Long)
+    
+    /**
      * Update the Spotify artist image URL for all tracks with a given Spotify artist ID.
      * This is used to cache artist images once fetched from Spotify.
      */

@@ -26,6 +26,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
+import androidx.lifecycle.Lifecycle
+
+/**
+ * Safe navigate that prevents double-click / rapid-tap navigation.
+ * Only navigates if the current back stack entry is in RESUMED state
+ * (i.e., not already navigating away).
+ */
+private fun NavHostController.safeNavigate(route: String) {
+    if (currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) == true) {
+        navigate(route)
+    }
+}
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
@@ -116,7 +128,7 @@ fun AppNavigation(
                                 }
                             },
                             onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-                            onNavigateToTrack = { trackId -> navController.navigate(Screen.SongDetails.createRoute(trackId)) },
+                            onNavigateToTrack = { trackId -> navController.safeNavigate(Screen.SongDetails.createRoute(trackId)) },
                             onNavigateToSpotlight = { timeRange ->
                                 val route = if (timeRange != null) {
                                     Screen.Spotlight.createRoute(timeRange.name)
@@ -135,15 +147,15 @@ fun AppNavigation(
                         val navigationViewModel: me.avinas.tempo.ui.navigation.NavigationViewModel = hiltViewModel()
 
                         me.avinas.tempo.ui.stats.StatsScreen(
-                            onNavigateToTrack = { trackId -> navController.navigate(Screen.SongDetails.createRoute(trackId)) },
+                            onNavigateToTrack = { trackId -> navController.safeNavigate(Screen.SongDetails.createRoute(trackId)) },
                             onNavigateToArtist = { artistIdentifier ->
                                 if (artistIdentifier.startsWith("id:")) {
                                     val artistId = artistIdentifier.removePrefix("id:").toLongOrNull()
                                     if (artistId != null && artistId > 0) {
-                                        navController.navigate(Screen.ArtistDetails.createRouteById(artistId))
+                                        navController.safeNavigate(Screen.ArtistDetails.createRouteById(artistId))
                                     }
                                 } else {
-                                    navController.navigate(Screen.ArtistDetails.createRouteByName(artistIdentifier))
+                                    navController.safeNavigate(Screen.ArtistDetails.createRouteByName(artistIdentifier))
                                 }
                             },
                             onNavigateToAlbum = { albumInfo ->
@@ -152,7 +164,7 @@ fun AppNavigation(
                                     if (parts.size == 2) {
                                         val albumId = navigationViewModel.getAlbumIdByTitleAndArtist(parts[0], parts[1])
                                         if (albumId != null) {
-                                            navController.navigate(Screen.AlbumDetails.createRoute(albumId))
+                                            navController.safeNavigate(Screen.AlbumDetails.createRoute(albumId))
                                         }
                                     }
                                 }
@@ -163,7 +175,7 @@ fun AppNavigation(
 
                     composable(Screen.History.route) {
                         me.avinas.tempo.ui.history.HistoryScreen(
-                            onNavigateToTrack = { trackId -> navController.navigate(Screen.SongDetails.createRoute(trackId)) }
+                            onNavigateToTrack = { trackId -> navController.safeNavigate(Screen.SongDetails.createRoute(trackId)) }
                         )
                     }
 
@@ -260,14 +272,14 @@ fun AppNavigation(
                                 artistId = artistId,
                                 artistName = null,
                                 onNavigateBack = { navController.popBackStack() },
-                                onNavigateToSong = { trackId -> navController.navigate(Screen.SongDetails.createRoute(trackId)) }
+                                onNavigateToSong = { trackId -> navController.safeNavigate(Screen.SongDetails.createRoute(trackId)) }
                             )
                         } else if (artistName != null) {
                             me.avinas.tempo.ui.details.ArtistDetailsScreen(
                                 artistId = null,
                                 artistName = artistName,
                                 onNavigateBack = { navController.popBackStack() },
-                                onNavigateToSong = { trackId -> navController.navigate(Screen.SongDetails.createRoute(trackId)) }
+                                onNavigateToSong = { trackId -> navController.safeNavigate(Screen.SongDetails.createRoute(trackId)) }
                             )
                         } else {
                             navController.popBackStack()
@@ -282,7 +294,7 @@ fun AppNavigation(
                         me.avinas.tempo.ui.details.AlbumDetailsScreen(
                             albumId = albumId,
                             onNavigateBack = { navController.popBackStack() },
-                            onNavigateToSong = { trackId -> navController.navigate(Screen.SongDetails.createRoute(trackId)) }
+                            onNavigateToSong = { trackId -> navController.safeNavigate(Screen.SongDetails.createRoute(trackId)) }
                         )
                     }
 

@@ -27,7 +27,7 @@ import me.avinas.tempo.data.local.entities.*
         UserLevel::class,    // Gamification: user level & XP
         Badge::class          // Gamification: achievement badges
     ],
-    version = 31, // Gamification: levels & badges
+    version = 32, // Badge star tiers
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -1428,6 +1428,23 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 31 to 32.
+         *
+         * Adds star tiers to badges:
+         * - stars: 0 = locked, 1-5 = earned star count
+         * Each badge has 5 star tiers at 1x, 2x, 3x, 5x, 10x the base threshold.
+         */
+        val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 31 to 32 - Badge star tiers")
+                db.execSQL("ALTER TABLE badges ADD COLUMN stars INTEGER NOT NULL DEFAULT 0")
+                // Migrate existing earned badges to 1 star
+                db.execSQL("UPDATE badges SET stars = 1 WHERE is_earned = 1")
+                Log.i(TAG, "Migration from version 31 to 32 completed successfully")
+            }
+        }
+
+        /**
          * All migrations in order.
          */
         val ALL_MIGRATIONS = arrayOf(
@@ -1455,7 +1472,8 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_27_28,
             MIGRATION_28_29,
             MIGRATION_29_30,
-            MIGRATION_30_31
+            MIGRATION_30_31,
+            MIGRATION_31_32
         )
         
     }

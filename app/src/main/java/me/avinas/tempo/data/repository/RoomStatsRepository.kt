@@ -95,7 +95,7 @@ class RoomStatsRepository @Inject constructor(
      * Call this when track metadata (album art, etc.) is updated by enrichment.
      * This will trigger UI refresh in components observing metadata updates.
      */
-    fun notifyMetadataUpdate() {
+    override fun notifyMetadataUpdate() {
         _metadataUpdateFlow.tryEmit(Unit)
         Log.d(TAG, "Metadata update emitted")
     }
@@ -174,8 +174,8 @@ class RoomStatsRepository @Inject constructor(
         cacheHits = 0
         cacheMisses = 0
         Log.d(TAG, "Cache invalidated")
-        // Also notify UI of potential metadata updates
-        notifyMetadataUpdate()
+        // Don't notify UI here - let callers decide when to notify
+        // This prevents global UI refreshes on background enrichment
     }
     
     /**
@@ -198,6 +198,65 @@ class RoomStatsRepository @Inject constructor(
     override fun clearArtistImageSearchCache() {
         artistImageSearchCache.clear()
         Log.d(TAG, "Artist image search cache cleared")
+    }
+
+    override suspend fun clearArtistImagesForArtist(artistId: Long): Unit = withContext(Dispatchers.IO) {
+        enrichedMetadataDao.clearArtistImagesForArtist(artistId)
+        Log.d(TAG, "Cleared artist images from enriched metadata for artist ID: $artistId")
+    }
+
+    /**
+     * Refresh artist image by directly searching for the specific artist via API.
+     * This avoids the track-based enrichment problem where a featured artist would get
+     * the track's primary artist's image instead of their own.
+     */
+    override suspend fun refreshArtistImageDirectly(artistId: Long): String? = withContext(Dispatchers.IO) {
+        val artist = artistDao.getArtistById(artistId)
+        if (artist == null) {
+            Log.w(TAG, "refreshArtistImageDirectly: Artist not found for ID=$artistId")
+            return@withContext null
+        }
+        val artistName = artist.name
+        Log.d(TAG, "refreshArtistImageDirectly: Searching for image of '$artistName' (ID=$artistId)")
+
+        // Clear existing image and caches
+        artistDao.updateImageUrl(artistId, null)
+        artistImageSearchCache.remove(artistName.lowercase().trim())
+
+        // Try iTunes first (high quality, no auth required)
+        if (iTunesEnrichmentService.isAvailable()) {
+            val fromITunes = iTunesEnrichmentService.searchAndFetchArtistImage(artistName)
+            if (!fromITunes.isNullOrBlank()) {
+                Log.d(TAG, "refreshArtistImageDirectly: Found image from iTunes for '$artistName'")
+                artistDao.updateImageUrl(artistId, fromITunes)
+                invalidateCache()
+                return@withContext fromITunes
+            }
+        }
+
+        // Try Spotify
+        if (spotifyEnrichmentService.isAvailable()) {
+            val fromSpotify = spotifyEnrichmentService.searchAndFetchArtistImage(artistName)
+            if (!fromSpotify.isNullOrBlank()) {
+                Log.d(TAG, "refreshArtistImageDirectly: Found image from Spotify for '$artistName'")
+                artistDao.updateImageUrl(artistId, fromSpotify)
+                invalidateCache()
+                return@withContext fromSpotify
+            }
+        }
+
+        // Fallback: try enriched_metadata via track_artists junction (PRIMARY role only)
+        val fromTrackArtists = statsDao.getArtistImageByArtistId(artistId)
+        if (!fromTrackArtists.isNullOrBlank()) {
+            Log.d(TAG, "refreshArtistImageDirectly: Found image from track_artists for '$artistName'")
+            artistDao.updateImageUrl(artistId, fromTrackArtists)
+            invalidateCache()
+            return@withContext fromTrackArtists
+        }
+
+        Log.w(TAG, "refreshArtistImageDirectly: No image found for '$artistName' (ID=$artistId)")
+        invalidateCache()
+        null
     }
 
     /**
@@ -640,15 +699,19 @@ class RoomStatsRepository @Inject constructor(
     /**
      * Get artist image URL with smart fallback strategy.
      * 
-     * For multi-artist tracks, we need to find the correct image for each individual artist.
+     * For multi-artist tracks, enriched_metadata stores the TRACK's Spotify-matched primary
+     * artist's image — which may differ from the artist we're looking for.
+     * e.g., a KARMA track on Spotify might have KR$NA as the first artist, so enriched_metadata
+     * stores KR$NA's image even though locally KARMA is marked as PRIMARY.
+     * 
+     * To avoid this, we prioritize direct API search (iTunes/Spotify) over enriched_metadata.
+     * The API search uses the specific artist name, so it always returns the correct artist's image.
+     * 
      * Priority order:
-     * 0. Artists table image_url (most reliable - directly assigned to this specific artist)
-     * 1. track_artists junction table lookup with PRIMARY role filter (enriched_metadata)
-     * 2. Tracks where this artist is the ONLY/PRIMARY artist (exact match)
-     * 3. Tracks where this artist is listed FIRST (e.g., "Artist, feat. Other")
-     * 4. Any track containing this artist (PRIMARY role only)
-     * 5. iTunes API search (high quality, no auth required)
-     * 6. Spotify API search (saves result to database for future use)
+     * 0. Artists table image_url (directly assigned to this specific artist - most reliable)
+     * 1. Verified enriched_metadata (Spotify artist ID must match this artist's Spotify ID)
+     * 2. iTunes API search (high quality, no auth required, searches by this artist's name)
+     * 3. Spotify API search (searches by this artist's name, saves to DB)
      */
     private suspend fun getArtistImageUrlWithFallback(artistName: String): String? {
         // 0. First find the artist entity in the database
@@ -657,49 +720,20 @@ class RoomStatsRepository @Inject constructor(
             ?: artistDao.getArtistByName(artistName)
         
         if (artistEntity != null) {
-            // 0a. Check artist entity's own image_url first (most reliable, matches artist details screen behavior)
-            // This image is directly assigned to this specific artist, so it's always correct.
+            // 0a. Check artist entity's own image_url first (most reliable)
             if (!artistEntity.imageUrl.isNullOrBlank()) {
                 Log.d(TAG, "Found artist image from artist entity: $artistName")
                 return artistEntity.imageUrl
             }
             
-            // 0b. Try enriched_metadata via track_artists junction table (PRIMARY role only)
-            // This ensures featured artists don't get the main artist's image from enriched_metadata.
-            val fromTrackArtists = statsDao.getArtistImageByArtistId(artistEntity.id)
-            if (!fromTrackArtists.isNullOrBlank()) {
-                Log.d(TAG, "Found artist image via track_artists junction table: $artistName")
-                // Persist to artists table for future fast lookups
-                persistImageToArtistTable(artistName, fromTrackArtists)
-                return fromTrackArtists
+            // 0b. Try verified enriched_metadata (checks Spotify artist ID matches)
+            // This prevents returning another artist's image from a collab track
+            val fromVerifiedEnriched = statsDao.getArtistImageByArtistId(artistEntity.id)
+            if (!fromVerifiedEnriched.isNullOrBlank()) {
+                Log.d(TAG, "Found verified artist image via track_artists junction: $artistName")
+                persistImageToArtistTable(artistName, fromVerifiedEnriched)
+                return fromVerifiedEnriched
             }
-        }
-        
-        // 1. Try tracks where this artist is the primary/solo artist
-        val asPrimaryArtist = statsDao.getArtistImageAsPrimaryArtist(artistName)
-        if (!asPrimaryArtist.isNullOrBlank()) {
-            Log.d(TAG, "Found artist image as primary artist: $artistName")
-            // Persist to artists table for future fast lookups
-            persistImageToArtistTable(artistName, asPrimaryArtist)
-            return asPrimaryArtist
-        }
-        
-        // 2. Try tracks where this artist is listed first in multi-artist string
-        val asFirstArtist = statsDao.getArtistImageAsFirstArtist(artistName)
-        if (!asFirstArtist.isNullOrBlank()) {
-            Log.d(TAG, "Found artist image as first artist: $artistName")
-            // Persist to artists table for future fast lookups
-            persistImageToArtistTable(artistName, asFirstArtist)
-            return asFirstArtist
-        }
-        
-        // 4. Fallback: any track containing this artist (now excludes featured contexts)
-        val fromEnriched = statsDao.getArtistImageFromEnrichedMetadata(artistName)
-        if (!fromEnriched.isNullOrBlank()) {
-            Log.d(TAG, "Found artist image from enriched metadata: $artistName")
-            // Persist to artists table for future fast lookups
-            persistImageToArtistTable(artistName, fromEnriched)
-            return fromEnriched
         }
         
         
@@ -1609,22 +1643,26 @@ class RoomStatsRepository @Inject constructor(
                 "existing imageUrl=${artist.imageUrl?.take(80) ?: "null"}")
             
             // Get artist image URL with fallback strategy
-            // 1. Use artist.imageUrl if available
-            // 2. Try to get from enriched_metadata via track_artists join
-            // 3. Try name-based fallback
+            // Priority:
+            // 1. artist.imageUrl (directly assigned, most reliable)
+            // 2. Verified enriched_metadata (Spotify artist ID must match this artist)
+            // 3. Direct API search by artist name (iTunes/Spotify) — always correct
             val fromArtistTable = artist.imageUrl?.takeIf { it.isNotBlank() }
-            val fromEnrichedById = if (fromArtistTable == null) {
+            val fromVerifiedEnriched = if (fromArtistTable == null) {
+                // Only use enriched_metadata if we can verify the image belongs to this artist
                 statsDao.getArtistImageByArtistId(artistId)?.also {
-                    Log.d(TAG, "getArtistDetails: Found image via track_artists join: ${it.take(80)}")
+                    Log.d(TAG, "getArtistDetails: Found verified image via track_artists join: ${it.take(80)}")
                 }
             } else null
-            val fromNameFallback = if (fromArtistTable == null && fromEnrichedById == null) {
+            val fromDirectSearch = if (fromArtistTable == null && fromVerifiedEnriched == null) {
+                // Search APIs directly for this specific artist — avoids the problem
+                // where enriched_metadata stores a different artist's image
                 getArtistImageUrlWithFallback(artist.name)?.also {
-                    Log.d(TAG, "getArtistDetails: Found image via name fallback: ${it.take(80)}")
+                    Log.d(TAG, "getArtistDetails: Found image via direct search: ${it.take(80)}")
                 }
             } else null
             
-            val imageUrl = fromArtistTable ?: fromEnrichedById ?: fromNameFallback
+            val imageUrl = fromArtistTable ?: fromVerifiedEnriched ?: fromDirectSearch
             
             if (imageUrl == null) {
                 Log.w(TAG, "getArtistDetails: No image found for artist '${artist.name}' (ID=$artistId)")
@@ -1726,12 +1764,13 @@ class RoomStatsRepository @Inject constructor(
                 val topAlbums = statsDao.getTopAlbumsForArtistById(existingArtist.id, 5)
                 
                 // Get artist image URL with fallback strategy
+                // Priority: artist table → verified enriched_metadata → direct API search
                 val imageUrl = existingArtist.imageUrl?.takeIf { it.isNotBlank() }
                     ?: statsDao.getArtistImageByArtistId(existingArtist.id)?.also {
-                        Log.d(TAG, "getArtistDetailsByName: Found image via track_artists join")
+                        Log.d(TAG, "getArtistDetailsByName: Found verified image via track_artists join")
                     }
                     ?: getArtistImageUrlWithFallback(existingArtist.name)?.also {
-                        Log.d(TAG, "getArtistDetailsByName: Found image via name fallback")
+                        Log.d(TAG, "getArtistDetailsByName: Found image via direct search")
                     }
                 
                 if (imageUrl != null) {

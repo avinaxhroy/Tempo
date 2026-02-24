@@ -1648,9 +1648,10 @@ interface StatsDao {
      * Get artist image URL by artist ID from enriched metadata.
      * Uses the track_artists junction table to find tracks linked to this artist.
      * 
-     * IMPORTANT: Only returns images from tracks where this artist is PRIMARY.
-     * This prevents featured artists from incorrectly getting the main artist's image,
-     * since enriched_metadata stores the track's primary artist image.
+     * IMPORTANT: Only returns images from tracks where this artist is PRIMARY
+     * AND where the enriched_metadata's spotify_artist_id matches the artist's spotify_id.
+     * This prevents returning the wrong artist's image when enriched_metadata stores
+     * a different artist's image (e.g., Spotify returns KR$NA as primary for a KARMA track).
      * 
      * Checks all artist image sources in priority order: Spotify > iTunes > Last.fm > Deezer
      */
@@ -1663,8 +1664,16 @@ interface StatsDao {
         )
         FROM enriched_metadata em
         INNER JOIN track_artists ta ON ta.track_id = em.track_id
+        INNER JOIN artists a ON a.id = ta.artist_id
         WHERE ta.artist_id = :artistId
               AND ta.role = 'PRIMARY'
+              AND (
+                  -- Verify: enriched_metadata's Spotify artist ID matches this artist's Spotify ID
+                  -- This prevents returning another artist's image from a collab/mismatched track
+                  (a.spotify_id IS NOT NULL AND em.spotify_artist_id IS NOT NULL AND em.spotify_artist_id = a.spotify_id)
+                  -- OR: no Spotify IDs to compare, and this is the ONLY artist on the track
+                  OR (a.spotify_id IS NULL AND (SELECT COUNT(*) FROM track_artists ta2 WHERE ta2.track_id = ta.track_id) = 1)
+              )
               AND (em.spotify_artist_image_url IS NOT NULL OR em.itunes_artist_image_url IS NOT NULL 
                    OR em.lastfm_artist_image_url IS NOT NULL OR em.deezer_artist_image_url IS NOT NULL)
         LIMIT 1

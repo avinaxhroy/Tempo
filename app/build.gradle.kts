@@ -36,8 +36,8 @@ android {
         applicationId = "me.avinas.tempo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 431
-        versionName = "4.3.1"
+        versionCode = 437
+        versionName = "4.3.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         

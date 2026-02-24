@@ -93,13 +93,14 @@ class GamificationRepository @Inject constructor(
     suspend fun getNextEarnableBadge(): Badge? {
         val allBadges = gamificationDao.getAllBadges()
         return allBadges
-            .filter { !it.isEarned }
+            .filter { !it.isMaxed } // Include locked badges and earned badges not yet at 5 stars
             .maxByOrNull { it.progressFraction }
     }
     
     /**
      * Evaluate all badge conditions and update the database.
-     * Returns list of newly earned badge IDs.
+     * Supports star tiers: each badge has 5 star levels at 1x, 2x, 3x, 5x, 10x the base threshold.
+     * Returns list of newly earned badge IDs (first-time unlocks only).
      */
     suspend fun evaluateAllBadges(): List<String> {
         val userLevel = gamificationDao.getUserLevel() ?: UserLevel()
@@ -118,43 +119,46 @@ class GamificationRepository @Inject constructor(
         for (def in GamificationEngine.ALL_BADGE_DEFINITIONS) {
             val existing = gamificationDao.getBadgeById(def.badgeId)
             
-            // Compute current progress for this badge
-            val (currentProgress, maxProgress) = when {
-                // Milestones
-                def.category == "MILESTONE" -> Pair(totalPlays.coerceAtMost(def.threshold), def.threshold)
-                
-                // Time
-                def.category == "TIME" -> Pair(totalTimeHours.coerceAtMost(def.threshold), def.threshold)
-                
-                // Streaks
-                def.category == "STREAK" -> {
-                    val longestStreak = userLevel.longestStreak
-                    Pair(longestStreak.coerceAtMost(def.threshold), def.threshold)
-                }
-                
-                // Discovery
-                def.badgeId.startsWith("artists_") -> Pair(uniqueArtists.coerceAtMost(def.threshold), def.threshold)
-                def.badgeId.startsWith("genres_") -> Pair(uniqueGenres.coerceAtMost(def.threshold), def.threshold)
-                
-                // Engagement
-                def.badgeId == "night_owl" -> Pair(nightPlays.coerceAtMost(def.threshold), def.threshold)
-                def.badgeId == "early_bird" -> Pair(morningPlays.coerceAtMost(def.threshold), def.threshold)
-                def.badgeId == "marathon" -> Pair(
-                    if (longestSessionHours >= 3) 1 else 0,
-                    1
-                )
-                
-                // Level milestones
-                def.category == "LEVEL" -> Pair(
-                    userLevel.currentLevel.coerceAtMost(def.threshold),
-                    def.threshold
-                )
-                
-                else -> Pair(0, def.threshold)
+            // Get raw (uncapped) progress for this badge
+            val rawProgress = when {
+                def.category == "MILESTONE" -> totalPlays
+                def.category == "TIME" -> totalTimeHours
+                def.category == "STREAK" -> userLevel.longestStreak
+                def.badgeId.startsWith("artists_") -> uniqueArtists
+                def.badgeId.startsWith("genres_") -> uniqueGenres
+                def.badgeId == "night_owl" -> nightPlays
+                def.badgeId == "early_bird" -> morningPlays
+                def.badgeId == "marathon" -> if (longestSessionHours >= 3) longestSessionHours / 3 else 0
+                def.category == "LEVEL" -> userLevel.currentLevel
+                else -> 0
             }
             
-            val isNowEarned = currentProgress >= maxProgress
+            // Compute star tier
+            // Beginner badges cap at 1 star (shown as "Unlocked" in UI)
+            val currentStars = if (def.badgeId in GamificationEngine.BEGINNER_BADGES) {
+                if (rawProgress >= def.threshold) 1 else 0
+            } else {
+                GamificationEngine.computeStars(rawProgress, def.threshold)
+            }
+            val previousStars = existing?.stars ?: 0
+            val isNowEarned = currentStars >= 1
             val wasAlreadyEarned = existing?.isEarned == true
+            
+            // Progress toward next star (or show maxed state)
+            val nextStarThreshold = GamificationEngine.getNextStarThreshold(def.threshold, currentStars)
+            
+            // For the progress bar: show progress within current tier toward next star
+            val displayProgress: Int
+            val displayMaxProgress: Int
+            if (currentStars >= GamificationEngine.MAX_STARS) {
+                // Maxed out — show full bar
+                displayProgress = nextStarThreshold
+                displayMaxProgress = nextStarThreshold
+            } else {
+                // Show progress toward next star
+                displayProgress = rawProgress.coerceAtMost(nextStarThreshold)
+                displayMaxProgress = nextStarThreshold
+            }
             
             val badge = Badge(
                 id = existing?.id ?: 0,
@@ -168,16 +172,19 @@ class GamificationRepository @Inject constructor(
                     isNowEarned -> System.currentTimeMillis()
                     else -> 0
                 },
-                progress = currentProgress,
-                maxProgress = maxProgress,
-                isEarned = isNowEarned
+                progress = displayProgress,
+                maxProgress = displayMaxProgress,
+                isEarned = isNowEarned,
+                stars = currentStars
             )
             
             gamificationDao.upsertBadge(badge)
             
             if (isNowEarned && !wasAlreadyEarned) {
                 newlyEarned.add(def.badgeId)
-                Log.i(TAG, "🏆 Badge earned: ${def.name}")
+                Log.i(TAG, "🏆 Badge earned: ${def.name} (★$currentStars)")
+            } else if (currentStars > previousStars && wasAlreadyEarned) {
+                Log.i(TAG, "⭐ Badge upgraded: ${def.name} → ★$currentStars")
             }
         }
         

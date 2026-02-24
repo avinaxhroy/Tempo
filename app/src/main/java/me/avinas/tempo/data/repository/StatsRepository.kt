@@ -88,6 +88,12 @@ interface StatsRepository {
      */
     fun observeMetadataUpdates(): Flow<Unit>
     
+    /**
+     * Notify observers that metadata has been updated.
+     * Should be called after enrichment updates that affect UI.
+     */
+    fun notifyMetadataUpdate()
+    
     // =====================
     // Top Charts
     // =====================
@@ -387,6 +393,19 @@ interface StatsRepository {
      * Useful when explicitly viewing artist details to retry image loading.
      */
     fun clearArtistImageSearchCache()
+
+    /**
+     * Clear all artist image URLs from enriched metadata for a specific artist.
+     * This forces re-enrichment of artist images when triggered.
+     */
+    suspend fun clearArtistImagesForArtist(artistId: Long)
+
+    /**
+     * Refresh artist image by directly searching for the specific artist via API.
+     * Unlike track-based enrichment, this fetches the image for THIS specific artist,
+     * not the primary artist of a track. Returns the new image URL, or null if not found.
+     */
+    suspend fun refreshArtistImageDirectly(artistId: Long): String?
 
     /**
      * Get audio features for a specific track.
