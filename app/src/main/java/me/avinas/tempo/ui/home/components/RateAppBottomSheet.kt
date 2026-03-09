@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.sp
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.GlassCardVariant
 import me.avinas.tempo.ui.theme.TempoRed
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,7 +69,7 @@ fun RateAppBottomSheet(
             Spacer(modifier = Modifier.height(24.dp))
             
             Text(
-                text = "Enjoying Tempo?",
+                text = stringResource(R.string.rate_enjoying),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
@@ -76,7 +78,7 @@ fun RateAppBottomSheet(
             Spacer(modifier = Modifier.height(8.dp))
             
             Text(
-                text = "If you like using the app, please take a moment to rate it. It really helps us grow!",
+                text = stringResource(R.string.rate_message),
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = Color.White.copy(alpha = 0.7f),
@@ -97,7 +99,7 @@ fun RateAppBottomSheet(
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Text(
-                    text = "Rate Now",
+                    text = stringResource(R.string.rate_now),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -110,7 +112,7 @@ fun RateAppBottomSheet(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Not Now",
+                    text = stringResource(R.string.rate_not_now),
                     color = Color.White.copy(alpha = 0.5f),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium

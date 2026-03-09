@@ -29,6 +29,9 @@ interface EnrichedMetadataDao {
 
     @Query("DELETE FROM enriched_metadata WHERE cache_timestamp < :expiry")
     suspend fun deleteOlderThan(expiry: Long)
+
+    @Query("DELETE FROM enriched_metadata WHERE track_id = :trackId")
+    suspend fun deleteByTrackId(trackId: Long)
     
     /**
      * Get tracks that need enrichment, prioritized by play count.

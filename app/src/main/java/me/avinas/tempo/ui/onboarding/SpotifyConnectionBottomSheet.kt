@@ -22,6 +22,8 @@ import me.avinas.tempo.ui.utils.adaptiveSizeByCategory
 import me.avinas.tempo.ui.utils.adaptiveTextUnitByCategory
 import me.avinas.tempo.ui.utils.isSmallScreen
 import me.avinas.tempo.ui.utils.scaledSize
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 @Composable
 fun SpotifyConnectionBottomSheet(
@@ -59,7 +61,7 @@ fun SpotifyConnectionBottomSheet(
                 .padding(horizontal = 16.dp, vertical = 6.dp) 
         ) {
             Text(
-                text = "✓ Tempo works with any music app!", // Simple & Direct
+                text = stringResource(R.string.spotify_works_any_app),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = Color(0xFF22C55E)
@@ -69,7 +71,7 @@ fun SpotifyConnectionBottomSheet(
         Spacer(modifier = Modifier.height(adaptiveSizeByCategory(16.dp, 14.dp, 12.dp)))
 
         Text(
-            text = "Get High-Quality Art", // Focus on the visual benefit, not "Features"
+            text = stringResource(R.string.spotify_get_art),
             style = if (isSmall) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = Color.White,
@@ -79,7 +81,7 @@ fun SpotifyConnectionBottomSheet(
         Spacer(modifier = Modifier.height(adaptiveSizeByCategory(4.dp, 3.dp, 2.dp)))
 
         Text(
-            text = "Connect to use Spotify nicely reliable database for metadata:", // "Nicely reliable" might be too casual? "Use Spotify's reliable database"
+            text = stringResource(R.string.spotify_connect_metadata),
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.7f),
             fontSize = adaptiveTextUnitByCategory(14.sp, 13.sp, 12.sp)
@@ -88,15 +90,15 @@ fun SpotifyConnectionBottomSheet(
         Spacer(modifier = Modifier.height(adaptiveSizeByCategory(12.dp, 10.dp, 8.dp)))
 
         // Benefits (Using compact version)
-        BenefitItem(icon = Icons.Default.GraphicEq, text = "Reliable album artwork")
-        BenefitItem(icon = Icons.Default.Mood, text = "Accurate genre info")
-        BenefitItem(icon = Icons.Default.Bolt, text = "Mood & energy stats")
+        BenefitItem(icon = Icons.Default.GraphicEq, text = stringResource(R.string.spotify_reliable_art))
+        BenefitItem(icon = Icons.Default.Mood, text = stringResource(R.string.spotify_accurate_genre))
+        BenefitItem(icon = Icons.Default.Bolt, text = stringResource(R.string.spotify_mood_energy))
 
         Spacer(modifier = Modifier.height(adaptiveSizeByCategory(12.dp, 10.dp, 8.dp)))
         
         // Clarification note
         Text(
-            text = "This is optional. We never access your playlists or personal data.",
+            text = stringResource(R.string.spotify_optional),
             style = MaterialTheme.typography.labelSmall,
             color = Color.White.copy(alpha = 0.5f),
             textAlign = TextAlign.Center,
@@ -118,7 +120,7 @@ fun SpotifyConnectionBottomSheet(
             shape = RoundedCornerShape(24.dp)
         ) {
             Text(
-                text = "Connect Spotify",
+                text = stringResource(R.string.spotify_connect),
                 fontWeight = FontWeight.Bold
             )
         }
@@ -127,7 +129,7 @@ fun SpotifyConnectionBottomSheet(
 
         TextButton(onClick = onMaybeLater) {
             Text(
-                text = "Skip for now", // Neutral
+                text = stringResource(R.string.spotify_skip),
                 color = Color.White.copy(alpha = 0.6f), // Reduced prominence
                 fontWeight = FontWeight.Normal
             )

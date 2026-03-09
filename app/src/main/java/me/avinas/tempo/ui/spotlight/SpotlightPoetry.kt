@@ -1,96 +1,101 @@
 package me.avinas.tempo.ui.spotlight
 
+import android.content.Context
+import me.avinas.tempo.R
 import me.avinas.tempo.data.stats.TimeRange
 import java.time.LocalDate
 import java.util.Locale
 
 object SpotlightPoetry {
 
-    fun getHeading(timeRange: TimeRange): String {
+    fun getHeading(context: Context, timeRange: TimeRange): String {
         return when (timeRange) {
-            TimeRange.THIS_MONTH -> getMonthlyPoetry()
-            TimeRange.THIS_YEAR -> getYearlyPoetry()
-            TimeRange.ALL_TIME -> getAllTimePoetry()
-            else -> getMonthlyPoetry() // Fallback
+            TimeRange.THIS_MONTH -> getMonthlyPoetry(context)
+            TimeRange.THIS_YEAR -> getYearlyPoetry(context)
+            TimeRange.ALL_TIME -> getAllTimePoetry(context)
+            else -> getMonthlyPoetry(context) // Fallback
         }
     }
 
-    private fun getYearlyPoetry(): String {
+    private fun getYearlyPoetry(context: Context): String {
         val year = LocalDate.now().year
-        return "$year unfolds in sound"
+        return context.getString(R.string.poetry_year_unfolds, year)
     }
 
-    private fun getAllTimePoetry(): String {
-        return "A sound that stays"
+    private fun getAllTimePoetry(context: Context): String {
+        return context.getString(R.string.poetry_all_time)
     }
 
-    private fun getMonthlyPoetry(): String {
+    private fun getMonthlyPoetry(context: Context): String {
         val monthValues = LocalDate.now().monthValue
         
         return if (isTropical()) {
-            getTropicalPoetry(monthValues)
+            getTropicalPoetry(context, monthValues)
         } else if (isSouthernHemisphere()) {
-            getSouthernHemispherePoetry(monthValues)
+            getSouthernHemispherePoetry(context, monthValues)
         } else {
-            getNorthernHemispherePoetry(monthValues)
+            getNorthernHemispherePoetry(context, monthValues)
         }
     }
 
     // 🌐 NORTHERN HEMISPHERE
-    private fun getNorthernHemispherePoetry(month: Int): String {
-        return when (month) {
-            1 -> "January arrives quietly"
-            2 -> "February keeps its distance"
-            3 -> "March begins to loosen its grip"
-            4 -> "April opens the year further"
-            5 -> "May settles into motion"
-            6 -> "June stretches the days"
-            7 -> "July holds everything at once"
-            8 -> "August lingers a little longer"
-            9 -> "September brings edges back"
-            10 -> "October sharpens the picture"
-            11 -> "November turns inward"
-            12 -> "December draws a line under the year"
-            else -> "Time moves forward"
+    private fun getNorthernHemispherePoetry(context: Context, month: Int): String {
+        val resId = when (month) {
+            1 -> R.string.poetry_nh_1
+            2 -> R.string.poetry_nh_2
+            3 -> R.string.poetry_nh_3
+            4 -> R.string.poetry_nh_4
+            5 -> R.string.poetry_nh_5
+            6 -> R.string.poetry_nh_6
+            7 -> R.string.poetry_nh_7
+            8 -> R.string.poetry_nh_8
+            9 -> R.string.poetry_nh_9
+            10 -> R.string.poetry_nh_10
+            11 -> R.string.poetry_nh_11
+            12 -> R.string.poetry_nh_12
+            else -> R.string.poetry_time_forward
         }
+        return context.getString(resId)
     }
 
     // 🌐 SOUTHERN HEMISPHERE
-    private fun getSouthernHemispherePoetry(month: Int): String {
-        return when (month) {
-            1 -> "January opens wide"
-            2 -> "February stays bright"
-            3 -> "March begins to slow its pace"
-            4 -> "April cools the edges"
-            5 -> "May pulls things closer"
-            6 -> "June grows quieter"
-            7 -> "July holds steady"
-            8 -> "August waits patiently"
-            9 -> "September starts to open again"
-            10 -> "October gathers momentum"
-            11 -> "November expands outward"
-            12 -> "December closes loudly"
-            else -> "Time moves forward"
+    private fun getSouthernHemispherePoetry(context: Context, month: Int): String {
+        val resId = when (month) {
+            1 -> R.string.poetry_sh_1
+            2 -> R.string.poetry_sh_2
+            3 -> R.string.poetry_sh_3
+            4 -> R.string.poetry_sh_4
+            5 -> R.string.poetry_sh_5
+            6 -> R.string.poetry_sh_6
+            7 -> R.string.poetry_sh_7
+            8 -> R.string.poetry_sh_8
+            9 -> R.string.poetry_sh_9
+            10 -> R.string.poetry_sh_10
+            11 -> R.string.poetry_sh_11
+            12 -> R.string.poetry_sh_12
+            else -> R.string.poetry_time_forward
         }
+        return context.getString(resId)
     }
 
     // 🌍 EQUATORIAL COUNTRIES
-    private fun getTropicalPoetry(month: Int): String {
-        return when (month) {
-            1 -> "January marks the beginning"
-            2 -> "February keeps things moving"
-            3 -> "March finds its footing"
-            4 -> "April continues forward"
-            5 -> "May settles the pace"
-            6 -> "June reaches the middle"
-            7 -> "July moves past the center"
-            8 -> "August carries on"
-            9 -> "September looks ahead"
-            10 -> "October gains clarity"
-            11 -> "November prepares to close"
-            12 -> "December brings the year home"
-            else -> "Time moves forward"
+    private fun getTropicalPoetry(context: Context, month: Int): String {
+        val resId = when (month) {
+            1 -> R.string.poetry_tr_1
+            2 -> R.string.poetry_tr_2
+            3 -> R.string.poetry_tr_3
+            4 -> R.string.poetry_tr_4
+            5 -> R.string.poetry_tr_5
+            6 -> R.string.poetry_tr_6
+            7 -> R.string.poetry_tr_7
+            8 -> R.string.poetry_tr_8
+            9 -> R.string.poetry_tr_9
+            10 -> R.string.poetry_tr_10
+            11 -> R.string.poetry_tr_11
+            12 -> R.string.poetry_tr_12
+            else -> R.string.poetry_time_forward
         }
+        return context.getString(resId)
     }
 
     // Logic duplicated from SightCardGenerator for self-containment

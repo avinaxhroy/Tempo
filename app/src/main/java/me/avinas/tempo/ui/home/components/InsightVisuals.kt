@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.sp
 import me.avinas.tempo.data.local.entities.UserLevel
 import me.avinas.tempo.ui.components.GlassCard
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 
 @Composable
@@ -40,7 +42,7 @@ fun GamificationCard(
             ) {
                 Column {
                     Text(
-                        text = "LEVEL ${userLevel.currentLevel}",
+                        text = stringResource(R.string.level_label, userLevel.currentLevel),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color.White.copy(alpha = 0.7f),
                         letterSpacing = 1.sp
@@ -86,12 +88,12 @@ fun GamificationCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "${userLevel.totalXp} XP",
+                    text = stringResource(R.string.level_xp, userLevel.totalXp),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.6f)
                 )
                 Text(
-                    text = "Next: ${userLevel.xpForNextLevel} XP",
+                    text = stringResource(R.string.level_next_xp, userLevel.xpForNextLevel),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.6f)
                 )

@@ -164,7 +164,10 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_28_29,  // Source index for Last.fm query performance
                 AppDatabase.MIGRATION_29_30,  // Repair indices for existing users
                 AppDatabase.MIGRATION_30_31,  // Gamification: levels & badges
-                AppDatabase.MIGRATION_31_32   // Badge star tiers
+                AppDatabase.MIGRATION_31_32,  // Badge star tiers
+                AppDatabase.MIGRATION_32_33,   // User known artists for smart rename
+                AppDatabase.MIGRATION_33_34,   // Daily challenges gamification
+                AppDatabase.MIGRATION_34_35    // Anti-gaming: volume_level on listening_events
             )
             // Enable Write-Ahead Logging for better concurrent read/write performance
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
@@ -239,4 +242,7 @@ object DatabaseModule {
     
     @Provides
     fun provideGamificationDao(db: AppDatabase) = db.gamificationDao()
+    
+    @Provides
+    fun provideUserKnownArtistDao(db: AppDatabase) = db.userKnownArtistDao()
 }

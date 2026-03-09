@@ -25,9 +25,11 @@ import me.avinas.tempo.data.local.entities.*
         LastFmImportMetadata::class, // Last.fm import session tracking
         ScrobbleArchive::class, // Compressed archive for long-tail scrobbles
         UserLevel::class,    // Gamification: user level & XP
-        Badge::class          // Gamification: achievement badges
+        Badge::class,         // Gamification: achievement badges
+        UserKnownArtist::class, // User-defined known artist names (anti-split)
+        DailyChallenge::class // Gamification: daily challenges
     ],
-    version = 32, // Badge star tiers
+    version = 35, // Anti-gaming: volume_level column on listening_events
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -47,6 +49,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun lastFmImportMetadataDao(): LastFmImportMetadataDao  // Last.fm import tracking
     abstract fun scrobbleArchiveDao(): ScrobbleArchiveDao  // Scrobble archive DAO
     abstract fun gamificationDao(): GamificationDao  // Gamification: levels & badges
+    abstract fun userKnownArtistDao(): UserKnownArtistDao  // User-defined known artists
     
     companion object {
         private const val TAG = "AppDatabase"
@@ -1445,6 +1448,89 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 32 to 33.
+         *
+         * Adds user_known_artists table for user-defined artist/band names
+         * that should not be split by the ArtistParser.
+         * This is additive-only — no existing data is modified or deleted.
+         */
+        val MIGRATION_32_33 = object : Migration(32, 33) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 32 to 33 - User known artists")
+
+                // Create user_known_artists table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS user_known_artists (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        normalized_name TEXT NOT NULL,
+                        created_at INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
+
+                // Create unique index on normalized_name for deduplication & fast lookup
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_user_known_artists_normalized_name ON user_known_artists(normalized_name)")
+
+                Log.i(TAG, "Migration from version 32 to 33 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 33 to 34.
+         *
+         * Adds daily_challenges table for the gamification challenges feature.
+         */
+        val MIGRATION_33_34 = object : Migration(33, 34) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 33 to 34 - Daily Challenges")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS daily_challenges (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        challenge_id TEXT NOT NULL,
+                        date TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        xp_reward INTEGER NOT NULL,
+                        target_value INTEGER NOT NULL,
+                        current_progress INTEGER NOT NULL,
+                        is_completed INTEGER NOT NULL,
+                        completed_at INTEGER NOT NULL,
+                        category TEXT NOT NULL,
+                        difficulty TEXT NOT NULL,
+                        target_metadata TEXT
+                    )
+                """)
+
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_daily_challenges_date ON daily_challenges(date)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_daily_challenges_date_is_completed ON daily_challenges(date, is_completed)")
+
+                Log.i(TAG, "Migration from version 33 to 34 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 34 to 35: Anti-gaming volume tracking.
+         * 
+         * Adds a nullable volume_level column to listening_events.
+         * - NULL  = legacy record (treated as audible, included in XP).
+         * - 0    = device music stream was muted; these rows are excluded from XP.
+         * - 1+   = normal audible play.
+         */
+        val MIGRATION_34_35 = object : Migration(34, 35) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 34 to 35 - Anti-gaming volume tracking")
+
+                db.execSQL("""
+                    ALTER TABLE listening_events 
+                    ADD COLUMN volume_level INTEGER DEFAULT NULL
+                """)
+
+                Log.i(TAG, "Migration from version 34 to 35 completed successfully")
+            }
+        }
+
+        /**
          * All migrations in order.
          */
         val ALL_MIGRATIONS = arrayOf(
@@ -1473,7 +1559,10 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_28_29,
             MIGRATION_29_30,
             MIGRATION_30_31,
-            MIGRATION_31_32
+            MIGRATION_31_32,
+            MIGRATION_32_33,  // User known artists for smart rename
+            MIGRATION_33_34,  // Daily challenges gamification
+            MIGRATION_34_35   // Anti-gaming: volume_level on listening_events
         )
         
     }

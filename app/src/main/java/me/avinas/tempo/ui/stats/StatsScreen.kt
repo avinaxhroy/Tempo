@@ -50,6 +50,8 @@ import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.TimePeriodSelector
 import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.ui.theme.TempoSecondary
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -226,7 +228,7 @@ fun StatsScreen(
                 TopAppBar(
                     title = { 
                         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text("Stats", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(stringResource(R.string.stats_screen_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -276,9 +278,9 @@ private fun resolveNavigation(
 @Composable
 fun HeroStatItem(item: Any, onNavigate: () -> Unit) {
     val (title, subtitle, imageUrl, label) = when (item) {
-        is TopTrack -> Quad(item.title, item.artist, item.albumArtUrl, "#1 Track")
-        is TopArtist -> Quad(item.artist, "${item.playCount} plays", item.imageUrl, "#1 Artist")
-        is TopAlbum -> Quad(item.album, item.artist, item.albumArtUrl, "#1 Album")
+        is TopTrack -> Quad(item.title, item.artist, item.albumArtUrl, stringResource(R.string.stats_rank_1_track))
+        is TopArtist -> Quad(item.artist, "${item.playCount} plays", item.imageUrl, stringResource(R.string.stats_rank_1_artist))
+        is TopAlbum -> Quad(item.album, item.artist, item.albumArtUrl, stringResource(R.string.stats_rank_1_album))
         else -> Quad("Unknown", "", null, "")
     }
 
@@ -419,9 +421,9 @@ fun EmptyStatsState() {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.AutoMirrored.Filled.TrendingDown, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("No stats yet", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
+            Text(stringResource(R.string.stats_no_stats_yet), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Start listening to see your top charts!", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.stats_start_listening), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -455,9 +457,9 @@ fun StatsTabSelector(selectedTab: StatsTab, onTabSelected: (StatsTab) -> Unit) {
             ) {
                  Text(
                     text = when (tab) {
-                        StatsTab.TOP_SONGS -> "Songs"
-                        StatsTab.TOP_ARTISTS -> "Artists"
-                        StatsTab.TOP_ALBUMS -> "Albums"
+                        StatsTab.TOP_SONGS -> stringResource(R.string.stats_tab_songs)
+                        StatsTab.TOP_ARTISTS -> stringResource(R.string.stats_tab_artists)
+                        StatsTab.TOP_ALBUMS -> stringResource(R.string.stats_tab_albums)
                     },
                     color = contentColor,
                     style = MaterialTheme.typography.labelMedium,
@@ -483,7 +485,7 @@ fun SortBySelector(
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = "Sort by: ", style = MaterialTheme.typography.bodySmall, color = Color(0xFFCAC4D0))
+        Text(text = stringResource(R.string.stats_sort_by), style = MaterialTheme.typography.bodySmall, color = Color(0xFFCAC4D0))
         Box {
             TextButton(
                 onClick = { expanded = true },
@@ -491,9 +493,9 @@ fun SortBySelector(
             ) {
                 Text(
                     text = when (selectedSortBy) {
-                        SortBy.COMBINED_SCORE -> "Combined Score"
-                        SortBy.PLAY_COUNT -> "Play Count"
-                        SortBy.TOTAL_TIME -> "Total Time"
+                        SortBy.COMBINED_SCORE -> stringResource(R.string.stats_sort_combined)
+                        SortBy.PLAY_COUNT -> stringResource(R.string.stats_sort_play_count)
+                        SortBy.TOTAL_TIME -> stringResource(R.string.stats_sort_total_time)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
@@ -504,9 +506,9 @@ fun SortBySelector(
                 SortBy.entries.forEach { sortBy ->
                     DropdownMenuItem(
                         text = { Text(when (sortBy) {
-                            SortBy.COMBINED_SCORE -> "Combined Score"
-                            SortBy.PLAY_COUNT -> "Play Count"
-                            SortBy.TOTAL_TIME -> "Total Time"
+                            SortBy.COMBINED_SCORE -> stringResource(R.string.stats_sort_combined)
+                            SortBy.PLAY_COUNT -> stringResource(R.string.stats_sort_play_count)
+                            SortBy.TOTAL_TIME -> stringResource(R.string.stats_sort_total_time)
                         }, fontWeight = if (sortBy == selectedSortBy) FontWeight.Bold else FontWeight.Normal) },
                         onClick = { expanded = false; onSortBySelected(sortBy) },
                         leadingIcon = if (sortBy == selectedSortBy) { { Text("✓", color = TempoRed) } } else null

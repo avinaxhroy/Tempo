@@ -5,7 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -35,7 +35,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -46,9 +46,9 @@ class MainActivity : ComponentActivity() {
     @javax.inject.Inject
     lateinit var walkthroughController: me.avinas.tempo.ui.components.WalkthroughController
     
-    // Observable state for triggering Spotify import after auth callback
     private val spotifyImportTrigger = mutableStateOf(0)
     private val spotifyAuthFailed = mutableStateOf(false)
+    private val navigationTrigger = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
         
         // Check if we're returning from Spotify auth callback
         checkSpotifyAuthIntent(intent)
+        checkNavigationIntent(intent)
 
         // Request notification permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -81,7 +82,8 @@ class MainActivity : ComponentActivity() {
                             ServiceHealthWorker.schedule(this)
                         },
                         spotifyImportTrigger = spotifyImportTrigger.value,
-                        spotifyAuthFailed = spotifyAuthFailed.value
+                        spotifyAuthFailed = spotifyAuthFailed.value,
+                        navigationTrigger = navigationTrigger.value
                     )
                 }
             }
@@ -92,6 +94,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         // Handle when activity is already running and receives new intent
         checkSpotifyAuthIntent(intent)
+        checkNavigationIntent(intent)
     }
     
     private fun checkSpotifyAuthIntent(intent: Intent?) {
@@ -114,6 +117,16 @@ class MainActivity : ComponentActivity() {
             spotifyAuthFailed.value = true
         }
     }
+    
+    private fun checkNavigationIntent(intent: Intent?) {
+        if (intent?.hasExtra("navigate_to") == true) {
+            val dest = intent.getStringExtra("navigate_to")
+            if (dest != null) {
+                navigationTrigger.value = dest
+                intent.removeExtra("navigate_to")
+            }
+        }
+    }
 }
 
 enum class OnboardingStep {
@@ -127,6 +140,7 @@ fun TempoApp(
     onSetupComplete: () -> Unit,
     spotifyImportTrigger: Int = 0,
     spotifyAuthFailed: Boolean = false,
+    navigationTrigger: String? = null,
     viewModel: OnboardingViewModel = hiltViewModel(),
     spotifyViewModel: SpotifyViewModel = hiltViewModel()
 ) {
@@ -264,7 +278,8 @@ fun TempoApp(
                     walkthroughController = walkthroughController,
                     onResetToOnboarding = {
                         currentStep = OnboardingStep.WELCOME
-                    }
+                    },
+                    navigationTrigger = navigationTrigger
                 )
             }
         }

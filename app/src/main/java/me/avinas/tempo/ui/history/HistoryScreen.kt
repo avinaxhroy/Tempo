@@ -62,6 +62,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -242,7 +244,7 @@ fun HistoryScreen(
                             Box(modifier = Modifier.weight(1f)) {
                                 if (uiState.searchQuery.isEmpty()) {
                                     Text(
-                                        text = "Search songs...",
+                                        text = stringResource(R.string.history_search_hint),
                                         color = Color(0xFFCAC4D0),
                                         style = MaterialTheme.typography.bodyLarge
                                     )
@@ -315,7 +317,7 @@ fun HistoryFilterSheetContent(
             .navigationBarsPadding()
     ) {
         Text(
-            text = "Filter History",
+            text = stringResource(R.string.history_filter_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = Color.White
@@ -324,7 +326,7 @@ fun HistoryFilterSheetContent(
         Spacer(modifier = Modifier.height(24.dp))
         
         Text(
-            "Time Range", 
+            stringResource(R.string.history_time_range), 
             style = MaterialTheme.typography.labelLarge, 
             color = Color(0xFFCAC4D0)
         )
@@ -337,7 +339,7 @@ fun HistoryFilterSheetContent(
             FilterChip(
                 selected = selectedRange == "All Time",
                 onClick = { selectedRange = "All Time" },
-                label = { Text("All Time") },
+                label = { Text(stringResource(R.string.history_all_time)) },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = TempoRed,
                     selectedLabelColor = Color.White,
@@ -349,7 +351,7 @@ fun HistoryFilterSheetContent(
             FilterChip(
                 selected = selectedRange == "Last 7 Days",
                 onClick = { selectedRange = "Last 7 Days" },
-                label = { Text("7 Days") },
+                label = { Text(stringResource(R.string.history_7_days_abbr)) },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = TempoRed,
                     selectedLabelColor = Color.White,
@@ -361,7 +363,7 @@ fun HistoryFilterSheetContent(
             FilterChip(
                 selected = selectedRange == "Last 30 Days",
                 onClick = { selectedRange = "Last 30 Days" },
-                label = { Text("30 Days") },
+                label = { Text(stringResource(R.string.history_30_days_abbr)) },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = TempoRed,
                     selectedLabelColor = Color.White,
@@ -375,7 +377,7 @@ fun HistoryFilterSheetContent(
         Spacer(modifier = Modifier.height(24.dp))
         
         Text(
-            "Playback", 
+            stringResource(R.string.history_playback), 
             style = MaterialTheme.typography.labelLarge, 
             color = Color(0xFFCAC4D0)
         )
@@ -392,7 +394,7 @@ fun HistoryFilterSheetContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Show Skipped Songs", 
+                    stringResource(R.string.history_show_skipped), 
                     color = Color.White,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f)
@@ -417,7 +419,7 @@ fun HistoryFilterSheetContent(
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCAC4D0))
             ) {
-                Text("Reset")
+                Text(stringResource(R.string.history_reset))
             }
             
             Button(
@@ -428,7 +430,7 @@ fun HistoryFilterSheetContent(
                 modifier = Modifier.weight(1f).height(48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = TempoRed)
             ) {
-                Text("Apply Filters")
+                Text(stringResource(R.string.history_apply_filters))
             }
         }
     }
@@ -491,10 +493,10 @@ fun SwipeToDeleteHistoryItem(
                 )
             },
             title = {
-                Text("Delete from history?")
+                Text(stringResource(R.string.history_delete_dialog_title))
             },
             text = {
-                Text("This will permanently remove \"${item.title}\" from your listening history.")
+                Text(stringResource(R.string.history_delete_dialog_message, item.title))
             },
             confirmButton = {
                 TextButton(
@@ -504,7 +506,7 @@ fun SwipeToDeleteHistoryItem(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = TempoRed)
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.history_delete_button))
                 }
             },
             dismissButton = {
@@ -512,7 +514,7 @@ fun SwipeToDeleteHistoryItem(
                     showDeleteDialog = false 
                     scope.launch { dismissState.snapTo(SwipeToDismissBoxValue.Settled) }
                 }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
             containerColor = Color(0xFF1E1B24), // Charcoal Surface
@@ -630,14 +632,14 @@ fun HistoryListContent(
                             tint = Color(0xFF2D2A32) // Charcoal Lighter
                         )
                         Text(
-                            text = "History is empty",
+                            text = stringResource(R.string.history_empty_title),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Play some music to see it here.",
+                            text = stringResource(R.string.history_empty_message),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0xFFCAC4D0) // Warm Gray
                         )
@@ -650,8 +652,8 @@ fun HistoryListContent(
             if (viewMode == HistoryViewMode.SEPARATED && groupedItems.isNotEmpty()) {
                 item(key = "recent_activity_header") {
                     SectionDividerHeader(
-                        title = "Recent Activity",
-                        subtitle = "From Spotify & notifications",
+                        title = stringResource(R.string.history_recent_activity),
+                        subtitle = stringResource(R.string.history_recent_activity_subtitle),
                         icon = Icons.Default.PlayCircle,
                         iconTint = TempoRed
                     )
@@ -726,8 +728,8 @@ fun HistoryListContent(
                 // Section header for Last.fm History
                 item(key = "lastfm_history_header") {
                     SectionDividerHeader(
-                        title = "Last.fm History",
-                        subtitle = "Imported listening history",
+                        title = stringResource(R.string.history_lastfm_history),
+                        subtitle = stringResource(R.string.history_lastfm_subtitle),
                         icon = Icons.Default.History,
                         iconTint = Color(0xFFFFB74D) // Amber/Orange
                     )
@@ -844,13 +846,13 @@ fun SeparatedModeInfoBanner(
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Last.fm History Imported",
+                    text = stringResource(R.string.history_lastfm_imported),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     color = Color.White
                 )
                 Text(
-                    text = "${archiveTotalPlays.formatNumber()} plays from $archiveTrackCount tracks",
+                    text = stringResource(R.string.history_archive_plays, archiveTotalPlays.formatNumber(), archiveTrackCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFCAC4D0)
                 )
@@ -940,7 +942,7 @@ fun ArchiveSectionHeader(
                 modifier = Modifier.size(20.dp)
             )
             Text(
-                text = "From Archive",
+                text = stringResource(R.string.history_from_archive),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFFFB74D),
@@ -948,7 +950,7 @@ fun ArchiveSectionHeader(
             )
         }
         Text(
-            text = "Showing $itemCount of $totalTracks archived tracks from Last.fm import",
+            text = stringResource(R.string.history_archive_showing_tracks, itemCount, totalTracks),
             style = MaterialTheme.typography.bodySmall,
             color = Color(0xFFCAC4D0),
             modifier = Modifier.padding(top = 4.dp)
@@ -1042,7 +1044,7 @@ fun ArchiveHistoryListItem(item: ArchiveHistoryItem) {
                 )
                 // Play count info
                 Text(
-                    text = "${item.playCount} plays in archive",
+                    text = stringResource(R.string.history_archive_plays_item, item.playCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFFFB74D).copy(alpha = 0.8f)
                 )
@@ -1247,7 +1249,7 @@ fun HistoryListItem(
         ) {
             // Section Header: Block this track
             Text(
-                text = "BLOCK THIS TRACK",
+                text = stringResource(R.string.history_block_track),
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.Gray,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -1255,8 +1257,8 @@ fun HistoryListItem(
             DropdownMenuItem(
                 text = { 
                     Column {
-                        Text("It's a Podcast", color = Color.White)
-                        Text("Remove from history & block future plays", 
+                        Text(stringResource(R.string.history_its_a_podcast), color = Color.White)
+                        Text(stringResource(R.string.history_remove_and_block), 
                              color = Color.Gray, 
                              style = MaterialTheme.typography.labelSmall)
                     }
@@ -1276,8 +1278,8 @@ fun HistoryListItem(
             DropdownMenuItem(
                 text = { 
                     Column {
-                        Text("It's an Audiobook", color = Color.White)
-                        Text("Remove from history & block future plays", 
+                        Text(stringResource(R.string.history_its_an_audiobook), color = Color.White)
+                        Text(stringResource(R.string.history_remove_and_block), 
                              color = Color.Gray, 
                              style = MaterialTheme.typography.labelSmall)
                     }
@@ -1299,7 +1301,7 @@ fun HistoryListItem(
             
             // Section Header: Block artist
             Text(
-                text = "BLOCK ENTIRE ARTIST",
+                text = stringResource(R.string.history_block_entire_artist),
                 style = MaterialTheme.typography.labelSmall,
                 color = TempoRed.copy(alpha = 0.7f),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -1307,8 +1309,8 @@ fun HistoryListItem(
             DropdownMenuItem(
                 text = { 
                     Column {
-                        Text("\"${item.artist}\" is Podcast", color = TempoRed)
-                        Text("Remove ALL content from this source", 
+                        Text(stringResource(R.string.history_artist_is_podcast, item.artist), color = TempoRed)
+                        Text(stringResource(R.string.history_remove_all_from_source), 
                              color = Color.Gray, 
                              style = MaterialTheme.typography.labelSmall)
                     }
@@ -1328,8 +1330,8 @@ fun HistoryListItem(
             DropdownMenuItem(
                 text = { 
                     Column {
-                        Text("\"${item.artist}\" is Audiobook", color = TempoRed)
-                        Text("Remove ALL content from this source", 
+                        Text(stringResource(R.string.history_artist_is_audiobook, item.artist), color = TempoRed)
+                        Text(stringResource(R.string.history_remove_all_from_source), 
                              color = Color.Gray, 
                              style = MaterialTheme.typography.labelSmall)
                     }

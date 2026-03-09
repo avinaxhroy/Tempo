@@ -36,8 +36,8 @@ android {
         applicationId = "me.avinas.tempo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 437
-        versionName = "4.3.7"
+        versionCode = 440
+        versionName = "4.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -128,6 +128,9 @@ dependencies {
     // Material Components
     implementation("com.google.android.material:material:1.12.0") 
 
+    // AppCompat (for per-app language support)
+    implementation("androidx.appcompat:appcompat:1.7.0")
+
     // Compose
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -140,9 +143,6 @@ dependencies {
     // Glance (Widgets)
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)
-
-    // Typography
-    implementation("androidx.compose.ui:ui-text-google-fonts:1.7.6")
 
     // Room
     implementation(libs.room.runtime)

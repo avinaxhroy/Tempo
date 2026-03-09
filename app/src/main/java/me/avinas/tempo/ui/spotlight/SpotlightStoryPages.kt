@@ -65,6 +65,8 @@ import me.avinas.tempo.ui.components.GlassCard
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 data class SpotlightDimens(
     val scale: Float,
@@ -222,10 +224,10 @@ fun ListeningMinutesPage(page: SpotlightStoryPage.ListeningMinutes) {
         ) {
             EnterAnimation(delay = 0) {
                 val titleText = when (page.timeRange) {
-                    TimeRange.THIS_YEAR -> "Your ${page.year} Spotlight"
-                    TimeRange.THIS_MONTH -> "This Month"
-                    TimeRange.ALL_TIME -> "All-Time Stats"
-                    else -> "Your Spotlight"
+                    TimeRange.THIS_YEAR -> stringResource(R.string.spotlight_this_year_title, page.year)
+                    TimeRange.THIS_MONTH -> stringResource(R.string.spotlight_this_month_title)
+                    TimeRange.ALL_TIME -> stringResource(R.string.spotlight_all_time_title)
+                    else -> stringResource(R.string.spotlight_default_title)
                 }
 
                 Text(
@@ -243,7 +245,7 @@ fun ListeningMinutesPage(page: SpotlightStoryPage.ListeningMinutes) {
             EnterAnimation(delay = 200) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "You listened for",
+                        text = stringResource(R.string.spotlight_listened_for),
                         style = MaterialTheme.typography.headlineMedium.copy(fontSize = dimens.textHeadline),
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -268,7 +270,7 @@ fun ListeningMinutesPage(page: SpotlightStoryPage.ListeningMinutes) {
                     )
 
                     Text(
-                        text = "minutes",
+                        text = stringResource(R.string.spotlight_listened_minutes),
                         style = MaterialTheme.typography.headlineSmall.copy(fontSize = dimens.textHeadline),
                         fontWeight = FontWeight.Bold,
                         color = Color.White.copy(alpha = 0.9f),
@@ -300,7 +302,7 @@ fun ListeningMinutesPage(page: SpotlightStoryPage.ListeningMinutes) {
                         contentPadding = PaddingValues(horizontal = dimens.horizontalPadding, vertical = dimens.spacerSmall)
                     ) {
                         Text(
-                            text = "That's over $days days non-stop!",
+                            text = stringResource(R.string.spotlight_days_nonstop, days),
                             style = MaterialTheme.typography.titleMedium.copy(fontSize = dimens.textBody),
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White
@@ -332,7 +334,7 @@ fun TopArtistPage(page: SpotlightStoryPage.TopArtist) {
             // HEADER - Fixed
             EnterAnimation(delay = 0) {
                  Text(
-                     text = "Your Top Artist",
+                     text = stringResource(R.string.spotlight_top_artist_label),
                      style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                      fontWeight = FontWeight.Bold,
                      color = Color.White.copy(alpha = 0.9f),
@@ -611,7 +613,7 @@ fun TopSongsPage(page: SpotlightStoryPage.TopSongs) {
             // HEADER - Fixed
             EnterAnimation(delay = 0) {
                 Text(
-                    text = "Your Top Song",
+                    text = stringResource(R.string.spotlight_top_song_label),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
                     color = Color.White.copy(alpha = 0.9f),
@@ -811,7 +813,7 @@ fun TopGenresPage(page: SpotlightStoryPage.TopGenres) {
         ) {
             EnterAnimation(delay = 0) {
                 Text(
-                    text = "Your Top Genres",
+                    text = stringResource(R.string.spotlight_top_genres_label),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
                     color = Color.White.copy(alpha = 0.9f),
@@ -982,7 +984,7 @@ fun PersonalityPage(page: SpotlightStoryPage.Personality) {
         ) {
             EnterAnimation(delay = 0) {
                 Text(
-                    text = "Your Listening Personality",
+                    text = stringResource(R.string.spotlight_listening_personality),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
                     color = Color.White.copy(alpha = 0.9f),
@@ -1091,8 +1093,9 @@ fun PersonalityPage(page: SpotlightStoryPage.Personality) {
 
 @Composable
 fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
+    val context = LocalContext.current
     val titleText = remember(page.timeRange) {
-        SpotlightPoetry.getHeading(page.timeRange)
+        SpotlightPoetry.getHeading(context, page.timeRange)
     }
     
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -1144,7 +1147,7 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                                 verticalArrangement = Arrangement.Center,
                                 modifier = Modifier.fillMaxSize()
                             ) {
-                                Text("Listening Time", style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel), color = Color.White.copy(alpha = 0.8f))
+                                Text(stringResource(R.string.spotlight_conclusion_listening_time), style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel), color = Color.White.copy(alpha = 0.8f))
                                 Spacer(modifier = Modifier.height(8.dp * dimens.scale))
                                 Text(
                                     String.format(java.util.Locale.US, "%,d", page.totalMinutes),
@@ -1152,7 +1155,7 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
-                                Text("min", style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel), color = Color.White.copy(alpha = 0.6f))
+                                Text(stringResource(R.string.spotlight_conclusion_min), style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel), color = Color.White.copy(alpha = 0.6f))
                             }
                         }
                     }
@@ -1208,7 +1211,7 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                             Column(
                                 modifier = Modifier.fillMaxSize()
                             ) {
-                                Text("Top Artists", style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel), color = Color.White.copy(alpha = 0.8f))
+                                Text(stringResource(R.string.spotlight_conclusion_top_artists), style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel), color = Color.White.copy(alpha = 0.8f))
                                 Spacer(modifier = Modifier.height(12.dp * dimens.scale))
                                 
                                 val artistCount = 5
@@ -1251,7 +1254,7 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                             Column(
                                 modifier = Modifier.fillMaxSize()
                             ) {
-                                Text("Top Songs", style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel), color = Color.White.copy(alpha = 0.8f))
+                                Text(stringResource(R.string.spotlight_conclusion_top_songs), style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel), color = Color.White.copy(alpha = 0.8f))
                                 Spacer(modifier = Modifier.height(12.dp * dimens.scale))
                                 
                                 val songCount = 5
@@ -1294,7 +1297,7 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                     contentPadding = PaddingValues(dimens.spacerSmall)
                 ) {
                     Column {
-                        Text("Top Genres", style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel), color = Color.White.copy(alpha = 0.8f))
+                        Text(stringResource(R.string.spotlight_conclusion_top_genres), style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel), color = Color.White.copy(alpha = 0.8f))
                         Spacer(modifier = Modifier.height(8.dp * dimens.scale))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1326,14 +1329,15 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
 }
 
 
+@Composable
 private fun getPersonalityAssets(type: String): Pair<ImageVector, Color> {
     return when (type) {
-        "Party Starter" -> Icons.Default.Celebration to Color(0xFFF472B6)
-        "Intense Soul" -> Icons.Default.Bolt to Color(0xFFEF4444)
-        "Peaceful Optimist" -> Icons.Default.Spa to Color(0xFF34D399)
-        "Deep Thinker" -> Icons.Default.SelfImprovement to Color(0xFF60A5FA)
-        "Dance Floor Regular" -> Icons.Default.MusicNote to Color(0xFFF59E0B)
-        "Balanced Enthusiast" -> Icons.Default.Balance to Color(0xFFA78BFA)
+        stringResource(R.string.personality_party_starter_name) -> Icons.Default.Celebration to Color(0xFFF472B6)
+        stringResource(R.string.personality_intense_soul_name) -> Icons.Default.Bolt to Color(0xFFEF4444)
+        stringResource(R.string.personality_peaceful_optimist_name) -> Icons.Default.Spa to Color(0xFF34D399)
+        stringResource(R.string.personality_deep_thinker_name) -> Icons.Default.SelfImprovement to Color(0xFF60A5FA)
+        stringResource(R.string.personality_dance_floor_regular_name) -> Icons.Default.MusicNote to Color(0xFFF59E0B)
+        stringResource(R.string.personality_balanced_enthusiast_name) -> Icons.Default.Balance to Color(0xFFA78BFA)
         else -> Icons.Default.Psychology to Color(0xFFC4B5FD)
     }
 }

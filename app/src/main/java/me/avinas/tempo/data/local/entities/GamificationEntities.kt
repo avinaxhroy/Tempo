@@ -40,7 +40,7 @@ data class UserLevel(
     /** XP remaining to reach next level */
     val xpRemaining: Long
         get() = (xpForNextLevel - totalXp).coerceAtLeast(0)
-    
+
     /** User title based on level */
     val title: String
         get() = when {
@@ -93,4 +93,33 @@ data class Badge(
     /** Star label like "★★★☆☆" */
     val starLabel: String
         get() = "★".repeat(stars) + "☆".repeat((5 - stars).coerceAtLeast(0))
+}
+
+/**
+ * Represents a daily challenge for gamification.
+ */
+@Entity(
+    tableName = "daily_challenges",
+    indices = [
+        Index(value = ["date"]),
+        Index(value = ["date", "is_completed"])
+    ]
+)
+data class DailyChallenge(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "challenge_id") val challengeId: String,
+    val date: String, // YYYY-MM-DD
+    val title: String,
+    val description: String,
+    @ColumnInfo(name = "xp_reward") val xpReward: Int,
+    @ColumnInfo(name = "target_value") val targetValue: Int,
+    @ColumnInfo(name = "current_progress") val currentProgress: Int = 0,
+    @ColumnInfo(name = "is_completed") val isCompleted: Boolean = false,
+    @ColumnInfo(name = "completed_at") val completedAt: Long = 0,
+    val category: String,
+    val difficulty: String, // EASY, MEDIUM, HARD
+    @ColumnInfo(name = "target_metadata") val targetMetadata: String? = null // For specific artists/genres
+) {
+    val progressFraction: Float
+        get() = if (targetValue > 0) (currentProgress.toFloat() / targetValue).coerceIn(0f, 1f) else 0f
 }

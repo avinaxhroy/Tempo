@@ -39,6 +39,8 @@ import me.avinas.tempo.ui.utils.isCompactScreen
 import me.avinas.tempo.ui.utils.rememberScreenHeightPercentage
 import me.avinas.tempo.ui.utils.scaledSize
 import me.avinas.tempo.ui.utils.rememberClampedHeightPercentage
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 /**
  * Educational screen explaining how Tempo's notification-based tracking works.
@@ -95,7 +97,7 @@ fun HowItWorksScreen(
             val isSmall = isSmallScreen()
             // Header
             Text(
-                text = "Here's How It Works",
+                text = stringResource(R.string.how_it_works_title),
                 style = if (isSmall) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
@@ -106,7 +108,7 @@ fun HowItWorksScreen(
             Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.01f)))
 
             Text(
-                text = "No login. No account. Just music.",
+                text = stringResource(R.string.how_it_works_subtitle),
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = Color.White.copy(alpha = 0.7f),
@@ -126,8 +128,8 @@ fun HowItWorksScreen(
                     modifier = Modifier.alpha(step1Alpha),
                     icon = Icons.Default.MusicNote,
                     iconColor = Color(0xFF1DB954), // Spotify green
-                    title = "You play music",
-                    subtitle = "Spotify, YouTube Music, or any app"
+                    title = stringResource(R.string.how_it_works_step1_title),
+                    subtitle = stringResource(R.string.how_it_works_step1_subtitle)
                 )
 
                 // Animated connector
@@ -138,8 +140,8 @@ fun HowItWorksScreen(
                     modifier = Modifier.alpha(step2Alpha),
                     icon = Icons.Default.Notifications,
                     iconColor = Color(0xFFF59E0B), // Amber
-                    title = "Notification appears",
-                    subtitle = "Tempo reads only music info"
+                    title = stringResource(R.string.how_it_works_step2_title),
+                    subtitle = stringResource(R.string.how_it_works_step2_subtitle)
                 )
 
                 // Animated connector
@@ -150,8 +152,8 @@ fun HowItWorksScreen(
                     modifier = Modifier.alpha(step3Alpha),
                     icon = Icons.Default.BarChart,
                     iconColor = TempoRed,
-                    title = "Stats saved locally",
-                    subtitle = "On your phone, nowhere else"
+                    title = stringResource(R.string.how_it_works_step3_title),
+                    subtitle = stringResource(R.string.how_it_works_step3_subtitle)
                 )
             }
 
@@ -162,9 +164,9 @@ fun HowItWorksScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                InfoBadge(emoji = "📱", text = "20+ apps")
-                InfoBadge(emoji = "🔒", text = "100% local")
-                InfoBadge(emoji = "⚡", text = "Auto-tracks")
+                InfoBadge(emoji = "📱", text = stringResource(R.string.how_it_works_badge_apps))
+                InfoBadge(emoji = "🔒", text = stringResource(R.string.how_it_works_badge_local))
+                InfoBadge(emoji = "⚡", text = stringResource(R.string.how_it_works_badge_auto))
             }
 
             // Flexible spacer before button
@@ -187,7 +189,7 @@ fun HowItWorksScreen(
                 )
             ) {
                 Text(
-                    text = "Next",
+                    text = stringResource(R.string.how_it_works_next),
                     fontSize = adaptiveTextUnitByCategory(18.sp, 17.sp, 16.sp),
                     fontWeight = FontWeight.Bold
                 )
@@ -205,7 +207,7 @@ fun HowItWorksScreen(
                 .padding(16.dp)
         ) {
             Text(
-                text = "Skip",
+                text = stringResource(R.string.welcome_skip),
                 color = Color.White.copy(alpha = 0.6f),
                 style = MaterialTheme.typography.labelLarge
             )

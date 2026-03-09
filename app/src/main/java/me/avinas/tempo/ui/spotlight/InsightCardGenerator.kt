@@ -18,6 +18,9 @@ import me.avinas.tempo.data.stats.TimeRange
 import me.avinas.tempo.data.stats.TopGenre
 import me.avinas.tempo.data.stats.TopTrack
 import javax.inject.Inject
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import me.avinas.tempo.R
 import kotlin.random.Random
 
 /**
@@ -53,6 +56,7 @@ private data class PrefetchedData(
 )
 
 class InsightCardGenerator @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val repository: StatsRepository
 ) {
     companion object {
@@ -243,7 +247,7 @@ class InsightCardGenerator @Inject constructor(
                     nightPercentage = nightPct,
                     dayTopGenre = "Music",
                     nightTopGenre = "Music",
-                    sunListenerType = if (dayPct > nightPct) "Sun Chaser" else "Moon Owl",
+                    sunListenerType = if (dayPct > nightPct) context.getString(R.string.insight_sun_chaser) else context.getString(R.string.insight_moon_owl),
                     hourlyLevels = hourlyLevels,
                     confidence = confidence // Phase 3: Data quality indicator
                 )
@@ -296,11 +300,11 @@ class InsightCardGenerator @Inject constructor(
             
             // Better warrior type logic with edge case handling
             val warriorType = when {
-                weekdayAvg == 0 && weekendAvg > 10 -> "Pure Weekend Warrior"
-                weekendAvg == 0 && weekdayAvg > 10 -> "Weekday Only"
-                weekendAvg > (weekdayAvg * 1.5) -> "Weekend Warrior"
-                weekdayAvg > (weekendAvg * 1.5) -> "Daily Grinder"
-                else -> "Consistent Vibez"
+                weekdayAvg == 0 && weekendAvg > 10 -> context.getString(R.string.insight_pure_weekend_warrior)
+                weekendAvg == 0 && weekdayAvg > 10 -> context.getString(R.string.insight_weekday_only)
+                weekendAvg > (weekdayAvg * 1.5) -> context.getString(R.string.insight_weekend_warrior)
+                weekdayAvg > (weekendAvg * 1.5) -> context.getString(R.string.insight_daily_grinder)
+                else -> context.getString(R.string.insight_consistent_vibez)
             }
             
             // Safe percentage calculation
@@ -376,12 +380,12 @@ class InsightCardGenerator @Inject constructor(
             
             // More gradual peak date descriptions (Phase 2)
             val peakDate = when {
-                daysSince < 30 -> "last month"
-                daysSince < 60 -> "a couple months ago"
-                daysSince < 90 -> "a few months ago"
-                daysSince < 180 -> "earlier this year"
-                daysSince < 365 -> "last year"
-                else -> "a while ago"
+                daysSince < 30 -> context.getString(R.string.insight_last_month)
+                daysSince < 60 -> context.getString(R.string.insight_couple_months_ago)
+                daysSince < 90 -> context.getString(R.string.insight_few_months_ago)
+                daysSince < 180 -> context.getString(R.string.insight_earlier_year)
+                daysSince < 365 -> context.getString(R.string.insight_last_year)
+                else -> context.getString(R.string.insight_while_ago)
             }
 
             CardGenerationResult.Success(
@@ -410,8 +414,8 @@ class InsightCardGenerator @Inject constructor(
             CardGenerationResult.Success(
                 SpotlightCardData.DeepDive(
                     durationMinutes = (data.overview.longestSessionMs / 60000).toInt(),
-                    date = "Recently",
-                    timeOfDay = "The Zone",
+                    date = context.getString(R.string.insight_recently),
+                    timeOfDay = context.getString(R.string.insight_the_zone),
                     topArtist = null
                 )
             )
@@ -665,23 +669,29 @@ class InsightCardGenerator @Inject constructor(
             
             // Determine Type
             val type = when {
-                newPercent >= 70 -> "The Explorer" // Mostly new music
-                newPercent <= 30 -> "The Time Traveler" // Mostly nostalgia/repeats
-                else -> "The Orbiter" // Balanced
+                newPercent >= 70 -> context.getString(R.string.insight_explorer)
+                newPercent <= 30 -> context.getString(R.string.insight_time_traveler)
+                else -> context.getString(R.string.insight_orbiter)
             }
             
-            val description = when (type) {
-                "The Explorer" -> {
-                    val artistPart = discoveryStats.topNewArtist?.let { " like $it" } ?: ""
-                    "You ventured into the unknown with $newPercent% new music. Your top discovery was a new sound$artistPart."
+            val description = when {
+                newPercent >= 70 -> {
+                    if (discoveryStats.topNewArtist != null)
+                        context.getString(R.string.insight_desc_explorer_with_artist, newPercent, discoveryStats.topNewArtist)
+                    else
+                        context.getString(R.string.insight_desc_explorer_no_artist, newPercent)
                 }
-                "The Time Traveler" -> {
-                    val artistPart = discoveryStats.topNewArtist?.let { " to discover $it" } ?: ""
-                    "You found comfort in your favorites ${100 - newPercent}% of the time. But you still made time$artistPart."
+                newPercent <= 30 -> {
+                    if (discoveryStats.topNewArtist != null)
+                        context.getString(R.string.insight_desc_time_traveler_with_artist, 100 - newPercent, discoveryStats.topNewArtist)
+                    else
+                        context.getString(R.string.insight_desc_time_traveler_no_artist, 100 - newPercent)
                 }
                 else -> {
-                    val artistPart = discoveryStats.topNewArtist?.let { " like $it" } ?: ""
-                    "Perfectly balanced. You explored new sounds$artistPart while keeping ${100 - newPercent}% of your listening grounded in favorites."
+                    if (discoveryStats.topNewArtist != null)
+                        context.getString(R.string.insight_desc_orbiter_with_artist, discoveryStats.topNewArtist.toString(), 100 - newPercent)
+                    else
+                        context.getString(R.string.insight_desc_orbiter_no_artist, 100 - newPercent)
                 }
             }
 
@@ -996,86 +1006,26 @@ class InsightCardGenerator @Inject constructor(
     }
 
     private fun getDynamicPersonalityText(type: String): Triple<String, String, String> {
-        val options = when (type) {
-            "Hip Hop Head" -> listOf(
-                Triple("Hip Hop Head", "You live for the bars, the beats, and the stories.", "The rhythm isn't just in your headphones, it's in your walk."),
-                Triple("Hip Hop Head", "From heavy 808s to complex rhymes, you appreciate the craft.", "Mainstream or underground, if it flows, it plays."),
-                Triple("Hip Hop Head", "It's more than music, it's a culture.", "You keep your head nodding all day long.")
-            )
-            "Pop Icon" -> listOf(
-                Triple("Pop Icon", "You keep your finger on the pulse of what's trending and catchy.", "If it's a hit, you probably heard it first."),
-                Triple("Pop Icon", "Your playlist is pure serotonin.", "You know every hook, every chorus, every word."),
-                Triple("Pop Icon", "You just want to have a good time.", "Life's too short for boring melodies.")
-            )
-            "Rock Star" -> listOf(
-                Triple("Rock Star", "You crave raw energy and authentic sounds.", "Loud guitars and real drums are your love language."),
-                Triple("Rock Star", "You like your music with a bit of grit.", "Turning it up to 11 is the only way."),
-                Triple("Rock Star", "Rebellion and rhythm run through your veins.", "You don't just listen, you feel the noise.")
-            )
-            "Metalhead" -> listOf(
-                Triple("Metalhead", "You find peace in the chaos and power of heavy music.", "Intensity isn't a flaw, it's a requirement."),
-                Triple("Metalhead", "Heavy riffs and double kicks fuel your soul.", "The heavier, the better."),
-                Triple("Metalhead", "You find beauty in the distortion.", "Silence is overrated.")
-            )
-            "R&B Soul" -> listOf(
-                Triple("R&B Soul", "You appreciate smooth vocals and deep emotional grooves.", "You feel the music as much as you hear it."),
-                Triple("R&B Soul", "Soulful vibes define your listening sessions.", "Music for the late nights and deep thoughts."),
-                Triple("R&B Soul", "It's all about the feeling.", "You like your music smooth like butter.")
-            )
-            "Electronic Voyager" -> listOf(
-                Triple("Electronic Voyager", "You get lost in synthetic soundscapes and driving beats.", "The drop is your favorite destination."),
-                Triple("Electronic Voyager", "From house patterns to techno rumbles, you love the machine.", "The future sounds exactly like your playlist."),
-                Triple("Electronic Voyager", "Rhythm and synthesis control your world.", "You dream in waveforms.")
-            )
-            "Jazz Cat" -> listOf(
-                Triple("Jazz Cat", "You have a sophisticated ear for improvisation and complexity.", "You listen for the notes they *don't* play."),
-                Triple("Jazz Cat", "Smooth, complex, and always cool.", "Life is improvised, just like your music.")
-            )
-            "Maestro" -> listOf(
-                Triple("Maestro", "You value timeless beauty and complex compositions.", "Your playlist is a masterpiece."),
-                Triple("Maestro", "Dramatic, epic, and refined.", "You appreciate the grand structure of sound.")
-            )
-            "Indie Spirit" -> listOf(
-                Triple("Indie Spirit", "You march to the beat of your own drum, preferring unique sounds.", "Mainstream is boring; you want something real."),
-                Triple("Indie Spirit", "You find the gems before they shine.", "Lo-fi, authentic, and uniquely yours.")
-            )
-            "Party Starter" -> listOf(
-                Triple("Party Starter", "You're all about high-energy, happy vibes that get everyone moving!", "You bring the energy, every single time."),
-                Triple("Party Starter", "Your playlist is 100% adrenaline.", "Monday morning or Friday night, you keep it hype.")
-            )
-            "Intense Soul" -> listOf(
-                Triple("Intense Soul", "You gravitate towards powerful, emotionally charged music.", "You feel every beat, deep down."),
-                Triple("Intense Soul", "Dark, moody, and meaningful.", "Music helps you process the world.")
-            )
-            "Peaceful Optimist" -> listOf(
-                Triple("Peaceful Optimist", "You prefer calm, positive music that lifts your spirits gently.", "Your playlist is a deep breath for the soul."),
-                Triple("Peaceful Optimist", "Soft acoustic vibes and gentle melodies.", "Music is your safe harbor.")
-            )
-            "Deep Thinker" -> listOf(
-                Triple("Deep Thinker", "You appreciate introspective, atmospheric soundscapes.", "You listen to understand, not just to hear."),
-                Triple("Deep Thinker", "Music for the mind.", "You get lost in the layers.")
-            )
-            "Dance Floor Regular" -> listOf(
-                Triple("Dance Floor Regular", "Rhythm is your language - you love music that moves!", "Standing still just isn't an option for you."),
-                Triple("Dance Floor Regular", "You don't need a club to dance.", "If it has a beat, you're moving.")
-            )
-            "Balanced Enthusiast" -> listOf(
-                Triple("Balanced Enthusiast", "You enjoy a healthy mix of upbeat and chill music.", "You keep things perfectly in tune."),
-                Triple("Balanced Enthusiast", "A little bit of everything, all of the time.", "Ideally balanced, as all things should be.")
-            )
-            "The Explorer" -> listOf(
-                Triple("The Explorer", "You're constantly hunting for fresh sounds and new artists.", "You don't loop comfort tracks. You hunt new ones."),
-                Triple("The Explorer", "Your library is an ever-expanding map of sound.", "New day, new artist, new vibe."),
-                Triple("The Explorer", "Stagnation is your enemy.", "You've traveled far and wide across the musical spectrum.")
-            )
-            "The Melophile" -> listOf(
-                Triple("The Melophile", "You simply love music in all its forms, without boundaries.", "Good music is good music, period."),
-                Triple("The Melophile", "You follow the sound, not the label.", "A true lover of the art form."),
-                Triple("The Melophile", "No genre filters, just vibes.", "You're open to anything that sounds good.")
-            )
-            else -> listOf(Triple(type, "You love music.", "Music is your life."))
+        return when (type) {
+            "Hip Hop Head" -> Triple(context.getString(R.string.personality_hip_hop_head_name), context.getString(R.string.pers_desc_hip_hop), context.getString(R.string.pers_tag_hip_hop))
+            "Pop Icon" -> Triple(context.getString(R.string.personality_pop_icon_name), context.getString(R.string.pers_desc_pop), context.getString(R.string.pers_tag_pop))
+            "Rock Star" -> Triple(context.getString(R.string.personality_rock_star_name), context.getString(R.string.pers_desc_rock), context.getString(R.string.pers_tag_rock))
+            "Metalhead" -> Triple(context.getString(R.string.personality_metalhead_name), context.getString(R.string.pers_desc_metal), context.getString(R.string.pers_tag_metal))
+            "R&B Soul" -> Triple(context.getString(R.string.personality_rb_soul_name), context.getString(R.string.pers_desc_rb), context.getString(R.string.pers_tag_rb))
+            "Electronic Voyager" -> Triple(context.getString(R.string.personality_electronic_voyager_name), context.getString(R.string.pers_desc_electronic), context.getString(R.string.pers_tag_electronic))
+            "Jazz Cat" -> Triple(context.getString(R.string.personality_jazz_cat_name), context.getString(R.string.pers_desc_jazz), context.getString(R.string.pers_tag_jazz))
+            "Maestro" -> Triple(context.getString(R.string.personality_maestro_name), context.getString(R.string.pers_desc_maestro), context.getString(R.string.pers_tag_maestro))
+            "Indie Spirit" -> Triple(context.getString(R.string.personality_indie_spirit_name), context.getString(R.string.pers_desc_indie), context.getString(R.string.pers_tag_indie))
+            "Party Starter" -> Triple(context.getString(R.string.personality_party_starter_name), context.getString(R.string.pers_desc_party), context.getString(R.string.pers_tag_party))
+            "Intense Soul" -> Triple(context.getString(R.string.personality_intense_soul_name), context.getString(R.string.pers_desc_intense), context.getString(R.string.pers_tag_intense))
+            "Peaceful Optimist" -> Triple(context.getString(R.string.personality_peaceful_optimist_name), context.getString(R.string.pers_desc_peaceful), context.getString(R.string.pers_tag_peaceful))
+            "Deep Thinker" -> Triple(context.getString(R.string.personality_deep_thinker_name), context.getString(R.string.pers_desc_deep_thinker), context.getString(R.string.pers_tag_deep_thinker))
+            "Dance Floor Regular" -> Triple(context.getString(R.string.personality_dance_floor_regular_name), context.getString(R.string.pers_desc_dance), context.getString(R.string.pers_tag_dance))
+            "Balanced Enthusiast" -> Triple(context.getString(R.string.personality_balanced_enthusiast_name), context.getString(R.string.pers_desc_balanced), context.getString(R.string.pers_tag_balanced))
+            "The Explorer" -> Triple(context.getString(R.string.personality_the_explorer_name), context.getString(R.string.pers_desc_explorer), context.getString(R.string.pers_tag_explorer))
+            "The Melophile" -> Triple(context.getString(R.string.personality_the_melophile_name), context.getString(R.string.pers_desc_melophile), context.getString(R.string.pers_tag_melophile))
+            else -> Triple(type, context.getString(R.string.pers_desc_default), context.getString(R.string.pers_tag_default))
         }
-        return options.random()
     }
 
     private fun getCurrentSeason(): String {

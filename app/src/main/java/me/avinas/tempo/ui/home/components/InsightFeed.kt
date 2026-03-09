@@ -50,6 +50,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
 import me.avinas.tempo.ui.profile.CompactLevelRing
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 
 @Composable
@@ -233,7 +235,7 @@ fun VibeHeader(
                                 lineHeight = 20.sp
                             )
                             Text(
-                                text = "LVL",
+                                text = stringResource(R.string.home_lvl),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 10.sp, // Slightly larger than 8sp
                                 fontWeight = FontWeight.Bold,

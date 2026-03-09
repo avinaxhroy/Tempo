@@ -6,6 +6,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.avinas.tempo.data.remote.itunes.iTunesApi
+import me.avinas.tempo.data.remote.itunes.iTunesResult as AppleMusicResult
 import me.avinas.tempo.utils.ArtistParser
 import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
@@ -36,7 +37,8 @@ class ITunesEnrichmentService @Inject constructor(
         // === Multiple regex strategies for extracting artist images from Apple Music HTML ===
         
         // AMCArtistImages CDN URL - Apple's dedicated artist photo path (most reliable signal)
-        private val ARTIST_IMAGE_CDN_REGEX = Regex("""(https?://is\d+-ssl\.mzstatic\.com/image/thumb/AMCArtistImages[^"'\s)}<]+)""")
+        // Note: Apple Music sometimes hosts actual artist images under /Features or /Music paths
+        private val ARTIST_IMAGE_CDN_REGEX = Regex("""(https?://is\d+-ssl\.mzstatic\.com/image/thumb/(?:AMCArtistImages|Features|Music)[^"'\s)}<]+)""")
         
         // --background-image CSS variable in artist-detail-header (contains artist banner/photo)
         private val BACKGROUND_IMAGE_REGEX = Regex("""--background-image\s*:\s*url\(([^)]+)\)""", RegexOption.IGNORE_CASE)
@@ -233,11 +235,20 @@ class ITunesEnrichmentService @Inject constructor(
     /**
      * Search for an artist by name and fetch their image.
      * Iterates through all individual artists found in the artist string until one matches.
-     * 
+     *
+     * When multiple artists share the same name, [trackHint] and [albumHint] are used to
+     * disambiguate by checking which artist has the matching track in their catalog.
+     *
      * @param artistName The raw artist string (may contain multiple artists)
+     * @param trackHint  Track title being enriched — used to pick the right artist when names clash
+     * @param albumHint  Album name being enriched — secondary disambiguation signal
      * @return The artist image URL or null if not found
      */
-    suspend fun searchAndFetchArtistImage(artistName: String): String? {
+    suspend fun searchAndFetchArtistImage(
+        artistName: String,
+        trackHint: String? = null,
+        albumHint: String? = null
+    ): String? {
         if (ArtistParser.isUnknownArtist(artistName)) return null
         
         // Split into individual artists to try each one
@@ -268,9 +279,9 @@ class ITunesEnrichmentService @Inject constructor(
                 
                 val searchResponse = response.body() ?: continue
                 
-                // Find all matching artists and rank them by popularity
+                // Use STRICT matching to prevent wrong artist (e.g., Shreya Ghoshal → Atif Aslam)
                 val matchingArtists = searchResponse.results.filter { result ->
-                    result.artistName != null && ArtistParser.isSameArtist(result.artistName, cleanName)
+                    result.artistName != null && ArtistParser.isStrictSameArtist(result.artistName, cleanName)
                 }
                 
                 if (matchingArtists.isEmpty()) {
@@ -278,12 +289,13 @@ class ITunesEnrichmentService @Inject constructor(
                     continue
                 }
                 
-                // Rank by: 1) Exact name match, 2) Artist score (track count, etc.)
-                val bestArtist = matchingArtists.maxByOrNull { result ->
-                    val exactMatch = result.isExactArtistMatch(cleanName)
-                    val score = result.getArtistScore()
-                    // Exact match gets huge bonus
-                    (if (exactMatch) 10000 else 0) + score
+                // When multiple artists share the same name, use track/album context to disambiguate
+                val bestArtist = if (matchingArtists.size > 1 && (trackHint != null || albumHint != null)) {
+                    Log.d(TAG, "Found ${matchingArtists.size} artists named '$cleanName' — disambiguating via track context")
+                    disambiguateArtistByTrack(matchingArtists, trackHint, albumHint)
+                        ?: matchingArtists.maxByOrNull { (if (it.isExactArtistMatch(cleanName)) 10000 else 0) + it.getArtistScore() }
+                } else {
+                    matchingArtists.maxByOrNull { (if (it.isExactArtistMatch(cleanName)) 10000 else 0) + it.getArtistScore() }
                 }
                 
                 if (bestArtist?.artistId != null) {
@@ -291,11 +303,8 @@ class ITunesEnrichmentService @Inject constructor(
                     val exactMatch = bestArtist.isExactArtistMatch(cleanName)
                     Log.d(TAG, "Found artist ID for '$cleanName': ${bestArtist.artistId} (score: $score, exact: $exactMatch, tracks: ${bestArtist.trackCount})")
                     
-                    val imageUrl = fetchArtistImage(bestArtist.artistId)
-                    
-                    if (imageUrl != null) {
-                        return imageUrl // Found one, return immediately
-                    }
+                    val imageUrl = fetchArtistImage(bestArtist.artistId, artistPhotoOnly = true)
+                    if (imageUrl != null) return imageUrl
                 }
                 
             } catch (e: Exception) {
@@ -308,15 +317,181 @@ class ITunesEnrichmentService @Inject constructor(
     }
 
     /**
+     * Search for a SINGLE specific artist by name and fetch their image.
+     * Unlike searchAndFetchArtistImage(), this does NOT split through getAllArtists()
+     * — it treats the input as a single clean artist name.
+     *
+     * Used by refreshArtistImageDirectly() where the artist name is already
+     * a clean single name from the artists table.
+     *
+     * @param artistName The clean, single artist name
+     * @param trackHint  Optional track title — used to disambiguate same-name artists
+     * @param albumHint  Optional album name — secondary disambiguation signal
+     * @return The artist image URL or null if not found
+     */
+    suspend fun searchAndFetchSingleArtistImage(
+        artistName: String,
+        trackHint: String? = null,
+        albumHint: String? = null
+    ): String? {
+        if (ArtistParser.isUnknownArtist(artistName)) return null
+
+        val cleanName = ArtistParser.normalizeArtistName(artistName)
+        if (cleanName.isBlank()) return null
+
+        Log.d(TAG, "Searching iTunes for single artist image: '$cleanName'")
+
+        try {
+            delay(RATE_LIMIT_DELAY_MS)
+
+            val response = iTunesApi.search(
+                term = cleanName,
+                entity = "musicArtist",
+                limit = 5,
+                country = getDeviceCountryCode()
+            )
+
+            if (!response.isSuccessful) {
+                Log.w(TAG, "iTunes artist search failed for '$cleanName': ${response.code()}")
+                return null
+            }
+
+            val searchResponse = response.body() ?: return null
+
+            // Use STRICT matching only — exact name match (no fuzzy/Jaccard)
+            val matchingArtists = searchResponse.results.filter { result ->
+                result.artistName != null && ArtistParser.isStrictSameArtist(result.artistName, cleanName)
+            }
+
+            if (matchingArtists.isEmpty()) {
+                Log.d(TAG, "No strict artist match found for: '$cleanName'")
+                return null
+            }
+
+            // When multiple artists share the same name, use track/album context to disambiguate
+            val bestArtist = if (matchingArtists.size > 1 && (trackHint != null || albumHint != null)) {
+                Log.d(TAG, "Found ${matchingArtists.size} artists named '$cleanName' — disambiguating via track context")
+                disambiguateArtistByTrack(matchingArtists, trackHint, albumHint)
+                    ?: matchingArtists.maxByOrNull { (if (it.isExactArtistMatch(cleanName)) 10000 else 0) + it.getArtistScore() }
+            } else {
+                matchingArtists.maxByOrNull { (if (it.isExactArtistMatch(cleanName)) 10000 else 0) + it.getArtistScore() }
+            }
+
+            if (bestArtist?.artistId != null) {
+                val score = bestArtist.getArtistScore()
+                val exactMatch = bestArtist.isExactArtistMatch(cleanName)
+                Log.d(TAG, "Found artist ID for '$cleanName': ${bestArtist.artistId} (score: $score, exact: $exactMatch)")
+
+                val imageUrl = fetchArtistImage(bestArtist.artistId, artistPhotoOnly = true)
+                if (imageUrl != null) return imageUrl
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error searching single artist '$cleanName' on iTunes", e)
+        }
+
+        Log.d(TAG, "No artist image found for single artist: '$artistName'")
+        return null
+    }
+
+    /**
+     * Disambiguate between multiple artists sharing the same name by checking
+     * which one has the given track/album in their catalog.
+     *
+     * For each candidate artist, fetches their top songs and scores by:
+     * - Track title match (strong signal, +100)
+     * - Album name match (medium signal, +50)
+     *
+     * Returns the best-matching artist, or null if no candidate has a matching
+     * track/album (caller should fall back to popularity-based ranking).
+     */
+    private suspend fun disambiguateArtistByTrack(
+        candidates: List<AppleMusicResult>,
+        trackHint: String?,
+        albumHint: String?
+    ): AppleMusicResult? {
+        data class ScoredCandidate(val artist: AppleMusicResult, val score: Int)
+
+        val cleanTrack = trackHint?.let { ArtistParser.cleanTrackTitle(it).lowercase() }
+        val cleanAlbum = albumHint?.lowercase()
+
+        val scored = candidates.mapNotNull { candidate ->
+            val artistId = candidate.artistId ?: return@mapNotNull null
+            try {
+                delay(RATE_LIMIT_DELAY_MS)
+                val songsResponse = iTunesApi.lookupArtistWithMedia(
+                    artistId = artistId,
+                    entity = "song",
+                    limit = 10
+                )
+                if (!songsResponse.isSuccessful) return@mapNotNull null
+
+                val songs = songsResponse.body()?.results
+                    ?.filter { it.wrapperType == "track" }
+                    ?: return@mapNotNull null
+
+                var score = 0
+
+                // Score by track name match
+                if (cleanTrack != null) {
+                    val trackMatch = songs.any { song ->
+                        val songTitle = song.trackName?.lowercase() ?: ""
+                        songTitle.contains(cleanTrack) || cleanTrack.contains(songTitle)
+                    }
+                    if (trackMatch) {
+                        score += 100
+                        Log.d(TAG, "Disambiguate: artist '${candidate.artistName}' (${artistId}) HAS track '$cleanTrack' (+100)")
+                    } else {
+                        Log.d(TAG, "Disambiguate: artist '${candidate.artistName}' (${artistId}) does NOT have track '$cleanTrack'")
+                    }
+                }
+
+                // Score by album name match
+                if (cleanAlbum != null) {
+                    val albumMatch = songs.any { song ->
+                        val collectionName = song.collectionName?.lowercase() ?: ""
+                        collectionName.contains(cleanAlbum) || cleanAlbum.contains(collectionName)
+                    }
+                    if (albumMatch) {
+                        score += 50
+                        Log.d(TAG, "Disambiguate: artist '${candidate.artistName}' (${artistId}) HAS album '$cleanAlbum' (+50)")
+                    }
+                }
+
+                ScoredCandidate(candidate, score)
+            } catch (e: Exception) {
+                Log.w(TAG, "Disambiguate: error checking songs for artist ${candidate.artistId}: ${e.message}")
+                null
+            }
+        }
+
+        val best = scored.maxByOrNull { it.score }
+        return if (best != null && best.score > 0) {
+            Log.i(TAG, "Disambiguated '${best.artist.artistName}' (${best.artist.artistId}) with score ${best.score} via track/album context")
+            best.artist
+        } else {
+            Log.d(TAG, "Disambiguation found no track/album match among ${candidates.size} candidates — falling back to popularity")
+            null
+        }
+    }
+
+    /**
      * Fetch artist image for the given artist ID.
      * 
      * Strategy:
      * 1. Lookup artist → get Apple Music page URL
      * 2. Fetch page via OkHttp → extract artist image using multiple strategies
      * 3. Rewrite URL to 600x600 square
-     * 4. Fallback to track/album artwork if page extraction fails
+     * 4. Fallback to track/album artwork if page extraction fails (unless artistPhotoOnly=true)
+     *
+     * @param artistPhotoOnly If true, skip track/album artwork fallback. Use for artist-image
+     *   refresh where cross-contamination with album art would be wrong.
      */
-    suspend fun fetchArtistImage(artistId: Long, visitedIds: MutableSet<Long> = mutableSetOf()): String? {
+    suspend fun fetchArtistImage(
+        artistId: Long,
+        visitedIds: MutableSet<Long> = mutableSetOf(),
+        artistPhotoOnly: Boolean = false
+    ): String? {
         if (artistId in visitedIds) {
             Log.w(TAG, "Already visited artist ID $artistId, skipping")
             return null
@@ -348,39 +523,44 @@ class ITunesEnrichmentService @Inject constructor(
                 }
             }
             
-            // Step 3: Fallback to track artwork
-            Log.d(TAG, "Page extraction failed for ID $artistId, trying track artwork")
-            delay(RATE_LIMIT_DELAY_MS)
-            val songResponse = iTunesApi.lookupArtistWithMedia(
-                artistId = artistId,
-                entity = "song",
-                limit = 3
-            )
-            if (songResponse.isSuccessful) {
-                val trackArt = songResponse.body()?.results
-                    ?.firstOrNull { it.artworkUrl100 != null && it.wrapperType == "track" }
-                    ?.getBestArtworkUrl()
-                if (trackArt != null) {
-                    Log.i(TAG, "Found track artwork for artist ID $artistId: $trackArt")
-                    return trackArt
+            // Step 3 & 4: Fallback to track/album artwork
+            // Skip if artistPhotoOnly — these are album/track covers, not artist photos
+            if (!artistPhotoOnly) {
+                Log.d(TAG, "Page extraction failed for ID $artistId, trying track artwork")
+                delay(RATE_LIMIT_DELAY_MS)
+                val songResponse = iTunesApi.lookupArtistWithMedia(
+                    artistId = artistId,
+                    entity = "song",
+                    limit = 3
+                )
+                if (songResponse.isSuccessful) {
+                    val trackArt = songResponse.body()?.results
+                        ?.firstOrNull { it.artworkUrl100 != null && it.wrapperType == "track" }
+                        ?.getBestArtworkUrl()
+                    if (trackArt != null) {
+                        Log.i(TAG, "Found track artwork for artist ID $artistId: $trackArt")
+                        return trackArt
+                    }
                 }
-            }
-            
-            // Step 4: Fallback to album artwork
-            delay(RATE_LIMIT_DELAY_MS)
-            val albumResponse = iTunesApi.lookupArtistWithMedia(
-                artistId = artistId,
-                entity = "album",
-                limit = 1
-            )
-            if (albumResponse.isSuccessful) {
-                val albumArt = albumResponse.body()?.results
-                    ?.firstOrNull { it.artworkUrl100 != null && it.wrapperType == "collection" }
-                    ?.getBestArtworkUrl()
-                if (albumArt != null) {
-                    Log.i(TAG, "Found album artwork for artist ID $artistId: $albumArt")
-                    return albumArt
+                
+                // Step 4: Fallback to album artwork
+                delay(RATE_LIMIT_DELAY_MS)
+                val albumResponse = iTunesApi.lookupArtistWithMedia(
+                    artistId = artistId,
+                    entity = "album",
+                    limit = 1
+                )
+                if (albumResponse.isSuccessful) {
+                    val albumArt = albumResponse.body()?.results
+                        ?.firstOrNull { it.artworkUrl100 != null && it.wrapperType == "collection" }
+                        ?.getBestArtworkUrl()
+                    if (albumArt != null) {
+                        Log.i(TAG, "Found album artwork for artist ID $artistId: $albumArt")
+                        return albumArt
+                    }
                 }
+            } else {
+                Log.d(TAG, "artistPhotoOnly=true, skipping track/album artwork fallback for ID $artistId")
             }
             
             Log.d(TAG, "No artwork found for artist ID: $artistId")
@@ -410,16 +590,21 @@ class ITunesEnrichmentService @Inject constructor(
      * 7. Generic mzstatic fallback (only AMCArtistImages paths)
      */
     private suspend fun extractArtistImageFromPage(pageUrl: String): String? {
+        // Extract artist slug from URL for context-aware filtering
+        // e.g. "shreya-ghoshal" from "https://music.apple.com/us/artist/shreya-ghoshal/19715559"
+        val artistSlug = pageUrl.substringAfter("/artist/").substringBefore("/").takeIf { it.isNotBlank() }
+        
         return withContext(Dispatchers.IO) {
             // Phase 1: Fetch with bot UA for reliable og:image (same as social media previews)
-            val botResult = fetchAndExtractArtistImage(pageUrl, BOT_USER_AGENT, "bot")
+            val botResult = fetchAndExtractArtistImage(pageUrl, BOT_USER_AGENT, "bot", artistSlug)
             if (botResult != null) return@withContext botResult
             
             // Phase 2: Fetch with browser UA for full SPA HTML with srcset/CSS data
             val browserResult = fetchAndExtractArtistImage(
                 pageUrl,
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "browser"
+                "browser",
+                artistSlug
             )
             if (browserResult != null) return@withContext browserResult
             
@@ -431,7 +616,7 @@ class ITunesEnrichmentService @Inject constructor(
     /**
      * Fetch Apple Music page with the given User-Agent and extract artist image.
      */
-    private fun fetchAndExtractArtistImage(pageUrl: String, userAgent: String, phase: String): String? {
+    private fun fetchAndExtractArtistImage(pageUrl: String, userAgent: String, phase: String, artistSlug: String? = null): String? {
         try {
             val request = Request.Builder()
                 .url(pageUrl)
@@ -449,7 +634,7 @@ class ITunesEnrichmentService @Inject constructor(
             val html = response.body?.string() ?: return null
             Log.d(TAG, "Fetched Apple Music page ($phase): ${html.length} chars")
             
-            return extractArtistImageFromHtml(html, phase)
+            return extractArtistImageFromHtml(html, phase, artistSlug)
         } catch (e: Exception) {
             Log.w(TAG, "Page extraction error ($phase): ${e.message}")
             return null
@@ -460,24 +645,72 @@ class ITunesEnrichmentService @Inject constructor(
      * Extract artist image URL from Apple Music HTML content.
      * Strongly prefers AMCArtistImages URLs (actual artist photos) over
      * generic artwork URLs (which are usually album covers).
+     * 
+     * @param artistSlug The artist slug from the Apple Music URL (e.g. "shreya-ghoshal")
+     *   Used to filter out images from related/similar artist sections.
      */
-    private fun extractArtistImageFromHtml(html: String, phase: String): String? {
-        // Strategy 1: AMCArtistImages CDN URLs (actual artist photos!)
-        // These are the most reliable. Apple uses this path exclusively for genuine
-        // artist profile photos, never for album art.
-        val allArtistCdnUrls = ARTIST_IMAGE_CDN_REGEX.findAll(html)
-            .map { it.groupValues[1] }
-            .toList()
-            .distinct()
-        if (allArtistCdnUrls.isNotEmpty()) {
-            // Prefer the largest/highest quality variant
-            val bestCdnUrl = allArtistCdnUrls.firstOrNull { it.contains("cropped.png") || it.contains("cc.") }
-                ?: allArtistCdnUrls.first()
-            Log.d(TAG, "Strategy 1 ($phase): Found AMCArtistImages URL (from ${allArtistCdnUrls.size} candidates): $bestCdnUrl")
-            return bestCdnUrl
+    private fun extractArtistImageFromHtml(html: String, phase: String, artistSlug: String? = null): String? {
+        // Strategy 1: Data-Testid header block extraction
+        // The most robust way to get the actual header image is to isolate the `<div data-testid="artist-detail-header">`
+        // block and extract the mzstatic URL from inside it. This bypasses the need to guess which CDN path Apple Music
+        // is using today, and it intrinsically prevents cross-contamination from "Related Artists" sections.
+        val headerIndex = html.indexOf("""data-testid="artist-detail-header"""")
+        if (headerIndex != -1) {
+            // Extract a reasonable chunk of HTML containing the header (usually ~2000-3000 chars)
+            val headerHtml = html.substring(headerIndex, minOf(headerIndex + 5000, html.length))
+            val headerUrls = MZSTATIC_GENERIC_REGEX.findAll(headerHtml)
+                .map { it.groupValues[1] }
+                .toList()
+                .distinct()
+                
+            if (headerUrls.isNotEmpty()) {
+                val bestHeaderUrl = headerUrls.firstOrNull { it.contains("cropped.png") || it.contains("cc.") }
+                    ?: headerUrls.first()
+                Log.d(TAG, "Strategy 1 ($phase): Found artist image in artist-detail-header: $bestHeaderUrl")
+                return bestHeaderUrl
+            }
         }
         
-        // Strategy 2: --background-image CSS variable in artist-detail-header
+        // Strategy 2: CDN Regex (Fallback for when the header block isn't found, e.g., SSR bot phase might differ)
+        // These are the most reliable. Apple uses this path exclusively for genuine
+        // artist profile photos, never for album art.
+        // IMPORTANT: Apple Music pages include related/similar artist images too,
+        // so we must filter by position to avoid cross-contamination.
+        val allArtistCdnMatches = ARTIST_IMAGE_CDN_REGEX.findAll(html)
+            .map { it.groupValues[1] to it.range.first } // Keep URL + position in HTML
+            .toList()
+            .distinctBy { it.first }
+        if (allArtistCdnMatches.isNotEmpty()) {
+            // Find where related/similar artist sections start in the HTML
+            val relatedSectionStart = findRelatedArtistsSectionStart(html)
+            
+            // Filter to only URLs that appear BEFORE the related artists section
+            val mainArtistMatches = if (relatedSectionStart != null) {
+                val filtered = allArtistCdnMatches.filter { (_, position) -> position < relatedSectionStart }
+                if (filtered.isNotEmpty()) {
+                    Log.d(TAG, "Strategy 1 ($phase): Filtered ${allArtistCdnMatches.size} CDN URLs to ${filtered.size} (before related section at pos $relatedSectionStart)")
+                    filtered
+                } else {
+                    // All CDN URLs are in related sections — they belong to other artists!
+                    // Do not fall back to them; it's better to return null than the wrong artist.
+                    Log.w(TAG, "Strategy 1 ($phase): All ${allArtistCdnMatches.size} CDN URLs appear after related section marker. Ignoring them to prevent cross-contamination.")
+                    emptyList()
+                }
+            } else {
+                allArtistCdnMatches
+            }
+            
+            if (mainArtistMatches.isNotEmpty()) {
+                val candidateUrls = mainArtistMatches.map { it.first }
+                // Prefer the largest/highest quality variant
+                val bestCdnUrl = candidateUrls.firstOrNull { it.contains("cropped.png") || it.contains("cc.") }
+                    ?: candidateUrls.first()
+                Log.d(TAG, "Strategy 1 ($phase): Found CDN URL (from ${allArtistCdnMatches.size} total, ${mainArtistMatches.size} main): $bestCdnUrl")
+                return bestCdnUrl
+            }
+        }
+        
+        // Strategy 3: --background-image CSS variable in artist-detail-header
         // Contains the artist banner photo URL directly in CSS
         val bgImageUrl = BACKGROUND_IMAGE_REGEX.find(html)?.groupValues?.get(1)
         if (bgImageUrl != null && bgImageUrl.contains("mzstatic.com")) {
@@ -485,15 +718,15 @@ class ITunesEnrichmentService @Inject constructor(
             return bgImageUrl
         }
         
-        // Strategy 3: og:image containing AMCArtistImages (verified artist photo)
+        // Strategy 4: og:image containing AMCArtistImages (verified artist photo)
         val ogImage = (OG_IMAGE_REGEX.find(html) ?: OG_IMAGE_REGEX_ALT.find(html))
             ?.groupValues?.get(1)
         if (ogImage != null && ogImage.contains("AMCArtistImages")) {
-            Log.d(TAG, "Strategy 3 ($phase): Found og:image with AMCArtistImages: $ogImage")
+            Log.d(TAG, "Strategy 4 ($phase): Found og:image with AMCArtistImages: $ogImage")
             return ogImage
         }
         
-        // Strategy 4: twitter:image containing AMCArtistImages
+        // Strategy 5: twitter:image containing AMCArtistImages
         val twitterImage = (TWITTER_IMAGE_REGEX.find(html) ?: TWITTER_IMAGE_REGEX_ALT.find(html))
             ?.groupValues?.get(1)
         if (twitterImage != null && twitterImage.contains("AMCArtistImages")) {
@@ -501,28 +734,28 @@ class ITunesEnrichmentService @Inject constructor(
             return twitterImage
         }
         
-        // Strategy 5: og:image / twitter:image from bot-fetched HTML (trusted even without AMCArtistImages)
+        // Strategy 6: og:image / twitter:image from bot-fetched HTML (trusted even without AMCArtistImages)
         // Social media previews for artist pages always show the artist photo.
         // Only trust this from bot phase since browser HTML might have album art in og:image.
         if (phase == "bot") {
             if (ogImage != null && ogImage.contains("mzstatic.com")) {
-                Log.d(TAG, "Strategy 5 ($phase): Found og:image (bot-trusted): $ogImage")
+                Log.d(TAG, "Strategy 6 ($phase): Found og:image (bot-trusted): $ogImage")
                 return ogImage
             }
             if (twitterImage != null && twitterImage.contains("mzstatic.com")) {
-                Log.d(TAG, "Strategy 5 ($phase): Found twitter:image (bot-trusted): $twitterImage")
+                Log.d(TAG, "Strategy 6 ($phase): Found twitter:image (bot-trusted): $twitterImage")
                 return twitterImage
             }
         }
         
-        // Strategy 6: JSON-LD structured data
+        // Strategy 7: JSON-LD structured data
         val jsonLdImage = JSON_LD_IMAGE_REGEX.find(html)?.groupValues?.get(1)
         if (jsonLdImage != null && jsonLdImage.contains("AMCArtistImages")) {
-            Log.d(TAG, "Strategy 6 ($phase): Found JSON-LD artist image: $jsonLdImage")
+            Log.d(TAG, "Strategy 7 ($phase): Found JSON-LD artist image: $jsonLdImage")
             return jsonLdImage
         }
         
-        // Strategy 7: Broad fallback - only AMCArtistImages URLs from any mzstatic match
+        // Strategy 8: Broad fallback - only AMCArtistImages URLs from any mzstatic match
         // This ensures we NEVER return album art as an artist image.
         val allMzstaticUrls = MZSTATIC_GENERIC_REGEX.findAll(html)
             .map { it.groupValues[1] }
@@ -543,6 +776,28 @@ class ITunesEnrichmentService @Inject constructor(
         
         Log.d(TAG, "No artist image found in HTML ($phase, ${html.length} chars, tried 7 strategies)")
         return null
+    }
+    
+    /**
+     * Find the position in HTML where related/similar artist sections begin.
+     * Apple Music pages show the main artist content first, then sections like
+     * "Also Listened To", "Similar Artists", etc. with other artist images.
+     * 
+     * @return The character position of the first related section marker, or null if not found
+     */
+    private fun findRelatedArtistsSectionStart(html: String): Int? {
+        val markers = listOf(
+            "Also Listened To",
+            "Similar Artists",
+            "More to Explore",
+            "You Might Also Like",
+            "Listeners Also Listen To",
+            "shelf-grid",            // Common CSS class for artist grid carousels
+            "carousel-list"          // Another common carousel container
+        )
+        return markers.mapNotNull { marker ->
+            html.indexOf(marker, ignoreCase = true).takeIf { it >= 0 }
+        }.minOrNull()
     }
     
     /**

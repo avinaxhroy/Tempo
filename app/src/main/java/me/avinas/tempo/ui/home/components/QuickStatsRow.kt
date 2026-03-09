@@ -8,6 +8,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -54,7 +56,7 @@ fun QuickStatsRow(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Top Artist",
+                    text = stringResource(R.string.home_top_artist),
                     style = MaterialTheme.typography.labelSmall,
                     color = me.avinas.tempo.ui.theme.NeonRed.copy(alpha = 0.8f),
                     maxLines = 1
@@ -93,7 +95,7 @@ fun QuickStatsRow(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "On Repeat",
+                    text = stringResource(R.string.home_on_repeat),
                     style = MaterialTheme.typography.labelSmall,
                     color = me.avinas.tempo.ui.theme.ElectricBlue.copy(alpha = 0.8f),
                     maxLines = 1

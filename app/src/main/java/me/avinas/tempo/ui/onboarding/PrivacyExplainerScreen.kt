@@ -42,6 +42,8 @@ import me.avinas.tempo.ui.utils.isCompactScreen
 import me.avinas.tempo.ui.utils.rememberScreenHeightPercentage
 import me.avinas.tempo.ui.utils.scaledSize
 import me.avinas.tempo.ui.utils.rememberClampedHeightPercentage
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 /**
  * Privacy-focused onboarding screen that reassures users about data safety.
@@ -116,7 +118,7 @@ fun PrivacyExplainerScreen(
 
             // Header
             Text(
-                text = "Your Data Stays Here",
+                text = stringResource(R.string.privacy_title),
                 style = if (isSmallScreen()) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
@@ -127,7 +129,7 @@ fun PrivacyExplainerScreen(
             Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.01f)))
 
             Text(
-                text = "Privacy isn't a feature. It's the foundation.",
+                text = stringResource(R.string.privacy_subtitle),
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = Color.White.copy(alpha = 0.7f),
@@ -148,8 +150,8 @@ fun PrivacyExplainerScreen(
                     PrivacyPoint(
                         icon = Icons.Default.PhoneAndroid,
                         iconColor = Color(0xFF3B82F6),
-                        title = "100% Local Storage",
-                        description = "All data stays on your phone. Always."
+                        title = stringResource(R.string.privacy_local_title),
+                        description = stringResource(R.string.privacy_local_desc)
                     )
                 }
 
@@ -158,8 +160,8 @@ fun PrivacyExplainerScreen(
                     PrivacyPoint(
                         icon = Icons.Default.CloudOff,
                         iconColor = Color(0xFFF59E0B),
-                        title = "No Servers, No Cloud",
-                        description = "We have no backend. Zero data uploaded."
+                        title = stringResource(R.string.privacy_no_cloud_title),
+                        description = stringResource(R.string.privacy_no_cloud_desc)
                     )
                 }
 
@@ -168,8 +170,8 @@ fun PrivacyExplainerScreen(
                     PrivacyPoint(
                         icon = Icons.Default.Visibility,
                         iconColor = Color(0xFFA855F7),
-                        title = "Music Notifications Only",
-                        description = "We read Spotify, YouTube Music, etc. Never messages."
+                        title = stringResource(R.string.privacy_notif_title),
+                        description = stringResource(R.string.privacy_notif_desc)
                     )
                 }
 
@@ -178,8 +180,8 @@ fun PrivacyExplainerScreen(
                     PrivacyPoint(
                         icon = Icons.Default.Code,
                         iconColor = Color(0xFF22C55E),
-                        title = "Open Source",
-                        description = "Check our code anytime on GitHub."
+                        title = stringResource(R.string.privacy_open_source_title),
+                        description = stringResource(R.string.privacy_open_source_desc)
                     )
                 }
             }
@@ -193,7 +195,7 @@ fun PrivacyExplainerScreen(
                 contentPadding = PaddingValues(adaptiveSizeByCategory(16.dp, 12.dp, 10.dp))
             ) {
                 Text(
-                    text = "\"We can't see your data. We don't want to.\"",
+                    text = stringResource(R.string.privacy_quote),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
@@ -223,7 +225,7 @@ fun PrivacyExplainerScreen(
                 )
             ) {
                 Text(
-                    text = "Got It",
+                    text = stringResource(R.string.privacy_got_it),
                     fontSize = adaptiveTextUnitByCategory(18.sp, 17.sp, 16.sp),
                     fontWeight = FontWeight.Bold
                 )
@@ -241,7 +243,7 @@ fun PrivacyExplainerScreen(
                 .padding(16.dp)
         ) {
             Text(
-                text = "Skip",
+                text = stringResource(R.string.welcome_skip),
                 color = Color.White.copy(alpha = 0.6f),
                 style = MaterialTheme.typography.labelLarge
             )

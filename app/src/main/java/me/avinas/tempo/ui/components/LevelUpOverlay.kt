@@ -23,6 +23,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.random.Random
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 /**
  * Full-screen overlay shown when the user levels up.
@@ -123,7 +125,7 @@ fun LevelUpOverlay(
             Spacer(modifier = Modifier.height(16.dp))
             
             Text(
-                text = "LEVEL UP!",
+                text = stringResource(R.string.level_up_title),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Black,
                 color = Color(0xFFF59E0B),
@@ -134,7 +136,7 @@ fun LevelUpOverlay(
             Spacer(modifier = Modifier.height(8.dp))
             
             Text(
-                text = "Level $newLevel",
+                text = stringResource(R.string.level_up_new_level, newLevel),
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Black,
                 color = Color.White,
@@ -158,7 +160,7 @@ fun LevelUpOverlay(
                 modifier = Modifier.alpha(textAlpha.value)
             ) {
                 Text(
-                    text = "Awesome!",
+                    text = stringResource(R.string.level_up_awesome),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color.White

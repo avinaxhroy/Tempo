@@ -1,0 +1,566 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tempo</string>
+    
+    <!-- Service notification -->
+    <string name="tracking_notification_title">A Tempo a zenéd követi</string>
+    <string name="tracking_notification_idle">Zenelejátszás figyelése…</string>
+    <string name="tracking_notification_active">Most követi: %1$s - %2$s</string>
+    
+    <!-- Permission screen -->
+    <string name="permission_setup_title">Tempo Beállítása</string>
+    <string name="permission_setup_subtitle">A Temponak néhány engedélyre van szüksége a zenehallgatásod háttérben történő követéséhez.</string>
+    <string name="permission_notification_title">Értesítési Hozzáférés</string>
+    <string name="permission_notification_desc">A Tempo az értesítéseidet olvassa, hogy észlelje, milyen zenét játszol. Ez működik a YouTube Music, a Spotify és más zenelejátszó alkalmazások esetében is.\n\nCsak a zenei értesítéseket olvassuk, és soha nem férünk hozzá a személyes üzeneteidhez vagy egyéb értesítéseidhez.</string>
+    <string name="permission_notification_button">Hozzáférés Engedélyezése</string>
+    <string name="permission_notification_granted">Engedélyezve ✓</string>
+    <string name="permission_battery_title">Akkumulátor Optimalizálás</string>
+    <string name="permission_battery_desc">Ahhoz, hogy megbízhatóan kövesse a zenéidet a háttérben, a Tempot ki kell zárni az akkumulátor-optimalizálásból.\n\nEz megakadályozza, hogy az Android leállítsa a Tempot, amikor zenét hallgatsz. A Tempo úgy van kialakítva, hogy minimális akkumulátort használjon.</string>
+    <string name="permission_battery_button">Optimalizálás Letiltása</string>
+    <string name="permission_battery_disabled">Letiltva ✓</string>
+    <string name="permission_continue">Követés Indítása</string>
+    <string name="permission_pending">Fejezd be a Beállítást Fent</string>
+    <string name="permission_privacy_note">🔒 Minden adatod az eszközödön marad. A Tempo soha nem tölti fel a hallgatási előzményeidet.</string>
+    
+    <!-- Home screen -->
+    <string name="home_tracking_active">✅ Zenei követés aktív</string>
+    <string name="home_tracking_hint">Játssz le zenét a YouTube Music, Spotify vagy bármely más zenés alkalmazásban. A Tempo automatikusan követi a hallgatásodat.</string>
+    <string name="home_title">Kezdőlap</string>
+    <string name="home_your_signal">A Te Jeled</string>
+    <string name="home_settings">Beállítások</string>
+    
+    <!-- Widget descriptions -->
+    <string name="widget_stats_desc">A mai hallgatási statisztikád egy pillantásra</string>
+    <string name="widget_artist_desc">Megjeleníti a legkedveltebb előadóid statisztikáit</string>
+    <string name="widget_dashboard_desc">Áttekintés a zeneszámok hallgatási statisztikáiról</string>
+    <string name="widget_discovery_desc">Fedezz fel új zenéket az ízlésed alapján</string>
+    <string name="widget_heatmap_desc">Lásd a hallgatási mintáidat az idő múlásával</string>
+    <string name="widget_milestone_desc">Kövesd nyomon a hallgatási mérföldköveidet</string>
+    <string name="widget_mix_desc">A te személyre szabott zenei mixed</string>
+
+    <!-- Home components -->
+    <string name="home_spotlight_title">Tempo Reflektorfény</string>
+    <string name="home_spotlight_subtitle">Lásd a zenéidet vizuálisan.</string>
+    <string name="home_week_review">A Heted Összefoglalója</string>
+    <string name="home_listen_time">Hallgatási Idő</string>
+    <string name="home_new_finds">Új Találatok</string>
+    <string name="home_top_artist">Kedvenc Előadó</string>
+    <string name="home_on_repeat">Ismétlésen</string>
+    <string name="home_ready_discover">Készen állsz a felfedezésre?</string>
+    <string name="home_found_artists">%1$d új előadót találtál</string>
+    <string name="home_expand_horizon">Bővítsd zenei látókörödet</string>
+    <string name="home_discovered_tracks">%1$d új számot fedeztél fel</string>
+    <string name="home_fresh_beats">Friss ritmusok a lejátszási listádhoz</string>
+    <string name="home_variety_score">Változatossági Pont: %1$d/10</string>
+    <string name="home_how_unique">Milyen egyedi az ízlésed?</string>
+    <string name="home_habits_title">Egy Pillantás a Szokásaidra</string>
+    <string name="home_lvl">SZINT</string>
+
+    <!-- Rate App -->
+    <string name="rate_enjoying">Tetszik a Tempo?</string>
+    <string name="rate_message">Ha szereted használni az alkalmazást, kérjük, szánj egy percet az értékelésre. Nagyon segít a növekedésünkben!</string>
+    <string name="rate_now">Értékelés Most</string>
+    <string name="rate_not_now">Most Nem</string>
+    
+    <!-- Gamification / Level -->
+    <string name="level_label">SZINT %1$d</string>
+    <string name="level_xp">%1$d XP</string>
+    <string name="level_next_xp">Következő: %1$d XP</string>
+    <string name="level_up_title">SZINTLÉPÉS!</string>
+    <string name="level_up_new_level">%1$d. szint</string>
+    <string name="level_up_awesome">Fantasztikus!</string>
+    <string name="level_reached">Elérted a(z) %1$d. szintet</string>
+
+    <!-- Onboarding: Welcome screen -->
+    <string name="welcome_headline_1">Ismerd a Zenéd,</string>
+    <string name="welcome_headline_2">Szeresd a Statisztikáid</string>
+    <string name="welcome_description">A Tempo automatikusan követi, mit hallgatsz, és gyönyörű betekintést nyújt a hallgatási szokásaidba.</string>
+    <string name="welcome_get_started">Kezdés</string>
+    <string name="welcome_skip">Kihagyás</string>
+
+    <!-- Onboarding: How It Works -->
+    <string name="how_it_works_title">Így Működik</string>
+    <string name="how_it_works_subtitle">Nincs bejelentkezés. Nincs fiók. Csak zene.</string>
+    <string name="how_it_works_step1_title">Zenét játszol le</string>
+    <string name="how_it_works_step1_subtitle">Spotify, YouTube Music, vagy bármely más alkalmazás</string>
+    <string name="how_it_works_step2_title">Egy értesítés jelenik meg</string>
+    <string name="how_it_works_step2_subtitle">A Tempo csak a zenei információkat olvassa</string>
+    <string name="how_it_works_step3_title">Minden statisztika helyben van mentve</string>
+    <string name="how_it_works_step3_subtitle">A telefonodon, sehol máshol</string>
+    <string name="how_it_works_badge_apps">20+ alkalmazás</string>
+    <string name="how_it_works_badge_local">100% helyi</string>
+    <string name="how_it_works_badge_auto">Automatikus követés</string>
+    <string name="how_it_works_next">Tovább</string>
+
+    <!-- Onboarding: Privacy -->
+    <string name="privacy_title">Az Adatod Itt Marad</string>
+    <string name="privacy_subtitle">A magánélet nem funkció. Ez az alap.</string>
+    <string name="privacy_local_title">100% Helyi Tárolás</string>
+    <string name="privacy_local_desc">Minden adatod a telefonodon marad. Mindig.</string>
+    <string name="privacy_no_cloud_title">Nincsenek Szerverek, Nincs Felhő</string>
+    <string name="privacy_no_cloud_desc">Nincs háttérrendszerünk. Nulla adatot töltünk fel.</string>
+    <string name="privacy_notif_title">Csak Zenei Értesítések</string>
+    <string name="privacy_notif_desc">A Spotify-t, YouTube Music-ot, stb. olvassuk. Soha az üzeneteket.</string>
+    <string name="privacy_open_source_title">Nyílt Forráskód</string>
+    <string name="privacy_open_source_desc">Bármikor megtekintheted a kódunkat a GitHubon.</string>
+    <string name="privacy_quote">"Nem látjuk az adataidat. Nem akarjuk."</string>
+    <string name="privacy_got_it">Értem</string>
+
+    <!-- Onboarding: Battery Optimization -->
+    <string name="battery_title">Egy utolsó dolog a jobb pontosság érdekében</string>
+    <string name="battery_description">Hagyd, hogy a Tempo a háttérben fusson a folyamatos követéshez. Ez biztosítja, hogy ne maradjunk le egyetlen számról sem, miközben a képernyőd ki van kapcsolva.</string>
+    <string name="battery_optimize">Optimalizálás</string>
+    <string name="battery_skip">Kihagyás most</string>
+
+    <!-- Onboarding: Advanced Settings -->
+    <string name="advanced_data_prefs">Adat Preferences</string>
+    <string name="advanced_choose_data">Válaszd ki, mennyi adatot használhat a Tempo az audió elemzéshez</string>
+    <string name="advanced_basic_title">Alap Elemzés</string>
+    <string name="advanced_basic_desc">Műfaj és hangulat adatbázis-keresés alapján</string>
+    <string name="advanced_basic_detail">Gyors • Nincs adatletöltés</string>
+    <string name="advanced_extended_title">Bővített Audió Elemzés [KÍSÉRLETI]</string>
+    <string name="advanced_extended_desc">Részletes hangulat és energia 30 másodperces audió előzetes alapján</string>
+    <string name="advanced_extended_detail">~500KB számonként • Pontosabb</string>
+    <string name="advanced_merge_title">Okos Verzió Egyesítés</string>
+    <string name="advanced_merge_desc">Számítson a Live/Remix változat ugyannak a számnak a tisztább előzmény érdekében</string>
+    <string name="advanced_merge_detail">Ajánlott a tisztább statisztikákhoz</string>
+    <string name="advanced_change_settings">Ezt bármikor módosíthatod a Beállításokban</string>
+    <string name="advanced_continue">Folytatás</string>
+
+    <!-- Permission screen (standalone) -->
+    <string name="perm_one_needed">Egy Engedély Szükséges</string>
+    <string name="perm_how_tempo_sees">Így látja a Tempo, amit éppen játszol</string>
+    <string name="perm_music_only">CSAK ZENE</string>
+    <string name="perm_music_apps">Spotify, YouTube,\nés lényegében bármelyik\nzenelejátszó</string>
+    <string name="perm_private_data">PRIVÁT ADATOK</string>
+    <string name="perm_we_ignore">Figyelmen kívül hagyjuk a chateket,\nOTP-ket, e-maileket, és\nminden mást</string>
+    <string name="perm_enable_access">Értesítési Hozzáférés Engedélyezése</string>
+    <string name="perm_do_later">Ezt később csinálom</string>
+    <string name="perm_runs_efficient">Hatékonyan fut a háttérben • Nem meríti az akkumulátort</string>
+
+    <!-- Spotify connection bottom sheet -->
+    <string name="spotify_works_any_app">✓ A Tempo bármely zenés alkalmazással működik!</string>
+    <string name="spotify_get_art">Kíváló Minőségű Borítók Beszerzése</string>
+    <string name="spotify_connect_metadata">Csatlakozz, hogy a Spotify megbízható adatbázisát használd metaadatokhoz:</string>
+    <string name="spotify_reliable_art">Megbízható album borítók</string>
+    <string name="spotify_accurate_genre">Pontos műfaj információk</string>
+    <string name="spotify_mood_energy">Hangulat és energia statisztikák</string>
+    <string name="spotify_optional">Ez opcionális. Soha nem férünk hozzá a lejátszási listáidhoz vagy személyes adataidhoz.</string>
+    <string name="spotify_connect">Spotify Csatlakoztatása</string>
+    <string name="spotify_skip">Kihagyás egyenlőre</string>
+
+    <!-- Restore / Import screen -->
+    <string name="restore_import_title">Importálás és Visszaállítás</string>
+    <string name="restore_import_subtitle">Importálj más szolgáltatásokból vagy állítsd vissza a biztonsági mentésedből.</string>
+    <string name="restore_import">Importálás</string>
+    <string name="restore_section">Visszaállítás</string>
+    <string name="restore_google_drive">Google Drive</string>
+    <string name="restore_connect_google">Google Fiók Csatlakoztatása</string>
+    <string name="restore_no_backups">Nem található biztonsági mentés</string>
+    <string name="restore_from_file">Visszaállítás Fájlból</string>
+    <string name="restore_select_zip">Válassz egy .zip biztonsági másolat fájlt</string>
+    <string name="restore_start_fresh">Tiszta Lap Kezdése</string>
+    <string name="restore_back">Vissza</string>
+    <string name="restore_restoring">Visszaállítás…</string>
+    <string name="restore_processing">Feldolgozás…</string>
+    <string name="restore_from_cloud">Visszaállítás a Felhőből…</string>
+    <string name="restore_options">Visszaállítási Opciók</string>
+    <string name="restore_handle_conflicts">Hogyan kezeljük az adataid ütközését?</string>
+    <string name="restore_replace_all">Minden Cserélése</string>
+    <string name="restore_skip_dupes">Duplikátumok Kihagyása</string>
+    <string name="restore_cancel">Mégse</string>
+    <string name="restore_this_backup">Visszaállítod ezt a mentést?</string>
+    <string name="restore_restore">Visszaállítás</string>
+    <string name="restore_importing_spotify">Importálás a Spotify-ból…</string>
+    <string name="restore_fetching_plays">Eddigi lejátszásaid lekérése</string>
+    <string name="restore_import_complete">Importálás Befejezve!</string>
+    <string name="restore_import_failed">Importálás Sikertelen</string>
+    <string name="restore_ok">Rendben</string>
+    <string name="restore_analyzing_liked">🕐 A Kedvelt Zeneszámaid Elemzése…</string>
+    <string name="restore_finding_playlists">📅 Az Éves Lejátszási Listák Keresése…</string>
+    <string name="restore_collecting_top">🎵 Top Számaid Gyűjtése…</string>
+    <string name="restore_creating_history">✨ Az Előzményeid Létrehozása…</string>
+    <string name="restore_using_dates">Pontos dátumok használata a kedvelt számaidból</string>
+    <string name="restore_finding_top">A te Top Számok listáid megtalálása</string>
+    <string name="restore_building_top">A top számaidból építkezve</string>
+    <string name="restore_creating_patterns">Reális hallgatási minták készítése</string>
+    <string name="restore_building_history">Zenei előzményed készítése</string>
+    <string name="restore_completing_auth">Azonosítás befejezése</string>
+    <string name="restore_getting_started">A statisztikák elindítása</string>
+    <string name="restore_please_wait">Kérlek várj amíg feldolgozzuk az adataid</string>
+
+    <!-- Import: Last.fm -->
+    <string name="lastfm_import_title">Importálás a Last.fm-ből</string>
+    <string name="lastfm_import_desc">Importáld a scrobble előzményeid, hogy minőségi betekintést kapj a hallgatásodra</string>
+    <string name="lastfm_import_years">Importáld a hallgatási előzményeid éveit</string>
+    <string name="lastfm_connect">Last.fm Csatlakoztatása</string>
+    <string name="lastfm_discovering">Last.fm fiókod keresése…</string>
+    <string name="lastfm_discovering_short">Fiókod keresése…</string>
+    <string name="lastfm_welcome">Üdvözlünk, %1$s!</string>
+    <string name="lastfm_total_scrobbles">%1$s összes scrobble</string>
+    <string name="lastfm_choose_level">Válaszd ki az importálás szintjét</string>
+    <string name="lastfm_recommended">Ajánlott</string>
+    <string name="lastfm_recommended_tier">Ajánlott: %1$s</string>
+    <string name="lastfm_cancel_import">Importálás Mégse</string>
+    <string name="lastfm_progress">%1$s a %2$s scrobble-ból</string>
+    <string name="lastfm_progress_percent">%1$s%%</string>
+    <string name="lastfm_import_complete">Importálás Befejezve!</string>
+    <string name="lastfm_history_imported">Last.fm Előzmények Importálva</string>
+    <string name="lastfm_complete_history">A te teljes előzményed importálva.</string>
+    <string name="lastfm_history_connected">A te Last.fm előzményed mostantól csatlakoztatva</string>
+    <string name="lastfm_done">Kész</string>
+    <string name="lastfm_this_may_take">Ez igénybe vehet néhány percet</string>
+    <string name="lastfm_we_analyze">Elemezni fogjuk a hallgatási előzményeid és betöltjük a friss scrobble-jeid. Az adataid az eszközödön maradnak.</string>
+
+    <!-- Import: Spotify -->
+    <string name="spotify_import_title">Importálás a Spotify-ból</string>
+    <string name="spotify_import_desc">Csatlakozz a Spotify-hoz</string>
+    <string name="spotify_connect_for_stats">Csatlakozz a Spotify-hoz\na Bővített Statisztikákért</string>
+    <string name="spotify_connect_unlock">Csatlakozz, hogy engedélyezz:</string>
+    <string name="spotify_data_stays">Az adataid az eszközödön maradnak. Csak audió adatokat szerzünk olyan címekhez amiket már hallgattál.</string>
+    <string name="spotify_note_50">"Megjegyzés: A Spotify API csak a legutolsó ~50 zeneszámod biztosítja. "</string>
+
+    <!-- Empty state -->
+    <string name="empty_tracking_active">Zene követése Aktív</string>
+    <string name="empty_quiet_week">Csendes hét eddig</string>
+    <string name="empty_quiet_week_msg">Figyelünk, de még nem láttunk egy lejátszást sem. Indíts el egyet, hogy megnézhesd a heti pulzusodat.</string>
+    <string name="empty_fresh_month">Friss hónap, friss kezdet</string>
+    <string name="empty_fresh_month_msg">Az előzményeid biztonságban vannak. Játssz le egy dalt, hogy elindítsd ehavi statisztikáid.</string>
+    <string name="empty_new_year">%1$d elkezdődött</string>
+    <string name="empty_new_year_msg">Az évértékelésed most kezdődik. Csak hallgasd, és éppül a történeted.</string>
+    <string name="empty_no_data">Nincs Még Adat</string>
+    <string name="empty_no_data_msg">Kezdj el hallgatni, hogy megnézhesd statisztikáid.</string>
+    <string name="empty_getting_started">A statisztikák elindítása</string>
+    <string name="empty_stats_flowing">Hadd jöjjön a statisztika</string>
+    <string name="empty_no_account">Nincs szükség fiókra</string>
+    <string name="empty_open_apps">Nyissa meg a Spotify-ot, YouTube Music-ot vagy másokat</string>
+    <string name="empty_play_songs">Játssz le néhány zenét - hamarosan megjelenik</string>
+    <string name="empty_return_insights">Térj vissza ide hogy lásd betekintéseid</string>
+    <string name="empty_check_apps">Ellenőrizd a Támogatott Alkalmazásokat</string>
+    <string name="empty_play_to_see">Játssz le egy kis zenét, hogy lássad statisztikáid.</string>
+
+    <!-- Details screens -->
+    <string name="details_song">Szám Részletei</string>
+    <string name="details_artist">Előadó Részletei</string>
+    <string name="details_album">Album Részletei</string>
+    <string name="details_plays">Lejátszás</string>
+    <string name="details_total_plays">Összes Lejátszás</string>
+    <string name="details_total_time">Összes Idő</string>
+    <string name="details_total_listening">Összes Hallgatás</string>
+    <string name="details_listening_time">Hallgatási Idő</string>
+    <string name="details_times_played">Lejátszva ennyiszer:</string>
+    <string name="details_peak_position">Legjobb Pozíció</string>
+    <string name="details_release_date">Kiadás Dátuma</string>
+    <string name="details_top_albums">Legjobb Albumok</string>
+    <string name="details_top_songs">Legjobb Dalok</string>
+    <string name="details_genre">Műfaj</string>
+    <string name="details_listen_on">Hallgasd itt</string>
+    <string name="details_tracks">Számok</string>
+    <string name="details_listening_activity">Hallgatási Tevékenység</string>
+    <string name="details_listening_trends">Hallgatási Trendek</string>
+    <string name="details_audio_analysis">Audió Elemzés</string>
+    <string name="details_average_tempo">Átlagos Ritmus</string>
+    <string name="details_based_on_tracks">%1$d alapjára támaszkodó audió analízis</string>
+    <string name="details_estimated_energy">Becsült Energia</string>
+    <string name="details_tracks_with_audio">Zenék audió tulajdonságokkal</string>
+    <string name="details_pending_enrichment">Függőben lévő gazdagítás</string>
+    <string name="details_share_preview">Előzetes Megosztása</string>
+    <string name="details_merge_artist">Előadók Egyesítése</string>
+    <string name="details_merge_with">Egyesítés ezzel…</string>
+    <string name="details_block_artist">TELJES ELŐADÓ BLOKKOLÁSA</string>
+    <string name="details_block_track">ENNEK A SZÁMNAK A BLOKKOLÁSA</string>
+
+    <!-- Merge dialogs -->
+    <string name="merge_confirm">Egyesítés Megerősítése</string>
+    <string name="merge_artist_confirm">⚠️ Egyesítés Megerősítése</string>
+    <string name="merge_artist_into">Egyesítés \"%1$s\" ide: \"%2$s\"?</string>
+    <string name="merge_track_into">Egyesítés \"%1$s\" (\%2$s)?</string>
+    <string name="merge_cannot_undo">Ez a lépés visszavonhatatlan. Minden lejátszási előzmény összevonásra kerül.</string>
+    <string name="merge_merging_artists">Előadók Egyesítése…</string>
+    <string name="merge_artist_search">Keresse meg a megfelelő előadót az egyesítéshez. Minden lejátszási előzmény összevonásra kerül.</string>
+    <string name="merge_track_search">Keresse meg a megfelelő számot az egyesítéshez. Minden lejátszási előzmény összevonásra kerül.</string>
+    <string name="merge_search_artists">Előadó neve a kereséshez</string>
+    <string name="merge_search_tracks">Szám neve a kereséshez</string>
+    <string name="merge_merging">Egyesítés: %1$s</string>
+
+    <!-- Engagement -->
+    <string name="engagement_score">Aktivitási pontszám</string>
+    <string name="engagement_your_engagement">A te aktivitásod</string>
+
+    <!-- Profile screen -->
+    <string name="profile_badges">Jelvények</string>
+    <string name="profile_no_badges">Még nincsenek jelvényeid</string>
+    <string name="profile_collected">%1$d / %2$d megszerzett</string>
+    <string name="profile_maxed">MAXIMÁLIS</string>
+    <string name="profile_unlocked">FELOLDVA</string>
+    <string name="profile_level_progress">Fejlődés állapota</string>
+    <string name="profile_listening_personality">A Hallgatási Stílusod</string>
+    <string name="profile_top_genres">Kedvenc műfajaid</string>
+
+    <!-- History screen -->
+    <string name="history_title">Előzmények Szűrése</string>
+    <string name="history_empty">Az Előzmények Üres</string>
+    <string name="history_search">Keresés a dalok között…</string>
+    <string name="history_sort_by">"Rendezés: "</string>
+    <string name="history_recent_activity">Zenei aktivitások</string>
+
+    <!-- Spotlight -->
+    <string name="spotlight_title">Reflektorfény</string>
+    <string name="spotlight_share_story">Történet megosztása</string>
+    <string name="spotlight_share_instagram">Megosztás Instagram Történetbe</string>
+    <string name="spotlight_loading">Kártyák Töltődnek…</string>
+    <string name="spotlight_no_cards">Nem Érhető El Kártya</string>
+    <string name="spotlight_preparing">A Történet Előkészítése…</string>
+    <string name="spotlight_view_story">Történet Megtekintése</string>
+    <string name="spotlight_your_music">A Te Zenéd %1$s</string>
+
+    <!-- Spotlight story pages -->
+    <string name="spotlight_top_songs">LEGJOBB DALOK</string>
+    <string name="spotlight_daily_rotation">NAPI FORGATÁS</string>
+    <string name="spotlight_your_top_artist">Felkapott előadó</string>
+    <string name="spotlight_your_top_song">A Számod Címeként Szolgáló Dal</string>
+    <string name="spotlight_your_all_time">Minden Idők Kedvence</string>
+    <string name="spotlight_favorite_msg">Ez az Ön valaha legtöbbet lejátszott dala.</string>
+    <string name="spotlight_top1_fan">LEGJOBB 1%% RAJONGÓ</string>
+    <string name="spotlight_breaking">★ ÚJ FÜGGŐSÉG ★</string>
+    <string name="spotlight_deep_cut">MÉLY VÁGÁS</string>
+    <string name="spotlight_horizon">LÁTHATÁRON TÚL</string>
+    <string name="spotlight_weekly_pulse">Heti pulzus</string>
+    <string name="spotlight_listened_for">Azonban te elérted a(z)</string>
+    <string name="spotlight_back_to_back">egymás után</string>
+    <string name="spotlight_days_thats_over">Több mint %1$d nap non-stop!</string>
+    <string name="spotlight_new_discoveries">ÚJ FELFEDEZETTEK</string>
+    <string name="spotlight_mood_genre">Zenei Stílus és Műfaj</string>
+    <string name="spotlight_circadian">Nappali és éjszakai ritmusok</string>
+    <string name="spotlight_streak_risk">Nem Múlasztod El</string>
+    <string name="spotlight_days_lost">Nap Mulasztott</string>
+    <string name="spotlight_ends_in">Befejeződik: %1$s</string>
+
+    <!-- Spotlight Canvas -->
+    <string name="canvas_add_cards">Koppints a + ikonra a kártyák hozzáadásához</string>
+    <string name="canvas_choose_bg">Válassz Hátteret</string>
+    <string name="canvas_add_card">Kártya Hozzáadása</string>
+    <string name="canvas_gradients">SZÍNATMENETEK</string>
+    <string name="canvas_solid_colors">EGYSZÍNŰ TÖMÖR SZÍNEK</string>
+    <string name="canvas_intensity">INTENZITÁS</string>
+    <string name="canvas_tempo_label">TEMPÓ</string>
+
+    <!-- Share Cards -->
+    <string name="share_your_data">A TE ADATAD</string>
+    <string name="share_plays_label">LEJÁTSZÁSOK</string>
+    <string name="share_minutes">PERC</string>
+    <string name="share_unique_tracks">EGYEDI DALOK</string>
+    <string name="share_weekday">HÉTKÖZNAP</string>
+    <string name="share_weekend">HÉTVÉGE</string>
+    <string name="share_time">IDŐ</string>
+    <string name="share_page_a1">A1-es OLDAL • ZENE SZEKCIÓ</string>
+    <string name="share_tempo_vanguard">TEMPO ELŐŐRSÖK</string>
+    <string name="share_early_adopter">KORAI FELHASZNÁLÓ</string>
+    <string name="share_access_pass">HOZZÁFÉRÉSI JELSZÓ</string>
+    <string name="share_scan_access">BEOLVASÁS</string>
+    <string name="share_tempo_stats">Tempo Statisztikák</string>
+    <string name="share_photo_archive">Megtekintés az Archívumban</string>
+    <string name="share_from_archive">Az archívumból</string>
+    <string name="share_restored">Visszaállítás</string>
+
+    <!-- Spotlight Reminder -->
+    <string name="spotlight_reminder_view">Nézd meg a történetedet</string>
+
+    <!-- Backup/Restore screen -->
+    <string name="backup_title">Biztonsági mentés</string>
+    <string name="backup_google_drive">GOOGLE DRIVE</string>
+    <string name="backup_local">HELYI MENTÉS</string>
+    <string name="backup_connect_google">Fiók csatlakoztatása</string>
+    <string name="backup_to_drive">Biztonsági mentés a Drive-ra</string>
+    <string name="backup_auto">Automatikus mentés</string>
+    <string name="backup_wifi_only">Csak Wi-Fi-n</string>
+    <string name="backup_wifi_desc">Wifi kapcsolata nem elérhető, de biztonsági</string>
+    <string name="backup_include_images">Képek mentése</string>
+    <string name="backup_history">Archívum Beállítás (%1$d)</string>
+    <string name="backup_no_backups">Az adatokat megtalálták</string>
+    <string name="backup_estimated">Becsült méret:</string>
+    <string name="backup_export">Exportálás fájlba</string>
+    <string name="backup_import">Importálás fájlból</string>
+    <string name="backup_tips">Hasznos tippek</string>
+    <string name="backup_drive_auto">Automatikus mentés engedélyezve</string>
+    <string name="backup_use_different">Másik fiók használata</string>
+    <string name="backup_last_backup">Biztonsági mentés: %1$s</string>
+
+    <!-- Supported Apps screen -->
+    <string name="supported_apps_title">Felismert eszközök</string>
+    <string name="supported_apps_desc">Ezeken az alkalmazásokon követjük a zenét</string>
+    <string name="supported_apps_installed">Telepített alkalmazások</string>
+    <string name="supported_apps_no_apps">Még hiány van Alkotói Tartalomról</string>
+    <string name="supported_apps_add">Kapcsolat Alkalmazás</string>
+
+    <!-- Background Protection (Xiaomi) -->
+    <string name="bg_protection_title">Át állítások Beállítása</string>
+    <string name="bg_protection_xiaomi_desc">Lépéseket is találná. Ezt is kötelező tenni a folyamatos adatbázisok javítása véget</string>
+    <string name="bg_protection_autostart_disabled">Adatok megváltoztatása és értesítésről</string>
+    <string name="bg_protection_enable_autostart">Újabb Auto Indítását Engedélyez</string>
+    <string name="bg_protection_battery_saver">Kímélőt - Kapcs.</string>
+    <string name="bg_protection_lock_app">Távolságtól Kapcs. Útvonal - Állapota is.</string>
+    <string name="bg_protection_lock_boost">Záró Rész Zene Beolvasásával is</string>
+    <string name="bg_protection_disable_miui">Tiltása is, ami segít ezt</string>
+
+    <!-- Spotify Settings Section -->
+    <string name="spotify_integration">Tegyél be a Spotify</string>
+    <string name="spotify_disconnect_title">Kikapcsolja?</string>
+    <string name="spotify_disconnect_msg">Ennek során eltűnik a statisztikai történet!</string>
+    <string name="spotify_disconnect">Kikapcsolja is</string>
+    <string name="spotify_connect_for">Meg is nézhető a Spotify is</string>
+    <string name="spotify_unlock_analysis">Adatok felnyújtása részletes zenei funk</string>
+    <string name="spotify_maybe_later">Talán Később</string>
+    <string name="spotify_connect_button">Kapcsoldás - Indítása!</string>
+
+    <!-- Audio features -->
+    <string name="audio_mood_analysis">Audio Felfogás Mód!</string>
+    <string name="audio_energy_insights">Zene Észrevétele Érzésként Célja is!</string>
+    <string name="audio_danceability">Táncos</string>
+    <string name="audio_acousticness">Akusztikus</string>
+    <string name="audio_harmonic">Harmónikus</string>
+    <string name="audio_sonic">Szonikus</string>
+    <string name="audio_from_spotify">Spotify alapján</string>
+    <string name="audio_spotify_requires">%1$s Spotify kapcsolatot igényel</string>
+
+    <!-- Stats screen -->
+    <string name="stats_not_enough">Nincs elég adat</string>
+    <string name="stats_forgetten_fav">Elfelejtett kedvenc</string>
+
+    <!-- Coach Mark / Walkthrough -->
+    <string name="coach_tip">Tipp</string>
+    
+    <!-- Music Links -->
+    <string name="music_links_listen_on">Hallgasd is ITT</string>
+
+    <!-- Common/Shared -->
+    <string name="common_cancel">Mégse</string>
+    <string name="common_save">Mentés</string>
+    <string name="common_back">Vissza</string>
+    <string name="common_ok">OK</string>
+    <string name="common_done">Kész</string>
+    <string name="common_continue">Folytatás</string>
+    <string name="common_skip">Kihagyás</string>
+    <string name="common_connect">Csatlakozás</string>
+
+    <!-- Settings screen: section headers -->
+    <string name="settings_title">Beállítások</string>
+    <string name="settings_profile">Profil Beállítások</string>
+    <string name="settings_language">Nyelv</string>
+    <string name="settings_notifications">Értesítések</string>
+    <string name="settings_music_tracking">Zene Követése</string>
+    <string name="settings_background_protection">Háttérbeli Védelem</string>
+    <string name="settings_content_filtering">Tartalomszűrés</string>
+    <string name="settings_advanced_stats">Részletes Statisztikák</string>
+    <string name="settings_import_history">Előzmények Importálása</string>
+    <string name="settings_your_data">Az Adataid</string>
+    <string name="settings_community">Közösség</string>
+    <string name="settings_about">Rólunk</string>
+    <string name="settings_tap_to_edit">Koppints a szerkesztéshez</string>
+    <string name="settings_update_name">Név frissítése</string>
+    <string name="settings_display_name">Megjelenítési név</string>
+    <string name="settings_save">Mentés</string>
+    <string name="settings_cancel">Mégse</string>
+    <string name="settings_back">Vissza</string>
+    <string name="settings_language_title">Nyelv kiválasztása</string>
+    <string name="settings_language_subtitle">Válaszd ki a nyelvet</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_french">Français</string>
+    <string name="settings_language_german">Deutsch</string>
+    <string name="settings_language_hungarian">Magyar</string>
+    <string name="settings_select_language">Nyelv kiválasztása</string>
+    <string name="settings_daily_summary">Napi Összesítő</string>
+    <string name="settings_daily_summary_desc">Kapjon összesítést a napi zenehallgatásról 20:00-kor</string>
+    <string name="settings_weekly_recap">Heti Összefoglaló</string>
+    <string name="settings_weekly_recap_desc">Látható lesz a Top statisztika minden vasárnap este</string>
+    <string name="settings_achievements">Eredmények</string>
+    <string name="settings_achievements_desc">Értesítést kapsz ha elértél valami Mérföldkövet!</string>
+    <string name="settings_manage_permissions">Engedélyek Kezelése</string>
+    <string name="settings_manage_permissions_desc">Értesítések és akkumulátor</string>
+    <string name="settings_manage_apps">Alkalmazások Kezelése</string>
+    <string name="settings_manage_apps_desc">Válaszd ki melyik alkalmazásokat kövesse</string>
+    <string name="settings_configure_required">Beállítás Szükséges</string>
+    <string name="settings_xiaomi_settings">Xiaomi Beállítások</string>
+    <string name="settings_prevent_killed">Megakadályozza, hogy a háttérben bezáródjon</string>
+    <string name="settings_filter_podcasts">Podcastok Szűrése</string>
+    <string name="settings_filter_podcasts_desc">A podcastok kizárása a statisztikákból</string>
+    <string name="settings_filter_audiobooks">Hangoskönyvek Szűrése</string>
+    <string name="settings_filter_audiobooks_desc">A hangoskönyvek kizárása a statisztikákból</string>
+    <string name="settings_connected_as">Csatlakoztatva: %1$s</string>
+    <string name="settings_tap_to_disconnect">Koppints a lecsatlakozáshoz</string>
+    <string name="settings_connect_spotify">Spotify Csatlakoztatása</string>
+    <string name="settings_connect_spotify_desc">Adatok használata részletes zenei funkciókhoz</string>
+    <string name="settings_spotify_api_mode">Spotify API Mód</string>
+    <string name="settings_spotify_api_on">NEM: Csatlak. a Spotify-Is Szervere is Csat. Érte (Rendszeres) is!</string>
+    <string name="settings_spotify_api_off">KI: Zárt Csatlak. és MÁS-Csatolásban Áramlón keresztül És Felületedről!</string>
+    <string name="settings_extended_audio">Bővített Audió Elemzés</string>
+    <string name="settings_extended_audio_desc">Működése egy Kis Célból. Rendszer is Használata Éles Részéhez. Ez adat is, Részéből Kis %!.</string>
+    <string name="settings_lastfm_connected">Csatlakoztatva: %1$s</string>
+    <string name="settings_lastfm_sync_daily">Napi Szinkronizáció</string>
+    <string name="settings_lastfm_sync_weekly">Heti Szinkronizáció</string>
+    <string name="settings_lastfm_import_complete">Teljesített is. Foly Rájössz Is Meg Nyisd! És.</string>
+    <string name="settings_import_lastfm">Last.fm Importálása</string>
+    <string name="settings_import_lastfm_desc">Tedd be Odamár Csak Kis Belyeg és Mutat.</string>
+    <string name="settings_smart_merge">Okos Egyesítés</string>
+    <string name="settings_smart_merge_desc">Szokások Kombók Alatt Újfelső.</string>
+    <string name="settings_backup_restore">Mentés és Visszaállítás</string>
+    <string name="settings_backup_restore_desc">Biztonsági mentés vagy visszaállítás</string>
+    <string name="settings_clear_all">Minden Adat Törlése</string>
+    <string name="settings_reddit">Reddit</string>
+    <string name="settings_reddit_sub">r/tempomusic</string>
+    <string name="settings_telegram">Telegram</string>
+    <string name="settings_telegram_name">Távolságtól Kapcs. Útvonal</string>
+    <string name="settings_github">GitHub</string>
+    <string name="settings_github_desc">Nyílt Forráskód</string>
+    <string name="settings_contribute">Közreműködés</string>
+    <string name="settings_contribute_desc">Fordításokhoz</string>
+    <string name="settings_rate_play_store">Értékelés a Play Áruházban</string>
+    <string name="settings_privacy_policy">Adatvédelmi Irányelvek</string>
+    <string name="settings_version">Verzió</string>
+    <string name="settings_processing">Folyamatban…</string>
+    <string name="settings_import_options">Importálási Opciók</string>
+    <string name="settings_import_conflict_msg">Mit tegyünk az adatokkal?</string>
+    <string name="settings_replace_existing">Minden lecserélése</string>
+    <string name="settings_skip_duplicates">Duplikátumok kihagyása</string>
+    <string name="settings_clear_data_title">Minden Adat Törlése?</string>
+    <string name="settings_clear_data_msg">Biztosan törölni akarod az összes adatot? Ez visszavonhatatlan!</string>
+    <string name="settings_clear_everything">Igen, töröld!</string>
+    <string name="settings_disconnect_spotify_title">Szabotál És Ront Spoti!?</string>
+    <string name="settings_disconnect_spotify_msg">Ez El És Tépi Jelenét ÉS Jelen is! A Kis Forma Is Halotti Sors A Legy, Alakítja Is Nyújt Is Cél.</string>
+    <string name="settings_disconnect">Lecsatlakozás</string>
+    <string name="settings_import_success">Sikeres Importálás</string>
+
+    <!-- Welcome to Tempo / Onboarding Final -->
+    <string name="welcome_ready">Minden Készen Áll!</string>
+    <string name="welcome_go">Gyerünk</string>
+
+    <!-- Errors and notifications -->
+    <string name="error_generic">Hiba történt. Kérjük, próbálja újra.</string>
+    <string name="error_network">Nincs hálózati kapcsolat.</string>
+    <string name="error_save">Nem sikerült menteni a beállításokat.</string>
+    <string name="success_save">Beállítások sikeresen mentve.</string>
+
+    <!-- App shortcuts -->
+    <string name="shortcut_search">Keresés</string>
+    <string name="shortcut_play">Lejátszás</string>
+
+    <!-- About screen -->
+    <string name="about_app_name">Tempo</string>
+    <string name="about_version">Verzió %1$s</string>
+    <string name="about_developer">Fejlesztette: Avinash</string>
+    <string name="about_license">Licencek</string>
+    <string name="about_source_code">Forráskód</string>
+    <string name="about_privacy">Adatvédelmi Nyilatkozat</string>
+    <string name="about_terms">Felhasználási Feltételek</string>
+    
+    <!-- Misc UI -->
+    <string name="ui_loading">Betöltés…</string>
+    <string name="ui_error">Hiba</string>
+    <string name="ui_retry">Újra</string>
+    <string name="ui_empty">Nincs megjeleníthető adat.</string>
+    <string name="ui_offline">Jelenleg offline állapotban vagy.</string>
+    <string name="ui_search_hint">Keresés…</string>
+    <string name="ui_no_results">Nincs találat.</string>
+    
+</resources>
+

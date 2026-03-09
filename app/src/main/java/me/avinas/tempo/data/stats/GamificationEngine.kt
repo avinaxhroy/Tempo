@@ -9,10 +9,10 @@ import kotlin.math.pow
  * Handles XP calculation, level computation, and badge definitions.
  * All logic is deterministic. XP can always be recomputed from listening history.
  * 
- * Level formula: xpForLevel(n) = floor(100 * n^1.5)
+ * Level formula: xpForLevel(n) = floor(130 * n^1.5)
  * This creates an exponential curve with no cap:
- *   Level 10 = 3,162 XP       Level 50 = 35,355 XP
- *   Level 25 = 12,500 XP      Level 100 = 100,000 XP
+ *   Level 10 = 4,110 XP       Level 50 = 45,961 XP
+ *   Level 25 = 16,250 XP      Level 100 = 130,000 XP
  */
 object GamificationEngine {
 
@@ -23,6 +23,13 @@ object GamificationEngine {
     const val XP_FULL_PLAY = 10L    // ≥80% completion
     const val XP_PARTIAL_PLAY = 3L  // 30-79% completion
     const val XP_SKIPPED = 0L       // <30% completion
+
+    // Anti-gaming: max plays of the *same track* per calendar day that contribute XP.
+    // Additional plays are still recorded (stats stay accurate) but earn 0 XP.
+    const val MAX_XP_PLAYS_PER_TRACK_PER_DAY = 3
+
+    // Discovery
+    const val XP_NEW_ARTIST = 20L
     
     // =====================
     // Level Computation
@@ -30,11 +37,11 @@ object GamificationEngine {
     
     /**
      * Cumulative XP required to reach a given level.
-     * Uses formula: floor(100 * level^1.5)
+     * Uses formula: floor(130 * level^1.5)
      */
     fun cumulativeXpForLevel(level: Int): Long {
         if (level <= 0) return 0
-        return floor(100.0 * level.toDouble().pow(1.5)).toLong()
+        return floor(130.0 * level.toDouble().pow(1.5)).toLong()
     }
     
     /**
@@ -66,10 +73,12 @@ object GamificationEngine {
     }
     
     /**
-     * Calculate total XP from play counts.
+     * Calculate total XP from play counts and discovery.
      */
-    fun calculateXp(fullPlayCount: Int, partialPlayCount: Int): Long {
-        return (fullPlayCount * XP_FULL_PLAY) + (partialPlayCount * XP_PARTIAL_PLAY)
+    fun calculateXp(fullPlayCount: Int, partialPlayCount: Int, uniqueArtistCount: Int = 0): Long {
+        return (fullPlayCount * XP_FULL_PLAY) + 
+               (partialPlayCount * XP_PARTIAL_PLAY) +
+               (uniqueArtistCount * XP_NEW_ARTIST)
     }
     
     /**
@@ -131,6 +140,28 @@ object GamificationEngine {
         )
     }
     
+    // =====================
+    // Titles
+    // =====================
+    
+    /**
+     * Compute User Title based on BOTH level and listening diversity (unique artists).
+     * This decouples the title from pure volume/farming.
+     */
+    fun computeTitle(level: Int, uniqueArtists: Int): String {
+        return when {
+            level >= 150 && uniqueArtists >= 2000 -> "Sound God"
+            level >= 100 && uniqueArtists >= 1000 -> "Audiophile"
+            level >= 75 && uniqueArtists >= 750 -> "Music Legend"
+            level >= 50 && uniqueArtists >= 500 -> "Music Connoisseur"
+            level >= 35 && uniqueArtists >= 250 -> "Dedicated Listener"
+            level >= 20 && uniqueArtists >= 100 -> "Music Enthusiast"
+            level >= 10 && uniqueArtists >= 50 -> "Music Fan"
+            level >= 5 && uniqueArtists >= 10 -> "Casual Listener"
+            else -> "Newcomer"
+        }
+    }
+
     // =====================
     // Badge Definitions
     // =====================

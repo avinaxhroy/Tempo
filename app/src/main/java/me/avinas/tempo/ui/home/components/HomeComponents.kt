@@ -40,6 +40,8 @@ import me.avinas.tempo.ui.components.GlassCard
 
 import me.avinas.tempo.ui.components.TrendLine
 import me.avinas.tempo.ui.theme.TempoRed
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 @Composable
 fun HeroCard(
@@ -252,13 +254,13 @@ fun SpotlightStoryCard(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = "Tempo Spotlight",
+                    text = stringResource(R.string.home_spotlight_title),
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "See your music visualised.",
+                    text = stringResource(R.string.home_spotlight_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.8f)
                 )
@@ -286,7 +288,7 @@ fun WeekInReviewGrid(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = "Your Week in Review",
+            text = stringResource(R.string.home_week_review),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = Color.White,
@@ -405,7 +407,7 @@ fun WeekInReviewGrid(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Listen Time",
+                        text = stringResource(R.string.home_listen_time),
                         style = MaterialTheme.typography.labelMedium,
                         color = me.avinas.tempo.ui.theme.GoldenAmber
                     )
@@ -444,7 +446,7 @@ fun WeekInReviewGrid(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "New Finds",
+                        text = stringResource(R.string.home_new_finds),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(0xFFA855F7)
                     )
@@ -467,7 +469,7 @@ fun DiscoverySection(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = "Ready to discover?",
+            text = stringResource(R.string.home_ready_discover),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = Color.White,
@@ -485,24 +487,24 @@ fun DiscoverySection(
             val varietyScore = ((discoveryStats?.varietyScore ?: 0.0) * 10).toInt()
             
             DiscoveryCard(
-                title = "Found $newArtists new artists",
-                subtitle = "Expand your musical horizon",
+                title = stringResource(R.string.home_found_artists, newArtists),
+                subtitle = stringResource(R.string.home_expand_horizon),
                 icon = Icons.Default.Explore,
                 color = Color(0xFF0EA5E9), // Sky 500
                 backgroundColor = Color(0xFF0369A1).copy(alpha = 0.2f)
             )
             
             DiscoveryCard(
-                title = "Discovered $newTracks new tracks",
-                subtitle = "Fresh beats for your playlist",
+                title = stringResource(R.string.home_discovered_tracks, newTracks),
+                subtitle = stringResource(R.string.home_fresh_beats),
                 icon = Icons.Default.History,
                 color = Color(0xFFF43F5E), // Rose 500
                 backgroundColor = Color(0xFFBE123C).copy(alpha = 0.2f)
             )
             
             DiscoveryCard(
-                title = "Variety Score: $varietyScore/10",
-                subtitle = "How unique is your taste?",
+                title = stringResource(R.string.home_variety_score, varietyScore),
+                subtitle = stringResource(R.string.home_how_unique),
                 icon = Icons.Default.Fingerprint,
                 color = Color(0xFF8B5CF6), // Violet 500
                 backgroundColor = Color(0xFF6D28D9).copy(alpha = 0.2f)
@@ -570,7 +572,7 @@ fun HabitInsights(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = "A Look at Your Habits",
+            text = stringResource(R.string.home_habits_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = Color.White,

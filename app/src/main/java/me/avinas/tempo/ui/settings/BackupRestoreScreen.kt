@@ -51,6 +51,8 @@ import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.utils.FormatUtils.formatBytes
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 /**
  * Dedicated Backup & Restore screen with Google Drive integration.
@@ -514,7 +516,7 @@ fun BackupRestoreScreen(
 @Composable
 private fun DataOverviewSection(uiState: BackupRestoreUiState) {
     Text(
-        text = "YOUR DATA",
+        text = stringResource(R.string.backup_restore_data_header),
         style = MaterialTheme.typography.titleSmall,
         color = TempoRed,
         fontWeight = FontWeight.Bold,
@@ -535,10 +537,10 @@ private fun DataOverviewSection(uiState: BackupRestoreUiState) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                DataStatItem(Icons.Default.MusicNote, uiState.trackCount, "Tracks")
-                DataStatItem(Icons.Default.Person, uiState.artistCount, "Artists")
-                DataStatItem(Icons.Default.History, uiState.eventCount, "Plays")
-                DataStatItem(Icons.Default.Image, uiState.localImageCount, "Images")
+                DataStatItem(Icons.Default.MusicNote, uiState.trackCount, stringResource(R.string.backup_restore_tracks_label))
+                DataStatItem(Icons.Default.Person, uiState.artistCount, stringResource(R.string.backup_restore_artists_label))
+                DataStatItem(Icons.Default.History, uiState.eventCount, stringResource(R.string.backup_restore_plays_label))
+                DataStatItem(Icons.Default.Image, uiState.localImageCount, stringResource(R.string.backup_restore_images_label))
             }
         }
         
@@ -886,7 +888,7 @@ private fun LocalBackupSection(
     onImport: () -> Unit
 ) {
     Text(
-        text = "LOCAL BACKUP",
+        text = stringResource(R.string.backup_restore_local_backup_header),
         style = MaterialTheme.typography.titleSmall,
         color = TempoRed,
         fontWeight = FontWeight.Bold,
@@ -901,11 +903,11 @@ private fun LocalBackupSection(
         Column {
             // Local images toggle
             SettingsSwitch(
-                title = "Include Local Images",
+                title = stringResource(R.string.backup_restore_include_local_images),
                 subtitle = if (uiState.localImageCount > 0) {
-                    "${uiState.localImageCount} images (${uiState.localImageSizeFormatted})"
+                    stringResource(R.string.backup_restore_local_images_desc, uiState.localImageCount, uiState.localImageSizeFormatted)
                 } else {
-                    "No local images to include"
+                    stringResource(R.string.backup_restore_no_local_images)
                 },
                 checked = uiState.includeLocalImages,
                 onCheckedChange = onToggleLocalImages
@@ -922,13 +924,13 @@ private fun LocalBackupSection(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Export to Device",
+                        text = stringResource(R.string.backup_restore_export_device),
                         style = MaterialTheme.typography.bodyLarge,
                         color = Color.White
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Estimated size: ${uiState.estimatedExportSizeFormatted}",
+                        text = stringResource(R.string.backup_restore_estimated_size, uiState.estimatedExportSizeFormatted),
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.7f)
                     )
@@ -941,7 +943,7 @@ private fun LocalBackupSection(
                 ) {
                     Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Export")
+                    Text(stringResource(R.string.backup_restore_export_button))
                 }
             }
             
@@ -956,13 +958,13 @@ private fun LocalBackupSection(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Import from Device",
+                        text = stringResource(R.string.backup_restore_import_device),
                         style = MaterialTheme.typography.bodyLarge,
                         color = Color.White
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Restore from a local backup file",
+                        text = stringResource(R.string.backup_restore_import_file_desc),
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.7f)
                     )
@@ -981,7 +983,7 @@ private fun LocalBackupSection(
                 ) {
                     Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Import")
+                    Text(stringResource(R.string.backup_restore_import_button))
                 }
             }
         }

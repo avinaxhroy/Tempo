@@ -35,6 +35,8 @@ import me.avinas.tempo.ui.utils.isCompactScreen
 import me.avinas.tempo.ui.utils.rememberScreenHeightPercentage
 import me.avinas.tempo.ui.utils.scaledSize
 import me.avinas.tempo.ui.utils.rememberClampedHeightPercentage
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 /**
  * Onboarding screen that lets users configure data/privacy settings
@@ -89,7 +91,7 @@ fun AdvancedSettingsScreen(
             Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.025f)))
 
             Text(
-                text = "Data Preferences",
+                text = stringResource(R.string.advanced_data_prefs),
                 style = if (isSmallScreen()) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
@@ -100,7 +102,7 @@ fun AdvancedSettingsScreen(
             Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.01f)))
 
             Text(
-                text = "Choose how much data Tempo uses for audio analysis",
+                text = stringResource(R.string.advanced_choose_data),
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 color = Color.White.copy(alpha = 0.7f),
@@ -112,9 +114,9 @@ fun AdvancedSettingsScreen(
             // Default (free) option - always enabled
             SettingOptionCard(
                 icon = Icons.Default.Speed,
-                title = "Basic Analysis",
-                description = "Genre and mood from database lookup",
-                detail = "Fast • No data download",
+                title = stringResource(R.string.advanced_basic_title),
+                description = stringResource(R.string.advanced_basic_desc),
+                detail = stringResource(R.string.advanced_basic_detail),
                 isEnabled = true,
                 isToggleable = false,
                 modifier = Modifier.fillMaxWidth()
@@ -125,9 +127,9 @@ fun AdvancedSettingsScreen(
             // Extended analysis option
             SettingOptionCard(
                 icon = Icons.Default.CloudDownload,
-                title = "Extended Audio Analysis [EXPERIMENTAL]",
-                description = "Detailed mood & energy from 30s audio preview",
-                detail = "~500KB per track • More accurate",
+                title = stringResource(R.string.advanced_extended_title),
+                description = stringResource(R.string.advanced_extended_desc),
+                detail = stringResource(R.string.advanced_extended_detail),
                 isEnabled = extendedAnalysisEnabled,
                 isToggleable = true,
                 onToggle = onExtendedAnalysisChange,
@@ -139,9 +141,9 @@ fun AdvancedSettingsScreen(
             // Smart Merge option
             SettingOptionCard(
                 icon = Icons.Default.MusicNote,
-                title = "Smart Merge Versions",
-                description = "Treat Live/Remix versions as the same song for cleaner history",
-                detail = "Recommended for cleaner stats",
+                title = stringResource(R.string.advanced_merge_title),
+                description = stringResource(R.string.advanced_merge_desc),
+                detail = stringResource(R.string.advanced_merge_detail),
                 isEnabled = mergeVersionsEnabled,
                 isToggleable = true,
                 onToggle = onMergeVersionsChange,
@@ -152,7 +154,7 @@ fun AdvancedSettingsScreen(
 
             // Info text
             Text(
-                text = "You can change this anytime in Settings",
+                text = stringResource(R.string.advanced_change_settings),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.5f),
                 textAlign = TextAlign.Center,
@@ -174,7 +176,7 @@ fun AdvancedSettingsScreen(
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Text(
-                    text = "Continue",
+                    text = stringResource(R.string.advanced_continue),
                     fontSize = adaptiveTextUnitByCategory(18.sp, 17.sp, 16.sp),
                     fontWeight = FontWeight.Bold
                 )

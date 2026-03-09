@@ -81,12 +81,23 @@ sealed class Screen(val route: String) {
 @Composable
 fun AppNavigation(
     walkthroughController: me.avinas.tempo.ui.components.WalkthroughController,
-    onResetToOnboarding: () -> Unit
+    onResetToOnboarding: () -> Unit,
+    navigationTrigger: String? = null
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val currentDestination = navBackStackEntry?.destination
+
+    androidx.compose.runtime.LaunchedEffect(navigationTrigger) {
+        if (navigationTrigger == "profile_challenges") {
+            navController.navigate(Screen.Profile.route) {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
 
     // Dismiss any active walkthrough when navigating to a new screen
     androidx.compose.runtime.LaunchedEffect(currentRoute) {

@@ -35,6 +35,8 @@ import me.avinas.tempo.ui.utils.isSmallScreen
 import me.avinas.tempo.ui.utils.rememberScreenHeightPercentage
 import me.avinas.tempo.ui.utils.scaledSize
 import me.avinas.tempo.ui.utils.rememberClampedHeightPercentage
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 @Composable
 fun BatteryOptimizationScreen(
@@ -124,7 +126,7 @@ fun BatteryOptimizationScreen(
             Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.045f)))
 
             Text(
-                text = "One more thing for better accuracy",
+                text = stringResource(R.string.battery_title),
                 style = if (isSmallScreen()) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
@@ -136,7 +138,7 @@ fun BatteryOptimizationScreen(
             Spacer(modifier = Modifier.height(rememberScreenHeightPercentage(0.02f)))
 
             Text(
-                text = "Let Tempo run in the background for continuous tracking. This ensures we don't miss any songs while your screen is off.",
+                text = stringResource(R.string.battery_description),
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = Color.White.copy(alpha = 0.7f),
@@ -165,7 +167,7 @@ fun BatteryOptimizationScreen(
                 )
             ) {
                 Text(
-                    text = "Optimize",
+                    text = stringResource(R.string.battery_optimize),
                     fontSize = adaptiveTextUnitByCategory(18.sp, 17.sp, 16.sp),
                     fontWeight = FontWeight.Bold
                 )
@@ -175,7 +177,7 @@ fun BatteryOptimizationScreen(
 
             TextButton(onClick = onSkip) {
                 Text(
-                    text = "Skip for now",
+                    text = stringResource(R.string.battery_skip),
                     color = Color.White.copy(alpha = 0.6f),
                     style = MaterialTheme.typography.labelLarge
                 )

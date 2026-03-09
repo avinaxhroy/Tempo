@@ -12,6 +12,7 @@ import me.avinas.tempo.data.importexport.ImportExportProgress
 import me.avinas.tempo.data.importexport.ImportExportResult
 import me.avinas.tempo.data.local.AppDatabase
 import me.avinas.tempo.ui.onboarding.dataStore
+import me.avinas.tempo.worker.ChallengeWorker
 import me.avinas.tempo.worker.NotificationWorker
 import me.avinas.tempo.worker.SpotifyPollingWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -47,6 +48,7 @@ class SettingsViewModel @Inject constructor(
     private val NOTIF_DAILY_KEY = booleanPreferencesKey("notif_daily_summary")
     private val NOTIF_WEEKLY_KEY = booleanPreferencesKey("notif_weekly_recap")
     private val NOTIF_ACHIEVEMENTS_KEY = booleanPreferencesKey("notif_achievements")
+    private val NOTIF_CHALLENGES_KEY = booleanPreferencesKey("notif_daily_challenges")
     private val EXTENDED_AUDIO_ANALYSIS_KEY = booleanPreferencesKey("extended_audio_analysis")
     private val USER_NAME_KEY = androidx.datastore.preferences.core.stringPreferencesKey("user_name")
 
@@ -62,6 +64,7 @@ class SettingsViewModel @Inject constructor(
                 dailySummaryEnabled = dataStorePrefs[NOTIF_DAILY_KEY] ?: true,
                 weeklyRecapEnabled = dataStorePrefs[NOTIF_WEEKLY_KEY] ?: true,
                 achievementsEnabled = dataStorePrefs[NOTIF_ACHIEVEMENTS_KEY] ?: true,
+                dailyChallengesEnabled = dataStorePrefs[NOTIF_CHALLENGES_KEY] ?: true,
                 extendedAudioAnalysisEnabled = dataStorePrefs[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
                 userName = dataStorePrefs[USER_NAME_KEY] ?: "User",
                 mergeAlternateVersions = roomPrefs.mergeAlternateVersions,
@@ -81,6 +84,7 @@ class SettingsViewModel @Inject constructor(
                     dailySummaryEnabled = preferences[NOTIF_DAILY_KEY] ?: true,
                     weeklyRecapEnabled = preferences[NOTIF_WEEKLY_KEY] ?: true,
                     achievementsEnabled = preferences[NOTIF_ACHIEVEMENTS_KEY] ?: true,
+                    dailyChallengesEnabled = preferences[NOTIF_CHALLENGES_KEY] ?: true,
                     extendedAudioAnalysisEnabled = preferences[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
                     userName = preferences[USER_NAME_KEY] ?: "User"
                 )
@@ -135,6 +139,14 @@ class SettingsViewModel @Inject constructor(
     fun toggleAchievements(enabled: Boolean) {
         viewModelScope.launch {
             context.dataStore.edit { it[NOTIF_ACHIEVEMENTS_KEY] = enabled }
+        }
+    }
+    
+    fun toggleDailyChallenges(enabled: Boolean) {
+        viewModelScope.launch {
+            context.dataStore.edit { it[NOTIF_CHALLENGES_KEY] = enabled }
+            // ChallengeWorker already checks the pref when generating, no need to cancel worker
+            // unless we want to disable generation completely (which we don't, just notifications)
         }
     }
     
@@ -247,6 +259,7 @@ data class SettingsUiState(
     val dailySummaryEnabled: Boolean = true,
     val weeklyRecapEnabled: Boolean = true,
     val achievementsEnabled: Boolean = true,
+    val dailyChallengesEnabled: Boolean = true,
     val extendedAudioAnalysisEnabled: Boolean = false,
     val isSpotifyConnected: Boolean = false,
     val spotifyUsername: String? = null,

@@ -9,6 +9,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import me.avinas.tempo.data.local.entities.DailyChallenge
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -142,7 +145,7 @@ fun ProfileScreen(
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 // === Level Ring & Title ===
-                LevelRingSection(userLevel = uiState.userLevel)
+                LevelRingSection(userLevel = uiState.userLevel, userTitle = uiState.userTitle)
                 
                 // === Stats Row & Streak Risk ===
                 StatsRow(
@@ -151,6 +154,15 @@ fun ProfileScreen(
                     timeRemaining = uiState.streakTimeRemaining,
                     streakDurationMinutes = uiState.streakDurationMinutes
                 )
+                
+                // === Challenges Section ===
+                if (uiState.challenges.isNotEmpty()) {
+                    ChallengesSection(
+                        challenges = uiState.challenges,
+                        totalXpAvailable = uiState.challengeXpTotal,
+                        onClaimChallenge = viewModel::claimChallenge
+                    )
+                }
                 
                 // === Badge Section ===
                 BadgeSection(
@@ -181,7 +193,7 @@ fun ProfileScreen(
 // Level Ring with animated progress
 // =====================
 @Composable
-private fun LevelRingSection(userLevel: UserLevel) {
+private fun LevelRingSection(userLevel: UserLevel, userTitle: String) {
     val animatedProgress by animateFloatAsState(
         targetValue = userLevel.levelProgress,
         animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
@@ -282,7 +294,7 @@ private fun LevelRingSection(userLevel: UserLevel) {
         
         // Title
         Text(
-            text = userLevel.title,
+            text = userTitle,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = Color.White
@@ -443,6 +455,228 @@ private fun StatItem(value: String, label: String, icon: ImageVector, color: Col
             style = MaterialTheme.typography.labelSmall,
             color = Color.White.copy(alpha = 0.5f)
         )
+    }
+}
+
+// =====================
+// Daily Challenges Section
+// =====================
+@Composable
+private fun ChallengesSection(
+    challenges: List<DailyChallenge>,
+    totalXpAvailable: Int,
+    onClaimChallenge: (Long) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Section Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Daily Challenges",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                val completedCount = challenges.count { it.isCompleted }
+                Text(
+                    text = "$completedCount/${challenges.size} Completed",
+                    fontSize = 14.sp,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            }
+            
+            // Expected Total XP Chip
+            Surface(
+                color = Color(0xFF6366F1).copy(alpha = 0.2f), // Indigo Tint
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "XP",
+                        tint = Color(0xFFA855F7), // Purple
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "$totalXpAvailable XP Available",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFA855F7)
+                    )
+                }
+            }
+        }
+        
+        // Challenge Cards
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            challenges.forEach { challenge ->
+                ChallengeCard(challenge = challenge, onClaim = { onClaimChallenge(challenge.id) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChallengeCard(challenge: DailyChallenge, onClaim: () -> Unit) {
+    val isCompleted = challenge.isCompleted
+    
+    // Difficulty Colors
+    val difficultyColor = when (challenge.difficulty) {
+        "EASY" -> Color(0xFF10B981)   // Emerald Green
+        "MEDIUM" -> Color(0xFFF59E0B) // Amber
+        "HARD" -> Color(0xFFEF4444)   // Red
+        else -> Color.Gray
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(enabled = isCompleted) { onClaim() },
+        color = Color.White.copy(alpha = 0.05f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isCompleted) Color(0xFF10B981).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.1f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                // Main Content
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = challenge.title,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = challenge.description,
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.7f),
+                        lineHeight = 18.sp
+                    )
+                }
+                
+                // Right side: Difficulty & XP / Completion Check
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.padding(start = 12.dp)
+                ) {
+                    if (isCompleted) {
+                        Surface(
+                            color = Color(0xFF10B981).copy(alpha = 0.2f),
+                            shape = CircleShape
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Completed",
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.padding(6.dp).size(20.dp)
+                            )
+                        }
+                    } else {
+                        // Difficulty Dot
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(difficultyColor)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = challenge.difficulty,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = difficultyColor
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // XP Reward
+                        Surface(
+                            color = Color.White.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = "+${challenge.xpReward} XP",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFA855F7),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Progress Bar
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Animated Progress Bar directly embedded
+                val animatedProgress by animateFloatAsState(
+                    targetValue = challenge.progressFraction,
+                    animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
+                    label = "challengeProgress"
+                )
+                
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(6.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.1f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(animatedProgress)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = if (isCompleted) {
+                                        listOf(Color(0xFF10B981), Color(0xFF34D399))
+                                    } else {
+                                        listOf(Color(0xFFEC4899), Color(0xFFA855F7))
+                                    }
+                                )
+                            )
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                // Text Progress
+                Text(
+                    text = "${challenge.currentProgress} / ${challenge.targetValue}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isCompleted) Color(0xFF10B981) else Color.White.copy(alpha = 0.5f)
+                )
+            }
+        }
     }
 }
 

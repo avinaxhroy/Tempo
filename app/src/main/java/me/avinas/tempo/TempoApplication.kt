@@ -7,11 +7,14 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
+import me.avinas.tempo.data.local.dao.UserKnownArtistDao
 import me.avinas.tempo.data.local.dao.UserPreferencesDao
+import me.avinas.tempo.utils.ArtistParser
 import me.avinas.tempo.worker.EnrichmentWorker
 import me.avinas.tempo.worker.ServiceHealthWorker
 import me.avinas.tempo.worker.SpotifyPollingWorker
 import me.avinas.tempo.worker.SpotlightUnlockWorker
+import me.avinas.tempo.worker.ChallengeWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +44,9 @@ class TempoApplication : Application(), Configuration.Provider, SingletonImageLo
     @Inject
     lateinit var userPreferencesDao: UserPreferencesDao
     
+    @Inject
+    lateinit var userKnownArtistDao: UserKnownArtistDao
+    
     // Background executor for non-critical initialization
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
     
@@ -63,10 +69,29 @@ class TempoApplication : Application(), Configuration.Provider, SingletonImageLo
     override fun onCreate() {
         super.onCreate()
         
+        // Load user-defined known artists into the parser early
+        // so any music tracking that starts immediately uses the correct list
+        loadUserKnownArtists()
+        
         // Schedule periodic background workers after a short delay
         // This prevents blocking the main thread during app startup
         // and reduces frame drops during initial composition
         scheduleBackgroundWorkDeferred()
+    }
+    
+    /**
+     * Load user-defined known artist names from the database into ArtistParser.
+     * This runs on a background coroutine and doesn't block startup.
+     */
+    private fun loadUserKnownArtists() {
+        applicationScope.launch {
+            try {
+                val names = userKnownArtistDao.getAllNormalizedNames().toSet()
+                ArtistParser.loadUserKnownBands(names)
+            } catch (e: Exception) {
+                android.util.Log.w("TempoApplication", "Failed to load user known artists", e)
+            }
+        }
     }
     
     /**
@@ -103,6 +128,9 @@ class TempoApplication : Application(), Configuration.Provider, SingletonImageLo
         // Schedule gamification refresh (XP, levels, badges)
         me.avinas.tempo.worker.GamificationWorker.enqueuePeriodicRefresh(this)
         me.avinas.tempo.worker.GamificationWorker.enqueueImmediateRefresh(this)
+        
+        // Schedule daily challenges worker (runs at midnight)
+        ChallengeWorker.scheduleDaily(this)
         
         // Schedule Spotify polling if API-Only mode is enabled
         scheduleSpotifyPollingIfEnabled()

@@ -17,4 +17,15 @@ interface TrackRepository {
     suspend fun updateContentTypeByArtist(artistName: String, contentType: String): Int
     suspend fun getTrackIdsByArtist(artistName: String): List<Long>
     suspend fun deleteByArtist(artistName: String): Int
+
+    /**
+     * Delete a track and all its associated data (listening events, enriched metadata,
+     * artist relationships, and content marks).
+     */
+    suspend fun deleteTrackWithAllData(trackId: Long): DeleteResult
 }
+
+data class DeleteResult(
+    val success: Boolean,
+    val error: String? = null
+)

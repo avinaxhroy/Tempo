@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.avinas.tempo.data.stats.TimeRange
 import me.avinas.tempo.ui.theme.TempoRed
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 
 
@@ -133,7 +135,7 @@ private fun TimeRangeEmptyState(
                     PulsingRadar(modifier = Modifier.size(24.dp), color = Color(0xFF22C55E))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Music Tracking Active",
+                        text = stringResource(R.string.empty_tracking_active),
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF22C55E),
                         fontWeight = FontWeight.Bold,
@@ -200,7 +202,7 @@ private fun TimeRangeEmptyState(
                 shape = MaterialTheme.shapes.large,
                 contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
             ) {
-               Text("Check Supported Apps", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold) 
+               Text(stringResource(R.string.empty_check_apps), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold) 
             }
         }
     }
@@ -227,7 +229,7 @@ private fun SetupGuideEmptyState(
         ) {
             // Header
             Text(
-                text = "Getting started with your stats", // Updated title
+                text = stringResource(R.string.empty_getting_started),
                 style = MaterialTheme.typography.headlineSmall, // Bigger than titleLarge
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -237,7 +239,7 @@ private fun SetupGuideEmptyState(
             Spacer(modifier = Modifier.height(8.dp))
             
             Text(
-                text = "Let's get your stats flowing",
+                text = stringResource(R.string.empty_stats_flowing),
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
@@ -252,7 +254,7 @@ private fun SetupGuideEmptyState(
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF22C55E).copy(alpha = 0.2f))
             ) {
                  Text(
-                    text = "No account connection needed",
+                    text = stringResource(R.string.empty_no_account),
                     style = MaterialTheme.typography.labelMedium,
                     color = Color(0xFF22C55E),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
@@ -268,15 +270,15 @@ private fun SetupGuideEmptyState(
             ) {
                 StepItem(
                     icon = Icons.AutoMirrored.Rounded.QueueMusic, 
-                    text = "Open Spotify, YouTube Music, or others"
+                    text = stringResource(R.string.empty_open_apps)
                 )
                 StepItem(
                     icon = Icons.Rounded.Headphones, 
-                    text = "Play a few songs - stats appear shortly"
+                    text = stringResource(R.string.empty_play_songs)
                 )
                 StepItem(
                     icon = Icons.Rounded.GraphicEq, 
-                    text = "Return here to see your insights"
+                    text = stringResource(R.string.empty_return_insights)
                 )
             }
             
@@ -294,7 +296,7 @@ private fun SetupGuideEmptyState(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Check Supported Apps",
+                    text = stringResource(R.string.empty_check_apps),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold
                 )

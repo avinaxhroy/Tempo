@@ -31,6 +31,8 @@ import me.avinas.tempo.ui.utils.isSmallScreen
 import me.avinas.tempo.ui.utils.rememberScreenHeightPercentage
 import me.avinas.tempo.ui.utils.scaledSize
 import me.avinas.tempo.ui.utils.rememberClampedHeightPercentage
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 @Composable
 fun WelcomeScreen(
@@ -120,7 +122,7 @@ fun WelcomeScreen(
 
                 // Gradient Headline - responsive text
                 Text(
-                    text = "Know Your Music,",
+                    text = stringResource(R.string.welcome_headline_1),
                     style = if (isSmall) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
@@ -134,7 +136,7 @@ fun WelcomeScreen(
                 )
                 
                 Text(
-                    text = "Love Your Stats",
+                    text = stringResource(R.string.welcome_headline_2),
                     style = (if (isSmall) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium).copy(
                         brush = gradientBrush
                     ),
@@ -148,7 +150,7 @@ fun WelcomeScreen(
 
                 // Description text - responsive sizing
                 Text(
-                    text = "Tempo automatically tracks what you listen to and shows you beautiful insights about your listening habits.",
+                    text = stringResource(R.string.welcome_description),
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
                     color = Color.White.copy(alpha = 0.7f),
@@ -176,7 +178,7 @@ fun WelcomeScreen(
                     )
                 ) {
                     Text(
-                        text = "Get Started",
+                        text = stringResource(R.string.welcome_get_started),
                         fontSize = adaptiveTextUnitByCategory(18.sp, 17.sp, 16.sp),
                         fontWeight = FontWeight.Bold
                     )
@@ -195,7 +197,7 @@ fun WelcomeScreen(
                 .padding(adaptiveSizeByCategory(16.dp, 14.dp, 12.dp))
         ) {
             Text(
-                text = "Skip",
+                text = stringResource(R.string.welcome_skip),
                 color = Color.White.copy(alpha = 0.6f),
                 style = MaterialTheme.typography.labelLarge
             )

@@ -4,6 +4,8 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import me.avinas.tempo.data.local.entities.Artist
+import me.avinas.tempo.data.repository.ArtistRenameRepository
 import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.data.stats.ArtistDetails
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,6 +19,7 @@ import javax.inject.Inject
 @HiltViewModel
 class ArtistDetailsViewModel @Inject constructor(
     private val statsRepository: StatsRepository,
+    private val artistRenameRepository: ArtistRenameRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -210,8 +213,6 @@ class ArtistDetailsViewModel @Inject constructor(
                     _uiState.update { it.copy(isRefreshingImage = true) }
 
                     // Directly search for this artist's image via API
-                    // This avoids the bug where track-based enrichment would fetch
-                    // the primary artist's image instead of this specific artist's image
                     val newImageUrl = statsRepository.refreshArtistImageDirectly(artistId)
 
                     Log.d(TAG, "Artist image refresh result: ${newImageUrl?.take(80) ?: "null"}")
@@ -231,6 +232,89 @@ class ArtistDetailsViewModel @Inject constructor(
             }
         }
     }
+
+    // ===== Rename Flow =====
+
+    /** Show the rename dialog. */
+    fun showRenameDialog() {
+        _uiState.update { it.copy(
+            showRenameDialog = true,
+            detectedSplitArtists = emptyList(),
+            isDetectingSplits = false,
+            isRenaming = false,
+            renameSuccess = null
+        ) }
+    }
+
+    /** Hide the rename dialog and reset rename state. */
+    fun dismissRenameDialog() {
+        _uiState.update { it.copy(
+            showRenameDialog = false,
+            detectedSplitArtists = emptyList(),
+            isDetectingSplits = false,
+            isRenaming = false,
+            renameSuccess = null
+        ) }
+    }
+
+    /**
+     * Detect if the new name matches split fragments of other artists in the DB.
+     * If no splits found, immediately performs a simple rename.
+     */
+    fun detectSplitsAndRename(newName: String) {
+        val artistId = currentArtistId ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDetectingSplits = true) }
+            try {
+                val splits = artistRenameRepository.detectSplitArtists(newName, artistId)
+                if (splits.isEmpty()) {
+                    // No splits detected — just rename directly
+                    performRename(artistId, newName, emptyList())
+                } else {
+                    // Found split artists — show merge confirmation
+                    _uiState.update { it.copy(
+                        detectedSplitArtists = splits,
+                        isDetectingSplits = false
+                    ) }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to detect splits", e)
+                _uiState.update { it.copy(isDetectingSplits = false, renameSuccess = false) }
+            }
+        }
+    }
+
+    /** Rename and merge the detected split artists. */
+    fun confirmRenameAndMerge(newName: String, mergeIds: List<Long>) {
+        val artistId = currentArtistId ?: return
+        performRename(artistId, newName, mergeIds)
+    }
+
+    /** Rename only, without merging any splits. */
+    fun confirmRenameOnly(newName: String) {
+        val artistId = currentArtistId ?: return
+        performRename(artistId, newName, emptyList())
+    }
+
+    private fun performRename(artistId: Long, newName: String, mergeIds: List<Long>) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRenaming = true) }
+            try {
+                val success = artistRenameRepository.renameAndMerge(artistId, newName, mergeIds)
+                _uiState.update { it.copy(isRenaming = false, renameSuccess = success) }
+
+                if (success) {
+                    Log.i(TAG, "Successfully renamed artist $artistId to '$newName'")
+                    // Force reload to show updated name/stats
+                    currentArtistId = null // Reset so loadArtistById doesn't skip
+                    loadArtistById(artistId)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Rename failed", e)
+                _uiState.update { it.copy(isRenaming = false, renameSuccess = false) }
+            }
+        }
+    }
 }
 
 @androidx.compose.runtime.Immutable
@@ -239,5 +323,11 @@ data class ArtistDetailsUiState(
     val artistDetails: ArtistDetails? = null,
     val artistPercentile: Double? = null,
     val error: String? = null,
-    val isRefreshingImage: Boolean = false
+    val isRefreshingImage: Boolean = false,
+    // Rename state
+    val showRenameDialog: Boolean = false,
+    val detectedSplitArtists: List<Artist> = emptyList(),
+    val isDetectingSplits: Boolean = false,
+    val isRenaming: Boolean = false,
+    val renameSuccess: Boolean? = null
 )

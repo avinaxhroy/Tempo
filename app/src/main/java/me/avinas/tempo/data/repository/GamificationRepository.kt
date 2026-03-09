@@ -44,7 +44,16 @@ class GamificationRepository @Inject constructor(
         // Calculate XP deterministically from listening events
         val fullPlays = gamificationDao.getFullPlayCount()
         val partialPlays = gamificationDao.getPartialPlayCount()
-        val totalXp = GamificationEngine.calculateXp(fullPlays, partialPlays)
+        val uniqueArtists = gamificationDao.getUniqueArtistCount()
+        var totalXp = GamificationEngine.calculateXp(fullPlays, partialPlays, uniqueArtists)
+        
+        // Add bonus XP from completed challenges
+        // Since challenges aren't bound to specific play events, we query all completed challenges
+        // Note: For a true deterministic calc, we might need a separate table or query, but
+        // counting completed challenges in daily_challenges is sufficient.
+        val completedChallenges = gamificationDao.getAllCompletedChallenges()
+        val challengeBonusXp = completedChallenges.sumOf { it.xpReward.toLong() }
+        totalXp += challengeBonusXp
         
         // Compute level from XP
         val levelState = GamificationEngine.computeLevelState(totalXp)
@@ -89,6 +98,8 @@ class GamificationRepository @Inject constructor(
     fun observeRecentBadges(limit: Int = 3): Flow<List<Badge>> = gamificationDao.observeRecentBadges(limit)
     
     suspend fun getEarnedBadgeCount(): Int = gamificationDao.getEarnedBadgeCount()
+    
+    suspend fun getUniqueArtistCount(): Int = gamificationDao.getUniqueArtistCount()
 
     suspend fun getNextEarnableBadge(): Badge? {
         val allBadges = gamificationDao.getAllBadges()

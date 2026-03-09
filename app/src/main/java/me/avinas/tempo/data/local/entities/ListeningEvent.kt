@@ -52,8 +52,18 @@ data class ListeningEvent(
     @ColumnInfo(name = "total_pause_duration_ms", defaultValue = "0") val totalPauseDurationMs: Long = 0,
     @ColumnInfo(name = "seek_count", defaultValue = "0") val seekCount: Int = 0,
     @ColumnInfo(name = "position_updates_count", defaultValue = "0") val positionUpdatesCount: Int = 0,
-    @ColumnInfo(name = "was_interrupted", defaultValue = "0") val wasInterrupted: Boolean = false
+    @ColumnInfo(name = "was_interrupted", defaultValue = "0") val wasInterrupted: Boolean = false,
+
+    // Anti-gaming: device music stream volume at the time the session was closed.
+    // NULL = legacy record or not yet checked (treated as audible for XP).
+    // 0  = silent / muted → excluded from XP calculation.
+    @ColumnInfo(name = "volume_level", defaultValue = "NULL") val volumeLevel: Int? = null
 ) {
+    /**
+     * Check if volume was explicitly 0 (muted). Legacy records (null) are treated as audible.
+     */
+    val isZeroVolume: Boolean get() = volumeLevel == 0
+
     /**
      * Check if this was a full play (>80% completion).
      */

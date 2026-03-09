@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MergeType
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.rounded.Album
@@ -53,6 +54,9 @@ import androidx.compose.material.icons.filled.MergeType
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -87,8 +91,27 @@ fun ArtistDetailsScreen(
                 uiState = uiState,
                 onNavigateBack = onNavigateBack,
                 onNavigateToSong = onNavigateToSong,
-                onRefreshImage = { viewModel.refreshArtistImage() }
+                onRefreshImage = { viewModel.refreshArtistImage() },
+                onShowRenameDialog = { viewModel.showRenameDialog() }
             )
+            
+            // Rename dialog
+            if (uiState.showRenameDialog) {
+                ArtistRenameDialog(
+                    currentName = artistDetails.artist.name,
+                    artistId = artistDetails.artist.id,
+                    splitArtists = uiState.detectedSplitArtists,
+                    isDetecting = uiState.isDetectingSplits,
+                    isRenaming = uiState.isRenaming,
+                    renameSuccess = uiState.renameSuccess,
+                    onDetectSplits = { newName -> viewModel.detectSplitsAndRename(newName) },
+                    onConfirmRenameAndMerge = { newName, mergeIds ->
+                        viewModel.confirmRenameAndMerge(newName, mergeIds)
+                    },
+                    onConfirmRenameOnly = { newName -> viewModel.confirmRenameOnly(newName) },
+                    onDismiss = { viewModel.dismissRenameDialog() }
+                )
+            }
         } else {
             // Error state with back button and retry option
             Column(
@@ -122,7 +145,7 @@ fun ArtistDetailsScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = uiState.error ?: "Artist not found",
+                            text = uiState.error ?: stringResource(R.string.details_artist_not_found),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyLarge,
                             textAlign = TextAlign.Center,
@@ -133,7 +156,7 @@ fun ArtistDetailsScreen(
                             onClick = { viewModel.retry() },
                             colors = ButtonDefaults.buttonColors(containerColor = TempoRed)
                         ) {
-                            Text("Retry", color = Color.White)
+                            Text(stringResource(R.string.common_retry), color = Color.White)
                         }
                     }
                 }
@@ -148,7 +171,8 @@ fun ArtistDetailsContent(
     uiState: ArtistDetailsUiState,
     onNavigateBack: () -> Unit,
     onNavigateToSong: (Long) -> Unit,
-    onRefreshImage: () -> Unit
+    onRefreshImage: () -> Unit,
+    onShowRenameDialog: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
@@ -176,7 +200,7 @@ fun ArtistDetailsContent(
             }
             
             Text(
-                text = "Artist Details",
+                text = stringResource(R.string.details_artist_details_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -221,12 +245,30 @@ fun ArtistDetailsContent(
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Text("Merge with...", color = Color.White)
+                                Text(stringResource(R.string.details_merge_with), color = Color.White)
                             }
                         },
                         onClick = {
                             showMenu = false
                             showMergeDialog = true
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Rename Artist", color = Color.White)
+                            }
+                        },
+                        onClick = {
+                            showMenu = false
+                            onShowRenameDialog()
                         }
                     )
                 }
@@ -246,7 +288,8 @@ fun ArtistDetailsContent(
                 ArtistHeroSection(
                     artistDetails = artistDetails,
                     onRefreshImage = onRefreshImage,
-                    isRefreshingImage = uiState.isRefreshingImage
+                    isRefreshingImage = uiState.isRefreshingImage,
+                    onShowRenameDialog = onShowRenameDialog
                 )
             }
 
@@ -276,7 +319,7 @@ fun ArtistDetailsContent(
             item {
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "Top Songs",
+                    text = stringResource(R.string.details_top_songs),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -297,7 +340,7 @@ fun ArtistDetailsContent(
                 item {
                     Spacer(modifier = Modifier.height(24.dp))
                     Text(
-                        text = "Top Albums",
+                        text = stringResource(R.string.details_top_albums),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
@@ -362,7 +405,8 @@ fun ArtistDetailsContent(
 fun ArtistHeroSection(
     artistDetails: ArtistDetails,
     onRefreshImage: () -> Unit,
-    isRefreshingImage: Boolean = false
+    isRefreshingImage: Boolean = false,
+    onShowRenameDialog: () -> Unit = {}
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
          // Premium Glow Container
@@ -502,7 +546,7 @@ fun ArtistHeroSection(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Refresh Artist Image",
+                                    contentDescription = stringResource(R.string.details_refresh_artist_image),
                                     tint = Color.White,
                                     modifier = Modifier.size(24.dp)
                                 )
@@ -515,15 +559,36 @@ fun ArtistHeroSection(
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        // Artist name
-        Text(
-            text = artistDetails.artist.name,
-            style = MaterialTheme.typography.displaySmall, // Larger
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-            textAlign = TextAlign.Center,
+        // Artist name with edit icon
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
             modifier = Modifier.padding(horizontal = 16.dp)
-        )
+        ) {
+            Text(
+                text = artistDetails.artist.name,
+                style = MaterialTheme.typography.displaySmall, // Larger
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(
+                onClick = onShowRenameDialog,
+                modifier = Modifier.size(36.dp),
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.White.copy(alpha = 0.1f),
+                    contentColor = Color.White
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = stringResource(R.string.details_rename_artist),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
 
         // Artist Country
         if (!artistDetails.country.isNullOrBlank()) {
@@ -609,7 +674,7 @@ fun ArtistStatsGrid(artistDetails: ArtistDetails) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Total Plays",
+                    text = stringResource(R.string.details_total_plays),
                     style = MaterialTheme.typography.labelMedium,
                     color = Color(0xFFFCA5A5) // Red 300
                 )
@@ -629,7 +694,7 @@ fun ArtistStatsGrid(artistDetails: ArtistDetails) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Listening Time",
+                    text = stringResource(R.string.details_listening_time),
                     style = MaterialTheme.typography.labelMedium,
                     color = Color(0xFF93C5FD) // Blue 300
                 )
@@ -663,7 +728,7 @@ fun DiscoveryInsightCard(artistDetails: ArtistDetails) {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Discovery Insight",
+                        text = stringResource(R.string.details_discovery_insight),
                         style = MaterialTheme.typography.labelLarge,
                         color = Color(0xFFC4B5FD),
                         fontWeight = FontWeight.Bold
@@ -676,23 +741,23 @@ fun DiscoveryInsightCard(artistDetails: ArtistDetails) {
                 
                 Text(
                     text = buildAnnotatedString {
-                        append("You first discovered ")
+                        append(stringResource(R.string.details_discovery_part1))
                         withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color.White)) {
                             append(artistDetails.artist.name)
                         }
-                        append(" on ")
+                        append(stringResource(R.string.details_discovery_part2))
                         withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color.White)) {
                             append(dateStr)
                         }
-                        append(". Since then, you've listened for ")
+                        append(stringResource(R.string.details_discovery_part3))
                         withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color.White)) {
                             append(formatListeningTime(artistDetails.personalTotalTimeMs))
                         }
-                        append(" across ")
+                        append(stringResource(R.string.details_discovery_part4))
                         withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color.White)) {
-                            append("${artistDetails.uniqueTracksPlayed} tracks")
+                            append("${artistDetails.uniqueTracksPlayed}")
                         }
-                        append(".")
+                        append(stringResource(R.string.details_discovery_part5))
                     },
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color.White.copy(alpha = 0.9f),
@@ -735,7 +800,7 @@ fun TopSongItem(song: TopTrack, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = song.album ?: "Unknown Album",
+                    text = song.album ?: stringResource(R.string.details_unknown_album),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF94A3B8),
                     maxLines = 1,
@@ -750,7 +815,7 @@ fun TopSongItem(song: TopTrack, onClick: () -> Unit) {
                     color = TempoRed
                 )
                 Text(
-                    text = "plays",
+                    text = stringResource(R.string.details_plays),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF94A3B8)
                 )
@@ -805,7 +870,7 @@ fun TopAlbumCard(album: TopAlbum) {
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "${album.playCount} plays",
+                text = stringResource(R.string.details_plays_count, album.playCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF94A3B8)
             )
@@ -842,21 +907,21 @@ fun formatListeningTime(millis: Long): String {
 fun FanStatusBadge(playCount: Int, percentile: Double? = null) {
     val (status, emoji, color, description) = if (percentile != null) {
         when {
-            percentile <= 1.0 -> Quadruple("Top 1% Artist", "👑", Color(0xFFFFD700), "This is one of your absolute favorites!")
-            percentile <= 5.0 -> Quadruple("Top 5% Artist", "🌟", Color(0xFFF59E0B), "You listen to them more than most.")
-            percentile <= 10.0 -> Quadruple("Top 10% Artist", "🔥", Color(0xFFEF4444), "Definitely one of your top picks.")
-            percentile <= 25.0 -> Quadruple("Top 25% Artist", "🎧", Color(0xFF3B82F6), "A solid part of your rotation.")
-            percentile <= 50.0 -> Quadruple("Top 50% Artist", "🎵", Color(0xFF8B5CF6), "You listen to them occasionally.")
-            else -> Quadruple("Listener", "🎵", Color(0xFF94A3B8), "Keep listening to climb the ranks!")
+            percentile <= 1.0 -> Quadruple(stringResource(R.string.fan_status_top_1), "👑", Color(0xFFFFD700), stringResource(R.string.fan_status_top_1_desc))
+            percentile <= 5.0 -> Quadruple(stringResource(R.string.fan_status_top_5), "🌟", Color(0xFFF59E0B), stringResource(R.string.fan_status_top_5_desc))
+            percentile <= 10.0 -> Quadruple(stringResource(R.string.fan_status_top_10), "🔥", Color(0xFFEF4444), stringResource(R.string.fan_status_top_10_desc))
+            percentile <= 25.0 -> Quadruple(stringResource(R.string.fan_status_top_25), "🎧", Color(0xFF3B82F6), stringResource(R.string.fan_status_top_25_desc))
+            percentile <= 50.0 -> Quadruple(stringResource(R.string.fan_status_top_50), "🎵", Color(0xFF8B5CF6), stringResource(R.string.fan_status_top_50_desc))
+            else -> Quadruple(stringResource(R.string.fan_status_listener), "🎵", Color(0xFF94A3B8), stringResource(R.string.fan_status_listener_desc))
         }
     } else {
         // Fallback to absolute counts if percentile not available
          when {
-            playCount > 1000 -> Quadruple("Ultimate Stan", "👑", Color(0xFFFFD700), "You're in the top tier of listeners!")
-            playCount > 500 -> Quadruple("Super Fan", "🌟", Color(0xFFF59E0B), "You really love this artist.")
-            playCount > 200 -> Quadruple("Big Fan", "🔥", Color(0xFFEF4444), "One of your favorites.")
-            playCount > 50 -> Quadruple("Regular Listener", "🎧", Color(0xFF3B82F6), "You listen to them quite a bit.")
-            else -> Quadruple("Listener", "🎵", Color(0xFF94A3B8), "Keep listening to level up!")
+            playCount > 1000 -> Quadruple(stringResource(R.string.fan_status_ultimate), "👑", Color(0xFFFFD700), stringResource(R.string.fan_status_ultimate_desc))
+            playCount > 500 -> Quadruple(stringResource(R.string.fan_status_super), "🌟", Color(0xFFF59E0B), stringResource(R.string.fan_status_super_desc))
+            playCount > 200 -> Quadruple(stringResource(R.string.fan_status_big), "🔥", Color(0xFFEF4444), stringResource(R.string.fan_status_big_desc))
+            playCount > 50 -> Quadruple(stringResource(R.string.fan_status_regular), "🎧", Color(0xFF3B82F6), stringResource(R.string.fan_status_regular_desc))
+            else -> Quadruple(stringResource(R.string.fan_status_listener), "🎵", Color(0xFF94A3B8), stringResource(R.string.fan_status_listener_desc))
         }
     }
 

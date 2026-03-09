@@ -1265,6 +1265,13 @@ class MusicTrackingService : NotificationListenerService() {
                     cachedAllKnownPackages = appPreferenceDao.getAllApps().first().map { it.packageName }.toSet()
                     isAppPreferenceCacheInitialized = true
                     Log.i(TAG, "App preference cache initialized with ${cachedEnabledApps.size} enabled, ${cachedBlockedApps.size} blocked, ${cachedAllKnownPackages.size} total known")
+                    
+                    // Fix for tracking bug: now that cache is ready, scan active MediaSessions.
+                    // This resolves the race condition where initializeMediaSessionManager() 
+                    // runs before the cache loads, causing all apps to be initially skipped.
+                    withContext(Dispatchers.Main) {
+                        rescanActiveMediaSessions()
+                    }
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to load initial preferences, using defaults", e)
                 }
@@ -1711,6 +1718,10 @@ class MusicTrackingService : NotificationListenerService() {
                 } catch (e: Exception) {
                     Log.e(TAG, "Error scanning active notifications", e)
                 }
+                
+                // Also rescan active MediaSessions in case they were missed
+                // during initial initialization
+                rescanActiveMediaSessions()
                 
                 // Update lifecycle after initial scan using the correct context
                 updateServiceLifecycle()
@@ -2665,7 +2676,8 @@ class MusicTrackingService : NotificationListenerService() {
             totalPauseDurationMs = session.totalPauseDurationMs,
             seekCount = session.seekCount,
             positionUpdatesCount = session.positionUpdatesCount,
-            wasInterrupted = session.wasInterrupted
+            wasInterrupted = session.wasInterrupted,
+            volumeLevel = (getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager).getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
         )
         
         // VALIDATION: Validate event before saving
@@ -2747,6 +2759,21 @@ class MusicTrackingService : NotificationListenerService() {
             Log.w(TAG, "MediaSessionManager access denied - notification access may not be granted", e)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize MediaSessionManager", e)
+        }
+    }
+
+    private fun rescanActiveMediaSessions() {
+        if (!isMediaSessionManagerInitialized) {
+            Log.d(TAG, "MediaSessionManager not initialized, skipping rescan")
+            return
+        }
+        try {
+            val componentName = ComponentName(this, MusicTrackingService::class.java)
+            val activeSessions = mediaSessionManager?.getActiveSessions(componentName)
+            Log.i(TAG, "Rescanning active media sessions: ${activeSessions?.size ?: 0} sessions found")
+            onActiveSessionsChanged(activeSessions)
+        } catch (e: Exception) {
+            Log.w(TAG, "Error rescanning active media sessions", e)
         }
     }
 
@@ -3340,7 +3367,13 @@ class MusicTrackingService : NotificationListenerService() {
                     val secs = it.accumulatedPositionMs / 1000
                     if (secs > 0) " (${secs}s)" else ""
                 } ?: ""
-                "🎵 $currentTrack - $currentArtist$timeInfo"
+                
+                // Anti-gaming warning: check if the user is playing at 0 volume
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                val volume = audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                val mutedWarning = if (volume == 0) " [MUTED - No XP]" else ""
+                
+                "🎵 $currentTrack - $currentArtist$timeInfo$mutedWarning"
             } else {
                 "🎵 Tracking $activeMusicSessions music session(s)"
             }

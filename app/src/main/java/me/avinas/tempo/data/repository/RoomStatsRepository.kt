@@ -224,8 +224,10 @@ class RoomStatsRepository @Inject constructor(
         artistImageSearchCache.remove(artistName.lowercase().trim())
 
         // Try iTunes first (high quality, no auth required)
+        // Use searchAndFetchSingleArtistImage: strict matching, no multi-artist splitting,
+        // no track/album artwork fallback — only actual artist photos
         if (iTunesEnrichmentService.isAvailable()) {
-            val fromITunes = iTunesEnrichmentService.searchAndFetchArtistImage(artistName)
+            val fromITunes = iTunesEnrichmentService.searchAndFetchSingleArtistImage(artistName)
             if (!fromITunes.isNullOrBlank()) {
                 Log.d(TAG, "refreshArtistImageDirectly: Found image from iTunes for '$artistName'")
                 artistDao.updateImageUrl(artistId, fromITunes)

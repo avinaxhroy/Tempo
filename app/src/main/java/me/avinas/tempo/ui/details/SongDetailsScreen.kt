@@ -56,6 +56,9 @@ import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.ui.components.SharePreviewDialog
 import me.avinas.tempo.ui.components.SongShareCard
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 @Composable
 fun SongDetailsScreen(
@@ -92,7 +95,7 @@ fun SongDetailsScreen(
             // Error state
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    text = uiState.error ?: "Track not found",
+                    text = uiState.error ?: stringResource(R.string.details_track_not_found),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyLarge
                 )
@@ -152,7 +155,7 @@ fun SongDetailsContent(
             }
             
             Text(
-                text = "Song Details",
+                text = stringResource(R.string.details_song_details_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -190,7 +193,7 @@ fun SongDetailsContent(
                         modifier = Modifier.background(Color(0xFF1E293B)) // Dark slate background
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Merge duplicate...", color = Color.White) },
+                            text = { Text(stringResource(R.string.details_merge_duplicate), color = Color.White) },
                             leadingIcon = {
                                 Icon(
                                     Icons.AutoMirrored.Filled.CallMerge,
@@ -204,7 +207,7 @@ fun SongDetailsContent(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Delete Song", color = Color.Red) },
+                            text = { Text(stringResource(R.string.details_delete_song), color = Color.Red) },
                             leadingIcon = {
                                 Icon(
                                     Icons.Default.Delete,
@@ -313,10 +316,10 @@ fun SongDetailsContent(
                     tint = MaterialTheme.colorScheme.error
                 )
             },
-            title = { Text("Delete Song?") },
+            title = { Text(stringResource(R.string.details_delete_song_title)) },
             text = {
                 Column {
-                    Text("Are you sure you want to delete this song?")
+                    Text(stringResource(R.string.details_delete_song_confirmation))
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         "\"${trackDetails.track.title}\" by ${trackDetails.track.artist}",
@@ -325,18 +328,18 @@ fun SongDetailsContent(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "This will permanently delete:",
+                        stringResource(R.string.details_delete_song_warning),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("• The song from your library")
-                    Text("• All listening history (${trackDetails.playCount} plays)")
-                    Text("• Any enriched metadata")
-                    Text("• Artist relationships")
+                    Text(stringResource(R.string.details_delete_song_bullet_library))
+                    Text(stringResource(R.string.details_delete_song_bullet_history, trackDetails.playCount))
+                    Text(stringResource(R.string.details_delete_song_bullet_metadata))
+                    Text(stringResource(R.string.details_delete_song_bullet_artist))
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "This action cannot be undone.",
+                        stringResource(R.string.details_delete_song_undone),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -354,13 +357,13 @@ fun SongDetailsContent(
                             contentColor = MaterialTheme.colorScheme.error
                         )
                     ) {
-                        Text("DELETE")
+                        Text(stringResource(R.string.history_delete_button).uppercase())
                     }
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.dismissDeleteDialog() }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             }
         )
@@ -456,7 +459,7 @@ fun AchievementBadge() {
                 Text("🏆", fontSize = 24.sp)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Your All-Time Favorite",
+                    text = stringResource(R.string.details_favorite_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -464,7 +467,7 @@ fun AchievementBadge() {
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "This is your most played song ever.",
+                text = stringResource(R.string.details_favorite_subtitle),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFFCBD5E1), // Slate 300
                 textAlign = TextAlign.Center
@@ -489,7 +492,7 @@ fun StatsGrid(
         ) {
             Column(modifier = Modifier.padding(8.dp)) {
                 Text(
-                    text = "Times Played",
+                    text = stringResource(R.string.details_stat_times_played),
                     style = MaterialTheme.typography.labelMedium,
                     color = Color(0xFFFCA5A5) // Red 300
                 )
@@ -511,7 +514,7 @@ fun StatsGrid(
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
                     Text(
-                        text = "Total Listening",
+                        text = stringResource(R.string.details_stat_total_listening),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(0xFF93C5FD) // Blue 300
                     )
@@ -531,7 +534,7 @@ fun StatsGrid(
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
                     Text(
-                        text = "Peak Position",
+                        text = stringResource(R.string.details_stat_peak_position),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(0xFFD8B4FE) // Purple 300
                     )
@@ -554,7 +557,7 @@ fun StatsGrid(
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
                     Text(
-                        text = "Release Date",
+                        text = stringResource(R.string.details_stat_release_date),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(0xFF86EFAC) // Green 300
                     )
@@ -574,7 +577,7 @@ fun StatsGrid(
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
                     Text(
-                        text = "Genre",
+                        text = stringResource(R.string.details_stat_genre),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(0xFFFDBA74) // Orange 300
                     )
@@ -600,7 +603,7 @@ fun ListeningTrendsChart(history: List<DailyListening>) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Listening Trends",
+                text = stringResource(R.string.details_listening_trends),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
@@ -612,7 +615,7 @@ fun ListeningTrendsChart(history: List<DailyListening>) {
                     modifier = Modifier.fillMaxWidth().height(150.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No data available", color = Color.White.copy(alpha = 0.5f))
+                    Text(stringResource(R.string.details_no_data_available), color = Color.White.copy(alpha = 0.5f))
                 }
             } else {
                 // Cache path data to avoid recalculating on every recomposition
@@ -703,7 +706,7 @@ fun MoodInsightsSection(moodSummary: TagBasedMoodAnalyzer.MoodSummary) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Mood & Genre",
+                    text = stringResource(R.string.details_mood_genre),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -727,18 +730,18 @@ fun MoodInsightsSection(moodSummary: TagBasedMoodAnalyzer.MoodSummary) {
                     MoodIndicator(
                         emoji = moodSummary.moodEmoji,
                         label = moodSummary.moodName,
-                        sublabel = "Mood"
+                        sublabel = stringResource(R.string.details_mood_label)
                     )
                     MoodIndicator(
                         emoji = getEnergyEmoji(moodSummary.energy.value),
                         label = moodSummary.energyName,
-                        sublabel = "Energy"
+                        sublabel = stringResource(R.string.details_energy_label)
                     )
                     if (moodSummary.primaryGenre != null) {
                         MoodIndicator(
                             emoji = "🎵",
                             label = moodSummary.primaryGenre.take(12),
-                            sublabel = "Genre"
+                            sublabel = stringResource(R.string.details_genre_label)
                         )
                     }
                 }
@@ -752,7 +755,7 @@ fun MoodInsightsSection(moodSummary: TagBasedMoodAnalyzer.MoodSummary) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Estimated Energy",
+                        text = stringResource(R.string.details_estimated_energy),
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.8f)
                     )
@@ -804,7 +807,7 @@ fun EngagementSection(engagement: TrackEngagement) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Your Engagement",
+                    text = stringResource(R.string.details_your_engagement),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -832,7 +835,7 @@ fun EngagementSection(engagement: TrackEngagement) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Engagement Score",
+                        text = stringResource(R.string.details_engagement_score),
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.8f)
                     )
@@ -863,19 +866,19 @@ fun EngagementSection(engagement: TrackEngagement) {
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 BehaviorStat(
-                    label = "Full Plays",
+                    label = stringResource(R.string.details_stat_full_plays),
                     value = "${engagement.fullPlaysCount}",
-                    subtext = "of ${engagement.playCount}"
+                    subtext = stringResource(R.string.details_stat_of_plays, engagement.playCount)
                 )
                 BehaviorStat(
-                    label = "Avg. Completion",
+                    label = stringResource(R.string.details_stat_avg_completion),
                     value = "${engagement.averageCompletionPercent.toInt()}%",
                     subtext = engagement.completionPattern
                 )
                 BehaviorStat(
-                    label = "Replays",
+                    label = stringResource(R.string.details_stat_replays),
                     value = "${engagement.replayCount}",
-                    subtext = "back-to-back"
+                    subtext = stringResource(R.string.details_stat_back_to_back)
                 )
 
             }
@@ -897,7 +900,7 @@ fun EngagementSection(engagement: TrackEngagement) {
                         modifier = Modifier.padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("Completion Rate", style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8))
+                        Text(stringResource(R.string.details_completion_rate), style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8))
                         Spacer(modifier = Modifier.height(12.dp))
                         Box(contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(
@@ -926,7 +929,7 @@ fun EngagementSection(engagement: TrackEngagement) {
                         modifier = Modifier.padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("Skip Rate", style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8))
+                        Text(stringResource(R.string.details_skip_rate), style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8))
                         Spacer(modifier = Modifier.height(12.dp))
                          // Calculate skip rate
                         val skipRate = if (engagement.playCount > 0) (engagement.skipsCount.toFloat() / engagement.playCount) else 0f
@@ -954,7 +957,7 @@ fun EngagementSection(engagement: TrackEngagement) {
             if (engagement.skipsCount > 0) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "⏭️ Skipped ${engagement.skipsCount} time${if (engagement.skipsCount > 1) "s" else ""} before finishing",
+                    text = stringResource(R.string.details_engagement_skipped, engagement.skipsCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.6f)
                 )
@@ -964,9 +967,9 @@ fun EngagementSection(engagement: TrackEngagement) {
             if (engagement.averagePauseCount > 0.5f) {
                 Spacer(modifier = Modifier.height(8.dp))
                 val pauseText = when {
-                    engagement.averagePauseCount >= 3f -> "⏸️ Frequently paused (avg ${String.format(java.util.Locale.US, "%.1f", engagement.averagePauseCount)} pauses/play)"
-                    engagement.averagePauseCount >= 1f -> "⏸️ Occasionally paused"
-                    else -> "⏸️ Rarely paused"
+                    engagement.averagePauseCount >= 3f -> stringResource(R.string.details_engagement_paused_freq, engagement.averagePauseCount)
+                    engagement.averagePauseCount >= 1f -> stringResource(R.string.details_engagement_paused_occas)
+                    else -> stringResource(R.string.details_engagement_paused_rare)
                 }
                 Text(
                     text = pauseText,
@@ -979,7 +982,7 @@ fun EngagementSection(engagement: TrackEngagement) {
             if (engagement.uniqueSessionsCount > 1) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "📅 Played across ${engagement.uniqueSessionsCount} different sessions",
+                    text = stringResource(R.string.details_engagement_sessions, engagement.uniqueSessionsCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.6f)
                 )

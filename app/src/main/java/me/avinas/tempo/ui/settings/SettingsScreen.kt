@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,9 +20,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.os.LocaleListCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import me.avinas.tempo.R
 import me.avinas.tempo.data.importexport.ImportConflictStrategy
 import me.avinas.tempo.data.importexport.ImportExportResult
 import me.avinas.tempo.ui.components.DeepOceanBackground
@@ -72,6 +76,13 @@ fun SettingsScreen(
     val isXiaomiDevice = remember { OemBackgroundHelper.isXiaomiDevice() }
     var autostartState by remember { mutableStateOf(OemBackgroundHelper.getAutostartState(context)) }
     
+    // Language selector state
+    var showLanguageDialog by remember { mutableStateOf(false) }
+    val currentLocale = remember {
+        val appLocales = AppCompatDelegate.getApplicationLocales()
+        if (appLocales.isEmpty) "en" else appLocales.get(0)?.language ?: "en"
+    }
+    
     // Refresh autostart state when returning from BackgroundProtectionScreen
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -104,6 +115,7 @@ fun SettingsScreen(
     }
     
     // Show result snackbar
+    val importSuccessMsg = stringResource(R.string.settings_import_success, 0, 0)
     LaunchedEffect(importExportResult) {
         importExportResult?.let { result ->
             when (result) {
@@ -130,10 +142,10 @@ fun SettingsScreen(
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("Settings", color = Color.White) },
+                title = { Text(stringResource(R.string.settings_title), color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.settings_back), tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -154,7 +166,7 @@ fun SettingsScreen(
                     .padding(16.dp)
             ) {
                 // Profile Section
-                SettingsSectionHeader("Profile")
+                SettingsSectionHeader(stringResource(R.string.settings_profile))
                 GlassCard(
                     modifier = Modifier.fillMaxWidth().clickable { 
                         tempName = uiState.userName
@@ -196,7 +208,7 @@ fun SettingsScreen(
                                 color = Color.White
                             )
                             Text(
-                                text = "Tap to edit name",
+                                text = stringResource(R.string.settings_tap_to_edit),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.White.copy(alpha = 0.6f)
                             )
@@ -204,7 +216,7 @@ fun SettingsScreen(
                         
                         Icon(
                             imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit Name",
+                            contentDescription = stringResource(R.string.settings_update_name),
                             tint = Color.White.copy(alpha = 0.6f)
                         )
                     }
@@ -212,30 +224,55 @@ fun SettingsScreen(
                 
                 Spacer(modifier = Modifier.height(24.dp))
 
+                // Language Section
+                SettingsSectionHeader(stringResource(R.string.settings_language))
+                GlassCard(
+                    contentPadding = PaddingValues(0.dp),
+                    variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
+                ) {
+                    SettingsOption(
+                        title = stringResource(R.string.settings_language_title),
+                        subtitle = if (currentLocale == "fr") 
+                            stringResource(R.string.settings_language_french) 
+                        else 
+                            stringResource(R.string.settings_language_english),
+                        onClick = { showLanguageDialog = true }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
                 // Notifications
-                SettingsSectionHeader("Notifications")
+                SettingsSectionHeader(stringResource(R.string.settings_notifications))
                 GlassCard(
                     contentPadding = PaddingValues(0.dp),
                     variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
                 ) {
                     Column {
                         SettingsSwitch(
-                            title = "Daily Summary",
-                            subtitle = "Get a summary of your listening each day at 8 PM",
+                            title = stringResource(R.string.settings_daily_summary),
+                            subtitle = stringResource(R.string.settings_daily_summary_desc),
                             checked = uiState.dailySummaryEnabled,
                             onCheckedChange = viewModel::toggleDailySummary
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsSwitch(
-                            title = "Weekly Recap",
-                            subtitle = "See your top stats every Sunday evening",
+                            title = stringResource(R.string.settings_weekly_recap),
+                            subtitle = stringResource(R.string.settings_weekly_recap_desc),
                             checked = uiState.weeklyRecapEnabled,
                             onCheckedChange = viewModel::toggleWeeklyRecap
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsSwitch(
-                            title = "Achievements",
-                            subtitle = "Get notified when you reach milestones",
+                            title = stringResource(R.string.settings_daily_challenges),
+                            subtitle = stringResource(R.string.settings_daily_challenges_desc),
+                            checked = uiState.dailyChallengesEnabled,
+                            onCheckedChange = viewModel::toggleDailyChallenges
+                        )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        SettingsSwitch(
+                            title = stringResource(R.string.settings_achievements),
+                            subtitle = stringResource(R.string.settings_achievements_desc),
                             checked = uiState.achievementsEnabled,
                             onCheckedChange = viewModel::toggleAchievements
                         )
@@ -245,15 +282,15 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Tracking
-                SettingsSectionHeader("Music Tracking")
+                SettingsSectionHeader(stringResource(R.string.settings_music_tracking))
                 GlassCard(
                     contentPadding = PaddingValues(0.dp),
                     variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
                 ) {
                     Column {
                         SettingsOption(
-                            title = "Manage Permissions",
-                            subtitle = "Tempo uses notification access to detect what you're listening to",
+                            title = stringResource(R.string.settings_manage_permissions),
+                            subtitle = stringResource(R.string.settings_manage_permissions_desc),
                             onClick = {
                                 val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
                                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -262,8 +299,8 @@ fun SettingsScreen(
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsOption(
-                            title = "Manage Supported Apps",
-                            subtitle = "Choose which apps Tempo tracks",
+                            title = stringResource(R.string.settings_manage_apps),
+                            subtitle = stringResource(R.string.settings_manage_apps_desc),
                             onClick = { onNavigateToSupportedApps?.invoke() }
                         )
                     }
@@ -273,7 +310,7 @@ fun SettingsScreen(
                 
                 // Background Protection - Only for Xiaomi/MIUI devices
                 if (isXiaomiDevice) {
-                    SettingsSectionHeader("Background Protection")
+                    SettingsSectionHeader(stringResource(R.string.settings_background_protection))
                     GlassCard(
                         modifier = Modifier.fillMaxWidth(),
                         contentPadding = PaddingValues(0.dp),
@@ -281,10 +318,10 @@ fun SettingsScreen(
                     ) {
                         SettingsOption(
                             title = if (autostartState == OemBackgroundHelper.AutostartState.DISABLED) 
-                                "⚠️ Configure Required Settings" 
+                                stringResource(R.string.settings_configure_required)
                             else 
-                                "Xiaomi Device Settings",
-                            subtitle = "Prevent Tempo from being killed in background",
+                                stringResource(R.string.settings_xiaomi_settings),
+                            subtitle = stringResource(R.string.settings_prevent_killed),
                             onClick = { onNavigateToBackgroundProtection?.invoke() }
                         )
                     }
@@ -293,22 +330,22 @@ fun SettingsScreen(
                 }
                 
                 // Content Filtering
-                SettingsSectionHeader("Content Filtering")
+                SettingsSectionHeader(stringResource(R.string.settings_content_filtering))
                 GlassCard(
                     contentPadding = PaddingValues(0.dp),
                     variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
                 ) {
                     Column {
                         SettingsSwitch(
-                            title = "Filter Podcasts",
-                            subtitle = "Exclude podcast apps and content from tracking",
+                            title = stringResource(R.string.settings_filter_podcasts),
+                            subtitle = stringResource(R.string.settings_filter_podcasts_desc),
                             checked = uiState.filterPodcasts,
                             onCheckedChange = viewModel::toggleFilterPodcasts
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsSwitch(
-                            title = "Filter Audiobooks",
-                            subtitle = "Exclude audiobook apps and content from tracking",
+                            title = stringResource(R.string.settings_filter_audiobooks),
+                            subtitle = stringResource(R.string.settings_filter_audiobooks_desc),
                             checked = uiState.filterAudiobooks,
                             onCheckedChange = viewModel::toggleFilterAudiobooks
                         )
@@ -318,7 +355,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Spotify
-                SettingsSectionHeader("Advanced Stats")
+                SettingsSectionHeader(stringResource(R.string.settings_advanced_stats))
                 GlassCard(
                     contentPadding = PaddingValues(0.dp),
                     variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
@@ -328,26 +365,26 @@ fun SettingsScreen(
                         when (spotifyAuthState) {
                             is me.avinas.tempo.data.remote.spotify.SpotifyAuthManager.AuthState.Connected -> {
                                 SettingsOption(
-                                    title = "Connected as ${spotifyViewModel.getUserDisplayName() ?: "Spotify User"}",
-                                    subtitle = "Tap to disconnect",
+                                    title = stringResource(R.string.settings_connected_as, spotifyViewModel.getUserDisplayName() ?: "Spotify User"),
+                                    subtitle = stringResource(R.string.settings_tap_to_disconnect),
                                     onClick = { showDisconnectDialog = true }
                                 )
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                                 // Spotify-API-Only Mode toggle (only shown when connected)
                                 SettingsSwitch(
-                                    title = "Spotify-API-Only Mode",
+                                    title = stringResource(R.string.settings_spotify_api_mode),
                                     subtitle = if (uiState.spotifyApiOnlyMode) 
-                                        "ON: Tracking via Spotify servers (syncs periodically)" 
+                                        stringResource(R.string.settings_spotify_api_on)
                                     else 
-                                        "OFF: Tracking via phone notifications (real-time)",
+                                        stringResource(R.string.settings_spotify_api_off),
                                     checked = uiState.spotifyApiOnlyMode,
                                     onCheckedChange = viewModel::toggleSpotifyApiOnlyMode
                                 )
                             }
                             else -> {
                                 SettingsOption(
-                                    title = "Connect Spotify",
-                                    subtitle = "Unlock mood tracking and audio features",
+                                    title = stringResource(R.string.settings_connect_spotify),
+                                    subtitle = stringResource(R.string.settings_connect_spotify_desc),
                                     onClick = { 
                                         val intent = spotifyViewModel.startLogin()
                                         context.startActivity(intent)
@@ -357,8 +394,8 @@ fun SettingsScreen(
                         }
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsSwitch(
-                            title = "Extended Audio Analysis (Experimental)",
-                            subtitle = "Download 30s previews for detailed mood analysis (uses mobile data)",
+                            title = stringResource(R.string.settings_extended_audio),
+                            subtitle = stringResource(R.string.settings_extended_audio_desc),
                             checked = uiState.extendedAudioAnalysisEnabled,
                             onCheckedChange = viewModel::toggleExtendedAudioAnalysis
                         )
@@ -368,7 +405,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Last.fm Import
-                SettingsSectionHeader("Import History")
+                SettingsSectionHeader(stringResource(R.string.settings_import_history))
                 GlassCard(
                     contentPadding = PaddingValues(0.dp),
                     variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
@@ -376,18 +413,18 @@ fun SettingsScreen(
                     Column {
                         if (uiState.isLastFmConnected) {
                             SettingsOption(
-                                title = "Last.fm: ${uiState.lastFmUsername ?: "Connected"}",
+                                title = stringResource(R.string.settings_lastfm_connected, uiState.lastFmUsername ?: "Connected"),
                                 subtitle = when (uiState.lastFmSyncFrequency) {
-                                    "DAILY" -> "Syncing daily"
-                                    "WEEKLY" -> "Syncing weekly"
-                                    else -> "Import complete • Tap to manage"
+                                    "DAILY" -> stringResource(R.string.settings_lastfm_sync_daily)
+                                    "WEEKLY" -> stringResource(R.string.settings_lastfm_sync_weekly)
+                                    else -> stringResource(R.string.settings_lastfm_import_complete)
                                 },
                                 onClick = { onNavigateToLastFmImport?.invoke() }
                             )
                         } else {
                             SettingsOption(
-                                title = "Import from Last.fm",
-                                subtitle = "Import your scrobble history for deeper insights",
+                                title = stringResource(R.string.settings_import_lastfm),
+                                subtitle = stringResource(R.string.settings_import_lastfm_desc),
                                 onClick = { onNavigateToLastFmImport?.invoke() }
                             )
                         }
@@ -397,27 +434,27 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Data Management
-                SettingsSectionHeader("Your Data")
+                SettingsSectionHeader(stringResource(R.string.settings_your_data))
                 GlassCard(
                     contentPadding = PaddingValues(0.dp),
                     variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
                 ) {
                     Column {
                         SettingsSwitch(
-                            title = "Smart Merge Versions",
-                            subtitle = "Treat Live/Remix versions as the same song for cleaner history",
+                            title = stringResource(R.string.settings_smart_merge),
+                            subtitle = stringResource(R.string.settings_smart_merge_desc),
                             checked = uiState.mergeAlternateVersions,
                             onCheckedChange = viewModel::toggleMergeAlternateVersions
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsOption(
-                            title = "Backup & Restore",
-                            subtitle = "Export or import your data",
+                            title = stringResource(R.string.settings_backup_restore),
+                            subtitle = stringResource(R.string.settings_backup_restore_desc),
                             onClick = { onNavigateToBackup?.invoke() }
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsOption(
-                            title = "Clear All Data",
+                            title = stringResource(R.string.settings_clear_all),
                             textColor = TempoRed,
                             onClick = { showClearDataDialog = true }
                         )
@@ -427,15 +464,15 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Community
-                SettingsSectionHeader("Community")
+                SettingsSectionHeader(stringResource(R.string.settings_community))
                 GlassCard(
                     contentPadding = PaddingValues(0.dp),
                     variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
                 ) {
                     Column {
                         SettingsOption(
-                            title = "Reddit Community",
-                            subtitle = "r/TempoStats",
+                            title = stringResource(R.string.settings_reddit),
+                            subtitle = stringResource(R.string.settings_reddit_sub),
                             onClick = {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.reddit.com/r/TempoStats/"))
                                 context.startActivity(intent)
@@ -443,8 +480,8 @@ fun SettingsScreen(
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsOption(
-                            title = "Telegram Channel",
-                            subtitle = "Confused Coconut",
+                            title = stringResource(R.string.settings_telegram),
+                            subtitle = stringResource(R.string.settings_telegram_name),
                             onClick = {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/confusedcoconut"))
                                 context.startActivity(intent)
@@ -452,8 +489,8 @@ fun SettingsScreen(
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsOption(
-                            title = "GitHub Project",
-                            subtitle = "Source code & Issue tracker",
+                            title = stringResource(R.string.settings_github),
+                            subtitle = stringResource(R.string.settings_github_desc),
                             onClick = {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/avinaxhroy/Tempo"))
                                 context.startActivity(intent)
@@ -461,8 +498,8 @@ fun SettingsScreen(
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsOption(
-                            title = "Contribute",
-                            subtitle = "Help improve Tempo",
+                            title = stringResource(R.string.settings_contribute),
+                            subtitle = stringResource(R.string.settings_contribute_desc),
                             onClick = {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/avinaxhroy/Tempo/blob/main/CONTRIBUTION.md"))
                                 context.startActivity(intent)
@@ -474,14 +511,14 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Privacy & About
-                SettingsSectionHeader("About")
+                SettingsSectionHeader(stringResource(R.string.settings_about))
                 GlassCard(
                     contentPadding = PaddingValues(0.dp),
                     variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
                 ) {
                     Column {
                         SettingsOption(
-                            title = "Rate on Play Store",
+                            title = stringResource(R.string.settings_rate_play_store),
                             onClick = {
                                 try {
                                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${context.packageName}"))
@@ -494,7 +531,7 @@ fun SettingsScreen(
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsOption(
-                            title = "Privacy Policy",
+                            title = stringResource(R.string.settings_privacy_policy),
                             onClick = { 
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse("http://tempo.avinas.me/privacy.html"))
                                 context.startActivity(intent)
@@ -502,7 +539,7 @@ fun SettingsScreen(
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                         SettingsOption(
-                            title = "Version",
+                            title = stringResource(R.string.settings_version),
                             subtitle = versionName,
                             showArrow = false
                         )
@@ -518,12 +555,12 @@ fun SettingsScreen(
     if (showNameDialog) {
         AlertDialog(
             onDismissRequest = { showNameDialog = false },
-            title = { Text("Update Name") },
+            title = { Text(stringResource(R.string.settings_update_name)) },
             text = {
                 OutlinedTextField(
                     value = tempName,
                     onValueChange = { tempName = it },
-                    label = { Text("Display Name") },
+                    label = { Text(stringResource(R.string.settings_display_name)) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                          focusedBorderColor = TempoRed,
@@ -543,12 +580,68 @@ fun SettingsScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = TempoRed)
                 ) {
-                    Text("Save")
+                    Text(stringResource(R.string.settings_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showNameDialog = false }) {
-                    Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.settings_cancel), color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        )
+    }
+    
+    // Language Selector Dialog
+    if (showLanguageDialog) {
+        AlertDialog(
+            onDismissRequest = { showLanguageDialog = false },
+            title = { Text(stringResource(R.string.settings_select_language)) },
+            text = {
+                Column {
+                    val languages = listOf(
+                        "en" to stringResource(R.string.settings_language_english),
+                        "fr" to stringResource(R.string.settings_language_french),
+                        "de" to stringResource(R.string.settings_language_german),
+                        "hu" to stringResource(R.string.settings_language_hungarian)
+                    )
+                    languages.forEach { (langTag, langName) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    AppCompatDelegate.setApplicationLocales(
+                                        LocaleListCompat.forLanguageTags(langTag)
+                                    )
+                                    showLanguageDialog = false
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = currentLocale == langTag,
+                                onClick = {
+                                    AppCompatDelegate.setApplicationLocales(
+                                        LocaleListCompat.forLanguageTags(langTag)
+                                    )
+                                    showLanguageDialog = false
+                                },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = TempoRed
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = langName,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showLanguageDialog = false }) {
+                    Text(stringResource(R.string.settings_cancel), color = MaterialTheme.colorScheme.onSurface)
                 }
             }
         )
@@ -558,7 +651,7 @@ fun SettingsScreen(
     importExportProgress?.let { progress ->
         AlertDialog(
             onDismissRequest = { /* Cannot dismiss while in progress */ },
-            title = { Text("Processing...") },
+            title = { Text(stringResource(R.string.settings_processing)) },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -593,26 +686,26 @@ fun SettingsScreen(
     conflictDialogUri?.let { uri ->
         AlertDialog(
             onDismissRequest = { viewModel.cancelImport() },
-            title = { Text("Import Options") },
+            title = { Text(stringResource(R.string.settings_import_options)) },
             text = { 
-                Text("What should happen when importing data that already exists in the app?") 
+                Text(stringResource(R.string.settings_import_conflict_msg)) 
             },
             confirmButton = {
                 TextButton(
                     onClick = { viewModel.importData(uri, ImportConflictStrategy.REPLACE) }
                 ) {
-                    Text("Replace Existing")
+                    Text(stringResource(R.string.settings_replace_existing))
                 }
             },
             dismissButton = {
                 Row {
                     TextButton(onClick = { viewModel.cancelImport() }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.settings_cancel))
                     }
                     TextButton(
                         onClick = { viewModel.importData(uri, ImportConflictStrategy.SKIP) }
                     ) {
-                        Text("Skip Duplicates")
+                        Text(stringResource(R.string.settings_skip_duplicates))
                     }
                 }
             }
@@ -622,8 +715,8 @@ fun SettingsScreen(
     if (showClearDataDialog) {
         AlertDialog(
             onDismissRequest = { showClearDataDialog = false },
-            title = { Text("Clear All Data?") },
-            text = { Text("This action cannot be undone. All your listening history and preferences will be permanently deleted.") },
+            title = { Text(stringResource(R.string.settings_clear_data_title)) },
+            text = { Text(stringResource(R.string.settings_clear_data_msg)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -633,12 +726,12 @@ fun SettingsScreen(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Clear Everything")
+                    Text(stringResource(R.string.settings_clear_everything))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearDataDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.settings_cancel))
                 }
             }
         )
@@ -647,8 +740,8 @@ fun SettingsScreen(
     if (showDisconnectDialog) {
         AlertDialog(
             onDismissRequest = { showDisconnectDialog = false },
-            title = { Text("Disconnect Spotify?") },
-            text = { Text("This will remove your Spotify connection. Audio features and mood tracking will no longer be available.") },
+            title = { Text(stringResource(R.string.settings_disconnect_spotify_title)) },
+            text = { Text(stringResource(R.string.settings_disconnect_spotify_msg)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -657,12 +750,12 @@ fun SettingsScreen(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Disconnect")
+                    Text(stringResource(R.string.settings_disconnect))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDisconnectDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.settings_cancel))
                 }
             }
         )

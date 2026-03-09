@@ -239,7 +239,7 @@ class ITunesEnrichmentSource @Inject constructor(
             // Handle artist images for ALL artists
             // This ensures secondary artists (feat. X) also get their images enriched and saved
             // Returns the primary artist's image URL (if found) to avoid a duplicate fetch
-            val primaryArtistImageUrl = enrichAndPersistAllArtists(track.artist, result)
+            val primaryArtistImageUrl = enrichAndPersistAllArtists(track.artist, result, track.title)
             
             // Use the primary artist image for the track metadata if we don't have one yet
             var finalMetadata = updated
@@ -256,13 +256,16 @@ class ITunesEnrichmentSource @Inject constructor(
     
     /**
      * Persist artist images for ALL artists on the track to the artists table.
-     * This prevents the Stats screen from needing to make redundant iTunes API calls.
-     */
-    /**
-     * Persist artist images for ALL artists on the track to the artists table.
      * Returns the primary artist's image URL (if found) to avoid duplicate fetches.
+     *
+     * [trackTitle] and [albumTitle] are passed as disambiguation hints to handle
+     * cases where multiple iTunes artists share the same name.
      */
-    private suspend fun enrichAndPersistAllArtists(trackArtistString: String, result: ITunesEnrichmentService.iTunesResult.Success): String? {
+    private suspend fun enrichAndPersistAllArtists(
+        trackArtistString: String,
+        result: ITunesEnrichmentService.iTunesResult.Success,
+        trackTitle: String? = null
+    ): String? {
         // 1. Parse all artists from the track string (e.g. "Artist A & Artist B")
         val allArtists = ArtistParser.getAllArtists(trackArtistString)
         val primaryArtist = ArtistParser.getPrimaryArtist(trackArtistString)
@@ -297,9 +300,14 @@ class ITunesEnrichmentSource @Inject constructor(
                     }
                 }
 
-                // For other artists (or if primary failed), do a dedicated search
+                // For other artists (or if primary failed), do a dedicated search.
+                // Pass track + album hints so same-name artists can be correctly disambiguated.
                 Log.d("EnrichmentSource", "Fetching missing image for artist: $artistName")
-                val imageUrl = iTunesService.searchAndFetchArtistImage(artistName)
+                val imageUrl = iTunesService.searchAndFetchArtistImage(
+                    artistName = artistName,
+                    trackHint = trackTitle,
+                    albumHint = result.albumTitle
+                )
                 if (imageUrl != null) {
                     persistImage(artistName, imageUrl, null)
                     if (isPrimary) primaryArtistImageUrl = imageUrl

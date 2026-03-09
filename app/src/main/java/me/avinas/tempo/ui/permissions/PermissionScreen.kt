@@ -34,6 +34,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import me.avinas.tempo.service.MusicTrackingService
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.theme.TempoRed
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 /**
  * Permission setup screen that guides users through granting Notification Listener access.
@@ -119,7 +121,7 @@ fun PermissionScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "One Permission Needed",
+                text = stringResource(R.string.perm_one_needed),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
@@ -129,7 +131,7 @@ fun PermissionScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "This is how Tempo sees what you're playing",
+                text = stringResource(R.string.perm_how_tempo_sees),
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 color = Color.White.copy(alpha = 0.7f)
@@ -163,7 +165,7 @@ fun PermissionScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         Text(
-                            text = "MUSIC ONLY",
+                            text = stringResource(R.string.perm_music_only),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF22C55E),
@@ -173,7 +175,7 @@ fun PermissionScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         Text(
-                            text = "Spotify, YouTube,\n& essentially any\nmusic player",
+                            text = stringResource(R.string.perm_music_apps),
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.9f),
                             textAlign = TextAlign.Center,
@@ -203,7 +205,7 @@ fun PermissionScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         Text(
-                            text = "PRIVATE DATA",
+                            text = stringResource(R.string.perm_private_data),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFEF4444),
@@ -213,7 +215,7 @@ fun PermissionScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         Text(
-                            text = "We ignore chats,\nOTPs, emails, and\neverything else",
+                            text = stringResource(R.string.perm_we_ignore),
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.6f),
                             textAlign = TextAlign.Center,
@@ -243,7 +245,7 @@ fun PermissionScreen(
                 )
             ) {
                 Text(
-                    text = "Enable Notification Access",
+                    text = stringResource(R.string.perm_enable_access),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -253,7 +255,7 @@ fun PermissionScreen(
 
             TextButton(onClick = onSkip) {
                 Text(
-                    text = "I'll do this later",
+                    text = stringResource(R.string.perm_do_later),
                     color = Color.White.copy(alpha = 0.6f),
                     style = MaterialTheme.typography.labelLarge
                 )
@@ -273,7 +275,7 @@ fun PermissionScreen(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Runs efficiently in background • No battery drain",
+                    text = stringResource(R.string.perm_runs_efficient),
                     textAlign = TextAlign.Center,
                     fontSize = 12.sp,
                     color = Color.Gray

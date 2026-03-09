@@ -10,6 +10,8 @@ fun main() {
     // Test cases
     val testCases = listOf(
         // Band names that should NOT be split
+        "AC/DC",
+        "Tyler, The Creator",
         "Dead & Company",
         "Derek & The Dominos",
         "Simon & Garfunkel",

@@ -44,6 +44,8 @@ import me.avinas.tempo.data.local.entities.UserLevel
 import me.avinas.tempo.data.repository.GamificationRepository
 import me.avinas.tempo.ui.profile.CompactLevelRing
 import me.avinas.tempo.ui.components.LevelUpOverlay
+import androidx.compose.ui.res.stringResource
+import me.avinas.tempo.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,7 +108,7 @@ fun HomeScreen(
                     VibeHeader(
                         energy = uiState.audioFeatures?.averageEnergy ?: 0.5f,
                         valence = uiState.audioFeatures?.averageValence ?: 0.5f,
-                        userName = uiState.userName ?: "User",
+                        userName = uiState.userName ?: stringResource(R.string.home_user_default),
                         isNewUser = uiState.isNewUser,
                         userLevel = userLevel?.currentLevel,
                         levelProgress = userLevel?.levelProgress ?: 0f,
@@ -148,7 +150,7 @@ fun HomeScreen(
                             val dailyLabels = uiState.chartLabels
 
                             HeroCard(
-                                userName = uiState.userName ?: "User", // Kept for Hero internal logic, visually hidden title
+                                userName = uiState.userName ?: stringResource(R.string.home_user_default), // Kept for Hero internal logic, visually hidden title
                                 listeningTime = timeString,
                                 periodLabel = uiState.selectedTimeRange.name.replace("_", " ").lowercase(),
                                 timeChangePercent = uiState.periodComparison?.timeChangePercent ?: 0.0,
@@ -203,7 +205,7 @@ fun HomeScreen(
                     if (uiState.insights.isNotEmpty()) {
                         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                              Text(
-                                text = "Your Signal",
+                                text = stringResource(R.string.home_your_signal),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -246,7 +248,7 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Home",
+                        text = stringResource(R.string.home_title),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.White.copy(alpha = headerAlpha)
@@ -264,7 +266,7 @@ fun HomeScreen(
                         contentColor = Color.White
                     )
                 ) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.home_settings))
                 }
             }
             

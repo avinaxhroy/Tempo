@@ -94,3 +94,4 @@ web/
 /app/release
 .kotlin/sessions/kotlin-compiler-13130970231225510226.salive
 /.kotlin
+*.sh

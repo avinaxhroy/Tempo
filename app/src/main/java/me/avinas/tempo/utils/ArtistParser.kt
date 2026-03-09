@@ -104,7 +104,16 @@ object ArtistParser {
         "kid cudi & eminem",  // Collaboration duo that performs together
         "lil nas x & billy ray cyrus",  // Known collaboration
         
+        // Prince variants
+        "prince and the revolution",
+        "prince & the revolution",
+        "prince and the power generation",
+        "prince & the power generation",
+        "prince and the new power generation",
+        "prince & the new power generation",
+        
         // Classic Rock & Oldies
+        "ac/dc",
         "sly & the family stone",
         "tommy james & the shondells",
         "sam & dave",
@@ -199,6 +208,7 @@ object ArtistParser {
         "kids see ghosts", // Kid Cudi & Kanye West
         "city girls",
         "earthgang",
+        "tyler, the creator",
 
         // Jazz & Blues
         "sonny terry & brownie mcghee",
@@ -240,6 +250,32 @@ object ArtistParser {
         "marshmello",
         "galantis"
     )
+
+    // User-defined known bands loaded from database at startup.
+    // These supplement the hardcoded KNOWN_COMPLEX_BANDS list above.
+    // Thread-safe: reads/writes are atomic on the volatile reference.
+    @Volatile
+    private var userKnownBands: Set<String> = emptySet()
+
+    /**
+     * Load user-defined known band names from the database.
+     * Called once at app startup to populate the user set.
+     * The hardcoded KNOWN_COMPLEX_BANDS remains unchanged.
+     */
+    fun loadUserKnownBands(names: Set<String>) {
+        userKnownBands = names.map { it.trim().lowercase() }.toSet()
+        Log.d("ArtistParser", "Loaded ${userKnownBands.size} user-known bands")
+    }
+
+    /**
+     * Add a single user-known band name at runtime.
+     * Called when a user confirms a rename that creates a new known artist.
+     */
+    fun addUserKnownBand(name: String) {
+        val lower = name.trim().lowercase()
+        userKnownBands = userKnownBands + lower
+        Log.d("ArtistParser", "Added user-known band: '$lower'")
+    }
     
     // Patterns that indicate the ampersand is part of a band name (Option 1: Pattern-Based Whitelist)
     // These patterns help identify when & is part of the artist name, not a separator
@@ -430,9 +466,10 @@ object ArtistParser {
      */
     private fun isKnownBand(artist: String): Boolean {
         val lower = artist.trim().lowercase()
-        return KNOWN_COMPLEX_BANDS.any { known -> 
-            lower == known
-        }
+        // Check hardcoded list first (fast path for common bands)
+        if (KNOWN_COMPLEX_BANDS.any { known -> lower == known }) return true
+        // Then check user-defined list
+        return lower in userKnownBands
     }
 
     /**
@@ -515,6 +552,29 @@ object ArtistParser {
         val similarity = if (union > 0) intersection.toDouble() / union else 0.0
 
         return similarity >= 0.5
+    }
+
+    /**
+     * Strict artist name comparison for API search result validation.
+     * Only allows exact match after normalization, or "The X" vs "X" variation.
+     * Does NOT use fuzzy/Jaccard matching — prevents matching wrong artists
+     * when validating iTunes/Spotify search results.
+     *
+     * @param artist1 First artist string
+     * @param artist2 Second artist string
+     * @return True only if the artists are very likely the same
+     */
+    fun isStrictSameArtist(artist1: String, artist2: String): Boolean {
+        val norm1 = normalizeForSearch(artist1)
+        val norm2 = normalizeForSearch(artist2)
+
+        // Exact match after normalization
+        if (norm1 == norm2) return true
+
+        // Handle "The Artist" vs "Artist"
+        if (norm1.removePrefix("the ") == norm2.removePrefix("the ")) return true
+
+        return false
     }
 
     /**

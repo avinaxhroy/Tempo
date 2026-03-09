@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import me.avinas.tempo.data.local.entities.Badge
+import me.avinas.tempo.data.local.entities.DailyChallenge
 import me.avinas.tempo.data.local.entities.UserLevel
+import me.avinas.tempo.data.repository.ChallengeRepository
 import me.avinas.tempo.data.repository.GamificationRepository
 import me.avinas.tempo.data.stats.GamificationEngine
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +21,8 @@ import javax.inject.Inject
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val gamificationRepository: GamificationRepository
+    private val gamificationRepository: GamificationRepository,
+    private val challengeRepository: ChallengeRepository
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -33,10 +36,16 @@ class ProfileViewModel @Inject constructor(
     private fun observeData() {
         viewModelScope.launch {
             gamificationRepository.observeUserLevel().collect { level ->
+                val uniqueArtists = try {
+                    gamificationRepository.getUniqueArtistCount()
+                } catch (e: Exception) { 0 }
+                
+                val calculatedTitle = GamificationEngine.computeTitle(level?.currentLevel ?: 0, uniqueArtists)
+                
                 if (level != null && level.currentLevel > uiState.value.userLevel.currentLevel && uiState.value.userLevel.currentLevel > 0) {
-                     _uiState.update { it.copy(userLevel = level, showLevelUpCelebration = true) }
+                     _uiState.update { it.copy(userLevel = level, showLevelUpCelebration = true, userTitle = calculatedTitle) }
                 } else {
-                     _uiState.update { it.copy(userLevel = level ?: UserLevel(), isLoading = false) }
+                     _uiState.update { it.copy(userLevel = level ?: UserLevel(), isLoading = false, userTitle = calculatedTitle) }
                 }
             }
         }
@@ -46,15 +55,36 @@ class ProfileViewModel @Inject constructor(
                 _uiState.update { it.copy(allBadges = badges) }
             }
         }
+        
+        viewModelScope.launch {
+            // First ensure today's challenges are generated
+            challengeRepository.generateDailyChallengesIfNeeded()
+            
+            // Then observe them
+            challengeRepository.observeTodayChallenges().collect { challenges ->
+                _uiState.update { it.copy(challenges = challenges) }
+            }
+        }
     }
     
     fun refreshGamification() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
+                challengeRepository.refreshChallengeProgress()
                 gamificationRepository.fullRefresh()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message) }
+            }
+        }
+    }
+    
+    fun claimChallenge(challengeId: Long) {
+        viewModelScope.launch {
+            try {
+                challengeRepository.claimChallengeXp(challengeId)
+            } catch (e: Exception) {
+                // Ignore for now
             }
         }
     }
@@ -72,10 +102,15 @@ data class ProfileUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val userLevel: UserLevel = UserLevel(),
+    val userTitle: String = "Newcomer",
     val allBadges: List<Badge> = emptyList(),
+    val challenges: List<DailyChallenge> = emptyList(),
     val selectedCategory: String? = null,
     val showLevelUpCelebration: Boolean = false
 ) {
+    val challengeXpTotal: Int
+        get() = challenges.sumOf { it.xpReward }
+
     val streakAtRisk: Boolean
         get() {
             // Logic: If user has a streak (>0) but hasn't listened TODAY, they are at risk.
