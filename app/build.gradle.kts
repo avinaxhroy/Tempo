@@ -36,8 +36,8 @@ android {
         applicationId = "me.avinas.tempo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 440
-        versionName = "4.4.0"
+        versionCode = 443
+        versionName = "4.4.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -219,6 +219,17 @@ dependencies {
 
     // Coroutines extension for Play Services
     implementation(libs.play.services.coroutines)
+
+    // Google Play In-App Review
+    implementation(libs.play.review)
+    implementation(libs.play.review.ktx)
+
+    // Desktop Satellite: NanoHTTPD (local HTTP server) + ZXing QR decoding + CameraX scanning
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+    implementation("com.google.zxing:core:3.5.3")
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
 
     // Testing
     testImplementation(libs.junit)

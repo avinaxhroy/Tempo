@@ -502,6 +502,47 @@
     <string name="settings_lastfm_import_complete">Import complete • Tap to manage</string>
     <string name="settings_import_lastfm">Import from Last.fm</string>
     <string name="settings_import_lastfm_desc">Import your scrobble history for deeper insights</string>
+
+    <!-- Desktop Satellite -->
+    <string name="desktop_link_section_header">Desktop</string>
+    <string name="desktop_link_settings_title">Link Desktop Satellite</string>
+    <string name="desktop_link_settings_subtitle">Sync listening history from your Mac or PC over your local network</string>
+    <string name="desktop_link_title">Desktop Satellite</string>
+    <string name="desktop_link_description">Pair with the Tempo Desktop app to sync your Mac or PC listening history to this phone over local WiFi — no cloud required. Open the desktop app and scan its QR code to get started.</string>
+    <!-- Receiver status (phone hosts the NanoHTTPD server that desktop pushes scrobbles to) -->
+    <string name="desktop_receiver_running">Receiver running on port %1$d</string>
+    <string name="desktop_receiver_stopped">Receiver not running</string>
+    <!-- Scanner UI -->
+    <string name="desktop_scan_qr_title">Scan Desktop QR Code</string>
+    <string name="desktop_scan_qr_subtitle">Open the Tempo Desktop app on your Mac or PC and scan the QR code it displays</string>
+    <string name="desktop_scan_button">Open Camera Scanner</string>
+    <string name="desktop_scan_instruction">Point your camera at the QR code shown by the Tempo Desktop app</string>
+    <string name="desktop_cancel_scan">Cancel</string>
+    <!-- Paired state -->
+    <string name="desktop_connected_to">Desktop</string>
+    <string name="desktop_phone_address">Phone receiver</string>
+    <string name="desktop_device_name">Device</string>
+    <string name="desktop_disconnect">Disconnect</string>
+    <!-- Manual entry -->
+    <string name="desktop_manual_entry">Enter manually instead</string>
+    <string name="desktop_ip_hint">Desktop IP address (e.g. 192.168.1.10)</string>
+    <string name="desktop_port_hint">Port (default: 8765)</string>
+    <string name="desktop_token_hint">Auth token (from desktop app)</string>
+    <string name="desktop_connect">Connect</string>
+    <!-- Shared -->
+    <string name="desktop_auth_token">Token</string>
+    <string name="desktop_copy_code">Copy Token</string>
+    <string name="desktop_last_sync">Last sync</string>
+    <!-- Desktop Stats -->
+    <string name="desktop_stats_title">Desktop Listening Stats</string>
+    <string name="desktop_stats_total_scrobbles">Total Scrobbles</string>
+    <string name="desktop_stats_listening_time">Listening Time</string>
+    <string name="desktop_stats_7day_scrobbles">Last 7 Days</string>
+    <string name="desktop_stats_7day_time">7-Day Time</string>
+    <string name="desktop_stats_top_listened">Top Listened (Desktop)</string>
+    <string name="desktop_stats_top_artist">Top Artist</string>
+    <string name="desktop_stats_top_track">Top Track</string>
+    <string name="desktop_stats_sources">Source Apps</string>
     <string name="settings_smart_merge">Smart Merge Versions</string>
     <string name="settings_smart_merge_desc">Treat Live/Remix versions as the same song for cleaner history</string>
     <string name="settings_backup_restore">Backup &amp; Restore</string>

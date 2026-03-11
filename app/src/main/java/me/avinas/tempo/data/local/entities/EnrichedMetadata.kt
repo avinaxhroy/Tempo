@@ -92,7 +92,7 @@ data class EnrichedMetadata(
     // Genre source tracking for priority-based replacement
     // Higher priority sources can replace lower priority ones
     // Priority: MUSICBRAINZ > LASTFM > ITUNES > RECCOBEATS > SPOTIFY_ARTIST
-    @ColumnInfo(name = "genre_source")
+    @ColumnInfo(name = "genre_source", defaultValue = "NONE")
     val genreSource: GenreSource = GenreSource.NONE,
     
     // Label info

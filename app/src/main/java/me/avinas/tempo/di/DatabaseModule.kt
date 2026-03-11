@@ -167,7 +167,9 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_31_32,  // Badge star tiers
                 AppDatabase.MIGRATION_32_33,   // User known artists for smart rename
                 AppDatabase.MIGRATION_33_34,   // Daily challenges gamification
-                AppDatabase.MIGRATION_34_35    // Anti-gaming: volume_level on listening_events
+                AppDatabase.MIGRATION_34_35,    // Anti-gaming: volume_level on listening_events
+                AppDatabase.MIGRATION_35_36,    // Gamification: add is_acknowledged to badges
+                AppDatabase.MIGRATION_36_37     // Fix: add genre_source column to enriched_metadata
             )
             // Enable Write-Ahead Logging for better concurrent read/write performance
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
@@ -245,4 +247,7 @@ object DatabaseModule {
     
     @Provides
     fun provideUserKnownArtistDao(db: AppDatabase) = db.userKnownArtistDao()
+
+    @Provides
+    fun provideDesktopPairingDao(db: AppDatabase) = db.desktopPairingDao()
 }

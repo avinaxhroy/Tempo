@@ -26,6 +26,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Desktop Satellite: read WiFi IP to display pairing address -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- Desktop Satellite: camera access for scanning desktop QR code -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <!-- Query launchable apps instead of all packages -->
     <queries>
         <intent>

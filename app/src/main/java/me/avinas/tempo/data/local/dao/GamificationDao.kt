@@ -38,6 +38,12 @@ interface GamificationDao {
     @Query("SELECT * FROM badges WHERE is_earned = 1 ORDER BY earned_at DESC")
     fun observeEarnedBadges(): Flow<List<Badge>>
     
+    @Query("SELECT * FROM badges WHERE is_earned = 1 AND is_acknowledged = 0 ORDER BY earned_at DESC")
+    fun observeUnacknowledgedBadges(): Flow<List<Badge>>
+    
+    @Query("UPDATE badges SET is_acknowledged = 1 WHERE badge_id IN (:badgeIds)")
+    suspend fun markBadgesAsAcknowledged(badgeIds: List<String>)
+    
     @Query("SELECT * FROM badges WHERE is_earned = 1 ORDER BY earned_at DESC LIMIT :limit")
     fun observeRecentBadges(limit: Int = 3): Flow<List<Badge>>
     

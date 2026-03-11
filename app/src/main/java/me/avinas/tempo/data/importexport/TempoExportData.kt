@@ -15,6 +15,8 @@ import me.avinas.tempo.data.local.entities.*
  * - v4: Smart image bundling (local only) + hotlink pre-caching
  * - v5: Added missing entities (track aliases, content marks, app prefs, scrobble archive, lastfm metadata)
  * - v6: Added user level (XP, level, streaks) for gamification
+ * - v7: Added userName (display name) from DataStore
+ * - v8: Added userKnownArtists and dailyChallenges tables
  */
 @JsonClass(generateAdapter = true)
 data class TempoExportData(
@@ -22,7 +24,10 @@ data class TempoExportData(
     val exportedAt: Long = System.currentTimeMillis(),
     val appVersion: String,
     val schemaVersion: Int,
-    
+
+    // v7: User display name (from DataStore)
+    val userName: String? = null,
+
     // Core data
     val tracks: List<Track> = emptyList(),
     val artists: List<Artist> = emptyList(),
@@ -37,6 +42,12 @@ data class TempoExportData(
     
     // v6: Badges (earned and locked)
     val badges: List<Badge> = emptyList(),
+
+    // v8: User-defined known artist names (anti-split rename entries)
+    val userKnownArtists: List<UserKnownArtist> = emptyList(),
+
+    // v8: Daily challenge history (completed challenges feed XP into UserLevel)
+    val dailyChallenges: List<DailyChallenge> = emptyList(),
     
     // Artist merge aliases (v5)
     val artistAliases: List<ArtistAlias> = emptyList(),
@@ -67,7 +78,7 @@ data class TempoExportData(
     val imageManifest: Map<String, String> = emptyMap()
 ) {
     companion object {
-        const val CURRENT_VERSION = 6
+        const val CURRENT_VERSION = 8
         const val DATA_FILENAME = "data.json"
     }
 }

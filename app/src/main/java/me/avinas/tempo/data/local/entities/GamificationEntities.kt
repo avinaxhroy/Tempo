@@ -81,7 +81,8 @@ data class Badge(
     val progress: Int = 0,     // Current progress toward next star
     @ColumnInfo(name = "max_progress") val maxProgress: Int = 1, // Threshold for next star
     @ColumnInfo(name = "is_earned") val isEarned: Boolean = false,
-    val stars: Int = 0         // Star count: 0=locked, 1-5=earned stars
+    val stars: Int = 0,        // Star count: 0=locked, 1-5=earned stars
+    @ColumnInfo(name = "is_acknowledged") val isAcknowledged: Boolean = false // Track if the user has seen the new star tier
 ) {
     /** Progress toward next star as a fraction 0.0 to 1.0 */
     val progressFraction: Float

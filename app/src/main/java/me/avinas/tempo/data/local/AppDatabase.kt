@@ -8,6 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import me.avinas.tempo.data.local.dao.*
 import me.avinas.tempo.data.local.entities.*
+import me.avinas.tempo.data.local.dao.DesktopPairingDao
+import me.avinas.tempo.data.local.entities.DesktopPairingSession
 
 @Database(
     entities = [
@@ -27,9 +29,10 @@ import me.avinas.tempo.data.local.entities.*
         UserLevel::class,    // Gamification: user level & XP
         Badge::class,         // Gamification: achievement badges
         UserKnownArtist::class, // User-defined known artist names (anti-split)
-        DailyChallenge::class // Gamification: daily challenges
+        DailyChallenge::class, // Gamification: daily challenges
+        DesktopPairingSession::class // Desktop Satellite pairing sessions
     ],
-    version = 35, // Anti-gaming: volume_level column on listening_events
+    version = 39, // Desktop Satellite v2: add desktop_ip / desktop_port to pairing sessions
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -50,9 +53,13 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun scrobbleArchiveDao(): ScrobbleArchiveDao  // Scrobble archive DAO
     abstract fun gamificationDao(): GamificationDao  // Gamification: levels & badges
     abstract fun userKnownArtistDao(): UserKnownArtistDao  // User-defined known artists
-    
+    abstract fun desktopPairingDao(): DesktopPairingDao     // Desktop Satellite pairing sessions
+
     companion object {
         private const val TAG = "AppDatabase"
+        
+        /** Current Room schema version — keep in sync with the @Database(version = ...) annotation. */
+        const val VERSION = 39
         
         /**
          * Migration from version 6 to 7: Add enhanced tracking columns to listening_events.
@@ -1531,6 +1538,216 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 35 to 36.
+         * 
+         * Adds is_acknowledged column to badges table to track whether the user
+         * has seen the congratulation for a newly earned star tier.
+         */
+        val MIGRATION_35_36 = object : Migration(35, 36) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 35 to 36 - Adding is_acknowledged to badges")
+                
+                db.execSQL("""
+                    ALTER TABLE badges 
+                    ADD COLUMN is_acknowledged INTEGER NOT NULL DEFAULT 0
+                """)
+                
+                // Existing earned badges should be marked as acknowledged so 
+                // users aren't flooded with old notifications
+                db.execSQL("""
+                    UPDATE badges 
+                    SET is_acknowledged = 1 
+                    WHERE is_earned = 1
+                """)
+                
+                Log.i(TAG, "Migration from version 35 to 36 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 36 to 37.
+         *
+         * Adds genre_source column to enriched_metadata.
+         * This column was added to the EnrichedMetadata entity without a corresponding
+         * migration, which would cause a crash for existing users on app update.
+         * Defaults to 'NONE' for all existing rows.
+         */
+        val MIGRATION_36_37 = object : Migration(36, 37) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 36 to 37 - Adding genre_source to enriched_metadata")
+
+                // Inspect the current state of the genre_source column (if any).
+                var genreSourceExists = false
+                var genreSourceHasCorrectDefault = false
+                db.query("PRAGMA table_info(enriched_metadata)").use { cursor ->
+                    val nameIndex = cursor.getColumnIndex("name")
+                    val dfltValueIndex = cursor.getColumnIndex("dflt_value")
+                    while (cursor.moveToNext()) {
+                        if (cursor.getString(nameIndex) == "genre_source") {
+                            genreSourceExists = true
+                            genreSourceHasCorrectDefault = cursor.getString(dfltValueIndex) == "'NONE'"
+                            break
+                        }
+                    }
+                }
+
+                when {
+                    !genreSourceExists -> {
+                        // Happy path: column missing, add it with the correct default.
+                        db.execSQL("""
+                            ALTER TABLE enriched_metadata
+                            ADD COLUMN genre_source TEXT NOT NULL DEFAULT 'NONE'
+                        """)
+                    }
+                    !genreSourceHasCorrectDefault -> {
+                        // Column exists but was added without DEFAULT 'NONE'.
+                        // SQLite cannot change a column's default in-place, so recreate the table.
+                        db.execSQL("PRAGMA foreign_keys = OFF")
+
+                        db.execSQL("""
+                            CREATE TABLE `enriched_metadata_new` (
+                                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                                `track_id` INTEGER NOT NULL,
+                                `musicbrainz_recording_id` TEXT,
+                                `musicbrainz_artist_id` TEXT,
+                                `musicbrainz_release_id` TEXT,
+                                `musicbrainz_release_group_id` TEXT,
+                                `album_title` TEXT,
+                                `release_date` TEXT,
+                                `release_year` INTEGER,
+                                `release_type` TEXT,
+                                `album_art_url` TEXT,
+                                `album_art_url_small` TEXT,
+                                `album_art_url_large` TEXT,
+                                `artist_name` TEXT,
+                                `artist_country` TEXT,
+                                `artist_type` TEXT,
+                                `track_duration_ms` INTEGER,
+                                `isrc` TEXT,
+                                `tags` TEXT NOT NULL,
+                                `genres` TEXT NOT NULL,
+                                `genre_source` TEXT NOT NULL DEFAULT 'NONE',
+                                `record_label` TEXT,
+                                `audio_features_json` TEXT,
+                                `spotify_id` TEXT,
+                                `spotify_artist_id` TEXT,
+                                `spotify_artist_ids` TEXT,
+                                `spotify_verified_artist` TEXT,
+                                `spotify_artist_image_url` TEXT,
+                                `spotify_preview_url` TEXT,
+                                `reccobeats_id` TEXT,
+                                `audio_features_source` TEXT NOT NULL,
+                                `spotify_enrichment_status` TEXT NOT NULL,
+                                `spotify_enrichment_error` TEXT,
+                                `spotify_last_attempt` INTEGER,
+                                `enrichment_status` TEXT NOT NULL,
+                                `enrichment_error` TEXT,
+                                `retry_count` INTEGER NOT NULL,
+                                `last_enrichment_attempt` INTEGER,
+                                `itunes_artist_image_url` TEXT,
+                                `apple_music_url` TEXT,
+                                `release_date_full` TEXT,
+                                `deezer_artist_image_url` TEXT,
+                                `lastfm_artist_image_url` TEXT,
+                                `spotify_track_url` TEXT,
+                                `preview_url` TEXT,
+                                `album_art_source` TEXT NOT NULL DEFAULT 'NONE',
+                                `cache_timestamp` INTEGER NOT NULL,
+                                `cache_version` INTEGER NOT NULL,
+                                FOREIGN KEY(`track_id`) REFERENCES `tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                            )
+                        """)
+
+                        db.execSQL("""
+                            INSERT INTO `enriched_metadata_new` (
+                                `id`, `track_id`, `musicbrainz_recording_id`, `musicbrainz_artist_id`,
+                                `musicbrainz_release_id`, `musicbrainz_release_group_id`, `album_title`,
+                                `release_date`, `release_year`, `release_type`, `album_art_url`,
+                                `album_art_url_small`, `album_art_url_large`, `artist_name`, `artist_country`,
+                                `artist_type`, `track_duration_ms`, `isrc`, `tags`, `genres`, `genre_source`,
+                                `record_label`, `audio_features_json`, `spotify_id`, `spotify_artist_id`,
+                                `spotify_artist_ids`, `spotify_verified_artist`, `spotify_artist_image_url`,
+                                `spotify_preview_url`, `reccobeats_id`, `audio_features_source`,
+                                `spotify_enrichment_status`, `spotify_enrichment_error`, `spotify_last_attempt`,
+                                `enrichment_status`, `enrichment_error`, `retry_count`, `last_enrichment_attempt`,
+                                `itunes_artist_image_url`, `apple_music_url`, `release_date_full`,
+                                `deezer_artist_image_url`, `lastfm_artist_image_url`, `spotify_track_url`,
+                                `preview_url`, `album_art_source`, `cache_timestamp`, `cache_version`
+                            )
+                            SELECT
+                                `id`, `track_id`, `musicbrainz_recording_id`, `musicbrainz_artist_id`,
+                                `musicbrainz_release_id`, `musicbrainz_release_group_id`, `album_title`,
+                                `release_date`, `release_year`, `release_type`, `album_art_url`,
+                                `album_art_url_small`, `album_art_url_large`, `artist_name`, `artist_country`,
+                                `artist_type`, `track_duration_ms`, `isrc`, `tags`, `genres`, `genre_source`,
+                                `record_label`, `audio_features_json`, `spotify_id`, `spotify_artist_id`,
+                                `spotify_artist_ids`, `spotify_verified_artist`, `spotify_artist_image_url`,
+                                `spotify_preview_url`, `reccobeats_id`, `audio_features_source`,
+                                `spotify_enrichment_status`, `spotify_enrichment_error`, `spotify_last_attempt`,
+                                `enrichment_status`, `enrichment_error`, `retry_count`, `last_enrichment_attempt`,
+                                `itunes_artist_image_url`, `apple_music_url`, `release_date_full`,
+                                `deezer_artist_image_url`, `lastfm_artist_image_url`, `spotify_track_url`,
+                                `preview_url`, `album_art_source`, `cache_timestamp`, `cache_version`
+                            FROM `enriched_metadata`
+                        """)
+
+                        db.execSQL("DROP TABLE `enriched_metadata`")
+                        db.execSQL("ALTER TABLE `enriched_metadata_new` RENAME TO `enriched_metadata`")
+
+                        db.execSQL("CREATE UNIQUE INDEX `index_enriched_metadata_track_id` ON `enriched_metadata` (`track_id`)")
+                        db.execSQL("CREATE INDEX `index_enriched_metadata_musicbrainz_recording_id` ON `enriched_metadata` (`musicbrainz_recording_id`)")
+                        db.execSQL("CREATE INDEX `index_enriched_metadata_enrichment_status` ON `enriched_metadata` (`enrichment_status`)")
+
+                        db.execSQL("PRAGMA foreign_keys = ON")
+                    }
+                    // else: column exists with correct default — nothing to do
+                }
+
+                Log.i(TAG, "Migration from version 36 to 37 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 37 to 38: Add Desktop Satellite pairing sessions table.
+         *
+         * Introduces the [DesktopPairingSession] entity that stores the auth token and
+         * metadata for the phone's built-in NanoHTTPD pairing server.
+         */
+        val MIGRATION_37_38 = object : Migration(37, 38) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 37 to 38 - Adding desktop_pairing_sessions")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `desktop_pairing_sessions` (
+                        `id` TEXT NOT NULL PRIMARY KEY,
+                        `auth_token` TEXT NOT NULL,
+                        `device_name` TEXT NOT NULL DEFAULT '',
+                        `paired_at_ms` INTEGER NOT NULL,
+                        `last_seen_ms` INTEGER DEFAULT NULL,
+                        `is_active` INTEGER NOT NULL DEFAULT 1
+                    )
+                """)
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_desktop_pairing_sessions_auth_token` ON `desktop_pairing_sessions` (`auth_token`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_desktop_pairing_sessions_is_active` ON `desktop_pairing_sessions` (`is_active`)")
+                Log.i(TAG, "Migration from version 37 to 38 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 38 to 39: Add desktop coordinates to desktop_pairing_sessions.
+         *
+         * The pairing direction has been corrected: the desktop app now shows the QR code
+         * and the phone scans it. The phone stores the desktop's IP and port so the
+         * connection details can be displayed to the user.
+         */
+        val MIGRATION_38_39 = object : Migration(38, 39) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE desktop_pairing_sessions ADD COLUMN desktop_ip TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE desktop_pairing_sessions ADD COLUMN desktop_port INTEGER DEFAULT NULL")
+                Log.i(TAG, "Migration from version 38 to 39 completed successfully")
+            }
+        }
+
+        /**
          * All migrations in order.
          */
         val ALL_MIGRATIONS = arrayOf(
@@ -1562,8 +1779,11 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_31_32,
             MIGRATION_32_33,  // User known artists for smart rename
             MIGRATION_33_34,  // Daily challenges gamification
-            MIGRATION_34_35   // Anti-gaming: volume_level on listening_events
+            MIGRATION_34_35,   // Anti-gaming: volume_level on listening_events
+            MIGRATION_35_36,   // Gamification: add is_acknowledged to badges
+            MIGRATION_36_37,   // Fix: add genre_source column to enriched_metadata
+            MIGRATION_37_38,   // Desktop Satellite: add desktop_pairing_sessions table
+            MIGRATION_38_39    // Desktop Satellite v2: add desktop_ip / desktop_port
         )
-        
     }
 }

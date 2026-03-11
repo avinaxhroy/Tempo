@@ -142,6 +142,25 @@ interface ListeningEventDao {
         val timestamp: Long
     )
 
+    /** Desktop source → count breakdown. */
+    data class SourceCount(
+        val source: String,
+        val cnt: Int
+    )
+
+    /** Artist name → count. */
+    data class ArtistCount(
+        val artist: String,
+        val cnt: Int
+    )
+
+    /** Track title + artist → count. */
+    data class TrackCount(
+        val title: String,
+        val artist: String,
+        val cnt: Int
+    )
+
     @Delete
     suspend fun delete(event: ListeningEvent)
     
@@ -285,4 +304,79 @@ interface ListeningEventDao {
         WHERE source NOT LIKE '%import%'
     """)
     suspend fun getRealPlayCount(): Int
+
+    // ─── Desktop-specific stats queries ──────────────────────────────────────
+
+    /**
+     * Total number of scrobbles received from the desktop satellite.
+     */
+    @Query("SELECT COUNT(*) FROM listening_events WHERE source LIKE 'desktop:%'")
+    suspend fun getDesktopScrobbleCount(): Int
+
+    /**
+     * Total listening time (ms) from desktop sources.
+     */
+    @Query("SELECT COALESCE(SUM(playDuration), 0) FROM listening_events WHERE source LIKE 'desktop:%'")
+    suspend fun getDesktopListeningTimeMs(): Long
+
+    /**
+     * Breakdown of desktop scrobbles grouped by source app (e.g., "desktop:Spotify Desktop").
+     * Returns source → count pairs, ordered by count descending.
+     */
+    @Query("""
+        SELECT source, COUNT(*) as cnt 
+        FROM listening_events 
+        WHERE source LIKE 'desktop:%'
+        GROUP BY source 
+        ORDER BY cnt DESC
+    """)
+    suspend fun getDesktopSourceBreakdown(): List<SourceCount>
+
+    /**
+     * Top artist scrobbled from desktop, by count.
+     */
+    @Query("""
+        SELECT t.artist, COUNT(*) as cnt
+        FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        WHERE le.source LIKE 'desktop:%'
+        GROUP BY t.artist
+        ORDER BY cnt DESC
+        LIMIT 1
+    """)
+    suspend fun getDesktopTopArtist(): ArtistCount?
+
+    /**
+     * Top track scrobbled from desktop, by count.
+     */
+    @Query("""
+        SELECT t.title, t.artist, COUNT(*) as cnt
+        FROM listening_events le
+        INNER JOIN tracks t ON le.track_id = t.id
+        WHERE le.source LIKE 'desktop:%'
+        GROUP BY t.title, t.artist
+        ORDER BY cnt DESC
+        LIMIT 1
+    """)
+    suspend fun getDesktopTopTrack(): TrackCount?
+
+    /**
+     * Count of desktop scrobbles in a given time range.
+     */
+    @Query("""
+        SELECT COUNT(*) FROM listening_events 
+        WHERE source LIKE 'desktop:%' 
+        AND timestamp >= :startTime AND timestamp <= :endTime
+    """)
+    suspend fun getDesktopScrobbleCountInRange(startTime: Long, endTime: Long): Int
+
+    /**
+     * Total desktop listening time (ms) in a given time range.
+     */
+    @Query("""
+        SELECT COALESCE(SUM(playDuration), 0) FROM listening_events 
+        WHERE source LIKE 'desktop:%' 
+        AND timestamp >= :startTime AND timestamp <= :endTime
+    """)
+    suspend fun getDesktopListeningTimeMsInRange(startTime: Long, endTime: Long): Long
 }

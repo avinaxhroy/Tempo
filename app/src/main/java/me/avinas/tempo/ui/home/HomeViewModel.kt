@@ -181,6 +181,18 @@ class HomeViewModel @Inject constructor(
     }
 
     private suspend fun shouldShowRateApp(totalTimeMs: Long, playCount: Int): Boolean {
+        // Install age check: only prompt users who have had the app for at least 7 days.
+        // firstInstallTime is set by the Play Store and survives app updates (not reinstalls).
+        val sevenDaysMs = 7 * 24 * 60 * 60 * 1000L
+        val firstInstallTime = try {
+            context.packageManager
+                .getPackageInfo(context.packageName, 0)
+                .firstInstallTime
+        } catch (_: Exception) {
+            System.currentTimeMillis() // fail-open: don't block the prompt if we can't read
+        }
+        if (System.currentTimeMillis() - firstInstallTime < sevenDaysMs) return false
+
         // Get REAL usage stats (excluding imported data from Spotify)
         // We want to prompt users who actually use the app, not just imported history
         val realListeningTimeMs = listeningEventDao.getRealListeningTimeMs()
@@ -412,9 +424,11 @@ class HomeViewModel @Inject constructor(
             .sortedBy { it.date }
     }
 
-    fun onRateAppClicked() {
+    fun onRateAppFlowHandled() {
         viewModelScope.launch {
             context.dataStore.edit { prefs ->
+                // The Play Review API does not tell us whether the user submitted a rating.
+                // We use this flag only to suppress re-prompting after handling the CTA.
                 prefs[booleanPreferencesKey("rate_app_rated")] = true
             }
             // Hide popup

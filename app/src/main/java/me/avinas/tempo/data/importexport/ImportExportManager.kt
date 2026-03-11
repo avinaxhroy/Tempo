@@ -3,14 +3,19 @@ package me.avinas.tempo.data.importexport
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import androidx.room.withTransaction
 import me.avinas.tempo.BuildConfig
 import me.avinas.tempo.data.local.AppDatabase
 import me.avinas.tempo.data.local.entities.*
+import me.avinas.tempo.ui.onboarding.dataStore
 import me.avinas.tempo.worker.PostRestoreCacheWorker
 import okio.buffer
 import okio.source
@@ -81,6 +86,14 @@ class ImportExportManager @Inject constructor(
             // v6: Collect gamification data
             val userLevel = database.gamificationDao().getUserLevel()
             val badges = database.gamificationDao().getAllBadges()
+
+            // v7: Collect display name from DataStore
+            val USER_NAME_KEY = stringPreferencesKey("user_name")
+            val userName = context.dataStore.data.first()[USER_NAME_KEY]
+
+            // v8: Collect user-known artists and daily challenge history (completed only)
+            val userKnownArtists = database.userKnownArtistDao().getAll()
+            val dailyChallenges = database.gamificationDao().getAllCompletedChallenges()
             
             _progress.value = ImportExportProgress("Analyzing images...", 20, 100)
             
@@ -125,7 +138,8 @@ class ImportExportManager @Inject constructor(
                     // Create export data using current database schema version
                     val exportData = TempoExportData(
                         appVersion = BuildConfig.VERSION_NAME,
-                        schemaVersion = 31, // Keep in sync with AppDatabase version
+                        schemaVersion = AppDatabase.VERSION,
+                        userName = userName,
                         tracks = tracks,
                         artists = artists,
                         albums = albums,
@@ -135,6 +149,8 @@ class ImportExportManager @Inject constructor(
                         userPreferences = userPrefs,
                         userLevel = userLevel,
                         badges = badges,
+                        userKnownArtists = userKnownArtists,
+                        dailyChallenges = dailyChallenges,
                         artistAliases = artistAliases,
                         trackAliases = trackAliases,
                         manualContentMarks = manualContentMarks,
@@ -235,13 +251,21 @@ class ImportExportManager @Inject constructor(
             
             _progress.value = ImportExportProgress("Importing artists...", 15, 100)
             
-            // ID mappings for foreign keys
+            // ID mappings for foreign keys (mutable maps modified inside the transaction)
             val artistIdMap = mutableMapOf<Long, Long>()
             val trackIdMap = mutableMapOf<Long, Long>()
             val albumIdMap = mutableMapOf<Long, Long>()
             
-            // Import Artists
+            // Counters collected inside the transaction
             var importedArtists = 0
+            var importedAlbums = 0
+            var importedTracks = 0
+            var importedEvents = 0
+            
+            // Wrap all Room DB writes in a single transaction so partial failures are rolled back
+            database.withTransaction {
+            
+            // Import Artists
             for (artist in data.artists) {
                 val remappedArtist = remapImagePath(artist, pathMapping)
                 val existingArtist = database.artistDao().getArtistByNormalizedName(remappedArtist.normalizedName)
@@ -263,7 +287,6 @@ class ImportExportManager @Inject constructor(
             _progress.value = ImportExportProgress("Importing albums...", 30, 100)
             
             // Import Albums
-            var importedAlbums = 0
             for (album in data.albums) {
                 val newArtistId = artistIdMap[album.artistId] ?: continue
                 val remappedAlbum = remapImagePath(album, pathMapping).copy(artistId = newArtistId)
@@ -294,7 +317,6 @@ class ImportExportManager @Inject constructor(
             _progress.value = ImportExportProgress("Importing tracks...", 45, 100)
             
             // Import Tracks
-            var importedTracks = 0
             for (track in data.tracks) {
                 val newPrimaryArtistId = track.primaryArtistId?.let { artistIdMap[it] }
                 val remappedTrack = remapImagePath(track, pathMapping).copy(primaryArtistId = newPrimaryArtistId)
@@ -329,15 +351,15 @@ class ImportExportManager @Inject constructor(
             
             _progress.value = ImportExportProgress("Importing listening history...", 65, 100)
             
-            // Import ListeningEvents - SORTED CHRONOLOGICALLY
+            // Import ListeningEvents - SORTED CHRONOLOGICALLY, deduplicated against existing rows
             val sortedEvents = data.listeningEvents.sortedBy { it.timestamp }
             val remappedEvents = sortedEvents.mapNotNull { event ->
                 val newTrackId = trackIdMap[event.track_id] ?: return@mapNotNull null
                 event.copy(id = 0, track_id = newTrackId)
             }
-            
-            val insertedEventIds = database.listeningEventDao().insertAllBatched(remappedEvents)
-            val importedEvents = insertedEventIds.count { it > 0 }
+            val dedupResult = database.listeningEventDao().insertAllBatchedWithDedup(remappedEvents)
+            importedEvents = dedupResult.inserted
+            Log.i(TAG, "Imported $importedEvents listening events (${dedupResult.skipped} skipped as duplicates)")
             
             _progress.value = ImportExportProgress("Importing metadata...", 80, 100)
             
@@ -360,7 +382,7 @@ class ImportExportManager @Inject constructor(
             data.userPreferences?.let { prefs ->
                 database.userPreferencesDao().upsert(prefs)
             }
-            
+
             // v6: Import UserLevel (gamification data)
             data.userLevel?.let { level ->
                 database.gamificationDao().upsertUserLevel(level)
@@ -372,6 +394,26 @@ class ImportExportManager @Inject constructor(
                 database.gamificationDao().upsertBadges(data.badges)
                 val earnedCount = data.badges.count { it.isEarned }
                 Log.i(TAG, "Imported ${data.badges.size} badges ($earnedCount earned)")
+            }
+
+            // v8: Import UserKnownArtists
+            if (data.userKnownArtists.isNotEmpty()) {
+                for (known in data.userKnownArtists) {
+                    database.userKnownArtistDao().insert(known.copy(id = 0))
+                }
+                Log.i(TAG, "Imported ${data.userKnownArtists.size} user-known artists")
+            }
+
+            // v8: Import DailyChallenges - deduplicate by (date, challengeId)
+            if (data.dailyChallenges.isNotEmpty()) {
+                val existingKeys = database.gamificationDao().getAllCompletedChallenges()
+                    .map { it.date to it.challengeId }.toSet()
+                val toInsert = data.dailyChallenges.filter { it.date to it.challengeId !in existingKeys }
+                if (toInsert.isNotEmpty()) {
+                    database.gamificationDao().upsertChallenges(toInsert.map { it.copy(id = 0) })
+                }
+                val completedCount = toInsert.count { it.isCompleted }
+                Log.i(TAG, "Imported ${toInsert.size} daily challenges ($completedCount completed, ${data.dailyChallenges.size - toInsert.size} skipped as duplicates)")
             }
             
             // Import Artist Aliases (for merged artists)
@@ -441,6 +483,15 @@ class ImportExportManager @Inject constructor(
                     database.lastFmImportMetadataDao().insert(metadata.copy(id = 0))
                 }
                 Log.i(TAG, "Imported ${data.lastFmImportMetadata.size} Last.fm import metadata records")
+            }
+            
+            } // end database.withTransaction
+            
+            // v7: Restore display name to DataStore (outside transaction — independent system)
+            data.userName?.takeIf { it.isNotBlank() }?.let { name ->
+                val USER_NAME_KEY = stringPreferencesKey("user_name")
+                context.dataStore.edit { it[USER_NAME_KEY] = name }
+                Log.i(TAG, "Restored user name: $name")
             }
             
             // Schedule pre-caching of hotlinked images

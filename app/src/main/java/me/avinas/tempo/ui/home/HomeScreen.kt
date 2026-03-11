@@ -46,6 +46,7 @@ import me.avinas.tempo.ui.profile.CompactLevelRing
 import me.avinas.tempo.ui.components.LevelUpOverlay
 import androidx.compose.ui.res.stringResource
 import me.avinas.tempo.R
+import me.avinas.tempo.utils.ReviewUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,7 +61,9 @@ fun HomeScreen(
     onNavigateToProfile: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var isRefreshing by remember { mutableStateOf(false) }
+    var isLaunchingReview by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
     
@@ -285,19 +288,27 @@ fun HomeScreen(
         
         // Rate App Bottom Sheet
         if (uiState.showRateAppPopup) {
-            val context = androidx.compose.ui.platform.LocalContext.current
             RateAppBottomSheet(
                 onDismiss = viewModel::onRateAppDismissed,
                 onRate = {
-                    viewModel.onRateAppClicked()
-                    try {
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=${context.packageName}"))
-                        context.startActivity(intent)
-                    } catch (e: android.content.ActivityNotFoundException) {
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://play.google.com/store/apps/details?id=${context.packageName}"))
-                        context.startActivity(intent)
+                    if (isLaunchingReview) return@RateAppBottomSheet
+                    val activity = ReviewUtils.run { context.findActivity() }
+                    if (activity == null) {
+                        ReviewUtils.openPlayStoreListing(context)
+                        viewModel.onRateAppFlowHandled()
+                        return@RateAppBottomSheet
                     }
-                }
+                    scope.launch {
+                        isLaunchingReview = true
+                        val launchedInAppReview = ReviewUtils.launchInAppReview(activity)
+                        if (!launchedInAppReview) {
+                            ReviewUtils.openPlayStoreListing(context)
+                        }
+                        viewModel.onRateAppFlowHandled()
+                        isLaunchingReview = false
+                    }
+                },
+                isSubmitting = isLaunchingReview
             )
         }
         

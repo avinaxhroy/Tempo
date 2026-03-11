@@ -7,6 +7,13 @@
 -keep class me.avinas.tempo.receiver.** { *; }
 -keep class me.avinas.tempo.worker.** { *; }
 -keep class me.avinas.tempo.widget.** { *; }
+-keep class me.avinas.tempo.desktop.** { *; }
+
+# NanoHTTPD - keep server class intact for R8
+-keep class fi.iki.elonen.** { *; }
+
+# ZXing QR decoder - MultiFormatReader loads sub-readers via reflection; must not be stripped
+-keep class com.google.zxing.** { *; }
 
 # Keep widget-related resources
 -keep class androidx.glance.appwidget.GlanceAppWidget { *; }

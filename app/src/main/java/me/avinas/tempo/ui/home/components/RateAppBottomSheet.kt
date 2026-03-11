@@ -27,7 +27,8 @@ import me.avinas.tempo.R
 @Composable
 fun RateAppBottomSheet(
     onDismiss: () -> Unit,
-    onRate: () -> Unit
+    onRate: () -> Unit,
+    isSubmitting: Boolean = false
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -89,6 +90,7 @@ fun RateAppBottomSheet(
             
             Button(
                 onClick = onRate,
+                enabled = !isSubmitting,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -98,17 +100,26 @@ fun RateAppBottomSheet(
                 ),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.rate_now),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                if (isSubmitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.rate_now),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(16.dp))
             
             TextButton(
                 onClick = onDismiss,
+                enabled = !isSubmitting,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(

@@ -11,6 +11,8 @@ import me.avinas.tempo.data.local.entities.UserLevel
 import me.avinas.tempo.data.repository.ChallengeRepository
 import me.avinas.tempo.data.repository.GamificationRepository
 import me.avinas.tempo.data.stats.GamificationEngine
+import androidx.datastore.preferences.core.stringPreferencesKey
+import me.avinas.tempo.ui.onboarding.dataStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,12 +59,27 @@ class ProfileViewModel @Inject constructor(
         }
         
         viewModelScope.launch {
+            gamificationRepository.observeUnacknowledgedBadges().collect { badges ->
+                _uiState.update { it.copy(unacknowledgedBadges = badges) }
+            }
+        }
+        
+        viewModelScope.launch {
             // First ensure today's challenges are generated
             challengeRepository.generateDailyChallengesIfNeeded()
             
             // Then observe them
             challengeRepository.observeTodayChallenges().collect { challenges ->
                 _uiState.update { it.copy(challenges = challenges) }
+            }
+        }
+        
+        viewModelScope.launch {
+            // Watch DataStore for updates
+            val USER_NAME_KEY = stringPreferencesKey("user_name")
+            context.dataStore.data.collect { preferences ->
+                val name = preferences[USER_NAME_KEY]?.takeIf { it.isNotBlank() } ?: "User"
+                _uiState.update { it.copy(userName = name) }
             }
         }
     }
@@ -96,6 +113,13 @@ class ProfileViewModel @Inject constructor(
     fun dismissLevelUpCelebration() {
         _uiState.update { it.copy(showLevelUpCelebration = false) }
     }
+    
+    fun acknowledgeBadges(badgeIds: List<String>) {
+        if (badgeIds.isEmpty()) return
+        viewModelScope.launch {
+            gamificationRepository.markBadgesAsAcknowledged(badgeIds)
+        }
+    }
 }
 
 data class ProfileUiState(
@@ -103,10 +127,12 @@ data class ProfileUiState(
     val error: String? = null,
     val userLevel: UserLevel = UserLevel(),
     val userTitle: String = "Newcomer",
+    val userName: String = "User",
     val allBadges: List<Badge> = emptyList(),
     val challenges: List<DailyChallenge> = emptyList(),
     val selectedCategory: String? = null,
-    val showLevelUpCelebration: Boolean = false
+    val showLevelUpCelebration: Boolean = false,
+    val unacknowledgedBadges: List<Badge> = emptyList()
 ) {
     val challengeXpTotal: Int
         get() = challenges.sumOf { it.xpReward }

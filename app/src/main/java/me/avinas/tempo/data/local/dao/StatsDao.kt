@@ -1161,7 +1161,8 @@ interface StatsDao {
             t.artist,
             t.album,
             t.content_type,
-            COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url
+            COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url,
+            le.source
         FROM listening_events le
         INNER JOIN tracks t ON le.track_id = t.id
         LEFT JOIN enriched_metadata em ON t.id = em.track_id
@@ -1205,7 +1206,8 @@ interface StatsDao {
             t.artist,
             t.album,
             t.content_type,
-            COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url
+            COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url,
+            le.source
         FROM listening_events le
         INNER JOIN tracks t ON le.track_id = t.id
         LEFT JOIN enriched_metadata em ON t.id = em.track_id
@@ -1250,7 +1252,8 @@ interface StatsDao {
             t.artist,
             t.album,
             t.content_type,
-            COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url
+            COALESCE(NULLIF(em.album_art_url, ''), NULLIF(t.album_art_url, '')) as album_art_url,
+            le.source
         FROM listening_events le
         INNER JOIN tracks t ON le.track_id = t.id
         LEFT JOIN enriched_metadata em ON t.id = em.track_id
@@ -2340,7 +2343,8 @@ data class HistoryItem(
     val artist: String,
     val album: String?,
     val content_type: String = "MUSIC",
-    val album_art_url: String?
+    val album_art_url: String?,
+    val source: String = ""
 )
 
 /**

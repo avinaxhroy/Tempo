@@ -101,6 +101,10 @@ class GamificationRepository @Inject constructor(
     
     suspend fun getUniqueArtistCount(): Int = gamificationDao.getUniqueArtistCount()
 
+    fun observeUnacknowledgedBadges(): Flow<List<Badge>> = gamificationDao.observeUnacknowledgedBadges()
+    
+    suspend fun markBadgesAsAcknowledged(badgeIds: List<String>) = gamificationDao.markBadgesAsAcknowledged(badgeIds)
+
     suspend fun getNextEarnableBadge(): Badge? {
         val allBadges = gamificationDao.getAllBadges()
         return allBadges
@@ -186,7 +190,8 @@ class GamificationRepository @Inject constructor(
                 progress = displayProgress,
                 maxProgress = displayMaxProgress,
                 isEarned = isNowEarned,
-                stars = currentStars
+                stars = currentStars,
+                isAcknowledged = if ((isNowEarned && !wasAlreadyEarned) || (currentStars > previousStars)) false else existing?.isAcknowledged ?: false
             )
             
             gamificationDao.upsertBadge(badge)

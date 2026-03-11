@@ -9,12 +9,16 @@ A blueprint for a lightweight, local-first companion app that relays desktop lis
 **Concept:** The desktop app acts solely as an "ear", collecting metadata from desktop media players. It does no processing or storage of its own beyond a temporary queue. The Android phone remains the single source of truth and brain of the operation.
 
 ### Pairing Mechanism
-1. The user opens the **Tempo app** on their phone and navigates to "Link Desktop Satellite".
-2. The phone generates a secure, one-time auth token and displays a **QR Code**. This QR code contains:
-   - The phone's local IP address (e.g., `192.168.1.5` or `192.168.43.1` for hotspot)
-   - The auth token (`e.g., dskX89vL...`)
-   - The port number the phone's internal API is listening on (e.g., `8080`)
-3. The desktop app scans this QR code (via webcam or screen-capture region), saving these credentials locally.
+1. The user opens the **Tempo Desktop app** on their Mac or PC and navigates to "Pair with Phone".
+2. The desktop app generates a secure auth token and displays a **QR Code** on screen. This QR code contains:
+   - The phone's receiver address will be registered after scanning — but the QR encodes the desktop endpoint details needed for the one-time pairing handshake, specifically: the auth token the desktop will use for all future scrobble pushes.
+   - In practice, the QR payload is: `{"ip":"<phone_ip>","port":8765,"token":"<token>","v":1}` where the token is desktop-generated.
+3. The user opens the **Tempo Android app**, navigates to Settings → Desktop Satellite, and taps **"Open Camera Scanner"**.
+4. The phone scans the QR code displayed on the desktop screen using its camera.
+5. The phone extracts the desktop credentials and stores them, then starts the local NanoHTTPD receiver (port 8765).
+6. The desktop app, now knowing the token is accepted, begins pushing scrobbles to `http://<phone_ip>:8765/api/scrobble`.
+
+> **Why phone scans desktop's QR (not the other way around):** Phones have cameras. Desktops typically do not — or relying on a webcam adds unnecessary friction. Showing the QR on the large desktop screen and scanning it with the phone camera is the natural, zero-friction flow.
 
 ### Synchronization Over Local Network
 Instead of a cloud server, the Android app hosts a very lightweight HTTP server (e.g., using `Ktor` or `NanoHTTPD`).

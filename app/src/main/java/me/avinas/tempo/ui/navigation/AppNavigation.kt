@@ -14,6 +14,7 @@ import me.avinas.tempo.ui.settings.SupportedAppsScreen
 import me.avinas.tempo.ui.settings.BackupRestoreScreen
 import me.avinas.tempo.ui.settings.BackgroundProtectionScreen
 import me.avinas.tempo.ui.lastfm.LastFmImportScreen
+import me.avinas.tempo.ui.desktop.DesktopLinkScreen
 import me.avinas.tempo.ui.spotlight.SpotlightScreen
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import kotlinx.coroutines.launch
@@ -71,6 +72,7 @@ sealed class Screen(val route: String) {
     data object SupportedApps : Screen("supported_apps")
     data object BackgroundProtection : Screen("background_protection")
     data object LastFmImport : Screen("lastfm_import")
+    data object DesktopLink : Screen("desktop_link")
     object ShareCanvas : Screen("share_canvas/{initialCardId}") {
         fun createRoute(initialCardId: String) = "share_canvas/$initialCardId"
         fun createRouteEmpty() = "share_canvas/_empty_"
@@ -197,7 +199,8 @@ fun AppNavigation(
                             onNavigateToBackup = { navController.navigate(Screen.BackupRestore.route) },
                             onNavigateToSupportedApps = { navController.navigate(Screen.SupportedApps.route) },
                             onNavigateToBackgroundProtection = { navController.navigate(Screen.BackgroundProtection.route) },
-                            onNavigateToLastFmImport = { navController.navigate(Screen.LastFmImport.route) }
+                            onNavigateToLastFmImport = { navController.navigate(Screen.LastFmImport.route) },
+                            onNavigateToDesktop = { navController.navigate(Screen.DesktopLink.route) }
                         )
                     }
 
@@ -221,6 +224,12 @@ fun AppNavigation(
 
                     composable(Screen.LastFmImport.route) {
                         LastFmImportScreen(
+                            onNavigateBack = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable(Screen.DesktopLink.route) {
+                        DesktopLinkScreen(
                             onNavigateBack = { navController.popBackStack() }
                         )
                     }
@@ -326,7 +335,8 @@ fun AppNavigation(
 
                     composable(Screen.Profile.route) {
                         me.avinas.tempo.ui.profile.ProfileScreen(
-                            onBack = { navController.popBackStack() }
+                            onBack = { navController.popBackStack() },
+                            onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
                         )
                     }
                 }

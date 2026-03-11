@@ -95,3 +95,7 @@ web/
 .kotlin/sessions/kotlin-compiler-13130970231225510226.salive
 /.kotlin
 *.sh
+/desktop
+desktopplan.md
+desktopplan.md
+/.vscode

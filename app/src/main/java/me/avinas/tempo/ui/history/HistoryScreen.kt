@@ -1200,6 +1200,20 @@ fun HistoryListItem(
                                     .padding(horizontal = 4.dp, vertical = 0.dp)
                             )
                         }
+                        
+                        // Desktop source tag
+                        if (item.source.startsWith("desktop:")) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Desktop",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF7C4DFF),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .border(1.dp, Color(0xFF7C4DFF), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 4.dp, vertical = 0.dp)
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(

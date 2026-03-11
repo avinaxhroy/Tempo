@@ -36,6 +36,7 @@ import me.avinas.tempo.ui.components.SettingsSwitch
 import me.avinas.tempo.ui.spotify.SpotifyViewModel
 import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.utils.OemBackgroundHelper
+import me.avinas.tempo.utils.ReviewUtils
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
@@ -48,6 +49,7 @@ fun SettingsScreen(
     onNavigateToSupportedApps: (() -> Unit)? = null,
     onNavigateToBackgroundProtection: (() -> Unit)? = null,
     onNavigateToLastFmImport: (() -> Unit)? = null,
+    onNavigateToDesktop: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
     spotifyViewModel: SpotifyViewModel = hiltViewModel()
 ) {
@@ -433,6 +435,23 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
+                // Desktop Satellite
+                SettingsSectionHeader(stringResource(R.string.desktop_link_section_header))
+                GlassCard(
+                    contentPadding = PaddingValues(0.dp),
+                    variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
+                ) {
+                    Column {
+                        SettingsOption(
+                            title = stringResource(R.string.desktop_link_settings_title),
+                            subtitle = stringResource(R.string.desktop_link_settings_subtitle),
+                            onClick = { onNavigateToDesktop() }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
                 // Data Management
                 SettingsSectionHeader(stringResource(R.string.settings_your_data))
                 GlassCard(
@@ -520,13 +539,7 @@ fun SettingsScreen(
                         SettingsOption(
                             title = stringResource(R.string.settings_rate_play_store),
                             onClick = {
-                                try {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${context.packageName}"))
-                                    context.startActivity(intent)
-                                } catch (e: android.content.ActivityNotFoundException) {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=${context.packageName}"))
-                                    context.startActivity(intent)
-                                }
+                                ReviewUtils.openPlayStoreListing(context)
                             }
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
