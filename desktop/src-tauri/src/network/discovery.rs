@@ -59,7 +59,10 @@ fn get_gateway_linux() -> Option<String> {
 
 #[cfg(target_os = "windows")]
 fn get_gateway_windows() -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
     let output = Command::new("powershell")
+        .creation_flags(CREATE_NO_WINDOW)
         .args([
             "-NoProfile",
             "-NonInteractive",

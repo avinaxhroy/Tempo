@@ -1,6 +1,18 @@
 use crate::db::models::RawMediaInfo;
 use log::{debug, warn};
+use std::os::windows::process::CommandExt;
 use std::process::Command;
+
+/// CREATE_NO_WINDOW prevents a visible console window from appearing each time
+/// PowerShell is spawned for media/volume queries during the polling cycle.
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+/// Build a PowerShell `Command` that never creates a visible console window.
+fn powershell_cmd() -> Command {
+    let mut cmd = Command::new("powershell");
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd
+}
 
 /// Detect now playing on Windows using PowerShell and GlobalSystemMediaTransportControls.
 ///
@@ -73,7 +85,7 @@ if ($results.Count -gt 0) {
 }
 "#;
 
-    let output = match Command::new("powershell")
+    let output = match powershell_cmd()
         .args(["-NoProfile", "-NonInteractive", "-Command", ps_script])
         .output()
     {
@@ -262,7 +274,7 @@ public static class Vol {
 "@ -ErrorAction SilentlyContinue
 try { [Vol]::Get() } catch { Write-Output "-1" }
 "#;
-    let output = Command::new("powershell")
+    let output = powershell_cmd()
         .args(["-NoProfile", "-NonInteractive", "-Command", ps])
         .output()
         .ok()?;
@@ -271,7 +283,7 @@ try { [Vol]::Get() } catch { Write-Output "-1" }
 }
 
 fn query_spotify_window_title() -> Option<RawMediaInfo> {
-    let output = Command::new("powershell")
+    let output = powershell_cmd()
         .args([
             "-NoProfile",
             "-NonInteractive",

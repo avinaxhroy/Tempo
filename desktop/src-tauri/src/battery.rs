@@ -210,9 +210,12 @@ fn parse_wmic_output(text: &str) -> BatteryStatus {
 
 #[cfg(target_os = "windows")]
 fn windows_powershell_battery() -> BatteryStatus {
+    use std::os::windows::process::CommandExt;
     use std::process::Command;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
 
     let output = match Command::new("powershell")
+        .creation_flags(CREATE_NO_WINDOW)
         .args(["-NoProfile", "-Command",
             "(Get-CimInstance -ClassName Win32_Battery | Select-Object -First 1 | ForEach-Object { \"$($_.EstimatedChargeRemaining)|$($_.BatteryStatus)\" })"])
         .output()

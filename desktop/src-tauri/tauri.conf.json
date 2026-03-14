@@ -64,7 +64,9 @@
         "startMenuFolder": "Tempo Desktop",
         "installMode": "currentUser",
         "displayLanguageSelector": false,
-        "minimumWebview2Version": "2.0.0"
+        "webviewInstallMode": {
+          "type": "skip"
+        }
       },
       "wix": {
         "language": "en-US"
