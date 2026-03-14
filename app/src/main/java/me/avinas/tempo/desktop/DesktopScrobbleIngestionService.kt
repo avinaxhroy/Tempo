@@ -3,11 +3,13 @@ package me.avinas.tempo.desktop
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import me.avinas.tempo.data.repository.ArtistLinkingService
 import me.avinas.tempo.data.repository.EnrichedMetadataRepository
 import me.avinas.tempo.data.local.entities.ListeningEvent
 import me.avinas.tempo.data.local.entities.Track
 import me.avinas.tempo.data.repository.ListeningRepository
 import me.avinas.tempo.data.repository.TrackRepository
+import me.avinas.tempo.utils.ArtistParser
 import me.avinas.tempo.utils.BatteryUtils
 import me.avinas.tempo.worker.EnrichmentWorker
 import org.json.JSONObject
@@ -54,7 +56,8 @@ class DesktopPlayIngestionService @Inject constructor(
     private val pairingManager: DesktopPairingManager,
     private val trackRepository: TrackRepository,
     private val listeningRepository: ListeningRepository,
-    private val enrichedMetadataRepository: EnrichedMetadataRepository
+    private val enrichedMetadataRepository: EnrichedMetadataRepository,
+    private val artistLinkingService: ArtistLinkingService
 ) {
     companion object {
         private const val TAG = "DesktopIngestion"
@@ -99,7 +102,7 @@ class DesktopPlayIngestionService @Inject constructor(
 
         var accepted = 0
         var duplicates = 0
-        var hasNewTracks = false
+        val newTrackIds = mutableListOf<Long>()
 
         for (i in 0 until playsArray.length()) {
             val entry = playsArray.optJSONObject(i) ?: continue
@@ -122,8 +125,28 @@ class DesktopPlayIngestionService @Inject constructor(
                 val trackResolution = findOrCreateTrack(title, artist, album, durationMs)
                 val trackId = trackResolution.id
                 if (trackResolution.isNew) {
+                    // Link artists (creates Artist records and TrackArtist relationships)
+                    if (!ArtistParser.isUnknownArtist(artist)) {
+                        try {
+                            artistLinkingService.linkArtistsForTrack(
+                                trackResolution.track ?: Track(
+                                    id = trackId,
+                                    title = title,
+                                    artist = artist,
+                                    album = album,
+                                    duration = durationMs.takeIf { it > 0L },
+                                    albumArtUrl = null,
+                                    spotifyId = null,
+                                    musicbrainzId = null,
+                                    contentType = "MUSIC"
+                                )
+                            )
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to link artists for track $trackId", e)
+                        }
+                    }
                     enrichedMetadataRepository.createPendingIfNotExists(trackId)
-                    hasNewTracks = true
+                    newTrackIds.add(trackId)
                 }
 
                 // 4. Deduplication: skip if an event for this track exists within ±60 s
@@ -161,9 +184,12 @@ class DesktopPlayIngestionService @Inject constructor(
             deviceName = deviceName.ifBlank { session.deviceName }
         )
 
-        if (hasNewTracks) {
-            // Queue one immediate run to process all newly created desktop tracks.
-            EnrichmentWorker.enqueueImmediate(context)
+        // Enqueue per-track immediate enrichment for each new track, identical to how
+        // MusicTrackingService handles real-time plays.  Using per-track IDs (rather than
+        // a single batch call) ensures the tracks are not lost at the bottom of the
+        // play-count-ordered PENDING queue and cannot be displaced by concurrent calls.
+        for (trackId in newTrackIds) {
+            EnrichmentWorker.enqueueImmediate(context, trackId)
         }
 
         Log.i(TAG, "Ingestion complete: $accepted accepted, $duplicates duplicates (device: $deviceName)")
@@ -199,12 +225,14 @@ class DesktopPlayIngestionService @Inject constructor(
             musicbrainzId = null,
             contentType = "MUSIC"
         )
-        return TrackResolution(id = trackRepository.insert(newTrack), isNew = true)
+        val id = trackRepository.insert(newTrack)
+        return TrackResolution(id = id, isNew = true, track = newTrack.copy(id = id))
     }
 
     private data class TrackResolution(
         val id: Long,
-        val isNew: Boolean
+        val isNew: Boolean,
+        val track: Track? = null
     )
 
     private suspend fun checkDuplicate(trackId: Long, timestampUtc: Long): Boolean {

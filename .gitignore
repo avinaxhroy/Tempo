@@ -95,8 +95,12 @@ web/
 .kotlin/sessions/kotlin-compiler-13130970231225510226.salive
 /.kotlin
 *.sh
-/desktop
 desktopplan.md
-desktopplan.md
+
+# Desktop app build artifacts
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+desktop/Tempo Desktop/
 /.vscode
 BATTERY_OPTIMIZATION.md

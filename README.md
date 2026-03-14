@@ -9,8 +9,9 @@
 <div align="center">
 
 
-[![Kotlin](https://img.shields.io/badge/Kotlin-1.9.0-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org) 
-[![Android](https://img.shields.io/badge/Android-14-green.svg?style=flat&logo=android)](https://developer.android.com) 
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org) 
+[![Android](https://img.shields.io/badge/Android-16-green.svg?style=flat&logo=android)](https://developer.android.com) 
+[![Version](https://img.shields.io/badge/Version-4.4.7-orange.svg?style=flat)]()
 [![License](https://img.shields.io/badge/License-Source%20Available-blue.svg)](LICENSE) 
 [![Status](https://img.shields.io/badge/Status-Active_Development-success.svg)]()
 
@@ -91,11 +92,12 @@ Android OEMs (especially Xiaomi/HyperOS) are notorious for killing background ap
 - **Reliability**: Includes `ServiceHealth` workers that self-heal if the background service is terminated.
 
 ### 🔊 ReccoBeats Enrichment
-When Spotify metadata fails, Tempo falls back to its own **4-Layer Enrichment Engine**:
+When Spotify metadata fails, Tempo falls back to its own **5-Layer Enrichment Engine**:
 1.  **Spotify ID Match**: Precise metadata from Spotify API.
 2.  **ReccoBeats Search**: Fuzzy matching against internal database.
-3.  **Audio Analysis**: Fetches audio features (energy, valence, tempo) for "Vibe" descriptions.
-4.  **Genius Integration**: Fetches lyrics and deeper track info.
+3.  **Audio Analysis**: Fetches audio features (energy, valence, tempo, danceability) for "Vibe" descriptions.
+4.  **MusicBrainz**: High-resolution album art, MBID tagging, and genre data.
+5.  **iTunes / Deezer Fallback**: Additional artwork and release metadata for tracks not covered by the above.
 
 ### ⏱️ Smart Duration Learning
 For local files or players that don't report track length:
@@ -113,6 +115,113 @@ A 0-100 metric that judges how *engaged* you are with your music.
 
 ---
 
+## 💻 Desktop Companion
+
+Tempo extends beyond Android with a **cross-platform desktop satellite app** (built with Tauri v2) that captures music from your PC/Mac/Linux machine and syncs it to your phone over the local network — no cloud, no account required.
+
+### How It Works
+1. Open the **Desktop Link** screen in the Tempo Android app.
+2. Tap **"Pair Desktop"** — Tempo generates a QR code.
+3. Scan the QR code with the Tempo desktop app to pair instantly (no manual IP entry).
+4. The desktop app discovers the phone via **mDNS** and queues scrobbles locally.
+5. Scrobbles are pushed to the phone over WiFi with **HMAC-SHA256-signed payloads** for integrity.
+
+### Supported Desktop Sources
+| Platform | Detection Method |
+|----------|-----------------|
+| **macOS** | AppleScript (Spotify/Apple Music first), then Now Playing fallback |
+| **Linux** | Any MPRIS-compatible player via D-Bus / playerctl |
+| **Windows** | Any app using Windows Media Session (Spotify, Tidal, browsers, etc.) |
+
+### Desktop Features
+- **Smart Batching**: Scrobbles queue locally and sync at configurable intervals (15 min – 24 hrs).
+- **Hotspot Fallback**: Works when your laptop is tethered to your phone's hotspot.
+- **Deduplication**: Prevents double-counting when the same track plays on both devices simultaneously.
+- **System Tray**: Runs silently in the background with a one-click "Sync Now" button.
+- **Crash Recovery**: Persisted playback sessions survive unexpected restarts.
+- **Data Export**: Export your full desktop scrobble history as CSV or JSON.
+
+---
+
+## 🏆 Gamification & Profile
+
+Tempo turns your listening habits into a progression system you can actually feel.
+
+### XP & Levels
+Every scrobble earns XP. Longer, more engaged listening sessions award more XP via the **Listening Quality Score** multiplier. As you level up, you unlock a unique **Listener Title** calculated from your level and the diversity of artists you've explored (e.g., *"Eclectic Wanderer"*, *"Devoted Fan"*).
+
+### Daily Challenges
+Fresh challenges are generated each day by the `ChallengeWorker`:
+- Discover a new artist today.
+- Listen for 30 minutes without skipping.
+- Play 3 tracks from your #1 album.
+
+Completing a challenge lets you **Claim XP** directly from the Profile screen. Progress is tracked in real time as you listen.
+
+### Badges
+A badge collection system awards milestones for listening habits — first scrobble, 1,000-hour milestone, first artist deep-dive, and more. New badges appear as animated pop-ups and are archived on your Profile screen.
+
+### Level-Up Celebration
+A full-screen animated celebration fires when you cross a level boundary, with confetti and your new title revealed.
+
+---
+
+## 🛡️ Anti-Gaming Integrity
+
+Tempo uses real XP, so the system needs to be fair. Two automatic safeguards prevent exploitation:
+
+### Mute Detection
+Tempo monitors the device media stream volume in real time via `AudioManager`. When you mute your phone:
+- **Time accumulation halts** — muted minutes don't count toward duration or XP.
+- **Notification updates** to show `"🎵 Song Title (Muted)"` so you always know what's being recorded.
+- The event is discarded as too short once the track ends with near-zero accumulated time.
+
+### Repeat-Spam Guard
+Looping the same 30-second track forever won't inflate your stats. The `ScrobbleEngine` keeps a rolling cache of `(trackId → lastPlayTime, playCount)`. If the same track is replayed consecutively more than the configurable limit (~5), subsequent replays are silently discarded, safeguarding leaderboard integrity while still crediting genuine re-listens.
+
+---
+
+## 📱 Widgets
+
+Tempo ships **seven home-screen and lock-screen widget types** powered by Jetpack Glance:
+
+| Widget | Description |
+|--------|-------------|
+| **App Widget** | Compact now-playing card with track art and quick stats |
+| **Dashboard** | Multi-stat summary: today's listening time, top track, and streak |
+| **Artist** | Spotlight your current top artist with play count |
+| **Heatmap** | Calendar-style listening intensity heatmap for the last 30 days |
+| **Discovery** | Highlights a new-to-you artist you recently discovered |
+| **Mix** | Rotating playlist of your most-played tracks from the past week |
+| **Milestone** | Progress bar toward your next XP level or listening milestone |
+
+All widgets update automatically via `WidgetWorker` and support Android 12+ dynamic coloring.
+
+---
+
+## 🎵 Deep-Dive Screens
+
+Beyond the main feed, Tempo offers dedicated detail screens for every entity in your library:
+
+### Song Details
+- Full play history with timestamps and source app icon.
+- Vibe scores (Energy, Valence, Danceability) from Spotify Audio Features.
+- **Listening Quality Score (LQS)** breakdown.
+- Smart merge tool to unify stats for "Live", "Remix", or "Remaster" variants.
+- Shareable stat cards.
+
+### Artist Details
+- Total play count and listening time across all tracks.
+- Top albums and top songs ranked by your personal play count.
+- Personality type inferred from your listening pattern (*"Deep Listener"*, *"Explorer"*, etc.).
+- Artist rename / merge tool to fix tagging errors.
+
+### Album Details
+- Track listing sorted by your play count.
+- Album-level aggregate stats: total plays, total listening time, favorite track.
+
+---
+
 ## 🔒 Privacy & Architecture
 
 **Your Data, Your Device.**
@@ -123,13 +232,18 @@ Tempo uses a **Local-First** architecture built on **Room Database**.
 - **Background Privacy**: While we read notifications to detect music, the content never leaves your device's internal storage.
 
 ### Tech Stack
-- **Languages**: Kotlin (100%)
-- **UI**: Jetpack Compose (Material 3), Jetpack Glance (Widgets)
-- **Architecture**: MVVM + Clean Architecture via Hilt
-- **Data**: Room (SQLite), DataStore
-- **Background**: WorkManager, Coroutines, Foreground Services
-- **Charts**: Vico & MPAndroidChart
-- **Image Loading**: Coil
+| Layer | Technology |
+|-------|-----------|
+| **Languages** | Kotlin 2.2.10 (100%) |
+| **UI** | Jetpack Compose (Material 3 / BOM 2025.12.01), Jetpack Glance (Widgets) |
+| **Architecture** | MVVM + Clean Architecture via Hilt 2.59 |
+| **Data** | Room 2.8.4 (SQLite), DataStore, EncryptedSharedPreferences |
+| **Networking** | Retrofit 3.0 + OkHttp 4.12 + Moshi |
+| **Background** | WorkManager 2.11, Coroutines 1.10, Foreground Services |
+| **Charts** | Vico 2.0 & MPAndroidChart 3.1 |
+| **Image Loading** | Coil 3.3 |
+| **Cloud Backup** | Google Drive API v3 |
+| **Min / Target SDK** | 26 (Android 8) / 36 (Android 16) |
 
 
 ---

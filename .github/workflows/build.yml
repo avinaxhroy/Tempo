@@ -1,0 +1,169 @@
+name: Build and Release Tempo Desktop
+
+# Triggers:
+#   - Push a tag like v1.0.0  → builds all platforms and creates a GitHub Release (draft)
+#   - workflow_dispatch        → manual build (no release created)
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write   # needed to create/update GitHub Releases
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ─── macOS: universal binary (Intel + Apple Silicon) ───────────────
+          - platform: macos-latest
+            name: macOS
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin
+
+          # ─── Linux: DEB + AppImage + RPM ──────────────────────────────────
+          - platform: ubuntu-22.04
+            name: Linux
+            rust-targets: ''
+            args: ''
+
+          # ─── Windows: NSIS .exe + WiX .msi ──────────────────────────────
+          - platform: windows-latest
+            name: Windows
+            rust-targets: ''
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    name: Build (${{ matrix.name }})
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Rust toolchain ────────────────────────────────────────────────
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Cache Rust build artefacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './desktop/src-tauri -> target'
+
+      # ── 3. Platform-specific system dependencies ─────────────────────────
+
+      # macOS: Xcode CLT (usually pre-installed on GitHub runners)
+      - name: Install macOS Xcode CLI tools
+        if: matrix.platform == 'macos-latest'
+        run: xcode-select --install 2>/dev/null || true
+
+      # Linux: WebKit, tray, rsvg, patchelf, playerctl
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libxdo-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            patchelf \
+            playerctl
+
+      # ── 4. Node.js ───────────────────────────────────────────────────────
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm install
+
+      # ── 5. Build via Tauri Action ─────────────────────────────────────────
+      #   • On tag push:  creates/updates a GitHub Release (draft) and uploads
+      #                   all platform bundles to it.
+      #   • On workflow_dispatch: just builds; artefacts are uploaded to the
+      #                           workflow run instead (no release created).
+      - name: Build Tauri app and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ── macOS code-signing (optional – set these secrets to enable) ──
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        with:
+          projectPath: desktop
+          args: ${{ matrix.args }}
+          # Release config – these are ignored when there is no tag
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: >-
+            ${{ startsWith(github.ref, 'refs/tags/')
+                && format('Tempo Desktop {0}', github.ref_name)
+                || '' }}
+          releaseBody: |
+            ## Tempo Desktop ${{ github.ref_name }}
+
+            Download the installer for your platform:
+
+            | Platform | Installer | Notes |
+            |----------|-----------|-------|
+            | **macOS** (Intel + Apple Silicon) | `Tempo Desktop_*.dmg` | Universal binary — drag to Applications |
+            | **Windows** | `Tempo Desktop_*.exe` | NSIS installer (recommended) |
+            | **Windows** | `Tempo Desktop_*.msi` | MSI installer |
+            | **Linux** | `tempo-desktop_*.deb` | Debian / Ubuntu (apt) |
+            | **Linux** | `tempo-desktop_*.AppImage` | Works on any distro — just `chmod +x` and run |
+            | **Linux** | `tempo-desktop_*.rpm` | Fedora / RHEL / openSUSE |
+
+            ### Linux: `playerctl` for best music detection
+            The DEB installer automatically installs `playerctl` for you.
+            For AppImage / RPM users, install it manually:
+            ```bash
+            sudo apt install playerctl        # Debian / Ubuntu / Mint
+            sudo dnf install playerctl        # Fedora
+            sudo pacman -S playerctl          # Arch Linux
+            ```
+            The app also works without `playerctl` via a D-Bus fallback — no music goes untracked.
+
+            ### macOS: first-launch permission
+            On the very first launch macOS will ask for **Automation** permission so Tempo
+            can query Spotify and Apple Music. Click **OK** when prompted.
+
+            ### Windows: WebView2
+            The installer checks for the Edge WebView2 Runtime and downloads it automatically
+            if it is not already present (Windows 10 20H2+ / 11 include it by default).
+          releaseDraft: true
+          prerelease: false
+
+      # ── 6. Upload artefacts for manual / PR builds (no release) ─────────
+      - name: Upload build artefacts (non-release runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tempo-desktop-${{ matrix.name }}
+          path: |
+            desktop/src-tauri/target/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/release/bundle/macos/*.app
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/release/bundle/msi/*.msi
+            desktop/src-tauri/target/release/bundle/deb/*.deb
+            desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+            desktop/src-tauri/target/release/bundle/rpm/*.rpm
+            desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+          retention-days: 7
+          if-no-files-found: warn

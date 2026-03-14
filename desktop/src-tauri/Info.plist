@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Extra Info.plist keys merged into the final .app bundle by Tauri at build time.
+  These keys describe OS-level permissions so that macOS shows a meaningful
+  explanation string in the System Settings → Privacy & Security prompts.
+-->
+<plist version="1.0">
+<dict>
+  <!--
+    Automation: shown when the app first tries to control Spotify, Apple Music,
+    Chrome, Brave, or other apps via AppleScript (osascript).
+  -->
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Tempo needs to query Spotify, Apple Music, and your browser to detect what music is currently playing and log it to your scrobble history.</string>
+
+  <!--
+    Allow the app bundle to execute AppleScripts.
+  -->
+  <key>NSAppleScriptEnabled</key>
+  <true/>
+
+  <!--
+    Local network: shown on first sync when the app opens a connection to
+    your phone over WiFi / personal hotspot.
+  -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Tempo sends your scrobble history directly to the Tempo app on your phone over your local WiFi or personal hotspot. No data leaves your network.</string>
+</dict>
+</plist>

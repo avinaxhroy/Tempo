@@ -274,7 +274,10 @@ class DesktopSatelliteServer @Inject constructor(
             }
 
             // Wait up to 10 s for the coroutine to finish (DB insert is fast)
-            latch.await(10, TimeUnit.SECONDS)
+            val completed = latch.await(10, TimeUnit.SECONDS)
+            if (!completed) {
+                Log.e(TAG, "Ingest coroutine timed out after 10 s — returning 500 to caller")
+            }
             return newFixedLengthResponse(statusRef.get(), MIME_JSON, responseBodyRef.get())
         }
 
