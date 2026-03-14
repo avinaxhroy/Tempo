@@ -1,7 +1,7 @@
 name: Build and Release Tempo Desktop
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 # Triggers:
 #   - Push a tag like v1.0.0  → builds all platforms and creates a GitHub Release (draft)
@@ -161,14 +161,12 @@ jobs:
         with:
           name: tempo-desktop-${{ matrix.name }}
           path: |
-            desktop/src-tauri/target/release/bundle/dmg/*.dmg
-            desktop/src-tauri/target/release/bundle/macos/*.app
-            desktop/src-tauri/target/release/bundle/nsis/*.exe
-            desktop/src-tauri/target/release/bundle/msi/*.msi
-            desktop/src-tauri/target/release/bundle/deb/*.deb
-            desktop/src-tauri/target/release/bundle/appimage/*.AppImage
-            desktop/src-tauri/target/release/bundle/rpm/*.rpm
-            desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
+            desktop/src-tauri/target/**/bundle/dmg/*.dmg
+            desktop/src-tauri/target/**/bundle/macos/*.app
+            desktop/src-tauri/target/**/bundle/nsis/*.exe
+            desktop/src-tauri/target/**/bundle/msi/*.msi
+            desktop/src-tauri/target/**/bundle/deb/*.deb
+            desktop/src-tauri/target/**/bundle/appimage/*.AppImage
+            desktop/src-tauri/target/**/bundle/rpm/*.rpm
           retention-days: 7
           if-no-files-found: warn
