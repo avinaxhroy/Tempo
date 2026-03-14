@@ -59,14 +59,14 @@
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
       "timestampUrl": "",
+      "webviewInstallMode": {
+        "type": "skip"
+      },
       "nsis": {
         "compression": "lzma",
         "startMenuFolder": "Tempo Desktop",
         "installMode": "currentUser",
-        "displayLanguageSelector": false,
-        "webviewInstallMode": {
-          "type": "skip"
-        }
+        "displayLanguageSelector": false
       },
       "wix": {
         "language": "en-US"

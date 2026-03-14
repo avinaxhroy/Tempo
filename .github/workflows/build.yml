@@ -101,7 +101,7 @@ jobs:
       #   • On workflow_dispatch: just builds; artefacts are uploaded to the
       #                           workflow run instead (no release created).
       - name: Build Tauri app and publish release
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # ── macOS code-signing (optional – set these secrets to enable) ──
