@@ -57,10 +57,12 @@ jobs:
 
       # ── 3. Platform-specific system dependencies ─────────────────────────
 
-      # macOS: Xcode CLT (usually pre-installed on GitHub runners)
-      - name: Install macOS Xcode CLI tools
+      # macOS: Xcode CLT + create-dmg (required by Tauri's bundle_dmg.sh)
+      - name: Install macOS dependencies
         if: matrix.platform == 'macos-latest'
-        run: xcode-select --install 2>/dev/null || true
+        run: |
+          xcode-select --install 2>/dev/null || true
+          brew install create-dmg
 
       # Linux: WebKit, tray, rsvg, patchelf, playerctl
       - name: Install Linux system dependencies
