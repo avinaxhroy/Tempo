@@ -1,11 +1,16 @@
 package me.avinas.tempo.desktop
 
+import android.content.Context
+import android.os.Build
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
 import fi.iki.elonen.NanoHTTPD
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import me.avinas.tempo.utils.BatteryUtils
 import org.json.JSONObject
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -17,24 +22,32 @@ import javax.inject.Singleton
  * A lightweight NanoHTTPD-based HTTP server that runs on the Android phone.
  *
  * Exposed endpoints:
- * - `GET  /api/ping`      — liveness check; no auth required; returns `{"ok":true}`
- * - `POST /api/scrobble`  — receives a batch of desktop scrobbles; requires valid Bearer token
+ * - `GET  /api/ping`             — liveness check; no auth required; returns `{"ok":true}`
+ * - `GET  /api/battery`          — battery status; no auth required; returns `{"level":XX,"critical":false}`
+ * - `POST /api/plays`         — receives a batch of desktop plays; requires valid Bearer token
  *
  * The token is validated against [DesktopPairingManager] on every POST. All actual
- * business logic (deduplication, DB insertion) is delegated to [DesktopScrobbleIngestionService].
+ * business logic (deduplication, DB insertion) is delegated to [DesktopPlayIngestionService].
+ *
+ * Battery Optimization:
+ * - Play sync requests are rejected if battery level is ≤ 20% (critical)
+ * - Desktop app should check battery status before attempting sync
+ * - Battery level is cached for 2 minutes to minimize system calls
  *
  * Thread model: NanoHTTPD delivers requests on its own background threads. We bridge to
  * coroutines via a dedicated [CoroutineScope] so we can call suspend functions safely.
  */
 @Singleton
 class DesktopSatelliteServer @Inject constructor(
+    @param:ApplicationContext private val context: Context,
     private val pairingManager: DesktopPairingManager,
-    private val ingestionService: DesktopScrobbleIngestionService
+    private val ingestionService: DesktopPlayIngestionService,
+    private val mdnsManager: DesktopMdnsManager
 ) {
     companion object {
         private const val TAG = "DesktopSatelliteServer"
         private const val MIME_JSON = "application/json"
-        private const val MAX_BODY_BYTES = 512 * 1024 // 512 KB guard – plenty for any scrobble batch
+        private const val MAX_BODY_BYTES = 512 * 1024 // 512 KB guard – plenty for any play batch
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -43,6 +56,10 @@ class DesktopSatelliteServer @Inject constructor(
     private var httpd: InternalHttpd? = null
 
     val isRunning: Boolean get() = httpd?.isAlive == true
+
+    init {
+        startBatteryWatchdog()
+    }
 
     // --------------------------------------------------------------------------
     // Lifecycle
@@ -70,6 +87,37 @@ class DesktopSatelliteServer @Inject constructor(
     }
 
     // --------------------------------------------------------------------------
+    // Battery watchdog — runs for the whole app lifetime (singleton scope)
+    // --------------------------------------------------------------------------
+
+    /**
+     * Monitors battery every 60 seconds regardless of which screen is open.
+     * Stops the server (and unregisters mDNS) when battery drops to critical (≤ 20%),
+     * and restarts it when battery recovers — as long as a pairing session exists.
+     */
+    private fun startBatteryWatchdog() {
+        scope.launch {
+            while (true) {
+                try {
+                    val isCritical = BatteryUtils.isCriticalBattery(context, forceRefresh = true)
+                    if (isCritical && isRunning) {
+                        Log.i(TAG, "Battery critical — stopping server to save power")
+                        mdnsManager.unregister()
+                        stop()
+                    } else if (!isCritical && !isRunning && pairingManager.getActiveSession() != null) {
+                        Log.i(TAG, "Battery recovered — restarting server")
+                        start(DesktopPairingManager.SERVER_PORT)
+                        mdnsManager.register(DesktopPairingManager.SERVER_PORT)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Battery watchdog error", e)
+                }
+                delay(60_000L)
+            }
+        }
+    }
+
+    // --------------------------------------------------------------------------
     // Inner NanoHTTPD implementation
     // --------------------------------------------------------------------------
 
@@ -79,7 +127,9 @@ class DesktopSatelliteServer @Inject constructor(
             return try {
                 when {
                     session.method == Method.GET && session.uri == "/api/ping" -> handlePing()
-                    session.method == Method.POST && session.uri == "/api/scrobble" -> handleScrobble(session)
+                    session.method == Method.GET && session.uri == "/api/battery" -> handleBattery()
+                    session.method == Method.POST && session.uri == "/api/pair/confirm" -> handlePairConfirm(session)
+                    session.method == Method.POST && session.uri == "/api/plays" -> handlePlays(session)
                     else -> newFixedLengthResponse(
                         Response.Status.NOT_FOUND, MIME_JSON,
                         """{"error":"not_found"}"""
@@ -95,11 +145,66 @@ class DesktopSatelliteServer @Inject constructor(
         }
 
         // GET /api/ping  -------------------------------------------------------
-        private fun handlePing(): Response =
-            newFixedLengthResponse(Response.Status.OK, MIME_JSON, """{"ok":true}""")
+        private fun handlePing(): Response {
+            if (BatteryUtils.isCriticalBattery(context, forceRefresh = true)) {
+                return errorResponse(Response.Status.SERVICE_UNAVAILABLE, "battery_critical")
+            }
+            return newFixedLengthResponse(Response.Status.OK, MIME_JSON, """{"ok":true}""")
+        }
 
-        // POST /api/scrobble  --------------------------------------------------
-        private fun handleScrobble(session: IHTTPSession): Response {
+        // GET /api/battery  -------------------------------------------------------
+        private fun handleBattery(): Response {
+            val batteryLevel = BatteryUtils.getBatteryLevel(context)
+            val isCritical = BatteryUtils.isCriticalBattery(context)
+            val isLow = BatteryUtils.isLowBattery(context)
+            
+            val response = JSONObject().apply {
+                put("level", batteryLevel)
+                put("critical", isCritical)
+                put("low", isLow)
+            }
+            
+            return newFixedLengthResponse(Response.Status.OK, MIME_JSON, response.toString())
+        }
+
+        // POST /api/pair/confirm  ----------------------------------------------
+        private fun handlePairConfirm(session: IHTTPSession): Response {
+            if (BatteryUtils.isCriticalBattery(context, forceRefresh = true)) {
+                Log.w(TAG, "Rejecting pair confirmation: battery level is critical (<= 20%)")
+                return errorResponse(Response.Status.SERVICE_UNAVAILABLE, "battery_critical")
+            }
+
+            val body = try {
+                val buf = HashMap<String, String>()
+                session.parseBody(buf)
+                buf["postData"] ?: return errorResponse(Response.Status.BAD_REQUEST, "empty_body")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to parse pair-confirm body", e)
+                return errorResponse(Response.Status.BAD_REQUEST, "parse_error")
+            }
+
+            val json = try {
+                JSONObject(body)
+            } catch (_: Exception) {
+                return errorResponse(Response.Status.BAD_REQUEST, "invalid_json")
+            }
+
+            val token = json.optString("auth_token").takeIf { it.isNotBlank() }
+                ?: return errorResponse(Response.Status.UNAUTHORIZED, "missing_token")
+
+            runBlockingPairingLookup(token)
+                ?: return errorResponse(Response.Status.UNAUTHORIZED, "invalid_token")
+
+            val deviceName = Build.MODEL
+            return newFixedLengthResponse(
+                Response.Status.OK,
+                MIME_JSON,
+                """{"ok":true,"device_name":${JSONObject.quote(deviceName)}}"""
+            )
+        }
+
+        // POST /api/plays  --------------------------------------------------
+        private fun handlePlays(session: IHTTPSession): Response {
             // 1. Read body safely
             // Check Content-Length header first as an early fast-reject, but do NOT rely on it
             // alone: a client can omit the header. The actual body is checked after parseBody.
@@ -117,7 +222,7 @@ class DesktopSatelliteServer @Inject constructor(
                 }
                 raw
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to parse scrobble body", e)
+                Log.w(TAG, "Failed to parse play batch body", e)
                 return errorResponse(Response.Status.BAD_REQUEST, "parse_error")
             }
 
@@ -131,6 +236,12 @@ class DesktopSatelliteServer @Inject constructor(
             // 3. Extract and validate token from payload
             val token = json.optString("auth_token").takeIf { it.isNotBlank() }
                 ?: return errorResponse(Response.Status.UNAUTHORIZED, "missing_token")
+
+            // 3.5 Battery check: reject plays if battery is critically low (≤ 20%)
+            if (BatteryUtils.isCriticalBattery(context, forceRefresh = true)) {
+                Log.w(TAG, "Rejecting play sync: battery level is critical (≤ 20%)")
+                return errorResponse(Response.Status.SERVICE_UNAVAILABLE, "battery_critical")
+            }
 
             // 4. Delegate to coroutine-aware ingestion — result is sent back synchronously
             //    via a blocking latch so NanoHTTPD's thread stays alive long enough.
@@ -169,5 +280,9 @@ class DesktopSatelliteServer @Inject constructor(
 
         private fun errorResponse(status: Response.Status, code: String): Response =
             newFixedLengthResponse(status, MIME_JSON, """{"ok":false,"error":"$code"}""")
+
+        private fun runBlockingPairingLookup(token: String) = kotlinx.coroutines.runBlocking {
+            pairingManager.validateToken(token)
+        }
     }
 }

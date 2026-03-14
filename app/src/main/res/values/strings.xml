@@ -503,46 +503,51 @@
     <string name="settings_import_lastfm">Import from Last.fm</string>
     <string name="settings_import_lastfm_desc">Import your scrobble history for deeper insights</string>
 
-    <!-- Desktop Satellite -->
-    <string name="desktop_link_section_header">Desktop</string>
-    <string name="desktop_link_settings_title">Link Desktop Satellite</string>
-    <string name="desktop_link_settings_subtitle">Sync listening history from your Mac or PC over your local network</string>
-    <string name="desktop_link_title">Desktop Satellite</string>
-    <string name="desktop_link_description">Pair with the Tempo Desktop app to sync your Mac or PC listening history to this phone over local WiFi — no cloud required. Open the desktop app and scan its QR code to get started.</string>
-    <!-- Receiver status (phone hosts the NanoHTTPD server that desktop pushes scrobbles to) -->
-    <string name="desktop_receiver_running">Receiver running on port %1$d</string>
-    <string name="desktop_receiver_stopped">Receiver not running</string>
+    <!-- Desktop Sync -->
+    <string name="desktop_link_section_header">Desktop Sync</string>
+    <string name="desktop_link_settings_title">Sync with Desktop</string>
+    <string name="desktop_link_settings_subtitle">Track and sync listening from your Mac or PC over local Wi-Fi</string>
+    <string name="desktop_link_title">Sync with Desktop</string>
+    <string name="desktop_link_description">Connect the Tempo Desktop app to sync listening history from your Mac or PC to this phone over local Wi-Fi. Open the desktop app, then scan the QR code to start.</string>
+    <!-- Receiver status (phone hosts the NanoHTTPD server that desktop pushes plays to) -->
+    <string name="desktop_receiver_running">Ready to sync on port %1$d</string>
+    <string name="desktop_receiver_stopped">Sync receiver is off</string>
     <!-- Scanner UI -->
-    <string name="desktop_scan_qr_title">Scan Desktop QR Code</string>
-    <string name="desktop_scan_qr_subtitle">Open the Tempo Desktop app on your Mac or PC and scan the QR code it displays</string>
-    <string name="desktop_scan_button">Open Camera Scanner</string>
-    <string name="desktop_scan_instruction">Point your camera at the QR code shown by the Tempo Desktop app</string>
+    <string name="desktop_scan_qr_title">Scan QR from Desktop App</string>
+    <string name="desktop_scan_qr_subtitle">Open Tempo Desktop on your Mac or PC, then scan the QR code shown there</string>
+    <string name="desktop_scan_button">Scan QR Code</string>
+    <string name="desktop_scan_instruction">Point your camera at the QR code in the Tempo Desktop app</string>
     <string name="desktop_cancel_scan">Cancel</string>
     <!-- Paired state -->
-    <string name="desktop_connected_to">Desktop</string>
-    <string name="desktop_phone_address">Phone receiver</string>
+    <string name="desktop_connected_to">Paired Desktop</string>
+    <string name="desktop_phone_address">Phone sync address</string>
     <string name="desktop_device_name">Device</string>
     <string name="desktop_disconnect">Disconnect</string>
     <!-- Manual entry -->
-    <string name="desktop_manual_entry">Enter manually instead</string>
+    <string name="desktop_manual_entry">Enter details manually</string>
     <string name="desktop_ip_hint">Desktop IP address (e.g. 192.168.1.10)</string>
     <string name="desktop_port_hint">Port (default: 8765)</string>
-    <string name="desktop_token_hint">Auth token (from desktop app)</string>
+    <string name="desktop_token_hint">Connection token (from desktop app)</string>
     <string name="desktop_connect">Connect</string>
     <!-- Shared -->
     <string name="desktop_auth_token">Token</string>
     <string name="desktop_copy_code">Copy Token</string>
     <string name="desktop_last_sync">Last sync</string>
     <!-- Desktop Stats -->
-    <string name="desktop_stats_title">Desktop Listening Stats</string>
-    <string name="desktop_stats_total_scrobbles">Total Scrobbles</string>
+    <string name="desktop_stats_title">Desktop Sync Stats</string>
+    <string name="desktop_stats_total_scrobbles">Total Plays</string>
     <string name="desktop_stats_listening_time">Listening Time</string>
     <string name="desktop_stats_7day_scrobbles">Last 7 Days</string>
     <string name="desktop_stats_7day_time">7-Day Time</string>
-    <string name="desktop_stats_top_listened">Top Listened (Desktop)</string>
+    <string name="desktop_stats_top_listened">Most Played on Desktop</string>
+    <string name="settings_desktop_battery_critical">Battery critical (%1$d%%) - Desktop sync is paused to save battery. Charge your phone to continue.</string>
+    <string name="settings_desktop_battery_low">Battery low (%1$d%%) - Consider charging before syncing with desktop.</string>
+    <string name="settings_desktop_battery_healthy">Battery healthy (%1$d%%) - Desktop sync is available.</string>
     <string name="desktop_stats_top_artist">Top Artist</string>
     <string name="desktop_stats_top_track">Top Track</string>
     <string name="desktop_stats_sources">Source Apps</string>
+    <string name="desktop_download_app">Download Desktop App</string>
+    <string name="desktop_download_app_desc">Get Tempo for Mac &amp; PC</string>
     <string name="settings_smart_merge">Smart Merge Versions</string>
     <string name="settings_smart_merge_desc">Treat Live/Remix versions as the same song for cleaner history</string>
     <string name="settings_backup_restore">Backup &amp; Restore</string>
@@ -949,4 +954,36 @@
     <string name="details_plays_count">%d plays</string>
     <string name="details_track_not_found">Track not found</string>
     <string name="details_song_details_title">Song Details</string>
+
+    <!-- Welcome to Tempo / Onboarding Final -->
+    <string name="welcome_ready">All Set!</string>
+    <string name="welcome_go">Let\'s Go</string>
+
+    <!-- Errors and notifications -->
+    <string name="error_generic">Something went wrong. Please try again.</string>
+    <string name="error_network">No network connection.</string>
+    <string name="error_save">Failed to save settings.</string>
+    <string name="success_save">Settings saved successfully.</string>
+
+    <!-- App shortcuts -->
+    <string name="shortcut_search">Search</string>
+    <string name="shortcut_play">Play</string>
+
+    <!-- About screen -->
+    <string name="about_app_name">Tempo</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_developer">Built by Avinash</string>
+    <string name="about_license">Licenses</string>
+    <string name="about_source_code">Source Code</string>
+    <string name="about_privacy">Privacy Policy</string>
+    <string name="about_terms">Terms of Use</string>
+
+    <!-- Misc UI -->
+    <string name="ui_loading">Loading…</string>
+    <string name="ui_error">Error</string>
+    <string name="ui_retry">Retry</string>
+    <string name="ui_empty">Nothing to show.</string>
+    <string name="ui_offline">You\'re currently offline.</string>
+    <string name="ui_search_hint">Search…</string>
+    <string name="ui_no_results">No results.</string>
 </resources>

@@ -158,6 +158,7 @@ object DefaultMusicApps {
      */
     val PODCAST_APPS: List<AppInfo> = listOf(
         AppInfo("com.google.android.apps.podcasts", "Google Podcasts", "PODCAST"),
+        AppInfo("com.google.android.apps.magazines", "Google News", "PODCAST"),
         AppInfo("fm.player", "Player FM", "PODCAST"),
         AppInfo("au.com.shiftyjelly.pocketcasts", "Pocket Casts", "PODCAST"),
         AppInfo("com.bambuna.podcastaddict", "Podcast Addict", "PODCAST"),

@@ -10,13 +10,17 @@ import me.avinas.tempo.data.local.entities.DailyChallenge
 import me.avinas.tempo.data.local.entities.UserLevel
 import me.avinas.tempo.data.repository.ChallengeRepository
 import me.avinas.tempo.data.repository.GamificationRepository
+import me.avinas.tempo.data.repository.RefreshCoordinator
 import me.avinas.tempo.data.stats.GamificationEngine
 import androidx.datastore.preferences.core.stringPreferencesKey
 import me.avinas.tempo.ui.onboarding.dataStore
+
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -24,8 +28,10 @@ import javax.inject.Inject
 class ProfileViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val gamificationRepository: GamificationRepository,
-    private val challengeRepository: ChallengeRepository
+    private val challengeRepository: ChallengeRepository,
+    private val refreshCoordinator: RefreshCoordinator
 ) : ViewModel() {
+    
     
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
@@ -33,6 +39,7 @@ class ProfileViewModel @Inject constructor(
     init {
         observeData()
         refreshGamification()
+        observeRefreshEvents()
     }
     
     private fun observeData() {
@@ -84,7 +91,50 @@ class ProfileViewModel @Inject constructor(
         }
     }
     
-    fun refreshGamification() {
+    
+    /**
+     * Listen for "new track recorded" events from MusicTrackingService.
+     * Uses debounce to avoid processing rapid-fire events (e.g., skips).
+     */
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    private fun observeRefreshEvents() {
+        viewModelScope.launch {
+            refreshCoordinator.refreshEvents
+                .debounce(1_000) // Wait 1s to batch rapid events
+                .collect {
+                    silentRefresh()
+                }
+        }
+    }
+    
+    /** Refresh gamification without showing the full loading indicator. */
+    private suspend fun silentRefresh() {
+        try {
+            challengeRepository.refreshChallengeProgress()
+            gamificationRepository.fullRefresh()
+        } catch (_: Exception) {
+            // Silent — don't show errors for background refreshes
+        }
+    }
+    
+    /** Pull-to-refresh handler. */
+    suspend fun refresh() {
+        val startTime = System.currentTimeMillis()
+        _uiState.update { it.copy(isRefreshing = true) }
+        try {
+            challengeRepository.refreshChallengeProgress()
+            gamificationRepository.fullRefresh()
+        } catch (e: Exception) {
+            _uiState.update { it.copy(error = e.message) }
+        } finally {
+            // Ensure spinner shows for at least 600ms so it doesn't flash away
+            val elapsed = System.currentTimeMillis() - startTime
+            if (elapsed < 600) delay(600 - elapsed)
+            _uiState.update { it.copy(isRefreshing = false) }
+        }
+    }
+    
+    private fun refreshGamification() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
@@ -124,6 +174,7 @@ class ProfileViewModel @Inject constructor(
 
 data class ProfileUiState(
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val error: String? = null,
     val userLevel: UserLevel = UserLevel(),
     val userTitle: String = "Newcomer",

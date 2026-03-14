@@ -543,6 +543,27 @@ interface StatsDao {
     """)
     suspend fun getMostActiveHour(startTime: Long, endTime: Long): HourlyDistribution?
 
+    /**
+     * Get the typical hour the user *starts* listening each day.
+     * For each day in the range, finds the earliest listen event, then averages those
+     * first-listen hours across all days. This tells us when the user typically begins
+     * their listening session rather than when they are most active overall.
+     */
+    @Query("""
+        SELECT
+            CAST(AVG(first_hour) AS INTEGER) as hour,
+            COUNT(*) as play_count,
+            0 as total_time_ms
+        FROM (
+            SELECT
+                MIN(CAST(strftime('%H', datetime(timestamp/1000, 'unixepoch', 'localtime')) AS INTEGER)) as first_hour
+            FROM listening_events
+            WHERE timestamp >= :startTime AND timestamp <= :endTime
+            GROUP BY strftime('%Y-%m-%d', datetime(timestamp/1000, 'unixepoch', 'localtime'))
+        )
+    """)
+    suspend fun getTypicalStartHour(startTime: Long, endTime: Long): HourlyDistribution?
+
     // =====================
     // Temporal Analysis - Day of Week
     // =====================

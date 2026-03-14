@@ -308,10 +308,10 @@ interface ListeningEventDao {
     // ─── Desktop-specific stats queries ──────────────────────────────────────
 
     /**
-     * Total number of scrobbles received from the desktop satellite.
+     * Total number of plays received from the desktop satellite.
      */
     @Query("SELECT COUNT(*) FROM listening_events WHERE source LIKE 'desktop:%'")
-    suspend fun getDesktopScrobbleCount(): Int
+    suspend fun getDesktopPlayCount(): Int
 
     /**
      * Total listening time (ms) from desktop sources.
@@ -320,7 +320,7 @@ interface ListeningEventDao {
     suspend fun getDesktopListeningTimeMs(): Long
 
     /**
-     * Breakdown of desktop scrobbles grouped by source app (e.g., "desktop:Spotify Desktop").
+     * Breakdown of desktop plays grouped by source app (e.g., "desktop:Spotify Desktop").
      * Returns source → count pairs, ordered by count descending.
      */
     @Query("""
@@ -333,7 +333,7 @@ interface ListeningEventDao {
     suspend fun getDesktopSourceBreakdown(): List<SourceCount>
 
     /**
-     * Top artist scrobbled from desktop, by count.
+     * Top artist played from desktop, by count.
      */
     @Query("""
         SELECT t.artist, COUNT(*) as cnt
@@ -347,7 +347,7 @@ interface ListeningEventDao {
     suspend fun getDesktopTopArtist(): ArtistCount?
 
     /**
-     * Top track scrobbled from desktop, by count.
+     * Top track played from desktop, by count.
      */
     @Query("""
         SELECT t.title, t.artist, COUNT(*) as cnt
@@ -361,14 +361,14 @@ interface ListeningEventDao {
     suspend fun getDesktopTopTrack(): TrackCount?
 
     /**
-     * Count of desktop scrobbles in a given time range.
+     * Count of desktop plays in a given time range.
      */
     @Query("""
         SELECT COUNT(*) FROM listening_events 
         WHERE source LIKE 'desktop:%' 
         AND timestamp >= :startTime AND timestamp <= :endTime
     """)
-    suspend fun getDesktopScrobbleCountInRange(startTime: Long, endTime: Long): Int
+    suspend fun getDesktopPlayCountInRange(startTime: Long, endTime: Long): Int
 
     /**
      * Total desktop listening time (ms) in a given time range.

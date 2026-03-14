@@ -1,13 +1,7 @@
 package me.avinas.tempo.worker
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.os.Build
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
@@ -19,7 +13,8 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import me.avinas.tempo.R
+import me.avinas.tempo.data.local.dao.StatsDao
+import me.avinas.tempo.data.local.dao.UserPreferencesDao
 import me.avinas.tempo.data.repository.ChallengeRepository
 import me.avinas.tempo.ui.onboarding.dataStore
 import java.util.Calendar
@@ -29,22 +24,31 @@ import java.util.concurrent.TimeUnit
 class ChallengeWorker @AssistedInject constructor(
     @Assisted private val context: Context,
     @Assisted workerParams: WorkerParameters,
-    private val challengeRepository: ChallengeRepository
+    private val challengeRepository: ChallengeRepository,
+    private val statsDao: StatsDao,
+    private val userPreferencesDao: UserPreferencesDao
 ) : CoroutineWorker(context, workerParams) {
 
     companion object {
         private const val TAG = "ChallengeWorker"
         private const val DAILY_WORK_NAME = "daily_challenge_work"
-        private const val CHANNEL_ID = "tempo_challenges"
-        private const val NOTIFICATION_ID = 3005
+
+        // Default fallback: notify at 9 AM if no listening history exists
+        private const val DEFAULT_NOTIF_HOUR = 9
+
+        // Recalculate preferred hour every 14 days
+        private const val RECALC_INTERVAL_MS = 14L * 24 * 60 * 60 * 1000L
 
         fun scheduleDaily(context: Context) {
             val now = Calendar.getInstance()
-            // Schedule for shortly after midnight (e.g., 12:05 AM)
+            // ChallengeWorker runs at midnight (12:05 AM) to GENERATE challenges for today.
+            // The actual notification is dispatched separately via NotificationWorker at the
+            // user's preferred listening hour (smart timing).
             val target = Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, 0)
                 set(Calendar.MINUTE, 5)
                 set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
             }
 
             if (target.before(now)) {
@@ -64,7 +68,7 @@ class ChallengeWorker @AssistedInject constructor(
             )
             Log.d(TAG, "Scheduled ChallengeWorker to run daily at 12:05 AM.")
         }
-        
+
         fun cancelDaily(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(DAILY_WORK_NAME)
         }
@@ -72,68 +76,94 @@ class ChallengeWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         Log.i(TAG, "Running daily ChallengeWorker...")
-        
-        try {
+
+        return try {
             // 1. Generate new challenges for today
             challengeRepository.generateDailyChallengesIfNeeded()
-            
+
             // 2. Check if user wants notifications for new challenges
             val notifPrefKey = booleanPreferencesKey("notif_daily_challenges")
-            val notificationsEnabled = context.dataStore.data.map { prefs -> 
+            val notificationsEnabled = context.dataStore.data.map { prefs ->
                 prefs[notifPrefKey] ?: true // Default is ON
             }.first()
 
             if (notificationsEnabled) {
-                sendChallengeReadyNotification()
+                // 3. Calculate (or retrieve cached) smart preferred notification hour
+                val preferredHour = computePreferredNotifHour()
+                Log.d(TAG, "Scheduling challenge-ready notification at hour $preferredHour")
+
+                // 4. Schedule a one-shot NotificationWorker to fire at the preferred hour
+                //    (this replaces the old approach of notifying directly at midnight)
+                NotificationWorker.scheduleChallengeReady(context, preferredHour)
+            } else {
+                Log.d(TAG, "Challenge notifications disabled — skipping notification scheduling.")
             }
-            
-            return Result.success()
+
+            Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "Error generating daily challenges", e)
-            return Result.retry()
+            Result.retry()
         }
     }
 
-    private fun sendChallengeReadyNotification() {
-        createNotificationChannel()
-        
-        // Create an intent that opens the app when notification is tapped
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            ?.apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra("navigate_to", "profile_challenges")
-            }
-        val pendingIntent = if (launchIntent != null) {
-            PendingIntent.getActivity(
-                context, 0, launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    /**
+     * Compute the preferred notification hour for challenge notifications.
+     *
+     * Strategy:
+     *  - Check stored smart hour in UserPreferences. If it was computed within [RECALC_INTERVAL_MS]
+     *    AND is within the morning window (8 AM – 12 PM), reuse it.
+     *  - Otherwise, look at the average first-listen hour per day over the last 28 days
+     *    (i.e. when the user typically starts their listening session).
+     *    Clamp the result to the morning window (8 AM – 12 PM) so the user always has the
+     *    full day to complete their challenges.
+     *  - Fall back to [DEFAULT_NOTIF_HOUR] (9 AM) if there is no history yet.
+     *  - Persist the newly computed hour so future runs are fast.
+     */
+    private suspend fun computePreferredNotifHour(): Int {
+        val prefs = userPreferencesDao.getSync()
+
+        // Check if we have a recently calculated hour we can reuse.
+        // Also discard any cached hour that falls outside the valid morning window (8–12),
+        // which can happen if the cache was written before the morning-cap was introduced.
+        val storedHour = prefs?.smartChallengeNotifHour
+        val storedCalcTime = prefs?.smartChallengeNotifCalcTime ?: 0L
+        val now = System.currentTimeMillis()
+        val isStoredHourValid = storedHour != null && storedHour in 8..12
+
+        if (isStoredHourValid && (now - storedCalcTime) < RECALC_INTERVAL_MS) {
+            Log.d(TAG, "Reusing cached smart notification hour: $storedHour")
+            return storedHour!!
+        }
+
+        // Query the typical hour the user starts listening each day over the last 28 days.
+        // Using start-of-listening rather than peak hour ensures the notification arrives
+        // around the time the user naturally opens their music app for the day.
+        val startMs = now - (28L * 24 * 60 * 60 * 1000L)
+        val typicalStartHour: Int = try {
+            val hourly = statsDao.getTypicalStartHour(startMs, now)
+            hourly?.hour ?: DEFAULT_NOTIF_HOUR
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not query typical start hour, using default", e)
+            DEFAULT_NOTIF_HOUR
+        }
+
+        // Clamp to morning window: 8 AM – 12 PM so users always have the full day to complete
+        // their challenges. If someone never starts listening before noon, 12 PM is the latest
+        // we'll send the notification.
+        val clampedHour = typicalStartHour.coerceIn(8, 12)
+        Log.i(TAG, "Computed smart notification hour: typical start=$typicalStartHour → clamped to $clampedHour")
+
+        // Persist for future use
+        try {
+            val updatedPrefs = (prefs ?: me.avinas.tempo.data.local.entities.UserPreferences()).copy(
+                smartChallengeNotifHour = clampedHour,
+                smartChallengeNotifCalcTime = now
             )
-        } else null
-        
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("New Daily Challenges! 🎯")
-            .setContentText("Your personalized challenges are ready for today. Earn bonus XP!")
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .apply { if (pendingIntent != null) setContentIntent(pendingIntent) }
-            .build()
-
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, notification)
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "Daily Challenges"
-            val descriptionText = "Notifications when your new daily challenges are ready"
-            val importance = NotificationManager.IMPORTANCE_DEFAULT
-            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
-                description = descriptionText
-            }
-            val notificationManager: NotificationManager =
-                context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+            userPreferencesDao.upsert(updatedPrefs)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not persist smart notification hour", e)
         }
+
+        return clampedHour
     }
 }

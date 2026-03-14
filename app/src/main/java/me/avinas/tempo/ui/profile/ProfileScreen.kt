@@ -45,11 +45,13 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
 import me.avinas.tempo.data.local.entities.Badge
 import me.avinas.tempo.data.local.entities.UserLevel
 import me.avinas.tempo.data.stats.GamificationEngine
@@ -129,9 +131,19 @@ fun ProfileScreen(
     onNavigateToSettings: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val scope = rememberCoroutineScope()
     
     DeepOceanBackground {
         Box(modifier = Modifier.fillMaxSize()) {
+            PullToRefreshBox(
+                isRefreshing = uiState.isRefreshing,
+                onRefresh = {
+                    scope.launch {
+                        viewModel.refresh()
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -170,12 +182,12 @@ fun ProfileScreen(
                     val tabs = listOf("Daily Challenges", "Badges")
                     
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        TabRow(
+                        SecondaryTabRow(
                             selectedTabIndex = pagerState.currentPage,
                             containerColor = Color.Transparent,
-                            indicator = { tabPositions ->
+                            indicator = {
                                 TabRowDefaults.SecondaryIndicator(
-                                    modifier = Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
+                                    modifier = Modifier.tabIndicatorOffset(pagerState.currentPage),
                                     color = Color(0xFFA855F7), // Purple accent
                                     height = 3.dp
                                 )
@@ -252,6 +264,7 @@ fun ProfileScreen(
                         }
                     }
                 }
+            }
             }
             
             // Floating Glassmorphic Top Bar
@@ -710,6 +723,20 @@ private fun ModernChallengesSection(
                     fontWeight = FontWeight.Bold,
                     color = Color.White.copy(alpha = 0.5f),
                     modifier = Modifier.padding(top = 4.dp)
+                )
+                val resetLabel = remember {
+                    val midnight = LocalDate.now().plusDays(1)
+                        .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    val diffMs = midnight - System.currentTimeMillis()
+                    val h = (diffMs / (1000 * 60 * 60)).toInt()
+                    val m = ((diffMs % (1000 * 60 * 60)) / (1000 * 60)).toInt()
+                    if (h > 0) "Resets in ${h}h ${m}m" else "Resets in ${m}m"
+                }
+                Text(
+                    text = resetLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.3f),
+                    modifier = Modifier.padding(top = 2.dp)
                 )
             }
             
@@ -1201,8 +1228,8 @@ private fun getBadgeShapePath(size: Size, badgeId: String): androidx.compose.ui.
         path.moveTo(cx, cy - radius)
         path.lineTo(cx + w, cy - radius * 0.8f)
         path.lineTo(cx + w, cy + radius * 0.2f)
-        path.quadraticBezierTo(cx + w * 0.5f, cy + radius, cx, cy + radius)
-        path.quadraticBezierTo(cx - w * 0.5f, cy + radius, cx - w, cy + radius * 0.2f)
+        path.quadraticTo(cx + w * 0.5f, cy + radius, cx, cy + radius)
+        path.quadraticTo(cx - w * 0.5f, cy + radius, cx - w, cy + radius * 0.2f)
         path.lineTo(cx - w, cy - radius * 0.8f)
         path.close()
     }

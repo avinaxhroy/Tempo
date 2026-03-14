@@ -145,8 +145,15 @@ class SettingsViewModel @Inject constructor(
     fun toggleDailyChallenges(enabled: Boolean) {
         viewModelScope.launch {
             context.dataStore.edit { it[NOTIF_CHALLENGES_KEY] = enabled }
-            // ChallengeWorker already checks the pref when generating, no need to cancel worker
-            // unless we want to disable generation completely (which we don't, just notifications)
+            if (enabled) {
+                // Re-enable: schedule a notification for today at the stored smart hour,
+                // falling back to 9 AM if no smart hour has been computed yet.
+                val storedHour = userPreferencesDao.getSync()?.smartChallengeNotifHour ?: 9
+                NotificationWorker.scheduleChallengeReady(context, storedHour)
+            } else {
+                // Disabled: cancel any pending challenge notification
+                NotificationWorker.cancelChallengeReady(context)
+            }
         }
     }
     

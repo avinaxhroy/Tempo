@@ -8,6 +8,7 @@ import me.avinas.tempo.data.local.dao.LastFmImportMetadataDao
 import me.avinas.tempo.data.local.dao.ScrobbleArchiveDao
 import me.avinas.tempo.data.local.entities.ScrobbleArchive
 import me.avinas.tempo.data.repository.ListeningRepository
+import me.avinas.tempo.data.repository.RefreshCoordinator
 import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.data.repository.TrackRepository
 import me.avinas.tempo.data.stats.TimeRange
@@ -15,8 +16,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
@@ -66,7 +69,8 @@ class HistoryViewModel @Inject constructor(
     private val manualContentMarkDao: me.avinas.tempo.data.local.dao.ManualContentMarkDao,
     private val userPreferencesDao: me.avinas.tempo.data.local.dao.UserPreferencesDao,
     private val lastFmImportMetadataDao: LastFmImportMetadataDao,
-    private val scrobbleArchiveDao: ScrobbleArchiveDao
+    private val scrobbleArchiveDao: ScrobbleArchiveDao,
+    private val refreshCoordinator: RefreshCoordinator
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HistoryUiState())
@@ -81,6 +85,7 @@ class HistoryViewModel @Inject constructor(
     init {
         initializeViewMode()
         observeDataChanges()
+        observeRefreshEvents()
     }
     
     /**
@@ -137,6 +142,139 @@ class HistoryViewModel @Inject constructor(
                         loadHistory()
                     }
                 }
+        }
+    }
+    
+    /**
+     * Listen for "new track recorded" events from MusicTrackingService.
+     */
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    private fun observeRefreshEvents() {
+        viewModelScope.launch {
+            refreshCoordinator.refreshEvents
+                .debounce(1_500)
+                .collect {
+                    if (_uiState.value.page == 0 && !suppressObserverRefresh) {
+                        loadHistory()
+                    }
+                }
+        }
+    }
+    
+    /** Pull-to-refresh handler. */
+    suspend fun refresh() {
+        _uiState.update { it.copy(isRefreshing = true) }
+        val startTime = System.currentTimeMillis()
+        try {
+            _uiState.update { it.copy(
+                page = 0,
+                rawItems = emptyList(),
+                groupedItems = emptyMap(),
+                lastFmItems = emptyList(),
+                lastFmGroupedItems = emptyMap(),
+                lastFmPage = 0,
+                hasMoreLastFm = true,
+                archiveItems = emptyList(),
+                isLoading = true
+            ) }
+            // Fetch data inline so we actually wait for it before clearing isRefreshing
+            fetchHistoryForRefresh()
+        } finally {
+            // Ensure spinner shows for at least 600ms so it doesn't feel like a bug
+            val elapsed = System.currentTimeMillis() - startTime
+            if (elapsed < 600) delay(600 - elapsed)
+            _uiState.update { it.copy(isRefreshing = false) }
+        }
+    }
+
+    /**
+     * Awaitable version of history loading used by pull-to-refresh.
+     * Mirrors the logic in loadHistory() / loadLastFmHistory() but runs sequentially.
+     */
+    private suspend fun fetchHistoryForRefresh() {
+        try {
+            val currentState = _uiState.value
+            val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+            val filterPodcasts = prefs.filterPodcasts
+            val filterAudiobooks = prefs.filterAudiobooks
+            val searchQuery = currentState.searchQuery.takeIf { it.isNotBlank() }
+
+            if (currentState.viewMode == HistoryViewMode.SEPARATED && hasLastFmImport) {
+                val result = statsRepository.getHistoryExcludingLastFm(
+                    searchQuery = searchQuery,
+                    startTime = currentState.startDate,
+                    endTime = currentState.endDate,
+                    includeSkips = currentState.showSkips,
+                    filterPodcasts = filterPodcasts,
+                    filterAudiobooks = filterAudiobooks,
+                    page = 0
+                )
+                val shouldShowCoachMark = checkShouldShowCoachMark(result.items)
+                _uiState.update { state ->
+                    state.copy(
+                        rawItems = result.items,
+                        groupedItems = groupHistoryItems(result.items),
+                        isLoading = false,
+                        isLoadingMore = false,
+                        page = 0,
+                        hasMore = result.hasMore,
+                        showCoachMark = shouldShowCoachMark
+                    )
+                }
+
+                // Also load Last.fm section
+                val lastFmResult = statsRepository.getHistoryLastFmOnly(
+                    searchQuery = searchQuery,
+                    startTime = currentState.startDate,
+                    endTime = currentState.endDate,
+                    includeSkips = currentState.showSkips,
+                    filterPodcasts = filterPodcasts,
+                    filterAudiobooks = filterAudiobooks,
+                    page = 0
+                )
+                val archiveItems = loadArchiveItems(
+                    query = searchQuery,
+                    startTime = currentState.startDate,
+                    endTime = currentState.endDate,
+                    page = 0
+                )
+                _uiState.update { state ->
+                    state.copy(
+                        lastFmItems = lastFmResult.items,
+                        lastFmGroupedItems = groupHistoryItems(lastFmResult.items),
+                        archiveItems = archiveItems,
+                        isLoadingMoreLastFm = false,
+                        lastFmPage = 0,
+                        hasMoreLastFm = lastFmResult.hasMore
+                    )
+                }
+            } else {
+                val result = statsRepository.getHistory(
+                    timeRange = TimeRange.ALL_TIME,
+                    searchQuery = searchQuery,
+                    startTime = currentState.startDate,
+                    endTime = currentState.endDate,
+                    includeSkips = currentState.showSkips,
+                    filterPodcasts = filterPodcasts,
+                    filterAudiobooks = filterAudiobooks,
+                    page = 0
+                )
+                val shouldShowCoachMark = checkShouldShowCoachMark(result.items)
+                _uiState.update { state ->
+                    state.copy(
+                        rawItems = result.items,
+                        groupedItems = groupHistoryItems(result.items),
+                        isLoading = false,
+                        isLoadingMore = false,
+                        page = 0,
+                        hasMore = result.hasMore,
+                        showCoachMark = shouldShowCoachMark
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during pull-to-refresh", e)
+            _uiState.update { it.copy(isLoading = false, isLoadingMore = false, error = e.message) }
         }
     }
 
@@ -705,6 +843,7 @@ class HistoryViewModel @Inject constructor(
 data class HistoryUiState(
     val isLoading: Boolean = true,
     val isLoadingMore: Boolean = false,
+    val isRefreshing: Boolean = false,
     val isMarking: Boolean = false, // True when marking content in progress
     val error: String? = null,
     

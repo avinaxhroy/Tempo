@@ -160,6 +160,21 @@ fun LastFmImportScreen(
                         LoadingContent()
                     }
                     
+                    // Already connected — show management screen with Sync Now
+                    uiState.isConnected && uiState.username != null -> {
+                        ConnectedContent(
+                            username = uiState.username!!,
+                            syncFrequency = uiState.syncFrequency,
+                            isSyncing = uiState.isSyncing,
+                            lastSyncResult = uiState.lastSyncResult,
+                            error = uiState.error,
+                            onSyncNow = viewModel::syncNow,
+                            onSetFrequency = viewModel::setSyncFrequency,
+                            onDisconnect = viewModel::disconnect,
+                            onClearError = viewModel::clearError
+                        )
+                    }
+                    
                     // Show username input
                     else -> {
                         UsernameInputContent(
@@ -745,6 +760,208 @@ private fun ImportCompletionContent(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
+        }
+    }
+}
+
+@Composable
+private fun ConnectedContent(
+    username: String,
+    syncFrequency: String,
+    isSyncing: Boolean,
+    lastSyncResult: String?,
+    error: String?,
+    onSyncNow: () -> Unit,
+    onSetFrequency: (String) -> Unit,
+    onDisconnect: () -> Unit,
+    onClearError: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(vertical = 24.dp)
+    ) {
+        item {
+            // Header
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(36.dp))
+                        .background(Color(0xFFBA0000).copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = androidx.compose.ui.res.painterResource(id = me.avinas.tempo.R.drawable.ic_lastfm),
+                        contentDescription = null,
+                        tint = Color(0xFFBA0000),
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Connected as",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
+                Text(
+                    text = username,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        // Error banner
+        if (error != null) {
+            item {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = null,
+                            tint = Color(0xFFE74C3C),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFE74C3C),
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = onClearError, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = Color.White.copy(alpha = 0.5f))
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            // Sync card
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Sync History",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Sync pulls your latest scrobbles since the last import. It does not run in real time — use the button below to fetch recent plays immediately.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                    if (lastSyncResult != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = lastSyncResult,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF27AE60)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = onSyncNow,
+                        enabled = !isSyncing,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFBA0000),
+                            disabledContainerColor = Color(0xFFBA0000).copy(alpha = 0.4f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Syncing…", fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Text("Sync Now", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            // Auto-sync frequency card
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Automatic Sync",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Automatically check for new scrobbles in the background.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    listOf("NONE" to "Off", "DAILY" to "Daily", "WEEKLY" to "Weekly").forEach { (value, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onSetFrequency(value) }
+                                .background(
+                                    if (syncFrequency == value) Color(0xFFBA0000).copy(alpha = 0.2f)
+                                    else Color.Transparent
+                                )
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White
+                            )
+                            if (syncFrequency == value) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color(0xFFBA0000),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            // Disconnect
+            TextButton(
+                onClick = onDisconnect,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Disconnect Last.fm",
+                    color = Color.White.copy(alpha = 0.4f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }

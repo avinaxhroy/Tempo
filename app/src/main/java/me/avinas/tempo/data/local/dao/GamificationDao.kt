@@ -116,6 +116,7 @@ interface GamificationDao {
         SELECT COUNT(DISTINCT t.artist) 
         FROM listening_events le 
         JOIN tracks t ON le.track_id = t.id
+        WHERE (le.volume_level IS NULL OR le.volume_level > 0)
     """)
     suspend fun getUniqueArtistCount(): Int
     
@@ -182,7 +183,11 @@ interface GamificationDao {
     // Challenge Progress Trackers (since start of day)
     // =====================
     
-    @Query("SELECT COUNT(*) FROM listening_events WHERE timestamp >= :startOfDayMs")
+        @Query("""
+                SELECT COUNT(*) FROM listening_events
+                WHERE timestamp >= :startOfDayMs
+                    AND (volume_level IS NULL OR volume_level > 0)
+        """)
     suspend fun getTodayPlayCount(startOfDayMs: Long): Int
     
     @Query("""
@@ -190,26 +195,63 @@ interface GamificationDao {
         FROM listening_events le 
         JOIN tracks t ON le.track_id = t.id
         WHERE le.timestamp >= :startOfDayMs
+          AND (le.volume_level IS NULL OR le.volume_level > 0)
     """)
     suspend fun getTodayUniqueArtists(startOfDayMs: Long): Int
     
-    @Query("SELECT COALESCE(SUM(playDuration), 0) FROM listening_events WHERE timestamp >= :startOfDayMs")
+    @Query("""
+        SELECT COALESCE(SUM(playDuration), 0) FROM listening_events
+        WHERE timestamp >= :startOfDayMs
+          AND (volume_level IS NULL OR volume_level > 0)
+    """)
     suspend fun getTodayListeningTimeMs(startOfDayMs: Long): Long
     
+    /**
+     * Count distinct individual genres today.
+     * Genres are stored as '|||'-delimited strings (e.g. "rock|||pop|||indie").
+     * This extracts the primary genre (first segment) for each track and counts distinct values,
+     * giving a meaningful "different genres heard" count rather than counting full combo strings.
+     */
     @Query("""
-        SELECT COUNT(DISTINCT em.genres) 
-        FROM listening_events le 
+        SELECT COUNT(DISTINCT LOWER(TRIM(
+            CASE WHEN instr(em.genres, '|||') > 0
+                 THEN substr(em.genres, 1, instr(em.genres, '|||') - 1)
+                 ELSE em.genres
+            END)))
+        FROM listening_events le
         JOIN tracks t ON le.track_id = t.id
         LEFT JOIN enriched_metadata em ON em.track_id = t.id
-        WHERE le.timestamp >= :startOfDayMs AND em.genres IS NOT NULL AND em.genres != ''
+        WHERE le.timestamp >= :startOfDayMs
+          AND (le.volume_level IS NULL OR le.volume_level > 0)
+          AND em.genres IS NOT NULL AND em.genres != ''
     """)
     suspend fun getTodayUniqueGenres(startOfDayMs: Long): Int
+
+    /**
+     * Count artists heard today for the first time ever (never heard before today).
+     * Used by the "Talent Scout" / discovery_artists challenge.
+     */
+    @Query("""
+        SELECT COUNT(DISTINCT t.artist)
+        FROM listening_events le
+        JOIN tracks t ON le.track_id = t.id
+        WHERE le.timestamp >= :startOfDayMs
+          AND (le.volume_level IS NULL OR le.volume_level > 0)
+          AND t.artist NOT IN (
+              SELECT DISTINCT t2.artist
+              FROM listening_events le2
+              JOIN tracks t2 ON le2.track_id = t2.id
+              WHERE le2.timestamp < :startOfDayMs
+          )
+    """)
+    suspend fun getTodayNewArtists(startOfDayMs: Long): Int
     
     @Query("""
         SELECT COUNT(*) 
         FROM listening_events le 
         JOIN tracks t ON le.track_id = t.id 
         WHERE le.timestamp >= :startOfDayMs 
+        AND (le.volume_level IS NULL OR le.volume_level > 0)
         AND LOWER(TRIM(t.artist)) = LOWER(TRIM(:artistName))
     """)
     suspend fun getTodayPlayCountForArtist(startOfDayMs: Long, artistName: String): Int
@@ -220,6 +262,7 @@ interface GamificationDao {
         JOIN tracks t ON le.track_id = t.id 
         LEFT JOIN enriched_metadata em ON em.track_id = t.id
         WHERE le.timestamp >= :startOfDayMs 
+        AND (le.volume_level IS NULL OR le.volume_level > 0)
         AND LOWER(em.genres) LIKE '%' || LOWER(:genre) || '%'
     """)
     suspend fun getTodayPlayCountForGenre(startOfDayMs: Long, genre: String): Int
@@ -228,6 +271,7 @@ interface GamificationDao {
     @Query("""
         SELECT COUNT(*) FROM listening_events 
         WHERE timestamp >= :startOfDayMs
+        AND (volume_level IS NULL OR volume_level > 0)
         AND CAST(strftime('%H', timestamp / 1000, 'unixepoch', 'localtime') AS INTEGER) >= :startHour 
         AND CAST(strftime('%H', timestamp / 1000, 'unixepoch', 'localtime') AS INTEGER) < :endHour
     """)

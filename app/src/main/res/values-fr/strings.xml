@@ -530,6 +530,46 @@
     <string name="settings_disconnect">Déconnecter</string>
     <string name="settings_import_success">%1$d enregistrements et %2$d images traités avec succès</string>
 
+    <!-- Synchronisation bureau -->
+    <string name="desktop_link_section_header">Synchronisation bureau</string>
+    <string name="desktop_link_settings_title">Synchroniser avec l\'ordinateur</string>
+    <string name="desktop_link_settings_subtitle">Suivez et synchronisez l\'écoute de votre Mac ou PC via le Wi-Fi local</string>
+    <string name="desktop_link_title">Synchroniser avec l\'ordinateur</string>
+    <string name="desktop_link_description">Connectez l\'application Tempo Desktop pour synchroniser l\'historique d\'écoute de votre Mac ou PC vers ce téléphone via le Wi-Fi local. Ouvrez l\'application desktop, puis scannez le QR code pour commencer.</string>
+    <string name="desktop_receiver_running">Prêt à synchroniser sur le port %1$d</string>
+    <string name="desktop_receiver_stopped">Le récepteur de synchronisation est arrêté</string>
+    <string name="desktop_scan_qr_title">Scanner le QR code de l\'application desktop</string>
+    <string name="desktop_scan_qr_subtitle">Ouvrez Tempo Desktop sur votre Mac ou PC, puis scannez le QR code affiché</string>
+    <string name="desktop_scan_button">Scanner le QR code</string>
+    <string name="desktop_scan_instruction">Pointez la caméra vers le QR code affiché dans Tempo Desktop</string>
+    <string name="desktop_cancel_scan">Annuler</string>
+    <string name="desktop_connected_to">Ordinateur connecté</string>
+    <string name="desktop_phone_address">Adresse de synchronisation du téléphone</string>
+    <string name="desktop_device_name">Appareil</string>
+    <string name="desktop_disconnect">Déconnecter</string>
+    <string name="desktop_manual_entry">Saisir les informations manuellement</string>
+    <string name="desktop_ip_hint">Adresse IP de l\'ordinateur (ex. 192.168.1.10)</string>
+    <string name="desktop_port_hint">Port (par défaut : 8765)</string>
+    <string name="desktop_token_hint">Jeton de connexion (depuis l\'application desktop)</string>
+    <string name="desktop_connect">Connecter</string>
+    <string name="desktop_auth_token">Jeton</string>
+    <string name="desktop_copy_code">Copier le jeton</string>
+    <string name="desktop_last_sync">Dernière synchronisation</string>
+    <string name="desktop_stats_title">Stats de synchronisation desktop</string>
+    <string name="desktop_stats_total_scrobbles">Scrobbles au total</string>
+    <string name="desktop_stats_listening_time">Temps d\'écoute</string>
+    <string name="desktop_stats_7day_scrobbles">7 derniers jours</string>
+    <string name="desktop_stats_7day_time">Temps sur 7 jours</string>
+    <string name="desktop_stats_top_listened">Les plus écoutés sur desktop</string>
+    <string name="desktop_stats_top_artist">Artiste principal</string>
+    <string name="desktop_stats_top_track">Titre principal</string>
+    <string name="desktop_stats_sources">Applications source</string>
+    <string name="desktop_download_app">Télécharger l\'app desktop</string>
+    <string name="desktop_download_app_desc">Obtenir Tempo pour Mac et PC</string>
+    <string name="settings_desktop_battery_critical">Batterie critique (%1$d%%) - La synchronisation desktop est en pause pour économiser la batterie. Rechargez votre téléphone pour continuer.</string>
+    <string name="settings_desktop_battery_low">Batterie faible (%1$d%%) - Pensez à recharger avant de synchroniser avec le desktop.</string>
+    <string name="settings_desktop_battery_healthy">Batterie correcte (%1$d%%) - La synchronisation desktop est disponible.</string>
+
     <!-- Spotlight story slide labels (Wrapped / Year in Review type) -->
     <string name="spotlight_this_year_title">Votre %1$d en vedette</string>
     <string name="spotlight_this_month_title">Ce mois-ci</string>

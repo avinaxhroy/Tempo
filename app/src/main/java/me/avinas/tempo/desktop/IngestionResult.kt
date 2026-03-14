@@ -1,6 +1,6 @@
 package me.avinas.tempo.desktop
 
-/** Result of a desktop scrobble ingestion attempt. */
+/** Result of a desktop play ingestion attempt. */
 sealed class IngestionResult {
     /** Payload was valid; [accepted] events inserted, [duplicates] skipped. */
     data class Success(val accepted: Int, val duplicates: Int) : IngestionResult()

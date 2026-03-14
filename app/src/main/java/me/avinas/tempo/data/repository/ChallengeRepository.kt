@@ -125,11 +125,12 @@ class ChallengeRepository @Inject constructor(
                     } else 0
                 }
                 ChallengeEngine.Category.DISCOVERY -> {
-                    // Discovery tracks unique genres/artists overall, but simpler to just use daily uniques for now
+                    // Discovery requires artists/genres the user has NEVER heard before today
                     if (challenge.challengeId.startsWith("discovery_genres")) {
                         gamificationDao.getTodayUniqueGenres(startOfDayMs)
                     } else {
-                        gamificationDao.getTodayUniqueArtists(startOfDayMs)
+                        // discovery_artists: count only artists heard for the first time ever today
+                        gamificationDao.getTodayNewArtists(startOfDayMs)
                     }
                 }
                 else -> 0

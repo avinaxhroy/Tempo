@@ -62,7 +62,6 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
-    var isRefreshing by remember { mutableStateOf(false) }
     var isLaunchingReview by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
@@ -90,12 +89,10 @@ fun HomeScreen(
     DeepOceanBackground {
         Box(modifier = Modifier.fillMaxSize()) {
             PullToRefreshBox(
-                isRefreshing = isRefreshing,
+                isRefreshing = uiState.isRefreshing,
                 onRefresh = {
                     scope.launch {
-                        isRefreshing = true
                         viewModel.refresh()
-                        isRefreshing = false
                     }
                 },
                 modifier = Modifier.fillMaxSize()

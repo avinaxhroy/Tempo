@@ -530,6 +530,46 @@
     <string name="settings_disconnect">Lecsatlakozás</string>
     <string name="settings_import_success">Sikeres Importálás</string>
 
+    <!-- Asztali szinkron -->
+    <string name="desktop_link_section_header">Asztali szinkron</string>
+    <string name="desktop_link_settings_title">Szinkronizálás asztali géppel</string>
+    <string name="desktop_link_settings_subtitle">Kövesd és szinkronizáld a Mac vagy PC zenehallgatását helyi Wi-Fi-n</string>
+    <string name="desktop_link_title">Szinkronizálás asztali géppel</string>
+    <string name="desktop_link_description">Csatlakoztasd a Tempo Desktop alkalmazást, hogy a Mac vagy PC hallgatási előzményeit helyi Wi-Fi-n erre a telefonra szinkronizáld. Nyisd meg az asztali appot, majd olvasd be a QR-kódot az indításhoz.</string>
+    <string name="desktop_receiver_running">Szinkronizálásra kész a(z) %1$d porton</string>
+    <string name="desktop_receiver_stopped">A szinkronfogadó ki van kapcsolva</string>
+    <string name="desktop_scan_qr_title">QR-kód beolvasása az asztali appból</string>
+    <string name="desktop_scan_qr_subtitle">Nyisd meg a Tempo Desktopot Macen vagy PC-n, majd olvasd be az ott megjelenő QR-kódot</string>
+    <string name="desktop_scan_button">QR-kód beolvasása</string>
+    <string name="desktop_scan_instruction">Irányítsd a kamerát a Tempo Desktop appban látható QR-kódra</string>
+    <string name="desktop_cancel_scan">Mégse</string>
+    <string name="desktop_connected_to">Csatlakoztatott asztali gép</string>
+    <string name="desktop_phone_address">Telefon szinkroncíme</string>
+    <string name="desktop_device_name">Eszköz</string>
+    <string name="desktop_disconnect">Lecsatlakozás</string>
+    <string name="desktop_manual_entry">Adatok megadása kézzel</string>
+    <string name="desktop_ip_hint">Asztali IP-cím (pl. 192.168.1.10)</string>
+    <string name="desktop_port_hint">Port (alapértelmezett: 8765)</string>
+    <string name="desktop_token_hint">Kapcsolati token (az asztali appból)</string>
+    <string name="desktop_connect">Csatlakozás</string>
+    <string name="desktop_auth_token">Token</string>
+    <string name="desktop_copy_code">Token másolása</string>
+    <string name="desktop_last_sync">Utolsó szinkron</string>
+    <string name="desktop_stats_title">Asztali szinkron statisztikák</string>
+    <string name="desktop_stats_total_scrobbles">Összes lejátszás</string>
+    <string name="desktop_stats_listening_time">Hallgatási idő</string>
+    <string name="desktop_stats_7day_scrobbles">Elmúlt 7 nap</string>
+    <string name="desktop_stats_7day_time">7 napos idő</string>
+    <string name="desktop_stats_top_listened">Legtöbbet hallgatott asztalin</string>
+    <string name="desktop_stats_top_artist">Top előadó</string>
+    <string name="desktop_stats_top_track">Top dal</string>
+    <string name="desktop_stats_sources">Forrásalkalmazások</string>
+    <string name="desktop_download_app">Desktop App letöltése</string>
+    <string name="desktop_download_app_desc">Tempo letöltése Macre és PC-re</string>
+    <string name="settings_desktop_battery_critical">Kritikus akkumulátor (%1$d%%) - Az asztali szinkron energiatakarékosság miatt szünetel. A folytatáshoz töltsd fel a telefonod.</string>
+    <string name="settings_desktop_battery_low">Alacsony akkumulátor (%1$d%%) - Asztali szinkron előtt érdemes feltölteni a telefont.</string>
+    <string name="settings_desktop_battery_healthy">Az akkumulátor rendben van (%1$d%%) - Az asztali szinkron elérhető.</string>
+
     <!-- Welcome to Tempo / Onboarding Final -->
     <string name="welcome_ready">Minden Készen Áll!</string>
     <string name="welcome_go">Gyerünk</string>

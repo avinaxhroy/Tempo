@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
@@ -93,6 +94,7 @@ fun HistoryScreen(
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     
     // Show feedback snackbar when message is set
     LaunchedEffect(uiState.feedbackMessage) {
@@ -154,6 +156,15 @@ fun HistoryScreen(
 
     DeepOceanBackground {
         Box(modifier = Modifier.fillMaxSize()) {
+            PullToRefreshBox(
+                isRefreshing = uiState.isRefreshing,
+                onRefresh = {
+                    scope.launch {
+                        viewModel.refresh()
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            ) {
             // List Content
             HistoryListContent(
                 // Recent Activity section
@@ -207,6 +218,7 @@ fun HistoryScreen(
                     CircularProgressIndicator(color = TempoRed)
                 }
             }
+            } // end PullToRefreshBox
 
             // Search & Filter Header (Overlay)
             Box(

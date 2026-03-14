@@ -4,9 +4,12 @@ import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +27,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -40,6 +44,7 @@ import me.avinas.tempo.R
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.GlassCardVariant
+import me.avinas.tempo.ui.theme.TempoDarkSurface
 import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.ui.theme.TempoPrimary
 import java.text.SimpleDateFormat
@@ -109,10 +114,34 @@ fun DesktopLinkScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                DesktopSyncHeroCard(uiState = uiState)
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 when (uiState.phase) {
                     PairingPhase.CHECKING -> {
-                        Spacer(modifier = Modifier.height(64.dp))
-                        CircularProgressIndicator(color = TempoPrimary)
+                        GlassCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(20.dp),
+                            variant = GlassCardVariant.LowProminence
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    color = TempoPrimary,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Text(
+                                    text = stringResource(R.string.ui_loading),
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
                     }
 
                     PairingPhase.UNPAIRED -> {
@@ -137,7 +166,7 @@ fun DesktopLinkScreen(
                         )
                         // Desktop stats below the paired content
                         uiState.desktopStats?.let { stats ->
-                            if (stats.totalScrobbles > 0) {
+                            if (stats.totalPlays > 0) {
                                 DesktopStatsSection(stats = stats)
                             }
                         }
@@ -157,8 +186,156 @@ fun DesktopLinkScreen(
                     )
                 }
 
+                if (uiState.phase == PairingPhase.UNPAIRED || uiState.phase == PairingPhase.PAIRED) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    DesktopAppDownloadButton(context = context)
+                }
+
                 Spacer(modifier = Modifier.height(32.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun DesktopSyncHeroCard(uiState: DesktopLinkUiState) {
+    val isConnected = uiState.phase == PairingPhase.PAIRED
+    val statusColor = when {
+        uiState.isBatteryCritical -> TempoRed
+        isConnected && uiState.isServerRunning -> Color(0xFF4ADE80)
+        isConnected -> Color(0xFFFBBF24)
+        else -> TempoPrimary
+    }
+
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(0.dp),
+        variant = GlassCardVariant.HighProminence
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            TempoPrimary.copy(alpha = 0.22f),
+                            TempoDarkSurface.copy(alpha = 0.6f)
+                        )
+                    )
+                )
+                .padding(16.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Sync,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.desktop_link_title),
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    StatusPill(
+                        text = if (uiState.isBatteryCritical) "Battery Low" else if (isConnected) "Paired" else "Ready",
+                        color = statusColor
+                    )
+                }
+
+                Text(
+                    text = stringResource(R.string.desktop_link_description),
+                    color = Color.White.copy(alpha = 0.75f),
+                    style = MaterialTheme.typography.bodySmall,
+                    lineHeight = 18.sp
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MiniInfoTile(
+                        modifier = Modifier.weight(1f),
+                        icon = Icons.Filled.Wifi,
+                        title = stringResource(R.string.desktop_phone_address),
+                        subtitle = if (uiState.phoneIp.isNotBlank()) "${uiState.phoneIp}:${uiState.phonePort}" else "-"
+                    )
+                    MiniInfoTile(
+                        modifier = Modifier.weight(1f),
+                        icon = if (uiState.isServerRunning) Icons.Filled.CheckCircle else Icons.Filled.PauseCircle,
+                        title = stringResource(R.string.desktop_receiver_running, uiState.phonePort),
+                        subtitle = if (uiState.isServerRunning) "Listening" else "Offline"
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusPill(
+    text: String,
+    color: Color
+) {
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(color.copy(alpha = 0.18f))
+            .border(1.dp, color.copy(alpha = 0.45f), CircleShape)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(
+            text = text,
+            color = color,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+private fun MiniInfoTile(
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.06f))
+            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+            .padding(10.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(icon, contentDescription = null, tint = TempoPrimary, modifier = Modifier.size(14.dp))
+            Text(
+                text = title,
+                color = Color.White.copy(alpha = 0.55f),
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                color = Color.White,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -231,49 +408,17 @@ private fun UnpairedContent(
     onScanClick: () -> Unit,
     onManualConnect: (ip: String, port: String, token: String) -> Unit
 ) {
-    // Info card
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(16.dp),
-        variant = GlassCardVariant.LowProminence
-    ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.Computer,
-                    contentDescription = null,
-                    tint = TempoPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = stringResource(R.string.desktop_link_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.desktop_link_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.7f),
-                lineHeight = 18.sp
-            )
-        }
-    }
-
-    Spacer(modifier = Modifier.height(20.dp))
-
     // Scan button card
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(20.dp),
+        contentPadding = PaddingValues(18.dp),
         variant = GlassCardVariant.LowProminence
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize()
         ) {
             Icon(
                 Icons.Filled.QrCodeScanner,
@@ -300,7 +445,8 @@ private fun UnpairedContent(
             Button(
                 onClick = onScanClick,
                 colors = ButtonDefaults.buttonColors(containerColor = TempoPrimary),
-                modifier = Modifier.fillMaxWidth(0.75f)
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(
                     Icons.Filled.QrCodeScanner,
@@ -333,7 +479,7 @@ private fun ManualEntrySection(
         contentPadding = PaddingValues(16.dp),
         variant = GlassCardVariant.LowProminence
     ) {
-        Column {
+        Column(modifier = Modifier.animateContentSize()) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -459,12 +605,22 @@ private fun PairedContent(
         variant = GlassCardVariant.LowProminence
     ) {
         Column {
-            Text(
-                text = stringResource(R.string.desktop_auth_token),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = stringResource(R.string.desktop_auth_token),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+                StatusPill(
+                    text = if (uiState.isServerRunning) "Listening" else "Paused",
+                    color = if (uiState.isServerRunning) Color(0xFF4ADE80) else Color(0xFFFBBF24)
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = session.authToken,
@@ -559,7 +715,7 @@ private fun DesktopStatsSection(stats: DesktopStats) {
     ) {
         DesktopStatCard(
             label = stringResource(R.string.desktop_stats_total_scrobbles),
-            value = stats.totalScrobbles.toString(),
+            value = stats.totalPlays.toString(),
             icon = Icons.Filled.MusicNote,
             modifier = Modifier.weight(1f)
         )
@@ -580,7 +736,7 @@ private fun DesktopStatsSection(stats: DesktopStats) {
     ) {
         DesktopStatCard(
             label = stringResource(R.string.desktop_stats_7day_scrobbles),
-            value = stats.last7DaysScrobbles.toString(),
+            value = stats.last7DaysPlays.toString(),
             icon = Icons.Filled.DateRange,
             modifier = Modifier.weight(1f)
         )
@@ -717,7 +873,7 @@ private fun DesktopStatCard(
 ) {
     GlassCard(
         modifier = modifier,
-        contentPadding = PaddingValues(12.dp),
+        contentPadding = PaddingValues(14.dp),
         variant = GlassCardVariant.LowProminence
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -752,6 +908,45 @@ private fun formatListeningTime(ms: Long): String {
     val hours = totalMinutes / 60
     val minutes = totalMinutes % 60
     return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Download Desktop App button
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun DesktopAppDownloadButton(context: Context) {
+    OutlinedButton(
+        onClick = {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("http://tempo.avinas.me/desktop"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        },
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = TempoPrimary),
+        border = BorderStroke(1.dp, TempoPrimary.copy(alpha = 0.6f)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Icon(
+            Icons.Filled.Download,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(
+                text = stringResource(R.string.desktop_download_app),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = stringResource(R.string.desktop_download_app_desc),
+                style = MaterialTheme.typography.labelSmall,
+                color = TempoPrimary.copy(alpha = 0.75f)
+            )
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -530,6 +530,46 @@
     <string name="settings_disconnect">Trennen</string>
     <string name="settings_import_success">Erfolgreich %1$d Einträge und %2$d Bilder verarbeitet</string>
 
+    <!-- Desktop-Synchronisierung -->
+    <string name="desktop_link_section_header">Desktop-Sync</string>
+    <string name="desktop_link_settings_title">Mit Desktop synchronisieren</string>
+    <string name="desktop_link_settings_subtitle">Musikhören von deinem Mac oder PC im lokalen WLAN erfassen und synchronisieren</string>
+    <string name="desktop_link_title">Mit Desktop synchronisieren</string>
+    <string name="desktop_link_description">Verbinde die Tempo-Desktop-App, um den Hörverlauf von deinem Mac oder PC über lokales WLAN mit diesem Smartphone zu synchronisieren. Öffne die Desktop-App und scanne den QR-Code, um zu starten.</string>
+    <string name="desktop_receiver_running">Bereit zur Synchronisierung auf Port %1$d</string>
+    <string name="desktop_receiver_stopped">Sync-Empfänger ist aus</string>
+    <string name="desktop_scan_qr_title">QR-Code aus der Desktop-App scannen</string>
+    <string name="desktop_scan_qr_subtitle">Öffne Tempo Desktop auf deinem Mac oder PC und scanne dann den dort angezeigten QR-Code</string>
+    <string name="desktop_scan_button">QR-Code scannen</string>
+    <string name="desktop_scan_instruction">Richte die Kamera auf den QR-Code in der Tempo-Desktop-App</string>
+    <string name="desktop_cancel_scan">Abbrechen</string>
+    <string name="desktop_connected_to">Gekoppelter Desktop</string>
+    <string name="desktop_phone_address">Telefon-Sync-Adresse</string>
+    <string name="desktop_device_name">Gerät</string>
+    <string name="desktop_disconnect">Trennen</string>
+    <string name="desktop_manual_entry">Details manuell eingeben</string>
+    <string name="desktop_ip_hint">Desktop-IP-Adresse (z. B. 192.168.1.10)</string>
+    <string name="desktop_port_hint">Port (Standard: 8765)</string>
+    <string name="desktop_token_hint">Verbindungstoken (aus der Desktop-App)</string>
+    <string name="desktop_connect">Verbinden</string>
+    <string name="desktop_auth_token">Token</string>
+    <string name="desktop_copy_code">Token kopieren</string>
+    <string name="desktop_last_sync">Letzte Synchronisierung</string>
+    <string name="desktop_stats_title">Desktop-Sync-Statistiken</string>
+    <string name="desktop_stats_total_scrobbles">Scrobbles gesamt</string>
+    <string name="desktop_stats_listening_time">Hörzeit</string>
+    <string name="desktop_stats_7day_scrobbles">Letzte 7 Tage</string>
+    <string name="desktop_stats_7day_time">7-Tage-Zeit</string>
+    <string name="desktop_stats_top_listened">Meistgehört auf Desktop</string>
+    <string name="desktop_stats_top_artist">Top-Künstler</string>
+    <string name="desktop_stats_top_track">Top-Titel</string>
+    <string name="desktop_stats_sources">Quell-Apps</string>
+    <string name="desktop_download_app">Desktop-App herunterladen</string>
+    <string name="desktop_download_app_desc">Tempo für Mac &amp; PC holen</string>
+    <string name="settings_desktop_battery_critical">Akku kritisch (%1$d%%) - Desktop-Sync ist zum Energiesparen pausiert. Lade dein Smartphone, um fortzufahren.</string>
+    <string name="settings_desktop_battery_low">Akku niedrig (%1$d%%) - Lade dein Smartphone vor der Desktop-Synchronisierung am besten auf.</string>
+    <string name="settings_desktop_battery_healthy">Akku in Ordnung (%1$d%%) - Desktop-Sync ist verfügbar.</string>
+
     <!-- Spotlight story slide labels (Wrapped / Year in Review type) -->
     <string name="spotlight_this_year_title">Dein %1$d Spotlight</string>
     <string name="spotlight_this_month_title">Diesen Monat</string>

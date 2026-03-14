@@ -266,7 +266,7 @@ object ChallengeEngine {
             challengeId = "time_early_bird",
             date = date,
             title = "🌅 Early Bird",
-            description = "Listen to 5 songs before 9 AM.",
+            description = "Listen to 5 songs between 5 AM and 9 AM.",
             xpReward = getReward(Difficulty.MEDIUM),
             targetValue = 5,
             category = Category.TIME,

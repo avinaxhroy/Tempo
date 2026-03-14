@@ -4,6 +4,7 @@ import me.avinas.tempo.ui.details.formatListeningTime
 import me.avinas.tempo.ui.theme.TempoDarkBackground
 import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.ui.theme.innerShadow
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Brush
 
 import androidx.compose.animation.animateColorAsState
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +66,7 @@ fun StatsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     val walkthroughController = me.avinas.tempo.ui.components.LocalWalkthroughController.current
 
     // Pagination Logic - simplified for better scroll performance
@@ -88,6 +91,15 @@ fun StatsScreen(
 
     DeepOceanBackground {
         Box(modifier = Modifier.fillMaxSize()) {
+            PullToRefreshBox(
+                isRefreshing = uiState.isRefreshing,
+                onRefresh = {
+                    scope.launch {
+                        viewModel.refresh()
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            ) {
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(top = 100.dp, bottom = 200.dp),
@@ -214,7 +226,8 @@ fun StatsScreen(
                         }
                     }
                 }
-            }
+                }
+            } // end PullToRefreshBox
 
             // Top Bar
             val isScrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0

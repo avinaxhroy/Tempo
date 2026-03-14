@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.avinas.tempo.data.lastfm.LastFmImportService
+import me.avinas.tempo.data.local.dao.LastFmImportMetadataDao
 import me.avinas.tempo.data.local.dao.UserPreferencesDao
 import me.avinas.tempo.data.local.entities.UserPreferences
 import me.avinas.tempo.worker.LastFmImportWorker
@@ -23,7 +24,8 @@ import javax.inject.Inject
 class LastFmViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val lastFmImportService: LastFmImportService,
-    private val userPreferencesDao: UserPreferencesDao
+    private val userPreferencesDao: UserPreferencesDao,
+    private val importMetadataDao: LastFmImportMetadataDao
 ) : ViewModel() {
 
     companion object {
@@ -47,10 +49,22 @@ class LastFmViewModel @Inject constructor(
     private fun loadConnectionState() {
         viewModelScope.launch {
             val prefs = userPreferencesDao.getSync() ?: UserPreferences()
+            // Load last sync time from import metadata so it survives app restarts
+            val lastSyncDisplay = if (prefs.lastfmConnected) {
+                importMetadataDao.getLatestCompleted()?.let { meta ->
+                    val syncedAt = meta.lastSyncTimestamp ?: meta.importCompletedAt
+                    if (syncedAt != null) {
+                        val date = java.util.Date(syncedAt)
+                        val fmt = java.text.SimpleDateFormat("MMM d, yyyy 'at' h:mm a", java.util.Locale.getDefault())
+                        "Last synced ${fmt.format(date)}"
+                    } else null
+                }
+            } else null
             _uiState.value = _uiState.value.copy(
                 isConnected = prefs.lastfmConnected,
                 username = prefs.lastfmUsername,
-                syncFrequency = prefs.lastfmSyncFrequency ?: "NONE"
+                syncFrequency = prefs.lastfmSyncFrequency ?: "NONE",
+                lastSyncResult = lastSyncDisplay
             )
         }
     }
@@ -209,9 +223,12 @@ class LastFmViewModel @Inject constructor(
 
             result.fold(
                 onSuccess = { count ->
+                    val now = java.util.Date()
+                    val fmt = java.text.SimpleDateFormat("MMM d, yyyy 'at' h:mm a", java.util.Locale.getDefault())
                     _uiState.value = _uiState.value.copy(
                         isSyncing = false,
-                        lastSyncResult = "Synced $count new scrobbles"
+                        lastSyncResult = if (count > 0) "Synced $count new scrobbles — ${fmt.format(now)}"
+                                         else "Up to date as of ${fmt.format(now)}"
                     )
                 },
                 onFailure = { error ->

@@ -17,17 +17,21 @@ import me.avinas.tempo.data.stats.InsightType
 import me.avinas.tempo.data.stats.InsightPayload
 import me.avinas.tempo.ui.onboarding.dataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.FlowPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+@OptIn(FlowPreview::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -35,7 +39,8 @@ class HomeViewModel @Inject constructor(
     private val tokenStorage: me.avinas.tempo.data.remote.spotify.SpotifyTokenStorage,
     private val preferencesRepository: me.avinas.tempo.data.repository.PreferencesRepository,
     private val listeningEventDao: ListeningEventDao,
-    val gamificationRepository: me.avinas.tempo.data.repository.GamificationRepository
+    val gamificationRepository: me.avinas.tempo.data.repository.GamificationRepository,
+    private val refreshCoordinator: me.avinas.tempo.data.repository.RefreshCoordinator
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -65,6 +70,15 @@ class HomeViewModel @Inject constructor(
                     loadData()
                 }
         }
+        
+        // Listen for new track events from MusicTrackingService
+        viewModelScope.launch {
+            refreshCoordinator.refreshEvents
+                .debounce(2_000) // Wait 2s to avoid excessive refreshes
+                .collect {
+                    loadData()
+                }
+        }
     }
 
     fun onTimeRangeSelected(timeRange: TimeRange) {
@@ -73,8 +87,16 @@ class HomeViewModel @Inject constructor(
     }
 
     suspend fun refresh() {
-        _uiState.update { it.copy(isLoading = true) }
-        fetchData()
+        val startTime = System.currentTimeMillis()
+        _uiState.update { it.copy(isRefreshing = true, isLoading = true) }
+        try {
+            fetchData()
+        } finally {
+            // Ensure spinner shows for at least 600ms so it doesn't flash away
+            val elapsed = System.currentTimeMillis() - startTime
+            if (elapsed < 600) delay(600 - elapsed)
+            _uiState.update { it.copy(isRefreshing = false) }
+        }
     }
 
     private fun loadData() {
@@ -546,6 +568,7 @@ class HomeViewModel @Inject constructor(
 @Immutable
 data class HomeUiState(
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val error: String? = null,
     val selectedTimeRange: TimeRange = TimeRange.THIS_WEEK,
     val hasData: Boolean = false,

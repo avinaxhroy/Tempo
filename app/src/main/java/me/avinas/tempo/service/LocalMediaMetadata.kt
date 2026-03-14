@@ -164,12 +164,15 @@ data class LocalMediaMetadata(
         if (lowerGenre == "podcast" || 
             lowerGenre == "podcasts" ||
             lowerGenre == "talk" ||
-            lowerGenre == "speech") {
+            lowerGenre == "speech" ||
+            lowerGenre == "news" ||
+            lowerGenre == "news & politics" ||
+            lowerGenre == "talk radio") {
             return true
         }
         
-        // Genre contains podcast but not music-related
-        if (lowerGenre.contains("podcast") && 
+        // Genre contains podcast/news but not music-related
+        if ((lowerGenre.contains("podcast") || lowerGenre.contains("news")) && 
             !lowerGenre.contains("music") &&
             !lowerGenre.contains("rock") &&
             !lowerGenre.contains("pop")) {

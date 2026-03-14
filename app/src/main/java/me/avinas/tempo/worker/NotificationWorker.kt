@@ -29,8 +29,15 @@ class NotificationWorker @AssistedInject constructor(
         private const val TAG = "NotificationWorker"
         private const val DAILY_WORK_NAME = "daily_notification_work"
         private const val WEEKLY_WORK_NAME = "weekly_notification_work"
+        private const val CHALLENGE_WORK_NAME = "challenge_notification_work"
+
+        // Channel for daily summary / weekly recap notifications
         private const val CHANNEL_ID = "tempo_updates"
         private const val NOTIFICATION_ID = 3004
+
+        // Separate channel for challenge notifications (ensures correct category/sound in system settings)
+        private const val CHALLENGE_CHANNEL_ID = "tempo_challenges"
+        private const val CHALLENGE_NOTIFICATION_ID = 3006
 
         fun scheduleDaily(context: Context) {
             val now = Calendar.getInstance()
@@ -85,12 +92,44 @@ class NotificationWorker @AssistedInject constructor(
             )
         }
 
+        fun scheduleChallengeReady(context: Context, targetHour: Int) {
+            val now = Calendar.getInstance()
+            val target = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, targetHour)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+            }
+
+            // If the target time has already passed today, schedule it for right away
+            // (e.g. they open the app at 11 AM, target is 10 AM -> just send it now)
+            val initialDelay = if (target.before(now)) {
+                0L
+            } else {
+                target.timeInMillis - now.timeInMillis
+            }
+
+            val request = OneTimeWorkRequestBuilder<NotificationWorker>()
+                .setInitialDelay(initialDelay, TimeUnit.MILLISECONDS)
+                .addTag("challenge")
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                CHALLENGE_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                request
+            )
+        }
+
         fun cancelDaily(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(DAILY_WORK_NAME)
         }
 
         fun cancelWeekly(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(WEEKLY_WORK_NAME)
+        }
+
+        fun cancelChallengeReady(context: Context) {
+            WorkManager.getInstance(context).cancelUniqueWork(CHALLENGE_WORK_NAME)
         }
     }
 
@@ -99,11 +138,14 @@ class NotificationWorker @AssistedInject constructor(
 
         val isDaily = tags.contains("daily")
         val isWeekly = tags.contains("weekly")
+        val isChallenge = tags.contains("challenge")
 
         if (isDaily) {
             sendDailySummary()
         } else if (isWeekly) {
             sendWeeklyRecap()
+        } else if (isChallenge) {
+            sendChallengeReadyNotification()
         }
 
         return Result.success()
@@ -141,6 +183,51 @@ class NotificationWorker @AssistedInject constructor(
             title = "Weekly Recap 📅",
             text = "Your top artist this week was ${topArtist.artist}!"
         )
+    }
+
+    private fun sendChallengeReadyNotification() {
+        // Ensure the challenge-specific channel is created
+        createChallengeNotificationChannel()
+
+        // Create an intent that opens the app directly to the challenges tab
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?.apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("navigate_to", "profile_challenges")
+            }
+        val pendingIntent = if (launchIntent != null) {
+            android.app.PendingIntent.getActivity(
+                context, 0, launchIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+        } else null
+
+        // Use CHALLENGE_CHANNEL_ID ("tempo_challenges") — NOT the generic "tempo_updates" channel
+        val notification = NotificationCompat.Builder(context, CHALLENGE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("New Daily Challenges! 🎯")
+            .setContentText("Your personalized challenges are ready for today. Earn bonus XP!")
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .apply { if (pendingIntent != null) setContentIntent(pendingIntent) }
+            .build()
+
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(CHALLENGE_NOTIFICATION_ID, notification)
+    }
+
+    private fun createChallengeNotificationChannel() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHALLENGE_CHANNEL_ID,
+                "Daily Challenges",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Notifications when your new daily challenges are ready"
+            }
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
     }
 
     private fun showNotification(title: String, text: String) {

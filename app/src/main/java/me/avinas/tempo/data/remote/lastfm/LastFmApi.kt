@@ -44,7 +44,7 @@ interface LastFmApi {
         @Query("api_key") apiKey: String,
         @Query("format") format: String = "json",
         @Query("autocorrect") autocorrect: Int = 1
-    ): Response<LastFmTrackResponse>
+    ): Response<LastFmScrobbleResponse>
 
     /**
      * Get artist info including tags/genres.

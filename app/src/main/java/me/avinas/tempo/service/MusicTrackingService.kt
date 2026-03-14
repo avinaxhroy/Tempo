@@ -15,6 +15,7 @@ import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Build
+import android.os.BatteryManager
 import android.os.IBinder
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -34,6 +35,7 @@ import me.avinas.tempo.data.repository.TrackRepository
 import me.avinas.tempo.data.repository.TrackAliasRepository
 import me.avinas.tempo.data.local.dao.UserPreferencesDao
 import me.avinas.tempo.data.local.dao.ManualContentMarkDao
+import me.avinas.tempo.data.repository.RefreshCoordinator
 import me.avinas.tempo.utils.TrackMatcher
 import me.avinas.tempo.utils.TrackCandidate
 import me.avinas.tempo.worker.EnrichmentWorker
@@ -82,6 +84,7 @@ class MusicTrackingService : NotificationListenerService() {
         fun userPreferencesDao(): UserPreferencesDao
         fun manualContentMarkDao(): ManualContentMarkDao
         fun appPreferenceDao(): me.avinas.tempo.data.local.dao.AppPreferenceDao
+        fun refreshCoordinator(): RefreshCoordinator
     }
 
     companion object {
@@ -167,6 +170,7 @@ class MusicTrackingService : NotificationListenerService() {
         // We rely on metadata detection for Spotify
         private val PODCAST_APPS = setOf(
             "com.google.android.apps.podcasts",     // Google Podcasts
+            "com.google.android.apps.magazines",    // Google News (plays news briefings via "Hey Google, Play the News")
             "fm.player",                             // Player FM
             "au.com.shiftyjelly.pocketcasts",       // Pocket Casts
             "com.bambuna.podcastaddict",            // Podcast Addict
@@ -705,6 +709,7 @@ class MusicTrackingService : NotificationListenerService() {
     private lateinit var trackAliasRepository: TrackAliasRepository
     private lateinit var manualContentMarkDao: ManualContentMarkDao
     private lateinit var appPreferenceDao: me.avinas.tempo.data.local.dao.AppPreferenceDao
+    private lateinit var refreshCoordinator: RefreshCoordinator
     
     // Dynamic app lists - cached from database, refreshed periodically
     @Volatile
@@ -1249,6 +1254,7 @@ class MusicTrackingService : NotificationListenerService() {
             trackAliasRepository = entryPoint.trackAliasRepository()
             manualContentMarkDao = entryPoint.manualContentMarkDao()
             appPreferenceDao = entryPoint.appPreferenceDao()
+            refreshCoordinator = entryPoint.refreshCoordinator()
             
             // Load initial preferences for caching
             serviceScope.launch {
@@ -1794,6 +1800,16 @@ class MusicTrackingService : NotificationListenerService() {
     }
 
     private fun processNotificationPosted(sbn: StatusBarNotification) {
+        if (isBatteryLow()) {
+            Log.d(TAG, "Battery level is low (< 20%), stopping tracking from notification")
+            val session = playbackStates.remove(sbn.packageName)
+            if (session != null) {
+                session.pause()
+                saveListeningEvent(session)
+            }
+            return
+        }
+
         val packageName = sbn.packageName
         val notification = sbn.notification
         val extras = notification.extras
@@ -2713,6 +2729,9 @@ class MusicTrackingService : NotificationListenerService() {
                 
                 // Invalidate stats cache to trigger real-time updates
                 (statsRepository as? RoomStatsRepository)?.onNewListeningEvent(event.timestamp)
+                
+                // Notify active ViewModels about the new event
+                refreshCoordinator.notifyNewTrackRecorded()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to queue listening event, falling back to direct insert", e)
@@ -2720,6 +2739,7 @@ class MusicTrackingService : NotificationListenerService() {
             try {
                 listeningRepository.insert(event)
                 (statsRepository as? RoomStatsRepository)?.onNewListeningEvent(event.timestamp)
+                refreshCoordinator.notifyNewTrackRecorded()
             } catch (fallbackError: Exception) {
                 Log.e(TAG, "Direct insert also failed", fallbackError)
             }
@@ -2935,6 +2955,17 @@ class MusicTrackingService : NotificationListenerService() {
 
     private fun processMediaControllerState(controller: MediaController) {
         val packageName = controller.packageName
+        
+        if (isBatteryLow()) {
+            Log.d(TAG, "Battery level is low (< 20%), stopping tracking from MediaController")
+            val session = playbackStates.remove(packageName)
+            if (session != null) {
+                session.pause()
+                saveListeningEvent(session)
+            }
+            return
+        }
+
         val metadata = controller.metadata
         val playbackState = controller.playbackState
         
@@ -3368,10 +3399,9 @@ class MusicTrackingService : NotificationListenerService() {
                     if (secs > 0) " (${secs}s)" else ""
                 } ?: ""
                 
-                // Anti-gaming warning: check if the user is playing at 0 volume
-                val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-                val volume = audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
-                val mutedWarning = if (volume == 0) " [MUTED - No XP]" else ""
+                // Anti-gaming warning: muted playback does not earn XP.
+                val volume = getCurrentMusicStreamVolume()
+                val mutedWarning = if (volume == 0) " [Muted playback detected - XP paused]" else ""
                 
                 "🎵 $currentTrack - $currentArtist$timeInfo$mutedWarning"
             } else {
@@ -3406,9 +3436,10 @@ class MusicTrackingService : NotificationListenerService() {
 
     private fun updateTrackingNotification(currentTrack: String?, currentArtist: String?) {
         val now = System.currentTimeMillis()
+        val currentVolume = getCurrentMusicStreamVolume()
         
         // Create notification content identifier for comparison
-        val contentId = "$currentTrack|$currentArtist|${hasActivePlayback()}"
+        val contentId = "$currentTrack|$currentArtist|${hasActivePlayback()}|$currentVolume"
         
         // Debounce: skip update if content hasn't changed and updated within last 2 seconds
         // Increased from 1s to 2s to reduce notification spam during rapid MediaSession callbacks
@@ -3427,6 +3458,11 @@ class MusicTrackingService : NotificationListenerService() {
         lastNotificationContent = contentId
         
         Log.v(TAG, "Notification updated: ${if (hasActivePlayback()) "tracking" else "idle"}")
+    }
+
+    private fun getCurrentMusicStreamVolume(): Int {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        return audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
     }
 
     // =====================
@@ -3492,6 +3528,33 @@ class MusicTrackingService : NotificationListenerService() {
         super.onDestroy()
     }
     
+    @Volatile
+    private var lastBatteryCheckTime = 0L
+    @Volatile
+    private var isBatteryLowCached = false
+    private val BATTERY_CHECK_INTERVAL_MS = 2 * 60 * 1000L // 2 minutes
+
+    /**
+     * Checks if the device battery level is below 20%.
+     * Tracking is completely stopped to optimize battery.
+     * The battery level is cached for 2 minutes to minimize system calls.
+     */
+    private fun isBatteryLow(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastBatteryCheckTime > BATTERY_CHECK_INTERVAL_MS) {
+            try {
+                val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+                val batteryPct = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                isBatteryLowCached = batteryPct in 0..19
+                lastBatteryCheckTime = now
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking battery level", e)
+                return false
+            }
+        }
+        return isBatteryLowCached
+    }
+
     /**
      * Get service health information for debugging.
      */

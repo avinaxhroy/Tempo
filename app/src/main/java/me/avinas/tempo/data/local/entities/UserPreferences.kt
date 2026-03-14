@@ -89,6 +89,22 @@ data class UserPreferences(
      * Values: NONE, DAILY, WEEKLY
      * Default: NONE (manual sync only)
      */
-    val lastfmSyncFrequency: String = "NONE"
+    val lastfmSyncFrequency: String = "NONE",
+    
+    // =====================================================
+    // Smart Notification Timing
+    // =====================================================
+    
+    /**
+     * Stored smart hour for daily challenge notifications (0-23).
+     * Set by ChallengeWorker based on listening history.
+     */
+    val smartChallengeNotifHour: Int? = null,
+    
+    /**
+     * Timestamp when the smart hour was last calculated.
+     * Used to refresh the calculation periodically (e.g., every 14 days).
+     */
+    val smartChallengeNotifCalcTime: Long? = null
 )
 

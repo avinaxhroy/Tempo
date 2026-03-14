@@ -169,7 +169,11 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_33_34,   // Daily challenges gamification
                 AppDatabase.MIGRATION_34_35,    // Anti-gaming: volume_level on listening_events
                 AppDatabase.MIGRATION_35_36,    // Gamification: add is_acknowledged to badges
-                AppDatabase.MIGRATION_36_37     // Fix: add genre_source column to enriched_metadata
+                AppDatabase.MIGRATION_36_37,    // Fix: add genre_source column to enriched_metadata
+                AppDatabase.MIGRATION_37_38,    // Desktop Satellite: add desktop_pairing_sessions table
+                AppDatabase.MIGRATION_38_39,    // Desktop Satellite v2: add desktop_ip/desktop_port to pairing sessions
+                AppDatabase.MIGRATION_39_40,    // Fix: add smartChallengeNotifHour / smartChallengeNotifCalcTime to user_preferences
+                AppDatabase.MIGRATION_40_41     // Fix: non-UNIQUE indices on artists/albums, nullable tags/genres in enriched_metadata
             )
             // Enable Write-Ahead Logging for better concurrent read/write performance
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)

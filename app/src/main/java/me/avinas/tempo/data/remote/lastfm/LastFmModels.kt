@@ -15,14 +15,14 @@ import com.squareup.moshi.JsonClass
 // =====================
 
 @JsonClass(generateAdapter = true)
-data class LastFmTrackResponse(
-    val track: LastFmTrack? = null,
+data class LastFmScrobbleResponse(
+    val track: LastFmTrackInfo? = null,
     val error: Int? = null,
     val message: String? = null
 )
 
 @JsonClass(generateAdapter = true)
-data class LastFmTrack(
+data class LastFmTrackInfo(
     val name: String? = null,
     val mbid: String? = null, // MusicBrainz ID
     val url: String? = null,

@@ -554,7 +554,12 @@ class LastFmImportService @Inject constructor(
             }
             
             val username = lastImport.lastfmUsername
-            val syncCursor = lastImport.lastSyncCursor ?: (System.currentTimeMillis() / 1000)
+            // Fall back to importCompletedAt (in seconds) so we catch any scrobbles
+            // that happened after the initial import finished. Never fall back to "now"
+            // because that would fetch zero results (asking for scrobbles in the future).
+            val syncCursor = lastImport.lastSyncCursor
+                ?: lastImport.importCompletedAt?.let { it / 1000 }
+                ?: 0L
             
             Log.i(TAG, "Syncing scrobbles for $username since ${java.util.Date(syncCursor * 1000)}")
             

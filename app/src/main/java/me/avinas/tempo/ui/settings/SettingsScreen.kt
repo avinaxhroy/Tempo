@@ -37,8 +37,10 @@ import me.avinas.tempo.ui.spotify.SpotifyViewModel
 import me.avinas.tempo.ui.theme.TempoRed
 import me.avinas.tempo.utils.OemBackgroundHelper
 import me.avinas.tempo.utils.ReviewUtils
+import me.avinas.tempo.utils.BatteryUtils
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,6 +85,21 @@ fun SettingsScreen(
     val currentLocale = remember {
         val appLocales = AppCompatDelegate.getApplicationLocales()
         if (appLocales.isEmpty) "en" else appLocales.get(0)?.language ?: "en"
+    }
+    
+    // Battery status monitoring for Desktop Sync
+    var batteryLevel by remember { mutableStateOf(BatteryUtils.getBatteryLevel(context)) }
+    var isBatteryCritical by remember { mutableStateOf(BatteryUtils.isCriticalBattery(context)) }
+    var isLowBattery by remember { mutableStateOf(BatteryUtils.isLowBattery(context)) }
+    
+    // Refresh battery level every 30 seconds
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30 * 1000L)
+            batteryLevel = BatteryUtils.getBatteryLevel(context)
+            isBatteryCritical = BatteryUtils.isCriticalBattery(context)
+            isLowBattery = BatteryUtils.isLowBattery(context)
+        }
     }
     
     // Refresh autostart state when returning from BackgroundProtectionScreen
@@ -435,13 +452,61 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Desktop Satellite
+                // Desktop Sync
                 SettingsSectionHeader(stringResource(R.string.desktop_link_section_header))
                 GlassCard(
                     contentPadding = PaddingValues(0.dp),
                     variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
                 ) {
                     Column {
+                        // Battery status warning if critical or low
+                        if (isBatteryCritical) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF8B0000).copy(alpha = 0.2f))
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.settings_desktop_battery_critical, batteryLevel),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFFFF6B6B),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        } else if (isLowBattery) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFFFF8C00).copy(alpha = 0.2f))
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.settings_desktop_battery_low, batteryLevel),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFFFFA500),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF4CAF50).copy(alpha = 0.1f))
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.settings_desktop_battery_healthy, batteryLevel),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF81C784),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        }
+                        
                         SettingsOption(
                             title = stringResource(R.string.desktop_link_settings_title),
                             subtitle = stringResource(R.string.desktop_link_settings_subtitle),

@@ -32,7 +32,7 @@ import me.avinas.tempo.data.local.entities.DesktopPairingSession
         DailyChallenge::class, // Gamification: daily challenges
         DesktopPairingSession::class // Desktop Satellite pairing sessions
     ],
-    version = 39, // Desktop Satellite v2: add desktop_ip / desktop_port to pairing sessions
+    version = 41, // Fix: non-UNIQUE indices on artists/albums, nullable tags/genres in enriched_metadata
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -59,7 +59,7 @@ abstract class AppDatabase : RoomDatabase() {
         private const val TAG = "AppDatabase"
         
         /** Current Room schema version — keep in sync with the @Database(version = ...) annotation. */
-        const val VERSION = 39
+        const val VERSION = 41
         
         /**
          * Migration from version 6 to 7: Add enhanced tracking columns to listening_events.
@@ -1748,6 +1748,152 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 39 to 40: Add smart challenge notification columns to user_preferences.
+         *
+         * These two columns were added to the UserPreferences entity alongside the daily-challenges
+         * feature but a matching ALTER TABLE migration was never written, causing a schema mismatch
+         * for users upgrading from any version below 40.
+         */
+        val MIGRATION_39_40 = object : Migration(39, 40) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 39 to 40 - Adding smart challenge notification columns to user_preferences")
+                db.execSQL("ALTER TABLE user_preferences ADD COLUMN smartChallengeNotifHour INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE user_preferences ADD COLUMN smartChallengeNotifCalcTime INTEGER DEFAULT NULL")
+                Log.i(TAG, "Migration from version 39 to 40 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 40 to 41: Fix three long-standing schema mismatches.
+         *
+         * 1. artists.normalized_name index was created non-UNIQUE in 7→8 ("can't be unique due to
+         *    potential duplicates") but the entity declares unique=true. Fix: deduplicate then
+         *    recreate as UNIQUE INDEX.
+         *
+         * 2. albums.musicbrainz_id index was created non-UNIQUE in DatabaseModule 3→4 but the
+         *    entity declares unique=true. Fix: recreate as UNIQUE INDEX.
+         *
+         * 3. enriched_metadata.tags and .genres were created as nullable TEXT in migration 1→2
+         *    but the entity fields are non-nullable (List<String>). Fix: full table rebuild
+         *    with COALESCE safe-copy so no data is lost.
+         */
+        val MIGRATION_40_41 = object : Migration(40, 41) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 40 to 41 - Fixing schema mismatches")
+
+                // --- Fix 1: artists.normalized_name → UNIQUE index ---
+                // Before recreating the unique index, collapse any duplicate normalized names
+                // by keeping the artist with the lowest id and deleting the rest.
+                db.execSQL("""
+                    DELETE FROM artists
+                    WHERE id NOT IN (
+                        SELECT MIN(id) FROM artists GROUP BY normalized_name
+                    )
+                """)
+                db.execSQL("DROP INDEX IF EXISTS index_artists_normalized_name")
+                db.execSQL("CREATE UNIQUE INDEX index_artists_normalized_name ON artists(normalized_name)")
+
+                // --- Fix 2: albums.musicbrainz_id → UNIQUE index ---
+                // Keep the album with the lowest id for each musicbrainz_id duplicate.
+                db.execSQL("""
+                    DELETE FROM albums
+                    WHERE musicbrainz_id IS NOT NULL
+                      AND id NOT IN (
+                        SELECT MIN(id) FROM albums
+                        WHERE musicbrainz_id IS NOT NULL
+                        GROUP BY musicbrainz_id
+                    )
+                """)
+                db.execSQL("DROP INDEX IF EXISTS index_albums_musicbrainz_id")
+                db.execSQL("CREATE UNIQUE INDEX index_albums_musicbrainz_id ON albums(musicbrainz_id)")
+
+                // --- Fix 3: enriched_metadata.tags / .genres → NOT NULL via table rebuild ---
+                db.execSQL("PRAGMA foreign_keys = OFF")
+                db.execSQL("""
+                    CREATE TABLE enriched_metadata_v41 (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `track_id` INTEGER NOT NULL,
+                        `musicbrainz_recording_id` TEXT,
+                        `musicbrainz_artist_id` TEXT,
+                        `musicbrainz_release_id` TEXT,
+                        `musicbrainz_release_group_id` TEXT,
+                        `album_title` TEXT,
+                        `release_date` TEXT,
+                        `release_year` INTEGER,
+                        `release_type` TEXT,
+                        `album_art_url` TEXT,
+                        `album_art_url_small` TEXT,
+                        `album_art_url_large` TEXT,
+                        `artist_name` TEXT,
+                        `artist_country` TEXT,
+                        `artist_type` TEXT,
+                        `track_duration_ms` INTEGER,
+                        `isrc` TEXT,
+                        `tags` TEXT NOT NULL,
+                        `genres` TEXT NOT NULL,
+                        `genre_source` TEXT NOT NULL DEFAULT 'NONE',
+                        `record_label` TEXT,
+                        `audio_features_json` TEXT,
+                        `spotify_id` TEXT,
+                        `spotify_artist_id` TEXT,
+                        `spotify_artist_ids` TEXT,
+                        `spotify_verified_artist` TEXT,
+                        `spotify_artist_image_url` TEXT,
+                        `spotify_preview_url` TEXT,
+                        `reccobeats_id` TEXT,
+                        `audio_features_source` TEXT NOT NULL DEFAULT 'NONE',
+                        `spotify_enrichment_status` TEXT NOT NULL DEFAULT 'NOT_ATTEMPTED',
+                        `spotify_enrichment_error` TEXT,
+                        `spotify_last_attempt` INTEGER,
+                        `enrichment_status` TEXT NOT NULL DEFAULT 'PENDING',
+                        `enrichment_error` TEXT,
+                        `retry_count` INTEGER NOT NULL DEFAULT 0,
+                        `last_enrichment_attempt` INTEGER,
+                        `itunes_artist_image_url` TEXT,
+                        `apple_music_url` TEXT,
+                        `release_date_full` TEXT,
+                        `deezer_artist_image_url` TEXT,
+                        `lastfm_artist_image_url` TEXT,
+                        `spotify_track_url` TEXT,
+                        `preview_url` TEXT,
+                        `album_art_source` TEXT NOT NULL DEFAULT 'NONE',
+                        `cache_timestamp` INTEGER NOT NULL,
+                        `cache_version` INTEGER NOT NULL DEFAULT 1,
+                        FOREIGN KEY(`track_id`) REFERENCES `tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                """)
+                db.execSQL("""
+                    INSERT INTO enriched_metadata_v41
+                    SELECT
+                        id, track_id, musicbrainz_recording_id, musicbrainz_artist_id,
+                        musicbrainz_release_id, musicbrainz_release_group_id, album_title,
+                        release_date, release_year, release_type, album_art_url,
+                        album_art_url_small, album_art_url_large, artist_name, artist_country,
+                        artist_type, track_duration_ms, isrc,
+                        COALESCE(tags, '[]'),
+                        COALESCE(genres, '[]'),
+                        genre_source, record_label, audio_features_json, spotify_id,
+                        spotify_artist_id, spotify_artist_ids, spotify_verified_artist,
+                        spotify_artist_image_url, spotify_preview_url, reccobeats_id,
+                        audio_features_source, spotify_enrichment_status, spotify_enrichment_error,
+                        spotify_last_attempt, enrichment_status, enrichment_error, retry_count,
+                        last_enrichment_attempt, itunes_artist_image_url, apple_music_url,
+                        release_date_full, deezer_artist_image_url, lastfm_artist_image_url,
+                        spotify_track_url, preview_url, album_art_source, cache_timestamp, cache_version
+                    FROM enriched_metadata
+                """)
+                db.execSQL("DROP TABLE enriched_metadata")
+                db.execSQL("ALTER TABLE enriched_metadata_v41 RENAME TO enriched_metadata")
+                db.execSQL("CREATE UNIQUE INDEX `index_enriched_metadata_track_id` ON `enriched_metadata` (`track_id`)")
+                db.execSQL("CREATE INDEX `index_enriched_metadata_musicbrainz_recording_id` ON `enriched_metadata` (`musicbrainz_recording_id`)")
+                db.execSQL("CREATE INDEX `index_enriched_metadata_enrichment_status` ON `enriched_metadata` (`enrichment_status`)")
+                db.execSQL("PRAGMA foreign_keys = ON")
+
+                Log.i(TAG, "Migration from version 40 to 41 completed successfully")
+            }
+        }
+
+        /**
          * All migrations in order.
          */
         val ALL_MIGRATIONS = arrayOf(
@@ -1783,7 +1929,9 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_35_36,   // Gamification: add is_acknowledged to badges
             MIGRATION_36_37,   // Fix: add genre_source column to enriched_metadata
             MIGRATION_37_38,   // Desktop Satellite: add desktop_pairing_sessions table
-            MIGRATION_38_39    // Desktop Satellite v2: add desktop_ip / desktop_port
+            MIGRATION_38_39,   // Desktop Satellite v2: add desktop_ip / desktop_port
+            MIGRATION_39_40,   // Fix: add smartChallengeNotifHour / smartChallengeNotifCalcTime to user_preferences
+            MIGRATION_40_41    // Fix: non-UNIQUE indices on artists/albums, nullable tags/genres in enriched_metadata
         )
     }
 }

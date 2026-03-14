@@ -56,7 +56,7 @@ private data class PrefetchedData(
 )
 
 class InsightCardGenerator @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val repository: StatsRepository
 ) {
     companion object {

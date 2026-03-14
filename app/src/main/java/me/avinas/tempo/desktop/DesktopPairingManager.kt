@@ -15,29 +15,31 @@ import javax.inject.Singleton
 /**
  * Holds the data extracted from a desktop Tempo Satellite QR code.
  *
- * QR format expected from the desktop app:
+ * Supported QR formats from the desktop app:
  * ```json
+ * {"token":"abc123...","device_name":"MacBook Pro","v":1}
  * {"ip":"192.168.1.10","port":8765,"token":"abc123...","v":1}
  * ```
  */
 data class DesktopQrData(
-    val ip: String,
-    val port: Int,
-    /** Auth token the desktop will use when POSTing scrobbles to the phone's server. */
-    val token: String
+    /** Auth token the desktop will use when POSTing plays to the phone's server. */
+    val token: String,
+    val ip: String? = null,
+    val port: Int? = null,
+    val deviceName: String? = null
 )
 
 /**
  * Manages the lifecycle of a Desktop Satellite pairing session.
  *
- * Pairing direction: the **desktop app** shows a QR code containing its scrobble
+ * Pairing direction: the **desktop app** shows a QR code containing its play
  * endpoint address and auth token. The **phone** (this app) scans it with the camera,
  * stores the credentials, and starts the local NanoHTTPD receiver so the desktop can
  * begin forwarding plays.
  */
 @Singleton
 class DesktopPairingManager @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val desktopPairingDao: DesktopPairingDao
 ) {
 
@@ -60,11 +62,20 @@ class DesktopPairingManager @Inject constructor(
     fun parseDesktopQrPayload(json: String): DesktopQrData? {
         return try {
             val obj = JSONObject(json)
-            val ip = obj.getString("ip")
-            val port = obj.getInt("port")
-            val token = obj.getString("token")
-            if (ip.isBlank() || port <= 0 || token.length < 8) null
-            else DesktopQrData(ip = ip, port = port, token = token)
+            val token = obj.optString("token").trim()
+            val ip = obj.optString("ip").trim().ifBlank { null }
+            val port = obj.optInt("port", 0).takeIf { it > 0 }
+            val deviceName = obj.optString("device_name").trim().ifBlank { null }
+
+            if (token.length < 8) null
+            else {
+                DesktopQrData(
+                    token = token,
+                    ip = ip,
+                    port = port,
+                    deviceName = deviceName
+                )
+            }
         } catch (e: JSONException) {
             Log.w(TAG, "Invalid QR payload: $json", e)
             null
@@ -80,13 +91,21 @@ class DesktopPairingManager @Inject constructor(
         val session = DesktopPairingSession(
             id = UUID.randomUUID().toString(),
             authToken = qrData.token,
+            deviceName = qrData.deviceName.orEmpty(),
             desktopIp = qrData.ip,
             desktopPort = qrData.port,
             pairedAtMs = System.currentTimeMillis(),
             isActive = true
         )
         desktopPairingDao.insertOrUpdate(session)
-        Log.i(TAG, "Paired with desktop at ${qrData.ip}:${qrData.port}")
+        Log.i(
+            TAG,
+            if (qrData.ip != null && qrData.port != null) {
+                "Paired with desktop at ${qrData.ip}:${qrData.port}"
+            } else {
+                "Paired with desktop using auth token only"
+            }
+        )
         return session
     }
 
@@ -98,7 +117,7 @@ class DesktopPairingManager @Inject constructor(
     suspend fun getActiveSession(): DesktopPairingSession? =
         desktopPairingDao.getActiveSession()
 
-    /** Validates an incoming auth token from a desktop scrobble request. */
+    /** Validates an incoming auth token from a desktop play sync request. */
     suspend fun validateToken(token: String): DesktopPairingSession? =
         desktopPairingDao.findByToken(token)
 

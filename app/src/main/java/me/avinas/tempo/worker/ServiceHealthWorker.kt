@@ -33,7 +33,7 @@ class ServiceHealthWorker @AssistedInject constructor(
         private const val TAG = "ServiceHealthWorker"
         private const val WORK_NAME = "service_health_check"
         private const val NOTIFICATION_CHANNEL_ID = "service_health_worker"
-        private const val NOTIFICATION_ID = 3005
+        private const val NOTIFICATION_ID = 3007 // Distinct from ChallengeWorker (3005) and NotificationWorker challenge (3006)
 
         /**
          * Schedule periodic health checks for the tracking service.
