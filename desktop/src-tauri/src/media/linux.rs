@@ -1,5 +1,5 @@
 use crate::db::models::RawMediaInfo;
-use log::{debug, info, warn};
+use log::{debug, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::process::Command;
 

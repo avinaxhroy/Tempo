@@ -1,4 +1,6 @@
-use log::{debug, warn};
+use log::debug;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 

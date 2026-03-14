@@ -82,7 +82,7 @@
         ],
         "section": "sound",
         "priority": "optional",
-        "postInstallScript": "scripts/deb-postinst.sh"
+        "postInstallScript": "src-tauri/scripts/deb-postinst.sh"
       },
       "rpm": {
         "release": "1",
