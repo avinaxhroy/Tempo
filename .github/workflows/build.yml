@@ -1,5 +1,8 @@
 name: Build and Release Tempo Desktop
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # Triggers:
 #   - Push a tag like v1.0.0  → builds all platforms and creates a GitHub Release (draft)
 #   - workflow_dispatch        → manual build (no release created)
@@ -83,10 +86,10 @@ jobs:
             playerctl
 
       # ── 4. Node.js ───────────────────────────────────────────────────────
-      - name: Set up Node.js 20
+      - name: Set up Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install frontend dependencies
         working-directory: desktop

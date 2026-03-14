@@ -81,8 +81,7 @@
           "playerctl"
         ],
         "section": "sound",
-        "priority": "optional",
-        "postInstallScript": "src-tauri/scripts/deb-postinst.sh"
+        "priority": "optional"
       },
       "rpm": {
         "release": "1",
