@@ -68,6 +68,11 @@ class RetryInterceptor @Inject constructor() : Interceptor {
                 
                 retryCount++
                 
+            } catch (e: IllegalArgumentException) {
+                // Non-retryable: invalid argument (e.g. system proxy configured with port -1).
+                // Retrying won't help; rethrow immediately.
+                response?.close()
+                throw IOException("Request configuration error: ${e.message}", e)
             } catch (e: IOException) {
                 lastException = e
                 Log.w(TAG, "Network error on attempt $retryCount: ${e.message}")

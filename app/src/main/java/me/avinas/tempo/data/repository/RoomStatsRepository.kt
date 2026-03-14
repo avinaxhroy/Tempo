@@ -424,8 +424,11 @@ class RoomStatsRepository @Inject constructor(
         )
     }
 
-    override fun observeListeningOverview(timeRange: TimeRange): Flow<ListeningOverview> = 
-        listeningEventDao.all()
+    override fun observeListeningOverview(timeRange: TimeRange): Flow<ListeningOverview> =
+        // Use a bounded query as a change trigger; all() on large datasets (e.g. after Last.fm import)
+        // overflows the 2MB CursorWindow and throws IllegalStateException. The actual data is
+        // fetched inside computeListeningOverview() via targeted statsDao queries.
+        listeningEventDao.recentEvents(1)
             .map { _ -> computeListeningOverview(timeRange) }
             .flowOn(Dispatchers.IO)
 

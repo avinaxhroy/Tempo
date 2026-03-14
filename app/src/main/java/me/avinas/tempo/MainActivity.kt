@@ -293,7 +293,21 @@ fun TempoApp(
                     onConnect = {
                         // Launch Spotify OAuth flow
                         val intent = spotifyViewModel.startLogin()
-                        context.startActivity(intent)
+                        try {
+                            context.startActivity(intent)
+                        } catch (e: android.content.ActivityNotFoundException) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "No browser found. Please install a browser to connect Spotify.",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        } catch (e: SecurityException) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Unable to open browser. Please open Spotify manually.",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
                         scope.launch { sheetState.hide() }.invokeOnCompletion {
                             if (!sheetState.isVisible) {
                                 showSpotifySheet = false
