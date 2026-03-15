@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Save, RotateCcw, Keyboard, Battery, BatteryWarning } from "lucide-react";
+import { Save, RotateCcw, Keyboard, Battery, BatteryWarning, Info } from "lucide-react";
 import { getSettings, updateSettings, setLogLevel, getAutostartEnabled, setAutostartEnabled, getBatteryStatus, getBatterySaverActive } from "../lib/api";
 import type { Settings as SettingsType, BatteryStatus } from "../lib/types";
 
@@ -117,6 +117,31 @@ export default function Settings() {
             <span className="toggle-slider" />
           </label>
         </div>
+
+        {navigator.userAgent.includes("Windows") && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 10,
+              background: "var(--info-soft, rgba(100,149,237,0.10))",
+              borderLeft: "3px solid var(--info, #6495ed)",
+              borderRadius: "0 6px 6px 0",
+              padding: "10px 12px",
+              marginTop: 12,
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: "var(--text-secondary)",
+            }}
+          >
+            <Info size={15} style={{ color: "var(--info, #6495ed)", flexShrink: 0, marginTop: 2 }} />
+            <span>
+              <strong style={{ color: "var(--text-primary)" }}>Browser tracking on Windows</strong> uses the
+              system media API (GSMTC). Artist info may occasionally be missing or incomplete,
+              as some sites don't expose it through this API.
+            </span>
+          </div>
+        )}
 
         <div className="toggle-row">
           <div className="toggle-info">

@@ -3,6 +3,13 @@ use log::{debug, warn};
 use std::os::windows::process::CommandExt;
 use std::process::Command;
 
+// Native WinRT GSMTC (GlobalSystemMediaTransportControls) imports.
+// Using native APIs is ~100x faster than PowerShell (~5ms vs ~500-2000ms).
+use windows::Media::Control::{
+    GlobalSystemMediaTransportControlsSessionManager,
+    GlobalSystemMediaTransportControlsSessionPlaybackStatus,
+};
+
 /// CREATE_NO_WINDOW prevents a visible console window from appearing each time
 /// PowerShell is spawned for media/volume queries during the polling cycle.
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -14,19 +21,21 @@ fn powershell_cmd() -> Command {
     cmd
 }
 
-/// Detect now playing on Windows using PowerShell and GlobalSystemMediaTransportControls.
+/// Detect now playing on Windows using native WinRT GSMTC API with PowerShell fallback.
 ///
-/// Queries ALL active media sessions and picks the best one using candidate scoring.
-/// Also retrieves system volume and infers browser URLs from window titles.
+/// Pipeline:
+/// 1. Native WinRT GSMTC (primary — ~5ms, no PowerShell overhead)
+/// 2. PowerShell GSMTC (fallback — if WinRT fails on older Windows)
+/// 3. Spotify window title (fallback)
+/// 4. Browser window title scan (last resort)
 ///
-/// All PowerShell sub-calls are blocking (`std::process::Command::output`), so we offload
-/// the entire detection to a dedicated blocking thread via `spawn_blocking` and enforce a
-/// 6-second hard timeout to prevent a stalled PowerShell from freezing the async runtime.
+/// All blocking work is offloaded to `spawn_blocking` and bounded by a
+/// 6-second hard timeout to prevent stalls from freezing the async runtime.
 pub async fn get_now_playing() -> Option<RawMediaInfo> {
-    // Offload blocking PowerShell work off the async thread pool.
+    // Offload blocking detection work off the async thread pool.
     let task = tokio::task::spawn_blocking(detect_now_playing_blocking);
 
-    // 6-second ceiling: if PowerShell hangs (e.g., GSMTC unresponsive), abort gracefully.
+    // 6-second ceiling: if detection hangs (e.g., WinRT or PowerShell unresponsive), abort.
     match tokio::time::timeout(std::time::Duration::from_secs(6), task).await {
         Ok(Ok(result)) => result,
         Ok(Err(_)) => {
@@ -42,11 +51,34 @@ pub async fn get_now_playing() -> Option<RawMediaInfo> {
 
 /// Synchronous inner body for `get_now_playing`, run on a blocking thread.
 fn detect_now_playing_blocking() -> Option<RawMediaInfo> {
-    // Primary: query all GSMTC sessions, score and pick the best
-    let sessions = query_all_media_sessions();
-    if !sessions.is_empty() {
-        let volume = query_system_volume().unwrap_or(-1.0);
-        return Some(select_best_session(sessions, volume));
+    // Primary: native WinRT GSMTC — fast (~5ms) and reliable
+    match native_detect_sessions() {
+        Ok(sessions) if !sessions.is_empty() => {
+            let volume = query_system_volume().unwrap_or(-1.0);
+            // Only fetch browser window titles if we actually have a browser session
+            let needs_browser_titles = sessions
+                .iter()
+                .any(|s| is_browser_source_id(&s.source_id.to_lowercase()));
+            let browser_titles = if needs_browser_titles {
+                get_all_browser_window_titles()
+            } else {
+                Vec::new()
+            };
+            return Some(select_best_session(sessions, volume, &browser_titles));
+        }
+        Ok(_) => {
+            debug!("Native GSMTC: no active sessions");
+        }
+        Err(e) => {
+            warn!("Native GSMTC failed: {} — trying PowerShell fallback", e);
+            // PowerShell GSMTC fallback
+            let sessions = ps_query_all_media_sessions();
+            if !sessions.is_empty() {
+                let volume = query_system_volume().unwrap_or(-1.0);
+                let browser_titles = get_all_browser_window_titles();
+                return Some(select_best_session(sessions, volume, &browser_titles));
+            }
+        }
     }
     // Fallback 1: Try Spotify window title parsing
     if let Some(np) = query_spotify_window_title() {
@@ -56,6 +88,126 @@ fn detect_now_playing_blocking() -> Option<RawMediaInfo> {
     // This catches cases where GSMTC doesn't return browser sessions
     // (e.g., TryGetMediaPropertiesAsync throws for sandboxed browser processes).
     query_browser_music_window()
+}
+
+/// A browser window title from the system-wide scan.
+struct BrowserWindowTitle {
+    /// Browser process name (e.g., "chrome", "msedge").
+    browser: String,
+    /// Full window title (e.g., "Shape of You | Spotify - Google Chrome").
+    title: String,
+}
+
+/// Detect media sessions using the native WinRT GSMTC API.
+///
+/// This replaces the previous PowerShell-based approach and is dramatically
+/// faster (~5ms vs ~500-2000ms) and more reliable since it doesn't depend
+/// on PowerShell script execution or .NET assembly loading.
+fn native_detect_sessions() -> windows::core::Result<Vec<MediaSessionCandidate>> {
+    let manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync()?.get()?;
+    let sessions = manager.GetSessions()?;
+    let count = sessions.Size()?;
+
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut candidates = Vec::new();
+
+    for i in 0..count {
+        let session = match sessions.GetAt(i) {
+            Ok(s) => s,
+            Err(e) => {
+                debug!("Failed to get GSMTC session at index {}: {}", i, e);
+                continue;
+            }
+        };
+
+        let source_id = session
+            .SourceAppUserModelId()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|_| "Unknown".to_string());
+
+        // Playback info (status, rate)
+        let (is_playing, playback_rate) = match session.GetPlaybackInfo() {
+            Ok(info) => {
+                let playing = info
+                    .PlaybackStatus()
+                    .map(|s| s == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing)
+                    .unwrap_or(false);
+                let rate = info.PlaybackRate().and_then(|r| r.Value()).unwrap_or(-1.0);
+                (playing, rate)
+            }
+            Err(_) => (false, -1.0),
+        };
+
+        // Timeline (duration, position) — TimeSpan.Duration is in 100ns units
+        let (duration_ms, position_ms) = match session.GetTimelineProperties() {
+            Ok(tl) => {
+                let dur = tl.EndTime().map(|t| t.Duration / 10_000).unwrap_or(0);
+                let pos = tl.Position().map(|t| t.Duration / 10_000).unwrap_or(-1);
+                (dur, pos)
+            }
+            Err(_) => (0i64, -1i64),
+        };
+
+        // Media properties — CAN fail for sandboxed browser processes.
+        // Retry once after a short sleep if the first attempt fails for a
+        // playing session, because COM apartment initialization for WinRT
+        // media queries can transiently fail on the first call.
+        let (title, artist, album) = {
+            let try_get_props = || -> (String, String, String) {
+                match session.TryGetMediaPropertiesAsync() {
+                    Ok(async_op) => match async_op.get() {
+                        Ok(props) => {
+                            let t = props.Title().map(|s| s.to_string()).unwrap_or_default();
+                            let a = props.Artist().map(|s| s.to_string()).unwrap_or_default();
+                            let al = props
+                                .AlbumTitle()
+                                .map(|s| s.to_string())
+                                .unwrap_or_default();
+                            (t, a, al)
+                        }
+                        Err(_) => (String::new(), String::new(), String::new()),
+                    },
+                    Err(_) => (String::new(), String::new(), String::new()),
+                }
+            };
+            let result = try_get_props();
+            if result.0.is_empty() && is_playing {
+                // Retry once after 50ms for playing sessions
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                let retry = try_get_props();
+                if !retry.0.is_empty() {
+                    debug!("TryGetMediaPropertiesAsync succeeded on retry for '{}'", source_id);
+                }
+                retry
+            } else {
+                result
+            }
+        };
+
+        // Skip sessions with no title that aren't playing — nothing useful.
+        // Playing browser sessions with failed props can still be enriched later.
+        if title.is_empty() && !is_playing {
+            continue;
+        }
+
+        candidates.push(MediaSessionCandidate {
+            title,
+            artist,
+            album,
+            duration_ms,
+            position_ms,
+            source_id,
+            is_playing,
+            playback_rate,
+            window_title: None,
+        });
+    }
+
+    debug!("Native GSMTC: found {} candidate(s)", candidates.len());
+    Ok(candidates)
 }
 
 /// A parsed GSMTC session before scoring.
@@ -74,7 +226,7 @@ struct MediaSessionCandidate {
     window_title: Option<String>,
 }
 
-fn query_all_media_sessions() -> Vec<MediaSessionCandidate> {
+fn ps_query_all_media_sessions() -> Vec<MediaSessionCandidate> {
     // PowerShell script that iterates ALL sessions (not just the single "current" one),
     // returns JSON array so we can score each candidate in Rust.
     //
@@ -209,6 +361,85 @@ if ($results.Count -gt 0) {
         .collect()
 }
 
+/// Get ALL window titles from ALL browser processes.
+///
+/// Unlike the previous approach which grabbed only `Select-Object -First 1`
+/// per browser (potentially missing the music tab), this scans every browser
+/// window. Returns a flat list of all browser windows for scoring in Rust.
+fn get_all_browser_window_titles() -> Vec<BrowserWindowTitle> {
+    let ps_script = r#"
+$browsers = @('chrome','msedge','firefox','brave','opera','vivaldi')
+$results = @()
+foreach ($b in $browsers) {
+    try {
+        Get-Process -Name $b -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -ne '' } | ForEach-Object {
+            $results += @{b=$b;t=$_.MainWindowTitle}
+        }
+    } catch { continue }
+}
+if ($results.Count -gt 0) { $results | ConvertTo-Json -Compress } else { Write-Output 'NONE' }
+"#;
+
+    let output = match powershell_cmd()
+        .args(["-NoProfile", "-NonInteractive", "-Command", ps_script])
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            debug!("Failed to scan browser window titles: {}", e);
+            return Vec::new();
+        }
+    };
+
+    let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if result.is_empty() || result == "NONE" {
+        return Vec::new();
+    }
+
+    // PowerShell returns single object (not array) for exactly one result
+    let entries: Vec<serde_json::Value> = if result.starts_with('[') {
+        serde_json::from_str(&result).unwrap_or_default()
+    } else {
+        serde_json::from_str::<serde_json::Value>(&result)
+            .ok()
+            .map(|v| vec![v])
+            .unwrap_or_default()
+    };
+
+    entries
+        .into_iter()
+        .filter_map(|v| {
+            let browser = v.get("b")?.as_str()?.to_string();
+            let title = v.get("t")?.as_str()?.to_string();
+            if title.is_empty() {
+                None
+            } else {
+                Some(BrowserWindowTitle { browser, title })
+            }
+        })
+        .collect()
+}
+
+/// Map a GSMTC SourceAppUserModelId to a browser process name for matching
+/// against `BrowserWindowTitle` entries.
+fn browser_process_name(source_id_lower: &str) -> &str {
+    if source_id_lower.contains("chrome") || source_id_lower.contains("chromium") {
+        "chrome"
+    } else if source_id_lower.contains("msedge") || source_id_lower.contains("edge") {
+        "msedge"
+    } else if source_id_lower.contains("firefox") {
+        "firefox"
+    } else if source_id_lower.contains("brave") {
+        "brave"
+    } else if source_id_lower.contains("opera") {
+        "opera"
+    } else if source_id_lower.contains("vivaldi") {
+        "vivaldi"
+    } else {
+        ""
+    }
+}
+
 /// Score a candidate session for music quality (higher = better).
 /// Mirrors macOS `candidate_quality_score` logic.
 fn score_session(c: &MediaSessionCandidate) -> i32 {
@@ -265,7 +496,104 @@ fn score_session(c: &MediaSessionCandidate) -> i32 {
 }
 
 /// Select the best session from all candidates using scoring.
-fn select_best_session(sessions: Vec<MediaSessionCandidate>, volume: f64) -> RawMediaInfo {
+///
+/// For browser sessions, enriches candidates with metadata from multiple sources
+/// in order of reliability:
+///   1. GSMTC Media Session API (already populated — most reliable)
+///   2. GSMTC title embedded artist ("Artist - Song" in the title field)
+///   3. Service-specific window title parsing (knows exact format per service)
+///   4. Generic window title artist extraction (least reliable — last resort)
+fn select_best_session(
+    mut sessions: Vec<MediaSessionCandidate>,
+    volume: f64,
+    browser_titles: &[BrowserWindowTitle],
+) -> RawMediaInfo {
+    // Enrich browser sessions with window titles and artist recovery
+    for session in &mut sessions {
+        let source_lower = session.source_id.to_lowercase();
+        if !is_browser_source_id(&source_lower) {
+            continue;
+        }
+
+        let proc_name = browser_process_name(&source_lower);
+        // Find the best matching window title from this browser — prefer
+        // titles that match a known music service pattern
+        let best_title = browser_titles
+            .iter()
+            .filter(|bt| bt.browser.eq_ignore_ascii_case(proc_name))
+            .max_by_key(|bt| title_music_site_bonus(&bt.title).unwrap_or(0));
+
+        if let Some(bt) = best_title {
+            session.window_title = Some(bt.title.clone());
+        }
+
+        // --- Artist recovery pipeline (ordered by reliability) ---
+
+        // If GSMTC has no title at all (TryGetMediaPropertiesAsync failed
+        // for a sandboxed browser), recover both title and artist from
+        // the window title first.
+        if session.title.is_empty() {
+            if let Some(wt) = session.window_title.as_deref() {
+                if let Some((title, artist)) = extract_metadata_from_window_title(wt) {
+                    debug!(
+                        "Recovered metadata from window title: '{}' by '{}'",
+                        title, artist
+                    );
+                    session.title = title;
+                    if session.artist.is_empty() {
+                        session.artist = artist;
+                    }
+                }
+            }
+        }
+
+        // Strategy 1: GSMTC title may embed artist ("Artist - Song" or "Song · Artist")
+        // This is more reliable than window title because it comes from the Media
+        // Session API data that the website explicitly set.
+        if session.artist.is_empty() && !session.title.is_empty() {
+            if let Some((artist, cleaned_title)) = try_split_artist_from_gsmtc_title(&session.title) {
+                debug!(
+                    "Extracted artist '{}' from GSMTC title '{}' → clean title '{}'",
+                    artist, session.title, cleaned_title
+                );
+                session.artist = artist;
+                session.title = cleaned_title;
+            }
+        }
+
+        // Strategy 2: Service-specific window title parsing (when we know the service)
+        if session.artist.is_empty() && !session.title.is_empty() {
+            if let Some(wt) = session.window_title.as_deref() {
+                let service = detect_service_from_window_title(wt);
+                if let Some(artist) = service_specific_artist_extraction(
+                    service, &session.title, wt,
+                ) {
+                    debug!(
+                        "Service-specific ({:?}) artist extraction: '{}' for '{}'",
+                        service, artist, session.title
+                    );
+                    session.artist = artist;
+                }
+            }
+        }
+
+        // Strategy 3 (last resort): Generic window title cross-reference.
+        // Only used when all above strategies failed.
+        if session.artist.is_empty() && !session.title.is_empty() {
+            if let Some(wt) = session.window_title.as_deref() {
+                if let Some(artist) =
+                    extract_artist_from_window_title(&session.title, wt)
+                {
+                    debug!(
+                        "Generic window title artist extraction: '{}' for '{}'",
+                        artist, session.title
+                    );
+                    session.artist = artist;
+                }
+            }
+        }
+    }
+
     let best = sessions
         .into_iter()
         .max_by_key(|c| score_session(c))
@@ -491,7 +819,9 @@ fn infer_url_from_title(title: &str) -> Option<String> {
         return Some("https://www.youtube.com/watch".to_string());
     }
     // Spotify Web player
-    if trimmed.ends_with("- spotify") || trimmed.ends_with("| spotify") {
+    if trimmed.ends_with("- spotify") || trimmed.ends_with("| spotify")
+        || trimmed.ends_with("- spotify - premium")
+    {
         return Some("https://open.spotify.com/track".to_string());
     }
     // SoundCloud
@@ -509,6 +839,22 @@ fn infer_url_from_title(title: &str) -> Option<String> {
     // Deezer
     if trimmed.ends_with("- deezer") || trimmed.ends_with("| deezer") {
         return Some("https://www.deezer.com/".to_string());
+    }
+    // Amazon Music
+    if trimmed.ends_with("- amazon music") || trimmed.ends_with("| amazon music") {
+        return Some("https://music.amazon.com/".to_string());
+    }
+    // Pandora
+    if trimmed.ends_with("- pandora") || trimmed.ends_with("| pandora") {
+        return Some("https://www.pandora.com/".to_string());
+    }
+    // JioSaavn
+    if trimmed.ends_with("- jiosaavn") || trimmed.ends_with("| jiosaavn") {
+        return Some("https://www.jiosaavn.com/".to_string());
+    }
+    // Gaana
+    if trimmed.ends_with("- gaana") || trimmed.ends_with("| gaana") {
+        return Some("https://gaana.com/".to_string());
     }
     // Bandcamp — titles are "Track, by Artist | site"
     if trimmed.contains("bandcamp") {
@@ -542,6 +888,18 @@ fn classify_browser_source(url: &str, browser: &str) -> String {
     if lower.contains("bandcamp.com") {
         return format!("Bandcamp ({})", browser);
     }
+    if lower.contains("music.amazon") {
+        return format!("Amazon Music ({})", browser);
+    }
+    if lower.contains("pandora.com") {
+        return format!("Pandora ({})", browser);
+    }
+    if lower.contains("jiosaavn.com") {
+        return format!("JioSaavn ({})", browser);
+    }
+    if lower.contains("gaana.com") {
+        return format!("Gaana ({})", browser);
+    }
     format!("{} (Windows)", browser)
 }
 
@@ -571,6 +929,22 @@ fn title_music_site_bonus(title: &str) -> Option<i32> {
     if trimmed.contains("bandcamp") {
         return Some(90);
     }
+    // Amazon Music
+    if trimmed.ends_with("- amazon music") || trimmed.ends_with("| amazon music") {
+        return Some(85);
+    }
+    // Pandora
+    if trimmed.ends_with("- pandora") || trimmed.ends_with("| pandora") {
+        return Some(80);
+    }
+    // JioSaavn
+    if trimmed.ends_with("- jiosaavn") || trimmed.ends_with("| jiosaavn") {
+        return Some(75);
+    }
+    // Gaana
+    if trimmed.ends_with("- gaana") || trimmed.ends_with("| gaana") {
+        return Some(75);
+    }
     // Plain YouTube — lower priority, needs further filtering
     if trimmed.ends_with("- youtube") || trimmed.ends_with("| youtube") {
         return Some(30);
@@ -598,6 +972,14 @@ const BROWSER_TITLE_SERVICES: &[(&str, &str, &str)] = &[
     ("| tidal", "https://listen.tidal.com/", "Tidal Web"),
     ("- deezer", "https://www.deezer.com/", "Deezer"),
     ("| deezer", "https://www.deezer.com/", "Deezer"),
+    ("- amazon music", "https://music.amazon.com/", "Amazon Music"),
+    ("| amazon music", "https://music.amazon.com/", "Amazon Music"),
+    ("- pandora", "https://www.pandora.com/", "Pandora"),
+    ("| pandora", "https://www.pandora.com/", "Pandora"),
+    ("- jiosaavn", "https://www.jiosaavn.com/", "JioSaavn"),
+    ("| jiosaavn", "https://www.jiosaavn.com/", "JioSaavn"),
+    ("- gaana", "https://gaana.com/", "Gaana"),
+    ("| gaana", "https://gaana.com/", "Gaana"),
 ];
 
 /// Try to detect music playback by scanning browser window titles directly.
@@ -606,88 +988,68 @@ const BROWSER_TITLE_SERVICES: &[(&str, &str, &str)] = &[
 /// sessions (e.g., TryGetMediaPropertiesAsync throws due to browser sandboxing,
 /// or the browser's media key handling flag is disabled).
 ///
-/// Parses window titles like "Song - Artist | Spotify" into metadata.
+/// Unlike the previous version which only checked the FIRST window title from
+/// the FIRST browser, this scans ALL windows from ALL browsers, scores each
+/// against known music service patterns, and picks the best match.
 fn query_browser_music_window() -> Option<RawMediaInfo> {
-    let ps_script = r#"
-$browsers = @('chrome','msedge','firefox','brave','opera','vivaldi')
-$out = ''
-foreach ($b in $browsers) {
-    try {
-        $procs = Get-Process -Name $b -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -ne '' }
-        foreach ($p in $procs) {
-            $wt = $p.MainWindowTitle
-            if ($wt -and $wt -ne '') {
-                $out = "$b::$wt"
-                break
-            }
-        }
-        if ($out -ne '') { break }
-    } catch { continue }
-}
-if ($out -ne '') { Write-Output $out } else { Write-Output 'NONE' }
-"#;
-
-    let output = powershell_cmd()
-        .args(["-NoProfile", "-NonInteractive", "-Command", ps_script])
-        .output()
-        .ok()?;
-
-    let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if result.is_empty() || result == "NONE" || !result.contains("::") {
+    let titles = get_all_browser_window_titles();
+    if titles.is_empty() {
         return None;
     }
 
-    let (browser_id, window_title) = result.split_once("::").unwrap();
-    if window_title.is_empty() {
-        return None;
-    }
+    // Score each browser window title against known music service patterns
+    // and pick the best match
+    let mut best_match: Option<(i32, &BrowserWindowTitle, &str, &str, &str)> = None;
 
-    let lower_title = window_title.to_lowercase();
-
-    // Match the window title against known music service patterns
-    for &(suffix, url, service_name) in BROWSER_TITLE_SERVICES {
-        if lower_title.ends_with(suffix) {
-            let content_before_suffix = &window_title[..window_title.len() - suffix.len()];
-            let content = content_before_suffix.trim().trim_end_matches(&['-', '|'][..]).trim();
-
-            if content.is_empty() {
-                continue;
+    for bt in &titles {
+        let lower_title = bt.title.to_lowercase();
+        for &(suffix, url, service_name) in BROWSER_TITLE_SERVICES {
+            if lower_title.ends_with(suffix) {
+                let score = title_music_site_bonus(&bt.title).unwrap_or(0);
+                match &best_match {
+                    Some((best_score, ..)) if score <= *best_score => {}
+                    _ => best_match = Some((score, bt, suffix, url, service_name)),
+                }
             }
-
-            // Try to split "Artist - Title" or "Title - Artist"
-            let (title, artist) = if let Some((a, b)) = split_dash(content) {
-                // For Spotify: title is "Song - lyrics and song by Artist"
-                // or "Song · Artist"
-                // For YouTube Music: "Song - Artist"
-                // We can't know the order, so use as-is
-                (a.to_string(), b.to_string())
-            } else {
-                (content.to_string(), String::new())
-            };
-
-            let browser_name = friendly_browser_name(&browser_id.to_lowercase());
-
-            debug!(
-                "Browser fallback: detected '{}' by '{}' from {} via {} window title",
-                title, artist, service_name, browser_name
-            );
-
-            return Some(RawMediaInfo {
-                title,
-                artist,
-                album: String::new(),
-                duration_ms: 0,
-                position_ms: -1,
-                source_app: format!("{} ({})", service_name, browser_name),
-                is_playing: true, // if the tab is open with music title, assume playing
-                volume: query_system_volume().unwrap_or(-1.0),
-                url: Some(url.to_string()),
-                playback_rate: 1.0,
-            });
         }
     }
 
-    None
+    let (_, bt, suffix, url, service_name) = best_match?;
+
+    let content_before_suffix = &bt.title[..bt.title.len() - suffix.len()];
+    let content = strip_browser_suffix(
+        content_before_suffix.trim().trim_end_matches(&['-', '|'][..]).trim(),
+    );
+
+    if content.is_empty() {
+        return None;
+    }
+
+    let (title, artist) = if let Some((a, b)) = split_dash(&content) {
+        (a.to_string(), b.to_string())
+    } else {
+        (content, String::new())
+    };
+
+    let browser_name = friendly_browser_name(&bt.browser.to_lowercase());
+
+    debug!(
+        "Browser fallback: detected '{}' by '{}' from {} via {} window title",
+        title, artist, service_name, browser_name
+    );
+
+    Some(RawMediaInfo {
+        title,
+        artist,
+        album: String::new(),
+        duration_ms: 0,
+        position_ms: -1,
+        source_app: format!("{} ({})", service_name, browser_name),
+        is_playing: true,
+        volume: query_system_volume().unwrap_or(-1.0),
+        url: Some(url.to_string()),
+        playback_rate: 1.0,
+    })
 }
 
 /// Split a string on the first " - ", " — ", " – " or " · " separator.
@@ -702,4 +1064,397 @@ fn split_dash(s: &str) -> Option<(&str, &str)> {
         }
     }
     None
+}
+
+// ---------------------------------------------------------------------------
+//  Artist recovery strategies (ordered by reliability)
+// ---------------------------------------------------------------------------
+
+/// Identifies which music service a browser window title belongs to.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum MusicService {
+    YouTubeMusic,
+    SpotifyWeb,
+    AppleMusic,
+    SoundCloud,
+    Tidal,
+    Deezer,
+    AmazonMusic,
+    Pandora,
+    Bandcamp,
+    YouTube,
+    Unknown,
+}
+
+/// Detect the music service from a browser window title string.
+fn detect_service_from_window_title(title: &str) -> MusicService {
+    let lower = title.to_lowercase();
+    // Order matters — check YouTube Music before YouTube
+    if lower.contains("youtube music") {
+        MusicService::YouTubeMusic
+    } else if lower.contains("spotify") {
+        MusicService::SpotifyWeb
+    } else if lower.contains("apple music") {
+        MusicService::AppleMusic
+    } else if lower.contains("soundcloud") {
+        MusicService::SoundCloud
+    } else if lower.contains("tidal") {
+        MusicService::Tidal
+    } else if lower.contains("deezer") {
+        MusicService::Deezer
+    } else if lower.contains("amazon music") {
+        MusicService::AmazonMusic
+    } else if lower.contains("pandora") {
+        MusicService::Pandora
+    } else if lower.contains("bandcamp") {
+        MusicService::Bandcamp
+    } else if lower.contains("youtube") {
+        MusicService::YouTube
+    } else {
+        MusicService::Unknown
+    }
+}
+
+/// Try to extract the artist from the GSMTC title field itself.
+///
+/// Some browsers/services embed "Artist - Song" or "Song · Artist" in the
+/// GSMTC title when the Media Session metadata doesn't include a separate
+/// artist field. This is MORE reliable than window title parsing because
+/// the data is what the website explicitly provided to the Media Session API.
+///
+/// Returns (artist, cleaned_title) if a split was found that looks like
+/// an artist-title pair, None otherwise.
+fn try_split_artist_from_gsmtc_title(title: &str) -> Option<(String, String)> {
+    if title.len() < 5 {
+        return None;
+    }
+
+    // Try separators in order of specificity
+    for sep in &[" · ", " - ", " – ", " — "] {
+        if let Some(pos) = title.find(sep) {
+            let left = title[..pos].trim();
+            let right = title[pos + sep.len()..].trim();
+
+            if left.is_empty() || right.is_empty() {
+                continue;
+            }
+
+            // Sanity checks: artist names are typically short-ish
+            // Reject if both sides are very long (probably not artist/title)
+            if left.len() > 80 && right.len() > 80 {
+                continue;
+            }
+
+            // Heuristic: shorter side is likely the artist.
+            // But for "Artist - Song (feat. X) [Official Video]" the right
+            // side may be long. Use the left as artist if it's reasonable.
+            if left.len() <= 80 {
+                return Some((left.to_string(), right.to_string()));
+            }
+        }
+    }
+    None
+}
+
+/// Service-specific artist extraction from browser window titles.
+///
+/// Each music service uses a distinct window title format. By knowing which
+/// service is active, we can parse the window title with high accuracy instead
+/// of guessing the structure.
+///
+/// Known formats:
+///   YouTube Music: "Song - Artist - YouTube Music"  or  "Song · Artist - YouTube Music"
+///   Spotify Web:   "Song · Artist - listener | Spotify"  or  "Spotify - Song"
+///   SoundCloud:    "Artist - Song | SoundCloud"
+///   Bandcamp:      "Song | ArtistName"
+///   Apple Music:   "Song - Artist - Apple Music"
+///   Tidal:         "Song - Artist - Tidal"
+///   Deezer:        "Song - Artist | Deezer"
+fn service_specific_artist_extraction(
+    service: MusicService,
+    gsmtc_title: &str,
+    window_title: &str,
+) -> Option<String> {
+    let stripped = strip_browser_suffix(window_title);
+    let content = strip_service_suffix_str(&stripped);
+    if content.is_empty() {
+        return None;
+    }
+
+    let gsmtc_lower = gsmtc_title.to_lowercase();
+
+    match service {
+        MusicService::YouTubeMusic => {
+            // YouTube Music uses "Song - Artist" or "Song · Artist"
+            // The GSMTC title is usually just "Song", so the part after
+            // the separator in the content (after stripping service suffix)
+            // is the artist.
+            for sep in &[" · ", " - ", " – ", " — "] {
+                if let Some(pos) = content.find(sep) {
+                    let left = content[..pos].trim();
+                    let right = content[pos + sep.len()..].trim();
+                    if left.is_empty() || right.is_empty() {
+                        continue;
+                    }
+                    // If left matches GSMTC title → right is artist
+                    if fuzzy_title_match(&left.to_lowercase(), &gsmtc_lower) {
+                        return Some(right.to_string());
+                    }
+                    // If right matches GSMTC title → left is artist
+                    if fuzzy_title_match(&right.to_lowercase(), &gsmtc_lower) {
+                        return Some(left.to_string());
+                    }
+                }
+            }
+            // Multi-separator: "Song - Artist - Album" — try taking middle part
+            let parts: Vec<&str> = content.split(" - ").collect();
+            if parts.len() >= 3 {
+                let first = parts[0].trim();
+                if fuzzy_title_match(&first.to_lowercase(), &gsmtc_lower) {
+                    return Some(parts[1].trim().to_string());
+                }
+            }
+            None
+        }
+        MusicService::SpotifyWeb => {
+            // Spotify uses "Song · Artist" or "Song - Artist"
+            // Also: "Song · Artist, Artist2"
+            for sep in &[" · ", " - ", " – "] {
+                if let Some(pos) = content.find(sep) {
+                    let left = content[..pos].trim();
+                    let right = content[pos + sep.len()..].trim();
+                    if left.is_empty() || right.is_empty() {
+                        continue;
+                    }
+                    if fuzzy_title_match(&left.to_lowercase(), &gsmtc_lower) {
+                        return Some(right.to_string());
+                    }
+                    if fuzzy_title_match(&right.to_lowercase(), &gsmtc_lower) {
+                        return Some(left.to_string());
+                    }
+                }
+            }
+            None
+        }
+        MusicService::SoundCloud => {
+            // SoundCloud: "Artist - Song"
+            for sep in &[" - ", " – ", " — "] {
+                if let Some(pos) = content.find(sep) {
+                    let left = content[..pos].trim();
+                    let right = content[pos + sep.len()..].trim();
+                    if left.is_empty() || right.is_empty() {
+                        continue;
+                    }
+                    // SoundCloud format is "Artist - Song", so if right ≈ GSMTC title
+                    if fuzzy_title_match(&right.to_lowercase(), &gsmtc_lower) {
+                        return Some(left.to_string());
+                    }
+                    if fuzzy_title_match(&left.to_lowercase(), &gsmtc_lower) {
+                        return Some(right.to_string());
+                    }
+                }
+            }
+            None
+        }
+        MusicService::Bandcamp => {
+            // Bandcamp: "Song, by Artist" or "Song | Artist"
+            if let Some(pos) = content.find(", by ") {
+                let right = content[pos + 5..].trim();
+                if !right.is_empty() {
+                    return Some(right.to_string());
+                }
+            }
+            // Fallback to generic split
+            for sep in &[" | ", " - "] {
+                if let Some(pos) = content.find(sep) {
+                    let left = content[..pos].trim();
+                    let right = content[pos + sep.len()..].trim();
+                    if left.is_empty() || right.is_empty() {
+                        continue;
+                    }
+                    if fuzzy_title_match(&left.to_lowercase(), &gsmtc_lower) {
+                        return Some(right.to_string());
+                    }
+                    if fuzzy_title_match(&right.to_lowercase(), &gsmtc_lower) {
+                        return Some(left.to_string());
+                    }
+                }
+            }
+            None
+        }
+        MusicService::AppleMusic | MusicService::Tidal | MusicService::Deezer
+        | MusicService::AmazonMusic | MusicService::Pandora => {
+            // These services commonly use "Song - Artist" format
+            for sep in &[" - ", " · ", " – ", " — "] {
+                if let Some(pos) = content.find(sep) {
+                    let left = content[..pos].trim();
+                    let right = content[pos + sep.len()..].trim();
+                    if left.is_empty() || right.is_empty() {
+                        continue;
+                    }
+                    if fuzzy_title_match(&left.to_lowercase(), &gsmtc_lower) {
+                        return Some(right.to_string());
+                    }
+                    if fuzzy_title_match(&right.to_lowercase(), &gsmtc_lower) {
+                        return Some(left.to_string());
+                    }
+                }
+            }
+            // Multi-part: "Song - Artist - Album"
+            let parts: Vec<&str> = content.split(" - ").collect();
+            if parts.len() >= 3 {
+                let first = parts[0].trim();
+                if fuzzy_title_match(&first.to_lowercase(), &gsmtc_lower) {
+                    return Some(parts[1].trim().to_string());
+                }
+            }
+            None
+        }
+        MusicService::YouTube | MusicService::Unknown => {
+            // For YouTube / unknown: try generic "Artist - Title" splitting
+            // but only if we can match the GSMTC title to one side
+            for sep in &[" - ", " · ", " – ", " — "] {
+                if let Some(pos) = content.find(sep) {
+                    let left = content[..pos].trim();
+                    let right = content[pos + sep.len()..].trim();
+                    if left.is_empty() || right.is_empty() {
+                        continue;
+                    }
+                    if fuzzy_title_match(&left.to_lowercase(), &gsmtc_lower) {
+                        return Some(right.to_string());
+                    }
+                    if fuzzy_title_match(&right.to_lowercase(), &gsmtc_lower) {
+                        return Some(left.to_string());
+                    }
+                }
+            }
+            None
+        }
+    }
+}
+
+/// Strip known browser suffixes from a window title.
+///
+/// Browser window titles typically end with " - Google Chrome", " - Brave", etc.
+/// Stripping these lets us work with just the page title content.
+fn strip_browser_suffix(title: &str) -> String {
+    const BROWSER_SUFFIXES: &[&str] = &[
+        " - Google Chrome",
+        " - Chrome",
+        " - Brave",
+        " - Brave Browser",
+        " - Microsoft\u{200b} Edge", // Edge sometimes uses zero-width space
+        " - Microsoft Edge",
+        " - Edge",
+        " - Mozilla Firefox",
+        " - Firefox",
+        " - Opera",
+        " - Vivaldi",
+    ];
+    let lower = title.to_lowercase();
+    for suffix in BROWSER_SUFFIXES {
+        if lower.ends_with(&suffix.to_lowercase()) {
+            return title[..title.len() - suffix.len()].to_string();
+        }
+    }
+    title.to_string()
+}
+
+/// Extract the artist from a browser window title when we know the GSMTC title.
+///
+/// When GSMTC gives us a clean title (e.g., "Shape of You") but no artist,
+/// and the browser window title is "Shape of You - Ed Sheeran | Spotify - Google Chrome",
+/// this function matches the GSMTC title against the window title content to
+/// identify which part is the artist.
+fn extract_artist_from_window_title(gsmtc_title: &str, window_title: &str) -> Option<String> {
+    // Strip browser and service suffixes to get just the content
+    let stripped = strip_browser_suffix(window_title);
+    let lower_gsmtc = gsmtc_title.to_lowercase();
+
+    // Find and strip the music service suffix
+    let content = strip_service_suffix_str(&stripped);
+    if content.is_empty() {
+        return None;
+    }
+
+    // Try each separator to split the content
+    for sep in &[" - ", " · ", " — ", " – "] {
+        if let Some(pos) = content.find(sep) {
+            let left = content[..pos].trim();
+            let right = content[pos + sep.len()..].trim();
+            if left.is_empty() || right.is_empty() {
+                continue;
+            }
+            let left_lower = left.to_lowercase();
+            let right_lower = right.to_lowercase();
+
+            // If GSMTC title matches one side, the other side is the artist
+            if fuzzy_title_match(&lower_gsmtc, &left_lower) {
+                return Some(right.to_string());
+            }
+            if fuzzy_title_match(&lower_gsmtc, &right_lower) {
+                return Some(left.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Extract both title and artist from a browser window title.
+/// Used when GSMTC provides no metadata at all (TryGetMediaPropertiesAsync failed).
+fn extract_metadata_from_window_title(window_title: &str) -> Option<(String, String)> {
+    let stripped = strip_browser_suffix(window_title);
+    let content = strip_service_suffix_str(&stripped);
+    if content.is_empty() {
+        return None;
+    }
+
+    if let Some((a, b)) = split_dash(&content) {
+        Some((a.to_string(), b.to_string()))
+    } else {
+        Some((content, String::new()))
+    }
+}
+
+/// Strip a known music service suffix from a title and return just the content.
+fn strip_service_suffix_str(title: &str) -> String {
+    let lower = title.to_lowercase();
+    const SUFFIXES: &[&str] = &[
+        "| spotify", "- spotify", "| spotify - premium", "- spotify - premium",
+        "| youtube music", "- youtube music",
+        "| apple music", "- apple music",
+        "| soundcloud", "- soundcloud",
+        "| tidal", "- tidal",
+        "| deezer", "- deezer",
+        "| amazon music", "- amazon music",
+        "| pandora", "- pandora",
+        "| jiosaavn", "- jiosaavn",
+        "| gaana", "- gaana",
+        "| bandcamp", "- bandcamp",
+        "| youtube", "- youtube",
+    ];
+    for suffix in SUFFIXES {
+        if lower.ends_with(suffix) {
+            return title[..title.len() - suffix.len()]
+                .trim()
+                .trim_end_matches(&['-', '|'][..])
+                .trim()
+                .to_string();
+        }
+    }
+    title.trim().to_string()
+}
+
+/// Fuzzy match two title strings — accounts for truncation and minor differences.
+fn fuzzy_title_match(a: &str, b: &str) -> bool {
+    if a == b {
+        return true;
+    }
+    // One contains the other (handles truncated titles)
+    if a.len() >= 4 && b.len() >= 4 {
+        if a.contains(b) || b.contains(a) {
+            return true;
+        }
+    }
+    false
 }

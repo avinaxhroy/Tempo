@@ -319,6 +319,12 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 </div>
               )}
               <div className="track-source">{nowPlaying.source_app}</div>
+              {/\(Windows\)/.test(nowPlaying.source_app ?? "") &&
+                /(chrome|firefox|edge|msedge|brave|opera|vivaldi)/i.test(nowPlaying.source_app ?? "") && (
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, fontStyle: "italic" }}>
+                  Artist info may be incomplete on Windows browsers
+                </div>
+              )}
             </div>
             <div className="playing-indicator">
               <span />
