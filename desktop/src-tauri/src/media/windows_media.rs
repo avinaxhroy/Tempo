@@ -1031,7 +1031,8 @@ fn query_browser_music_window() -> Option<RawMediaInfo> {
         (content, String::new())
     };
 
-    let browser_name = friendly_browser_name(&bt.browser.to_lowercase());
+    let browser_lower = bt.browser.to_lowercase();
+    let browser_name = friendly_browser_name(&browser_lower);
 
     debug!(
         "Browser fallback: detected '{}' by '{}' from {} via {} window title",
