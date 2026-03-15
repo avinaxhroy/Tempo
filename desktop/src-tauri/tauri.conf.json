@@ -29,7 +29,7 @@
     "notification": null,
     "global-shortcut": null,
     "autostart": null,
-    "single-instance": {}
+    "single-instance": null
   },
   "bundle": {
     "active": true,

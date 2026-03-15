@@ -260,26 +260,39 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building Tempo Desktop")
         .run(|app_handle, event| {
-            if let RunEvent::WindowEvent {
-                label,
-                event: WindowEvent::CloseRequested { api, .. },
-                ..
-            } = &event
-            {
-                // If minimize_to_tray is enabled, hide the window instead of quitting
-                let should_hide = {
-                    let state = app_handle.state::<AppState>();
-                    let db = tauri::async_runtime::block_on(state.db.lock());
-                    db.get_settings()
-                        .map(|s| s.minimize_to_tray)
-                        .unwrap_or(true)
-                };
-                if should_hide {
-                    api.prevent_close();
-                    if let Some(window) = app_handle.get_webview_window(label) {
-                        let _ = window.hide();
+            match &event {
+                // macOS: user clicked the dock icon while the app is already running
+                // (e.g. window was hidden via minimize-to-tray). Bring it back.
+                RunEvent::Reopen { has_visible_windows, .. } => {
+                    if !has_visible_windows {
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
                     }
                 }
+                RunEvent::WindowEvent {
+                    label,
+                    event: WindowEvent::CloseRequested { api, .. },
+                    ..
+                } => {
+                    // If minimize_to_tray is enabled, hide the window instead of quitting
+                    let should_hide = {
+                        let state = app_handle.state::<AppState>();
+                        let db = tauri::async_runtime::block_on(state.db.lock());
+                        db.get_settings()
+                            .map(|s| s.minimize_to_tray)
+                            .unwrap_or(true)
+                    };
+                    if should_hide {
+                        api.prevent_close();
+                        if let Some(window) = app_handle.get_webview_window(label) {
+                            let _ = window.hide();
+                        }
+                    }
+                }
+                _ => {}
             }
         });
 }
