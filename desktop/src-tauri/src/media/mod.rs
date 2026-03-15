@@ -250,56 +250,6 @@ pub async fn start_polling(app_handle: tauri::AppHandle) {
         }
     }
 
-    // Crash recovery: check for a persisted session from a previous run
-    {
-        let state = app_handle.state::<AppState>();
-        if let Some(session) = crate::session::load_session(&state.app_data_dir) {
-            info!(
-                "Recovering crashed session: '{}' by '{}' (listened {}ms)",
-                session.title, session.artist, session.accumulated_listen_ms
-            );
-            // Only recover if the session had enough listen time
-            if session.accumulated_listen_ms >= 15_000 {
-                let db = state.db.lock().await;
-                let timestamp = session.saved_at;
-                if !db.has_recent_play(&session.title, &session.artist, timestamp).unwrap_or(true) {
-                    let completion = if session.duration_ms > 0 {
-                        ((session.accumulated_listen_ms as f64 / session.duration_ms as f64) * 100.0).clamp(0.0, 100.0)
-                    } else {
-                        90.0
-                    };
-                    let play = crate::db::models::Play {
-                        id: None,
-                        title: session.title.clone(),
-                        artist: session.artist.clone(),
-                        album: session.album.clone(),
-                        duration_ms: session.duration_ms,
-                        timestamp_utc: timestamp,
-                        source_app: session.source_app.clone(),
-                        status: crate::db::models::PlayStatus::Queued,
-                        listened_ms: session.accumulated_listen_ms,
-                        skipped: session.duration_ms > 0
-                            && (session.accumulated_listen_ms as f64) < (session.duration_ms as f64 * 0.30),
-                        replay_count: session.replay_count,
-                        is_muted: false,
-                        completion_percentage: completion,
-                        pause_count: session.pause_count,
-                        seek_count: session.seek_count,
-                        session_id: session.session_id.clone(),
-                        site: session.site.unwrap_or_default(),
-                        content_type: session.content_type.clone(),
-                        volume_level: session.volume_level,
-                    };
-                    match db.insert_play(&play) {
-                        Ok(_) => info!("Recovered crashed session as queued play"),
-                        Err(e) => error!("Failed to recover crashed session: {}", e),
-                    }
-                }
-            }
-            crate::session::clear_session(&state.app_data_dir);
-        }
-    }
-
     loop {
         let poll_secs = {
             let state = app_handle.state::<AppState>();
@@ -401,41 +351,18 @@ pub async fn start_polling(app_handle: tauri::AppHandle) {
                         );
                         let _ = app_handle.emit("play-added", &play);
                         let _ = app_handle.emit("now-playing-changed", &now_playing);
-                        // Clear persisted session — the play was successfully logged
-                        crate::session::clear_session(&state.app_data_dir);
                     }
                     Err(e) => error!("Failed to insert play: {}", e),
                 }
             }
             DetectResult::NowPlaying(np) => {
                 let _ = app_handle.emit("now-playing-changed", &np);
-                // Periodically persist in-progress session for crash recovery
-                let session = crate::session::PersistedSession {
-                    track_key: format!("{}|{}", np.title, np.artist),
-                    title: np.title.clone(),
-                    artist: np.artist.clone(),
-                    album: np.album.clone(),
-                    duration_ms: np.duration_ms,
-                    accumulated_listen_ms: np.listened_ms,
-                    source_app: np.source_app.clone(),
-                    session_id: np.session_id.clone(),
-                    replay_count: np.replay_count,
-                    pause_count: np.pause_count,
-                    seek_count: np.seek_count,
-                    site: np.site.clone(),
-                    content_type: np.content_type.clone(),
-                    volume_level: np.volume_level,
-                    saved_at: chrono::Utc::now().timestamp_millis(),
-                };
-                crate::session::save_session(&state.app_data_dir, &session);
             }
             DetectResult::TrackFinished { listened_ms, skipped, replay_count, completion_percentage, pause_count, seek_count, session_id: _ } => {
                 debug!(
                     "Track finished: listened={}ms skipped={} replays={} completion={:.1}% pauses={} seeks={}",
                     listened_ms, skipped, replay_count, completion_percentage, pause_count, seek_count
                 );
-                // Clear persisted session — track has ended
-                crate::session::clear_session(&state.app_data_dir);
             }
             DetectResult::Filtered | DetectResult::NothingPlaying => {}
         }
