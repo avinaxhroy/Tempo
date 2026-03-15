@@ -5,7 +5,6 @@ pub mod errors;
 mod media;
 mod network;
 mod queue;
-pub mod session;
 
 use db::Database;
 use media::MediaDetector;

@@ -55,5 +55,6 @@ zbus = { version = "4", default-features = false, features = ["tokio"] }
 windows = { version = "0.58", features = [
   "Media_Control",
   "Foundation",
-  "Storage_Streams"
+  "Foundation_Collections",
+  "Storage_Streams",
 ] }
