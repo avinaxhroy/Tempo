@@ -11,7 +11,7 @@ pub struct PlayCount {
 
 #[tauri::command]
 pub async fn get_now_playing(state: State<'_, AppState>) -> Result<Option<NowPlaying>, String> {
-    let media = state.media.lock().await;
+    let mut media = state.media.lock().await;
     let np = media.detect_now_playing().await;
     Ok(np)
 }

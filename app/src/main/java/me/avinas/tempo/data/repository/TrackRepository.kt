@@ -8,6 +8,7 @@ interface TrackRepository {
     suspend fun findBySpotifyId(spotifyId: String): Track?
     suspend fun findByTitleAndArtist(title: String, artist: String): Track?
     suspend fun findByTitleAndArtistFuzzy(title: String, artist: String): Track?
+    suspend fun findCandidatesByTitle(title: String): List<Track>
     suspend fun insert(track: Track): Long
     suspend fun insertAll(tracks: List<Track>): List<Long>
     suspend fun update(track: Track)

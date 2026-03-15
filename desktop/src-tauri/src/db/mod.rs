@@ -128,6 +128,19 @@ impl Database {
 
             CREATE INDEX IF NOT EXISTS idx_user_known_artists_norm ON user_known_artists(normalized_name);
             CREATE INDEX IF NOT EXISTS idx_user_youtube_channels_norm ON user_youtube_channels(normalized_name);
+
+            -- Network-aware IP memory: remembers phone IP per WiFi network (SSID)
+            CREATE TABLE IF NOT EXISTS network_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                network_id TEXT NOT NULL,
+                phone_ip TEXT NOT NULL,
+                phone_port INTEGER NOT NULL DEFAULT 8765,
+                last_seen TEXT DEFAULT (datetime('now')),
+                success_count INTEGER DEFAULT 1,
+                UNIQUE(network_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_network_history_id ON network_history(network_id);
             ",
         )?;
 
@@ -393,8 +406,29 @@ impl Database {
     }
 
     pub fn clear_queue(&self) -> Result<usize, rusqlite::Error> {
-        let count = self.conn.execute("DELETE FROM scrobbles WHERE status = 'queued'", [])?;
+        let count = self.conn.execute("DELETE FROM scrobbles WHERE status IN ('queued', 'failed')", [])?;
         Ok(count)
+    }
+
+    /// Remove old synced scrobbles (>30 days) and old sync_history entries (>90 days)
+    /// to prevent unbounded table growth.
+    pub fn prune_old_data(&self) -> Result<(usize, usize), rusqlite::Error> {
+        let scrobbles_pruned = self.conn.execute(
+            "DELETE FROM scrobbles WHERE status = 'synced' AND timestamp_utc < strftime('%s', 'now', '-30 days') * 1000",
+            [],
+        )?;
+        let history_pruned = self.conn.execute(
+            "DELETE FROM sync_history WHERE synced_at < datetime('now', '-90 days')",
+            [],
+        )?;
+        if scrobbles_pruned > 0 || history_pruned > 0 {
+            log::info!(
+                "Pruned {} old synced scrobbles and {} old sync history entries",
+                scrobbles_pruned,
+                history_pruned
+            );
+        }
+        Ok((scrobbles_pruned, history_pruned))
     }
 
     // --- Pairing ---
@@ -732,6 +766,39 @@ impl Database {
             log::info!("Reset {} failed plays back to queued for retry", count);
         }
         Ok(count)
+    }
+
+    // --- Network History (WiFi-aware IP memory) ---
+
+    /// Record or update the phone's IP for a specific network (SSID or identifier).
+    /// Increments success_count on subsequent successful connections from the same network.
+    pub fn upsert_network_ip(&self, network_id: &str, phone_ip: &str, phone_port: u16) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "INSERT INTO network_history (network_id, phone_ip, phone_port, last_seen, success_count)
+             VALUES (?1, ?2, ?3, datetime('now'), 1)
+             ON CONFLICT(network_id) DO UPDATE SET
+                 phone_ip = excluded.phone_ip,
+                 phone_port = excluded.phone_port,
+                 last_seen = datetime('now'),
+                 success_count = network_history.success_count + 1",
+            params![network_id, phone_ip, phone_port],
+        )?;
+        Ok(())
+    }
+
+    /// Look up the last known phone IP for a specific network.
+    pub fn get_network_ip(&self, network_id: &str) -> Result<Option<(String, u16)>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT phone_ip, phone_port FROM network_history WHERE network_id = ?1",
+        )?;
+        let result = stmt.query_row(params![network_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, u16>(1)?))
+        });
+        match result {
+            Ok(pair) => Ok(Some(pair)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 
     /// Mark specific plays as failed.

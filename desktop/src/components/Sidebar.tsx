@@ -7,6 +7,7 @@ import {
   Disc3,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { getPairingStatus } from "../lib/api";
 import type { Page } from "../lib/types";
 
@@ -31,8 +32,13 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     const interval = setInterval(() => {
       if (document.visibilityState !== "visible") return;
       getPairingStatus().then((s) => setIsPaired(s.is_paired)).catch(() => {});
-    }, 10000);
-    return () => clearInterval(interval);
+    }, 30000);
+    // React instantly to pairing events instead of waiting for the next poll
+    const unlistenPaired = listen("pairing-confirmed", () => setIsPaired(true));
+    return () => {
+      clearInterval(interval);
+      unlistenPaired.then((f) => f());
+    };
   }, []);
 
   return (

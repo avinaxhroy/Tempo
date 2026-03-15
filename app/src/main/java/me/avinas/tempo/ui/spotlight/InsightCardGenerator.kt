@@ -191,12 +191,14 @@ class InsightCardGenerator @Inject constructor(
             
             // Time-range-specific thresholds (Phase 2)
             val minPlays = when (timeRange) {
+                TimeRange.THIS_WEEK -> 3
                 TimeRange.THIS_MONTH -> 5  // More lenient for new users
                 TimeRange.THIS_YEAR -> 8
                 else -> 10
             }
             
             val minHours = when (timeRange) {
+                TimeRange.THIS_WEEK -> 2
                 TimeRange.THIS_MONTH -> 2
                 else -> 3
             }
@@ -286,6 +288,7 @@ class InsightCardGenerator @Inject constructor(
             
             // Time-range-specific pattern strength (Phase 2)
             val minDifference = when (timeRange) {
+                TimeRange.THIS_WEEK -> 2
                 TimeRange.THIS_MONTH -> 3  // More lenient for new users
                 else -> 5
             }
@@ -354,11 +357,13 @@ class InsightCardGenerator @Inject constructor(
             
             // Time-range-specific requirements  (Phase 2)
             val minPlayCount = when (timeRange) {
+                TimeRange.THIS_WEEK -> 5
                 TimeRange.THIS_MONTH -> 8
                 else -> 10
             }
             
             val minRelationshipDays = when (timeRange) {
+                TimeRange.THIS_WEEK -> 3L   // 3 days
                 TimeRange.THIS_MONTH -> 7L  // 1 week
                 else -> 14L  // 2 weeks
             }
@@ -442,6 +447,7 @@ class InsightCardGenerator @Inject constructor(
             // Use pre-fetched play count instead of expensive getArtistDetailsByName call
             val playCount = data.topNewArtistPlayCount
             val minPlays = when (timeRange) {
+                TimeRange.THIS_WEEK -> 2
                 TimeRange.THIS_MONTH -> 3
                 TimeRange.THIS_YEAR -> 6
                 else -> 12
@@ -787,6 +793,7 @@ class InsightCardGenerator @Inject constructor(
             val topArtist = topArtistsList.first()
             
             val timeText = when (timeRange) {
+                TimeRange.THIS_WEEK -> "this week"
                 TimeRange.THIS_MONTH -> "this month"
                 TimeRange.ALL_TIME -> "of all time"
                 else -> "this year"

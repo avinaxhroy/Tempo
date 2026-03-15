@@ -1,5 +1,7 @@
 pub mod discovery;
 pub mod mdns;
+pub mod subnet;
+pub mod wifi;
 
 use crate::db::models::{SyncPayload, SyncPlay};
 use crate::AppState;
@@ -51,7 +53,7 @@ fn compute_hmac(auth_token: &str, payload_json: &str) -> String {
 #[allow(dead_code)]
 pub struct SyncResult {
     pub synced_count: usize,
-    pub method: String, // "primary", "mdns", "hotspot"
+    pub method: String, // "primary", "network_memory", "mdns", "hotspot", "subnet_scan"
     pub resolved_ip: String,
 }
 
@@ -74,6 +76,10 @@ pub async fn discover_confirmed_phone(
     auth_token: &str,
     preferred_port: u16,
 ) -> Option<ResolvedPhone> {
+    // Note: network-remembered IP lookup requires DB access and is handled by
+    // the caller (sync_to_phone / connection_health_loop) before invoking this.
+
+    // Strategy A: mDNS discovery
     if let Some(discovered) = mdns::discover_phone().await {
         if let Some(device_name) = confirm_pairing_token(&discovered.ip, discovered.port, auth_token).await {
             return Some(ResolvedPhone {
@@ -85,6 +91,7 @@ pub async fn discover_confirmed_phone(
         }
     }
 
+    // Strategy B: Hotspot gateway fallback
     if let Some(gateway) = discovery::get_default_gateway() {
         if let Some(device_name) = confirm_pairing_token(&gateway, preferred_port, auth_token).await {
             return Some(ResolvedPhone {
@@ -96,15 +103,29 @@ pub async fn discover_confirmed_phone(
         }
     }
 
+    // Strategy C: Subnet scan (finds phone even when mDNS is blocked)
+    if let Some(ip) = subnet::scan_subnet_for_phone(preferred_port).await {
+        if let Some(device_name) = confirm_pairing_token(&ip, preferred_port, auth_token).await {
+            return Some(ResolvedPhone {
+                ip,
+                port: preferred_port,
+                method: "subnet_scan".to_string(),
+                device_name,
+            });
+        }
+    }
+
     None
 }
 
 /// Sync queued plays to the paired phone with multi-strategy discovery and retry.
 ///
 /// Strategy order:
-/// 1. Try the stored (primary) phone IP
-/// 2. Try mDNS auto-discovery (handles DHCP IP changes)
-/// 3. Try hotspot gateway fallback (handles tethering)
+/// 1. Primary stored IP
+/// 1.5 Network-remembered IP for this WiFi SSID
+/// 2. mDNS auto-discovery (handles DHCP IP changes)
+/// 3. Hotspot gateway fallback (handles tethering)
+/// 4. Subnet scan (handles multicast-blocked networks)
 ///
 /// Each strategy uses exponential backoff retries.
 pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncError> {
@@ -181,6 +202,7 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
     let phone_url = format!("http://{}:{}/api/plays", pairing.phone_ip, pairing.phone_port);
     info!("Syncing {} plays to {} (primary)", count, phone_url);
 
+    let current_network = wifi::get_current_network_id();
     let mut last_error_reason = format!("primary ({}): no response", pairing.phone_ip);
 
     match send_with_retry(&phone_url, &payload).await {
@@ -190,6 +212,10 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
                 .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
             db.record_sync(count as i64, "success", None)
                 .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+            // Remember this IP for the current WiFi network
+            if let Some(ref net_id) = current_network {
+                let _ = db.upsert_network_ip(net_id, &pairing.phone_ip, pairing.phone_port);
+            }
             return Ok(count);
         }
         Err(SyncError::BatteryCritical) => {
@@ -209,7 +235,54 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
         }
         Err(e) => {
             last_error_reason = format!("primary ({}): {}", pairing.phone_ip, e);
-            info!("Primary IP failed ({}), trying mDNS discovery...", e);
+            info!("Primary IP failed ({}), trying network memory...", e);
+        }
+    }
+
+    // Strategy 1.5: Try network-remembered IP (last known IP for this WiFi SSID)
+    if let Some(ref net_id) = current_network {
+        let remembered = {
+            let db = state.db.lock().await;
+            db.get_network_ip(net_id).ok().flatten()
+        };
+        if let Some((remembered_ip, remembered_port)) = remembered {
+            // Only try if it's different from the primary IP we already tried
+            if remembered_ip != pairing.phone_ip || remembered_port != pairing.phone_port {
+                let net_url = format!("http://{}:{}/api/plays", remembered_ip, remembered_port);
+                info!("Trying network-remembered IP for '{}': {}", net_id, net_url);
+
+                match send_with_retry(&net_url, &payload).await {
+                    Ok(()) => {
+                        // Update stored primary IP too
+                        let mut updated_pairing = pairing.clone();
+                        updated_pairing.phone_ip = remembered_ip.clone();
+                        updated_pairing.phone_port = remembered_port;
+                        let db = state.db.lock().await;
+                        let _ = db.save_pairing(&updated_pairing);
+                        let _ = db.upsert_network_ip(net_id, &remembered_ip, remembered_port);
+                        db.mark_plays_synced(&ids)
+                            .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+                        db.record_sync(count as i64, "success", None)
+                            .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+                        info!("Sync via network memory succeeded ({})", remembered_ip);
+                        return Ok(count);
+                    }
+                    Err(SyncError::BatteryCritical) => return Err(SyncError::BatteryCritical),
+                    Err(e @ SyncError::Rejected(_)) => {
+                        error!("Phone rejected via network memory: {}", e);
+                        let db = state.db.lock().await;
+                        let _ = db.mark_plays_failed(&ids);
+                        let err_str = e.to_string();
+                        db.record_sync(0, "failed", Some(&err_str))
+                            .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+                        return Err(e);
+                    }
+                    Err(e) => {
+                        last_error_reason = format!("network_memory ({}): {}", remembered_ip, e);
+                        info!("Network-remembered IP also failed ({}), trying mDNS...", e);
+                    }
+                }
+            }
         }
     }
 
@@ -236,6 +309,10 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
                     .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
                 db.record_sync(count as i64, "success", None)
                     .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+                // Remember this IP for the current WiFi network
+                if let Some(ref net_id) = current_network {
+                    let _ = db.upsert_network_ip(net_id, &discovered.ip, discovered.port);
+                }
                 info!("Sync via mDNS succeeded, updated stored IP to {}", discovered.ip);
                 return Ok(count);
             }
@@ -281,6 +358,10 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
                     .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
                 db.record_sync(count as i64, "success", None)
                     .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+                // Remember this IP for the current WiFi network
+                if let Some(ref net_id) = current_network {
+                    let _ = db.upsert_network_ip(net_id, &gateway, pairing.phone_port);
+                }
                 info!("Sync via hotspot fallback succeeded (gateway: {})", gateway);
                 return Ok(count);
             }
@@ -305,10 +386,49 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
         }
     }
 
+    // Strategy 4: Subnet scan (finds phone even when mDNS/multicast is blocked)
+    info!("Trying subnet scan as last resort...");
+    if let Some(found_ip) = subnet::scan_subnet_for_phone(pairing.phone_port).await {
+        let scan_url = format!("http://{}:{}/api/plays", found_ip, pairing.phone_port);
+        info!("Subnet scan found phone at {}, attempting sync...", scan_url);
+
+        match send_with_retry(&scan_url, &payload).await {
+            Ok(()) => {
+                let mut updated_pairing = pairing.clone();
+                updated_pairing.phone_ip = found_ip.clone();
+                let db = state.db.lock().await;
+                let _ = db.save_pairing(&updated_pairing);
+                if let Some(ref net_id) = current_network {
+                    let _ = db.upsert_network_ip(net_id, &found_ip, pairing.phone_port);
+                }
+                db.mark_plays_synced(&ids)
+                    .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+                db.record_sync(count as i64, "success", None)
+                    .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+                info!("Sync via subnet scan succeeded ({})", found_ip);
+                return Ok(count);
+            }
+            Err(SyncError::BatteryCritical) => return Err(SyncError::BatteryCritical),
+            Err(e @ SyncError::Rejected(_)) => {
+                error!("Phone rejected via subnet scan: {}", e);
+                let db = state.db.lock().await;
+                let _ = db.mark_plays_failed(&ids);
+                let err_str = e.to_string();
+                db.record_sync(0, "failed", Some(&err_str))
+                    .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+                return Err(e);
+            }
+            Err(e) => {
+                last_error_reason = format!("subnet_scan ({}): {}", found_ip, e);
+                error!("Subnet scan sync also failed: {}", e);
+            }
+        }
+    }
+
     // All strategies failed — mark plays as failed (they'll be retried on next auto-sync cycle)
     let err_msg = if last_error_reason.is_empty() {
         format!(
-            "Could not reach phone at {}:{} (tried primary IP, mDNS, and hotspot gateway)",
+            "Could not reach phone at {}:{} (tried primary IP, network memory, mDNS, hotspot gateway, and subnet scan)",
             pairing.phone_ip, pairing.phone_port
         )
     } else {

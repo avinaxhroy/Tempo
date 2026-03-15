@@ -10,6 +10,12 @@ export interface NowPlaying {
   skipped: boolean;
   replay_count: number;
   is_muted: boolean;
+  completion_percentage: number;
+  pause_count: number;
+  seek_count: number;
+  content_type: string;
+  session_id: string;
+  volume_level: number;
 }
 
 export interface Play {
@@ -23,6 +29,15 @@ export interface Play {
   status: "queued" | "synced" | "failed";
   listened_ms: number;
   skipped: boolean;
+  replay_count: number;
+  is_muted: boolean;
+  completion_percentage: number;
+  pause_count: number;
+  seek_count: number;
+  session_id: string;
+  site: string;
+  content_type: string;
+  volume_level: number;
 }
 
 export interface PairingStatus {

@@ -455,19 +455,15 @@ fn clean_artist(artist: &str) -> String {
         return String::new();
     }
 
-    // Reconstruct the artist string preserving featured artists so that downstream
-    // consumers (e.g. Android ArtistParser / ArtistLinkingService) can correctly
-    // extract and link both primary and featured artists to the track.
-    let primary = if parsed.primary_artists.is_empty() {
+    // Reconstruct as a plain comma-separated list of ALL artists (primary + featured).
+    // This matches the format that iOS/Apple Music exposes and that MusicTrackingService
+    // stores on the phone (e.g. "Farhan Khan, Mujtaba Aziz Naza, Mr. Doss").
+    // Keeping a "feat." keyword in the sent string would cause the phone's findOrCreate
+    // lookup to miss the existing track row and create a duplicate.
+    cleaned = if parsed.all_artists.is_empty() {
         parsed.original.clone()
     } else {
-        parsed.primary_artists.join(", ")
-    };
-
-    cleaned = if parsed.featured_artists.is_empty() {
-        primary
-    } else {
-        format!("{} feat. {}", primary, parsed.featured_artists.join(", "))
+        parsed.all_artists.join(", ")
     };
 
     cleaned.trim().to_string()

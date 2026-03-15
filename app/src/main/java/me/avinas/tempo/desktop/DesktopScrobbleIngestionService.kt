@@ -147,6 +147,23 @@ class DesktopPlayIngestionService @Inject constructor(
                     }
                     enrichedMetadataRepository.createPendingIfNotExists(trackId)
                     newTrackIds.add(trackId)
+                } else {
+                    // Existing track: if album art is still missing (enrichment never succeeded
+                    // or failed previously) re-queue it so it gets another attempt.
+                    // This is the common case when a desktop sync resends a track that was
+                    // ingested before but whose EnrichmentWorker run produced no art.
+                    val existingMeta = enrichedMetadataRepository.forTrackSync(trackId)
+                    if (existingMeta == null || existingMeta.albumArtUrl.isNullOrBlank()) {
+                        if (existingMeta == null) {
+                            enrichedMetadataRepository.createPendingIfNotExists(trackId)
+                        } else {
+                            // Reset status to PENDING so the worker picks it up again
+                            enrichedMetadataRepository.markForReEnrichment(trackId)
+                        }
+                        if (!newTrackIds.contains(trackId)) {
+                            newTrackIds.add(trackId)
+                        }
+                    }
                 }
 
                 // 4. Deduplication: skip if an event for this track exists within ±60 s
@@ -206,15 +223,26 @@ class DesktopPlayIngestionService @Inject constructor(
         album: String?,
         durationMs: Long
     ): TrackResolution {
-        // Exact match first
+        // 1. Exact case-insensitive match
         trackRepository.findByTitleAndArtist(title, artist)?.let {
             return TrackResolution(id = it.id, isNew = false)
         }
-        // Fuzzy match (handles minor whitespace/case differences)
+        // 2. Fuzzy substring match (handles minor whitespace / case differences)
         trackRepository.findByTitleAndArtistFuzzy(title, artist)?.let {
             return TrackResolution(id = it.id, isNew = false)
         }
-        // Create new track record
+        // 3. Any-artist intersection match:
+        //    Fetch every track with the same title, then check whether at least one
+        //    individual artist name from the incoming play exists in the stored artist
+        //    string (or vice-versa).  This handles:
+        //      - Desktop sends only the primary artist ("Farhan Khan") but phone stores
+        //        the full list ("Farhan Khan, Mujtaba Aziz Naza, Mr. Doss").
+        //      - Different separators: "A & B" vs "A, B", "A feat. B" vs "A ft. B", etc.
+        val candidates = trackRepository.findCandidatesByTitle(title)
+        candidates.firstOrNull { artistsOverlap(it.artist, artist) }?.let {
+            return TrackResolution(id = it.id, isNew = false)
+        }
+        // 4. No match found — create a new track record
         val newTrack = Track(
             title = title,
             artist = artist,
@@ -234,6 +262,30 @@ class DesktopPlayIngestionService @Inject constructor(
         val isNew: Boolean,
         val track: Track? = null
     )
+
+    /**
+     * Returns true if the two artist strings share at least one individual artist name.
+     *
+     * Both strings are split on common separators (comma, ampersand, slash, featuring
+     * keywords, "x", "and", "vs").  Each token is trimmed and lowercased before the
+     * intersection check, so formatting differences ("feat." vs "ft.", " & " vs ", ")
+     * and partial-artist sends ("Farhan Khan" vs "Farhan Khan, Mujtaba Aziz Naza, …")
+     * are all handled transparently.
+     */
+    private fun artistsOverlap(storedArtist: String, incomingArtist: String): Boolean {
+        val separator = Regex(
+            """\s*[,/]\s*|\s+&\s+|\s+feat\.?\s+|\s+ft\.?\s+|\s+featuring\s+|\s+with\s+|\s+x\s+|\s+and\s+|\s+vs\.?\s+""",
+            RegexOption.IGNORE_CASE
+        )
+        fun tokens(s: String) = separator.split(s)
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .toSet()
+
+        val stored   = tokens(storedArtist)
+        val incoming = tokens(incomingArtist)
+        return stored.any { it in incoming }
+    }
 
     private suspend fun checkDuplicate(trackId: Long, timestampUtc: Long): Boolean {
         val windowStart = timestampUtc - DEDUP_WINDOW_MS

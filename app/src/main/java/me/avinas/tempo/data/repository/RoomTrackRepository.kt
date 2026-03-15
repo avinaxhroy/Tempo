@@ -30,6 +30,8 @@ class RoomTrackRepository @Inject constructor(
         dao.findByTitleAndArtist(title, artist)
     override suspend fun findByTitleAndArtistFuzzy(title: String, artist: String): Track? = 
         dao.findByTitleAndArtistFuzzy(title, artist)
+    override suspend fun findCandidatesByTitle(title: String): List<Track> =
+        dao.findCandidatesByTitle(title)
     override suspend fun insert(track: Track): Long = dao.insert(track)
     override suspend fun insertAll(tracks: List<Track>): List<Long> = dao.insertAll(tracks)
     override suspend fun update(track: Track) = dao.update(track)

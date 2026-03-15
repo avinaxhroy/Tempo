@@ -193,7 +193,12 @@ class HomeViewModel @Inject constructor(
                         userName = userName,
                         hasData = hasData,
                         isNewUser = isNewUser,
-                        showRateAppPopup = shouldShowRateApp(allTimeOverview.totalListeningTimeMs, allTimeOverview.totalPlayCount)
+                        // Preserve existing true state: once the popup is triggered it must stay
+                        // visible until the user actively interacts with it. Without this guard,
+                        // any subsequent data reload (e.g. time-range change) would call
+                        // shouldShowRateApp() which now sees the 3-day cooldown has just been
+                        // written and returns false, silently dismissing the popup mid-interaction.
+                        showRateAppPopup = it.showRateAppPopup || shouldShowRateApp()
                     )
                 }
             }
@@ -202,9 +207,25 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private suspend fun shouldShowRateApp(totalTimeMs: Long, playCount: Int): Boolean {
-        // Install age check: only prompt users who have had the app for at least 7 days.
-        // firstInstallTime is set by the Play Store and survives app updates (not reinstalls).
+    private suspend fun shouldShowRateApp(): Boolean {
+        // Check cheapest gates first to short-circuit before hitting the DB.
+        val preferences = context.dataStore.data.first()
+
+        // 1. Already handled — permanent suppression.
+        val hasRated = preferences[booleanPreferencesKey("rate_app_rated")] ?: false
+        if (hasRated) return false
+
+        // 2. Dismissed too many times.
+        val dismissCount = preferences[intPreferencesKey("rate_app_dismiss_count")] ?: 0
+        if (dismissCount >= 2) return false
+
+        // 3. Cooldown: don't re-prompt within 3 days of the last showing.
+        val lastShown = preferences[longPreferencesKey("rate_app_last_shown")] ?: 0L
+        val threeDaysMs = 3 * 24 * 60 * 60 * 1000L
+        if (System.currentTimeMillis() - lastShown <= threeDaysMs) return false
+
+        // 4. Install age: only prompt users who have had the app for at least 7 days.
+        //    firstInstallTime survives app updates but not reinstalls.
         val sevenDaysMs = 7 * 24 * 60 * 60 * 1000L
         val firstInstallTime = try {
             context.packageManager
@@ -215,34 +236,17 @@ class HomeViewModel @Inject constructor(
         }
         if (System.currentTimeMillis() - firstInstallTime < sevenDaysMs) return false
 
-        // Get REAL usage stats (excluding imported data from Spotify)
-        // We want to prompt users who actually use the app, not just imported history
+        // 5. Engagement: > 2 hours REAL listening AND > 50 REAL plays
+        //    (excludes imported Spotify history — source NOT LIKE '%import%')
         val realListeningTimeMs = listeningEventDao.getRealListeningTimeMs()
         val realPlayCount = listeningEventDao.getRealPlayCount()
-        
-        // Engagement Check: > 2 hours REAL listening AND > 50 REAL plays
         if (realListeningTimeMs < 2 * 60 * 60 * 1000 || realPlayCount < 50) return false
 
-        val preferences = context.dataStore.data.first()
-        val hasRated = preferences[booleanPreferencesKey("rate_app_rated")] ?: false
-        if (hasRated) return false
-
-        val dismissCount = preferences[intPreferencesKey("rate_app_dismiss_count")] ?: 0
-        if (dismissCount >= 2) return false // Don't show if dismissed twice
-
-        val lastShown = preferences[longPreferencesKey("rate_app_last_shown")] ?: 0L
-        val threeDaysMs = 3 * 24 * 60 * 60 * 1000L
-        
-        // If never shown or shown more than 3 days ago
-        if (System.currentTimeMillis() - lastShown > threeDaysMs) {
-             // Mark as shown today
-             context.dataStore.edit { prefs ->
-                 prefs[longPreferencesKey("rate_app_last_shown")] = System.currentTimeMillis()
-             }
-             return true
+        // All gates passed — record the timestamp and show the popup.
+        context.dataStore.edit { prefs ->
+            prefs[longPreferencesKey("rate_app_last_shown")] = System.currentTimeMillis()
         }
-        
-        return false // Shown recently
+        return true
     }
     
     /**
@@ -447,25 +451,25 @@ class HomeViewModel @Inject constructor(
     }
 
     fun onRateAppFlowHandled() {
+        // Dismiss immediately so the user sees instant feedback.
+        _uiState.update { it.copy(showRateAppPopup = false) }
         viewModelScope.launch {
             context.dataStore.edit { prefs ->
                 // The Play Review API does not tell us whether the user submitted a rating.
                 // We use this flag only to suppress re-prompting after handling the CTA.
                 prefs[booleanPreferencesKey("rate_app_rated")] = true
             }
-            // Hide popup
-            _uiState.update { it.copy(showRateAppPopup = false) }
         }
     }
     
     fun onRateAppDismissed() {
-         viewModelScope.launch {
+        // Dismiss immediately so the user sees instant feedback.
+        _uiState.update { it.copy(showRateAppPopup = false) }
+        viewModelScope.launch {
             context.dataStore.edit { prefs ->
                 val current = prefs[intPreferencesKey("rate_app_dismiss_count")] ?: 0
                 prefs[intPreferencesKey("rate_app_dismiss_count")] = current + 1
             }
-            // Hide popup
-            _uiState.update { it.copy(showRateAppPopup = false) }
         }
     }
     

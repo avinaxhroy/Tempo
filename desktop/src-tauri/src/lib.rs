@@ -37,6 +37,15 @@ pub fn run() {
     env_logger::init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            // Second instance launched (e.g., desktop shortcut clicked while already running).
+            // Bring the existing window to the foreground instead of opening another.
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -53,6 +62,22 @@ pub fn run() {
 
             let db_path = app_data_dir.join("tempo.db");
             let db = Database::new(&db_path).expect("failed to initialize database");
+
+            // Run integrity check and backup on startup
+            match db.check_integrity() {
+                Ok(true) => {
+                    let _ = db.backup();
+                    let _ = db.prune_old_data();
+                    log::info!("Startup integrity check passed, backup created");
+                }
+                Ok(false) => {
+                    log::error!("Database integrity check FAILED — data may be corrupted");
+                }
+                Err(e) => {
+                    log::warn!("Could not run integrity check: {}", e);
+                }
+            }
+
             let db = Arc::new(Mutex::new(db));
 
             let settings = {
@@ -115,7 +140,18 @@ pub fn run() {
                 .icon(tray_icon)
                 .icon_as_template(true)
                 .menu(&tray_menu)
-                .show_menu_on_left_click(true)
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    // Single-click or double-click on tray icon shows the window
+                    use tauri::tray::TrayIconEvent;
+                    if matches!(event, TrayIconEvent::Click { .. } | TrayIconEvent::DoubleClick { .. }) {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "open" => {
                         if let Some(window) = app.get_webview_window("main") {
@@ -253,7 +289,6 @@ async fn start_pairing_callback_server(
     listener: std::net::TcpListener,
 ) {
     use log::{error, info, warn};
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     let listener = match tokio::net::TcpListener::from_std(listener) {
         Ok(listener) => listener,
@@ -266,7 +301,7 @@ async fn start_pairing_callback_server(
     info!("Pairing callback server listening on port {}", app_handle.state::<AppState>().pairing_callback_port);
 
     loop {
-        let (mut stream, _) = match listener.accept().await {
+        let (stream, peer_addr) = match listener.accept().await {
             Ok(conn) => conn,
             Err(err) => {
                 warn!("Pairing callback accept failed: {}", err);
@@ -274,86 +309,109 @@ async fn start_pairing_callback_server(
             }
         };
 
+        // Security: only accept connections from private/local network IPs
+        let peer_ip = peer_addr.ip();
+        if !is_local_ip(&peer_ip) {
+            warn!("Rejecting pairing callback from non-local IP: {}", peer_ip);
+            continue;
+        }
+
         let app_handle = app_handle.clone();
         tauri::async_runtime::spawn(async move {
-            let mut buf = vec![0u8; 16 * 1024];
-            let mut received = 0usize;
-            let header_end;
-
-            loop {
-                match stream.read(&mut buf[received..]).await {
-                    Ok(0) => return,
-                    Ok(n) => {
-                        received += n;
-                        if let Some(pos) = buf[..received].windows(4).position(|w| w == b"\r\n\r\n") {
-                            header_end = pos + 4;
-                            break;
-                        }
-                        if received == buf.len() {
-                            let _ = stream.write_all(http_response(413, "payload_too_large").as_bytes()).await;
-                            return;
-                        }
-                    }
-                    Err(_) => return,
-                }
-            }
-
-            let header_text = match std::str::from_utf8(&buf[..header_end]) {
-                Ok(text) => text,
-                Err(_) => {
-                    let _ = stream.write_all(http_response(400, "invalid_request").as_bytes()).await;
-                    return;
-                }
-            };
-
-            let mut lines = header_text.split("\r\n");
-            let request_line = lines.next().unwrap_or_default();
-            let mut parts = request_line.split_whitespace();
-            let method = parts.next().unwrap_or_default().to_string();
-            let path = parts.next().unwrap_or_default().to_string();
-
-            let content_length = lines
-                .find_map(|line| {
-                    let (name, value) = line.split_once(':')?;
-                    if name.eq_ignore_ascii_case("content-length") {
-                        value.trim().parse::<usize>().ok()
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or(0);
-
-            while received < header_end + content_length {
-                match stream.read(&mut buf[received..]).await {
-                    Ok(0) => break,
-                    Ok(n) => received += n,
-                    Err(_) => return,
-                }
-            }
-
-            if method != "POST" || path != "/api/pair/confirm" {
-                let _ = stream.write_all(http_response(404, "not_found").as_bytes()).await;
-                return;
-            }
-
-            let body = &buf[header_end..received.min(header_end + content_length)];
-            let payload: crate::commands::pairing::PairConfirmPayload = match serde_json::from_slice(body) {
-                Ok(payload) => payload,
-                Err(_) => {
-                    let _ = stream.write_all(http_response(400, "invalid_json").as_bytes()).await;
-                    return;
-                }
-            };
-
-            match crate::commands::pairing::finalize_pairing(app_handle.state::<AppState>().inner(), &app_handle, payload).await {
-                Ok(()) => {
-                    let _ = stream.write_all(http_ok_response().as_bytes()).await;
-                }
-                Err(err) => {
-                    let _ = stream.write_all(http_error_response(400, &err).as_bytes()).await;
-                }
+            // Timeout entire pairing request handling to prevent slow-client resource exhaustion
+            let result = tokio::time::timeout(
+                tokio::time::Duration::from_secs(10),
+                handle_pairing_request(stream, app_handle),
+            ).await;
+            if result.is_err() {
+                warn!("Pairing callback timed out from {}", peer_addr);
             }
         });
+    }
+}
+
+async fn handle_pairing_request(
+    mut stream: tokio::net::TcpStream,
+    app_handle: tauri::AppHandle,
+) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let mut buf = vec![0u8; 16 * 1024];
+    let mut received = 0usize;
+    let header_end;
+
+    loop {
+        match stream.read(&mut buf[received..]).await {
+            Ok(0) => return,
+            Ok(n) => {
+                received += n;
+                if let Some(pos) = buf[..received].windows(4).position(|w| w == b"\r\n\r\n") {
+                    header_end = pos + 4;
+                    break;
+                }
+                if received == buf.len() {
+                    let _ = stream.write_all(http_response(413, "payload_too_large").as_bytes()).await;
+                    return;
+                }
+            }
+            Err(_) => return,
+        }
+    }
+
+    let header_text = match std::str::from_utf8(&buf[..header_end]) {
+        Ok(text) => text,
+        Err(_) => {
+            let _ = stream.write_all(http_response(400, "invalid_request").as_bytes()).await;
+            return;
+        }
+    };
+
+    let mut lines = header_text.split("\r\n");
+    let request_line = lines.next().unwrap_or_default();
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or_default().to_string();
+    let path = parts.next().unwrap_or_default().to_string();
+
+    let content_length = lines
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            if name.eq_ignore_ascii_case("content-length") {
+                value.trim().parse::<usize>().ok()
+            } else {
+                None
+            }
+        })
+        .unwrap_or(0);
+
+    while received < header_end + content_length {
+        match stream.read(&mut buf[received..]).await {
+            Ok(0) => break,
+            Ok(n) => received += n,
+            Err(_) => return,
+        }
+    }
+
+    if method != "POST" || path != "/api/pair/confirm" {
+        let _ = stream.write_all(http_response(404, "not_found").as_bytes()).await;
+        return;
+    }
+
+    let body = &buf[header_end..received.min(header_end + content_length)];
+    let payload: crate::commands::pairing::PairConfirmPayload = match serde_json::from_slice(body) {
+        Ok(payload) => payload,
+        Err(_) => {
+            let _ = stream.write_all(http_response(400, "invalid_json").as_bytes()).await;
+            return;
+        }
+    };
+
+    match crate::commands::pairing::finalize_pairing(app_handle.state::<AppState>().inner(), &app_handle, payload).await {
+        Ok(()) => {
+            let _ = stream.write_all(http_ok_response().as_bytes()).await;
+        }
+        Err(err) => {
+            let _ = stream.write_all(http_error_response(400, &err).as_bytes()).await;
+        }
     }
 }
 
@@ -391,6 +449,21 @@ fn http_error_response(status: u16, message: &str) -> String {
         body.len(),
         body
     )
+}
+
+/// Check if an IP address is a private/local network address.
+/// Accepts loopback, link-local, and RFC 1918 private ranges.
+fn is_local_ip(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            v4.is_loopback()          // 127.x.x.x
+                || v4.is_private()    // 10.x, 172.16-31.x, 192.168.x
+                || v4.is_link_local() // 169.254.x.x
+        }
+        std::net::IpAddr::V6(v6) => {
+            v6.is_loopback() // ::1
+        }
+    }
 }
 
 /// Register global keyboard shortcuts.
@@ -435,9 +508,29 @@ async fn connection_health_loop(app_handle: tauri::AppHandle) {
                 let reachable = if network::ping_phone(&pairing.phone_ip, pairing.phone_port).await {
                     Some((pairing.phone_ip.clone(), "primary".to_string(), None))
                 } else {
-                    network::discover_confirmed_phone(&pairing.auth_token, pairing.phone_port)
-                        .await
-                        .map(|resolved| (resolved.ip, resolved.method, resolved.device_name))
+                    // Try network-remembered IP before full discovery
+                    let net_remembered = if let Some(ref net_id) = network::wifi::get_current_network_id() {
+                        let state = app_handle.state::<AppState>();
+                        let db = state.db.lock().await;
+                        db.get_network_ip(net_id).ok().flatten()
+                            .filter(|(ip, port)| *ip != pairing.phone_ip || *port != pairing.phone_port)
+                    } else {
+                        None
+                    };
+
+                    if let Some((ref remembered_ip, remembered_port)) = net_remembered {
+                        if network::ping_phone(remembered_ip, remembered_port).await {
+                            Some((remembered_ip.clone(), "network_memory".to_string(), None))
+                        } else {
+                            network::discover_confirmed_phone(&pairing.auth_token, pairing.phone_port)
+                                .await
+                                .map(|resolved| (resolved.ip, resolved.method, resolved.device_name))
+                        }
+                    } else {
+                        network::discover_confirmed_phone(&pairing.auth_token, pairing.phone_port)
+                            .await
+                            .map(|resolved| (resolved.ip, resolved.method, resolved.device_name))
+                    }
                 };
 
                 match (&reachable, was_reachable) {
@@ -451,16 +544,33 @@ async fn connection_health_loop(app_handle: tauri::AppHandle) {
                             }),
                         );
 
-                        // Update stored IP if it changed
-                        if *ip != pairing.phone_ip {
+                        // Update stored IP and network memory in a single lock scope
+                        {
                             let state = app_handle.state::<AppState>();
                             let db = state.db.lock().await;
-                            let mut updated = pairing.clone();
-                            updated.phone_ip = ip.clone();
-                            if let Some(device_name) = reachable.as_ref().and_then(|(_, _, name)| name.clone()) {
-                                updated.device_name = device_name;
+                            if *ip != pairing.phone_ip {
+                                let mut updated = pairing.clone();
+                                updated.phone_ip = ip.clone();
+                                if let Some(device_name) = reachable.as_ref().and_then(|(_, _, name)| name.clone()) {
+                                    updated.device_name = device_name;
+                                }
+                                let _ = db.save_pairing(&updated);
                             }
-                            let _ = db.save_pairing(&updated);
+                            if let Some(ref net_id) = network::wifi::get_current_network_id() {
+                                let _ = db.upsert_network_ip(net_id, ip, pairing.phone_port);
+                            }
+                        }
+                    }
+                    (Some((ip, _method, _device_name)), true) if *ip != pairing.phone_ip => {
+                        // IP changed while staying connected (e.g. DHCP renew) — silently update
+                        debug!("Phone IP changed to {}, updating stored address", ip);
+                        let state = app_handle.state::<AppState>();
+                        let db = state.db.lock().await;
+                        let mut updated = pairing.clone();
+                        updated.phone_ip = ip.clone();
+                        let _ = db.save_pairing(&updated);
+                        if let Some(ref net_id) = network::wifi::get_current_network_id() {
+                            let _ = db.upsert_network_ip(net_id, ip, pairing.phone_port);
                         }
                     }
                     (None, true) => {

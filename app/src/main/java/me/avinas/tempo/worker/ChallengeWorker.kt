@@ -123,12 +123,12 @@ class ChallengeWorker @AssistedInject constructor(
         val prefs = userPreferencesDao.getSync()
 
         // Check if we have a recently calculated hour we can reuse.
-        // Also discard any cached hour that falls outside the valid morning window (8–12),
-        // which can happen if the cache was written before the morning-cap was introduced.
+        // Discard cached hours outside the valid waking-hours window (7–21),
+        // which can happen if the cache was written with the old morning-only cap.
         val storedHour = prefs?.smartChallengeNotifHour
         val storedCalcTime = prefs?.smartChallengeNotifCalcTime ?: 0L
         val now = System.currentTimeMillis()
-        val isStoredHourValid = storedHour != null && storedHour in 8..12
+        val isStoredHourValid = storedHour != null && storedHour in 7..21
 
         if (isStoredHourValid && (now - storedCalcTime) < RECALC_INTERVAL_MS) {
             Log.d(TAG, "Reusing cached smart notification hour: $storedHour")
@@ -147,11 +147,11 @@ class ChallengeWorker @AssistedInject constructor(
             DEFAULT_NOTIF_HOUR
         }
 
-        // Clamp to morning window: 8 AM – 12 PM so users always have the full day to complete
-        // their challenges. If someone never starts listening before noon, 12 PM is the latest
-        // we'll send the notification.
-        val clampedHour = typicalStartHour.coerceIn(8, 12)
-        Log.i(TAG, "Computed smart notification hour: typical start=$typicalStartHour → clamped to $clampedHour")
+        // Notify 1 hour before the user's typical first-listen hour so the challenge is
+        // visible right as they're about to open their music app. Clamped to waking hours
+        // (7 AM – 9 PM) regardless of listening schedule.
+        val clampedHour = (typicalStartHour - 1).coerceIn(7, 21)
+        Log.i(TAG, "Computed smart notification hour: typical start=$typicalStartHour → scheduled at $clampedHour")
 
         // Persist for future use
         try {

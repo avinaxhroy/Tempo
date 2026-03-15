@@ -62,8 +62,16 @@ export default function Settings() {
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     setSettings(defaultSettings);
+    setError("");
+    try {
+      await updateSettings(defaultSettings);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(String(e));
+    }
   };
 
   const update = (partial: Partial<SettingsType>) => {

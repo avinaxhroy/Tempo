@@ -33,6 +33,11 @@ const MAX_LISTEN_CAP_MS: i64 = 3_600_000; // 1 hour
 /// cap it. Handles stuck/looping detection.
 const MAX_DURATION_MULTIPLIER: f64 = 3.0;
 
+/// Tighter duration multiplier when position data is unavailable.
+/// Without position tracking we cannot detect replays, so cap at ~1.1x
+/// to allow a small tolerance for polling jitter.
+const WALL_CLOCK_DURATION_MULTIPLIER: f64 = 1.1;
+
 
 
 /// Tracks per-track playback state derived from raw media position samples.
@@ -74,6 +79,10 @@ pub struct PlaybackTracker {
     position_updates_count: u32,
     /// Whether the session was interrupted (e.g., another app took focus).
     was_interrupted: bool,
+    /// Whether valid position data was ever received for this track.
+    /// When false, tighter duration caps are applied since we can't
+    /// distinguish replays from stuck tracking.
+    has_position_data: bool,
     /// Cached raw info for the current track (for finalize when track changes).
     last_raw: Option<RawMediaInfo>,
 }
@@ -98,6 +107,7 @@ impl PlaybackTracker {
             last_persist_time: 0,
             position_updates_count: 0,
             was_interrupted: false,
+            has_position_data: false,
             last_raw: None,
         }
     }
@@ -137,6 +147,7 @@ impl PlaybackTracker {
             self.last_persist_time = now;
             self.position_updates_count = 0;
             self.was_interrupted = false;
+            self.has_position_data = raw.position_ms >= 0;
             self.last_raw = Some(raw.clone());
 
             return prev_event;
@@ -149,6 +160,7 @@ impl PlaybackTracker {
         // Track position updates for data quality
         if raw.position_ms >= 0 {
             self.position_updates_count += 1;
+            self.has_position_data = true;
         }
 
         // Detect pause: was playing → now not playing
@@ -211,13 +223,20 @@ impl PlaybackTracker {
         if raw.is_playing && !self.is_muted && rate_ok {
             // Use the smaller of wall-clock delta and position delta
             // to avoid over-counting during seeks
-            let listen_increment = if raw.position_ms >= 0
-                && self.last_position_ms >= 0
-                && pos_delta > 0
-            {
-                pos_delta.min(wall_delta).max(0)
+            let listen_increment = if raw.position_ms >= 0 && self.last_position_ms >= 0 {
+                // Position data available on both sides — trust it
+                if pos_delta > 0 {
+                    // Normal playback: use whichever is smaller to avoid
+                    // over-counting during seeks
+                    pos_delta.min(wall_delta).max(0)
+                } else {
+                    // Position didn't advance (stuck, paused cursor, or
+                    // backward seek). Don't accumulate wall-clock time
+                    // when position says nothing moved.
+                    0
+                }
             } else {
-                // Position not available — fall back to wall-clock
+                // Position truly unavailable — fall back to wall-clock
                 wall_delta
             };
 
@@ -265,15 +284,23 @@ impl PlaybackTracker {
             return remaining;
         }
 
-        // Cap 2: 3x estimated duration (only when duration is known and > 0)
+        // Cap 2: duration-based cap.
+        // When we have real position data, allow up to 3x (accounts for replays).
+        // When position is unavailable (wall-clock only), cap at ~1.1x to prevent
+        // runaway accumulation — without position we can't detect replays.
         if self.track_duration_ms > 0 {
-            let max_by_duration = (self.track_duration_ms as f64 * MAX_DURATION_MULTIPLIER) as i64;
+            let multiplier = if self.has_position_data {
+                MAX_DURATION_MULTIPLIER
+            } else {
+                WALL_CLOCK_DURATION_MULTIPLIER
+            };
+            let max_by_duration = (self.track_duration_ms as f64 * multiplier) as i64;
             if new_total > max_by_duration {
                 let remaining = (max_by_duration - self.accumulated_listen_ms).max(0);
                 if remaining == 0 {
                     debug!(
-                        "PlaybackTracker: hit 3x duration cap ({}ms / {}ms)",
-                        self.accumulated_listen_ms, self.track_duration_ms
+                        "PlaybackTracker: hit {:.1}x duration cap ({}ms / {}ms, has_position={})",
+                        multiplier, self.accumulated_listen_ms, self.track_duration_ms, self.has_position_data
                     );
                 }
                 return remaining;

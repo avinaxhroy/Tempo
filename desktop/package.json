@@ -14,8 +14,7 @@
     "lucide-react": "^0.460.0",
     "qrcode.react": "^4.1.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@tauri-apps/api": "^2.1.1",

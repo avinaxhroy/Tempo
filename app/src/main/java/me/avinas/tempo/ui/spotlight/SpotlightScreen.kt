@@ -193,7 +193,7 @@ fun SpotlightScreen(
         TimePeriodSelector(
             selectedRange = uiState.selectedTimeRange,
             onRangeSelected = viewModel::onTimeRangeSelected,
-            availableRanges = listOf(TimeRange.THIS_MONTH, TimeRange.THIS_YEAR, TimeRange.ALL_TIME),
+            availableRanges = listOf(TimeRange.THIS_WEEK, TimeRange.THIS_MONTH, TimeRange.THIS_YEAR, TimeRange.ALL_TIME),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(16.dp)

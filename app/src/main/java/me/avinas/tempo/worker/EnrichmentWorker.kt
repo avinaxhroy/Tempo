@@ -213,9 +213,19 @@ class EnrichmentWorker @AssistedInject constructor(
                 .addTag("enrichment_immediate")
                 .build()
 
+            // Per-track enrichments each get a unique work name so that a desktop batch
+            // (which enqueues multiple track IDs in quick succession) does not cause each
+            // submission to replace the previous still-ENQUEUED one under APPEND_OR_REPLACE.
+            // KEEP policy is correct here: if the same track is already queued, there is no
+            // need to enqueue a duplicate job.
+            // The generic (null trackId) path keeps APPEND_OR_REPLACE to ensure a startup
+            // batch sweep always runs after whatever is currently pending.
+            val workName = if (trackId != null) "${WORK_NAME_IMMEDIATE}_$trackId" else WORK_NAME_IMMEDIATE
+            val workPolicy = if (trackId != null) ExistingWorkPolicy.KEEP else ExistingWorkPolicy.APPEND_OR_REPLACE
+
             WorkManager.getInstance(context).enqueueUniqueWork(
-                WORK_NAME_IMMEDIATE,
-                ExistingWorkPolicy.APPEND_OR_REPLACE,
+                workName,
+                workPolicy,
                 workRequest
             )
 

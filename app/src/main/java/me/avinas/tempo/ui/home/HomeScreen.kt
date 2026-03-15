@@ -295,8 +295,10 @@ fun HomeScreen(
                         viewModel.onRateAppFlowHandled()
                         return@RateAppBottomSheet
                     }
+                    // Set the guard BEFORE launching the coroutine so a rapid second tap
+                    // is blocked even if the coroutine hasn't begun executing yet.
+                    isLaunchingReview = true
                     scope.launch {
-                        isLaunchingReview = true
                         val launchedInAppReview = ReviewUtils.launchInAppReview(activity)
                         if (!launchedInAppReview) {
                             ReviewUtils.openPlayStoreListing(context)

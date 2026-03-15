@@ -21,12 +21,18 @@ use tracker::{PlaybackTracker, TrackEvent};
 
 pub struct MediaDetector {
     tracker: PlaybackTracker,
+    /// Cached snapshot from the last successful poll cycle.
+    /// Served to the UI's on-demand `get_now_playing` command so we don't
+    /// spawn a redundant OS query (expensive on Windows: ~500ms PowerShell)
+    /// every time the frontend refreshes.
+    last_snapshot: Option<NowPlaying>,
 }
 
 impl MediaDetector {
     pub fn new() -> Self {
         Self {
             tracker: PlaybackTracker::new(),
+            last_snapshot: None,
         }
     }
 
@@ -37,7 +43,9 @@ impl MediaDetector {
         let raw = match self.detect_raw().await {
             Some(r) => r,
             None => {
-                // Nothing playing — finalize any in-progress track
+                // Nothing playing — clear the cached snapshot so the UI shows "nothing".
+                self.last_snapshot = None;
+                // Finalize any in-progress track
                 let event = self.tracker.on_playback_stopped();
 
                 return match event {
@@ -68,7 +76,10 @@ impl MediaDetector {
             TrackEvent::ReadyToLog(np) => {
                 // Normalize the metadata before logging
                 match normalize::normalize(np) {
-                    Some(normalized) => DetectResult::PlayReady(normalized),
+                    Some(normalized) => {
+                        self.last_snapshot = Some(normalized.clone());
+                        DetectResult::PlayReady(normalized)
+                    }
                     None => DetectResult::Filtered, // normalizer rejected it
                 }
             }
@@ -98,7 +109,10 @@ impl MediaDetector {
                 };
                 // Apply normalization for display
                 match normalize::normalize(np) {
-                    Some(np) => DetectResult::NowPlaying(np),
+                    Some(np) => {
+                        self.last_snapshot = Some(np.clone());
+                        DetectResult::NowPlaying(np)
+                    }
                     None => DetectResult::Filtered,
                 }
             }
@@ -125,15 +139,27 @@ impl MediaDetector {
                     volume_level: self.tracker.current_volume(),
                 };
                 match normalize::normalize(np) {
-                    Some(np) => DetectResult::NowPlaying(np),
+                    Some(np) => {
+                        self.last_snapshot = Some(np.clone());
+                        DetectResult::NowPlaying(np)
+                    }
                     None => DetectResult::Filtered,
                 }
             }
         }
     }
 
-    /// Detect now playing from the UI command (on-demand, bypasses tracker).
-    pub async fn detect_now_playing(&self) -> Option<NowPlaying> {
+    /// Detect now playing from the UI command (on-demand).
+    ///
+    /// Returns the cached snapshot from the last background poll cycle.
+    /// This avoids spawning a redundant OS query (which is expensive on Windows)
+    /// and ensures the UI always shows what the tracker considers authoritative.
+    /// Falls back to a fresh OS query only if no cached data exists yet.
+    pub async fn detect_now_playing(&mut self) -> Option<NowPlaying> {
+        if let Some(ref snap) = self.last_snapshot {
+            return Some(snap.clone());
+        }
+        // First call before the background poll has run — do a one-shot fresh query.
         let raw = self.detect_raw().await?;
         if !site_detect::should_track(&raw) {
             return None;
@@ -221,6 +247,56 @@ pub async fn start_polling(app_handle: tauri::AppHandle) {
         if let Ok(channels) = db.get_user_youtube_channel_names() {
             artist_parser::load_user_youtube_channels(&channels);
             info!("Loaded {} user YouTube channels", channels.len());
+        }
+    }
+
+    // Crash recovery: check for a persisted session from a previous run
+    {
+        let state = app_handle.state::<AppState>();
+        if let Some(session) = crate::session::load_session(&state.app_data_dir) {
+            info!(
+                "Recovering crashed session: '{}' by '{}' (listened {}ms)",
+                session.title, session.artist, session.accumulated_listen_ms
+            );
+            // Only recover if the session had enough listen time
+            if session.accumulated_listen_ms >= 15_000 {
+                let db = state.db.lock().await;
+                let timestamp = session.saved_at;
+                if !db.has_recent_play(&session.title, &session.artist, timestamp).unwrap_or(true) {
+                    let completion = if session.duration_ms > 0 {
+                        ((session.accumulated_listen_ms as f64 / session.duration_ms as f64) * 100.0).clamp(0.0, 100.0)
+                    } else {
+                        90.0
+                    };
+                    let play = crate::db::models::Play {
+                        id: None,
+                        title: session.title.clone(),
+                        artist: session.artist.clone(),
+                        album: session.album.clone(),
+                        duration_ms: session.duration_ms,
+                        timestamp_utc: timestamp,
+                        source_app: session.source_app.clone(),
+                        status: crate::db::models::PlayStatus::Queued,
+                        listened_ms: session.accumulated_listen_ms,
+                        skipped: session.duration_ms > 0
+                            && (session.accumulated_listen_ms as f64) < (session.duration_ms as f64 * 0.30),
+                        replay_count: session.replay_count,
+                        is_muted: false,
+                        completion_percentage: completion,
+                        pause_count: session.pause_count,
+                        seek_count: session.seek_count,
+                        session_id: session.session_id.clone(),
+                        site: session.site.unwrap_or_default(),
+                        content_type: session.content_type.clone(),
+                        volume_level: session.volume_level,
+                    };
+                    match db.insert_play(&play) {
+                        Ok(_) => info!("Recovered crashed session as queued play"),
+                        Err(e) => error!("Failed to recover crashed session: {}", e),
+                    }
+                }
+            }
+            crate::session::clear_session(&state.app_data_dir);
         }
     }
 
@@ -325,18 +401,41 @@ pub async fn start_polling(app_handle: tauri::AppHandle) {
                         );
                         let _ = app_handle.emit("play-added", &play);
                         let _ = app_handle.emit("now-playing-changed", &now_playing);
+                        // Clear persisted session — the play was successfully logged
+                        crate::session::clear_session(&state.app_data_dir);
                     }
                     Err(e) => error!("Failed to insert play: {}", e),
                 }
             }
             DetectResult::NowPlaying(np) => {
                 let _ = app_handle.emit("now-playing-changed", &np);
+                // Periodically persist in-progress session for crash recovery
+                let session = crate::session::PersistedSession {
+                    track_key: format!("{}|{}", np.title, np.artist),
+                    title: np.title.clone(),
+                    artist: np.artist.clone(),
+                    album: np.album.clone(),
+                    duration_ms: np.duration_ms,
+                    accumulated_listen_ms: np.listened_ms,
+                    source_app: np.source_app.clone(),
+                    session_id: np.session_id.clone(),
+                    replay_count: np.replay_count,
+                    pause_count: np.pause_count,
+                    seek_count: np.seek_count,
+                    site: np.site.clone(),
+                    content_type: np.content_type.clone(),
+                    volume_level: np.volume_level,
+                    saved_at: chrono::Utc::now().timestamp_millis(),
+                };
+                crate::session::save_session(&state.app_data_dir, &session);
             }
             DetectResult::TrackFinished { listened_ms, skipped, replay_count, completion_percentage, pause_count, seek_count, session_id: _ } => {
                 debug!(
                     "Track finished: listened={}ms skipped={} replays={} completion={:.1}% pauses={} seeks={}",
                     listened_ms, skipped, replay_count, completion_percentage, pause_count, seek_count
                 );
+                // Clear persisted session — track has ended
+                crate::session::clear_session(&state.app_data_dir);
             }
             DetectResult::Filtered | DetectResult::NothingPlaying => {}
         }

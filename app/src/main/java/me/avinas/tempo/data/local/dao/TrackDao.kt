@@ -71,6 +71,13 @@ interface TrackDao {
         LIMIT 1
     """)
     suspend fun findByTitleAndArtistFuzzy(title: String, artist: String): Track?
+
+    /**
+     * Return all tracks whose title matches exactly (case-insensitive).
+     * Used for any-artist intersection matching when the strict/fuzzy queries miss.
+     */
+    @Query("SELECT * FROM tracks WHERE LOWER(title) = LOWER(:title)")
+    suspend fun findCandidatesByTitle(title: String): List<Track>
     
     // =====================
     // Queries by Artist ID
