@@ -261,6 +261,7 @@ pub fn run() {
         .expect("error while building Tempo Desktop")
         .run(|app_handle, event| {
             match &event {
+                #[cfg(target_os = "macos")]
                 // macOS: user clicked the dock icon while the app is already running
                 // (e.g. window was hidden via minimize-to-tray). Bring it back.
                 RunEvent::Reopen { has_visible_windows, .. } => {
