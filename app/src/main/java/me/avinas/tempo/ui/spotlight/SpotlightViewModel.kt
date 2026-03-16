@@ -178,6 +178,13 @@ class SpotlightViewModel @Inject constructor(
                         lockMessage = "Start listening to unlock your All Time story"
                     }
                 }
+                TimeRange.THIS_WEEK -> {
+                    // Lock unless it's Sunday
+                    if (now.dayOfWeek != java.time.DayOfWeek.SUNDAY) {
+                        isLocked = true
+                        lockMessage = "Your Weekly Wrapped arrives on Sunday"
+                    }
+                }
                 else -> {
                     // Other ranges unlocked by default
                     isLocked = false

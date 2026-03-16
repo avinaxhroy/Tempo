@@ -7,6 +7,8 @@ import androidx.work.*
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import me.avinas.tempo.data.repository.GamificationRepository
+import me.avinas.tempo.data.repository.PreferencesRepository
+import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 
 /**
@@ -20,7 +22,8 @@ import java.util.concurrent.TimeUnit
 class GamificationWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
-    private val gamificationRepository: GamificationRepository
+    private val gamificationRepository: GamificationRepository,
+    private val preferencesRepository: PreferencesRepository
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -54,6 +57,14 @@ class GamificationWorker @AssistedInject constructor(
         }
         
         /**
+         * Cancel periodic gamification refresh.
+         */
+        fun cancelPeriodicRefresh(context: Context) {
+            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+            Log.d(TAG, "Periodic gamification refresh cancelled")
+        }
+
+        /**
          * Trigger an immediate one-time refresh.
          */
         fun enqueueImmediateRefresh(context: Context) {
@@ -68,6 +79,12 @@ class GamificationWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
+            val isGamificationEnabled = preferencesRepository.preferences().first()?.isGamificationEnabled ?: true
+            if (!isGamificationEnabled) {
+                Log.i(TAG, "Gamification is disabled. Skipping refresh.")
+                return Result.success()
+            }
+
             Log.i(TAG, "Starting gamification refresh...")
             
             val result = gamificationRepository.fullRefresh()

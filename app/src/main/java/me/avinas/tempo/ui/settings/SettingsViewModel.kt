@@ -13,6 +13,7 @@ import me.avinas.tempo.data.importexport.ImportExportResult
 import me.avinas.tempo.data.local.AppDatabase
 import me.avinas.tempo.ui.onboarding.dataStore
 import me.avinas.tempo.worker.ChallengeWorker
+import me.avinas.tempo.worker.GamificationWorker
 import me.avinas.tempo.worker.NotificationWorker
 import me.avinas.tempo.worker.SpotifyPollingWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -73,7 +74,8 @@ class SettingsViewModel @Inject constructor(
                 spotifyApiOnlyMode = roomPrefs.spotifyApiOnlyMode,
                 isLastFmConnected = roomPrefs.lastfmConnected,
                 lastFmUsername = roomPrefs.lastfmUsername,
-                lastFmSyncFrequency = roomPrefs.lastfmSyncFrequency
+                lastFmSyncFrequency = roomPrefs.lastfmSyncFrequency,
+                isGamificationEnabled = roomPrefs.isGamificationEnabled
             )
         }
         
@@ -102,7 +104,8 @@ class SettingsViewModel @Inject constructor(
                     spotifyApiOnlyMode = prefs.spotifyApiOnlyMode,
                     isLastFmConnected = prefs.lastfmConnected,
                     lastFmUsername = prefs.lastfmUsername,
-                    lastFmSyncFrequency = prefs.lastfmSyncFrequency
+                    lastFmSyncFrequency = prefs.lastfmSyncFrequency,
+                    isGamificationEnabled = prefs.isGamificationEnabled
                 )
             }
         }
@@ -160,6 +163,24 @@ class SettingsViewModel @Inject constructor(
     fun toggleExtendedAudioAnalysis(enabled: Boolean) {
         viewModelScope.launch {
             context.dataStore.edit { it[EXTENDED_AUDIO_ANALYSIS_KEY] = enabled }
+        }
+    }
+    
+    fun toggleGamificationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+            userPreferencesDao.upsert(currentPrefs.copy(isGamificationEnabled = enabled))
+            _uiState.value = _uiState.value.copy(isGamificationEnabled = enabled)
+            if (!enabled) {
+                // If gamification is completely disabled, cancel workers that compute XP/challenges
+                NotificationWorker.cancelChallengeReady(context)
+                ChallengeWorker.cancelDaily(context)
+                GamificationWorker.cancelPeriodicRefresh(context)
+            } else {
+                // Re-enable workers
+                ChallengeWorker.scheduleDaily(context)
+                GamificationWorker.enqueuePeriodicRefresh(context)
+            }
         }
     }
     
@@ -278,5 +299,7 @@ data class SettingsUiState(
     // Last.fm connection state
     val isLastFmConnected: Boolean = false,
     val lastFmUsername: String? = null,
-    val lastFmSyncFrequency: String = "NONE"
+    val lastFmSyncFrequency: String = "NONE",
+    // Gamification state
+    val isGamificationEnabled: Boolean = true
 )

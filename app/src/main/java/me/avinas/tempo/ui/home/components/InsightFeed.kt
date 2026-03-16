@@ -89,6 +89,7 @@ fun VibeHeader(
     userLevel: Int? = null,
     levelProgress: Float = 0f,
     levelTitle: String? = null,
+    isGamificationEnabled: Boolean = true,
     onLevelClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -195,7 +196,10 @@ fun VibeHeader(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onLevelClick)
+                    .clickable(
+                        enabled = isGamificationEnabled,
+                        onClick = onLevelClick
+                    )
                     .shadow(
                         elevation = 12.dp,
                         shape = RoundedCornerShape(100.dp),
@@ -211,56 +215,58 @@ fun VibeHeader(
                     horizontalArrangement = Arrangement.spacedBy(itemSpacing)
                 ) {
                     // Left: Adaptive Level Ring
-                    val level = userLevel ?: 0
-                    val progress = levelProgress
+                    if (isGamificationEnabled) {
+                        val level = userLevel ?: 0
+                        val progress = levelProgress
 
-                    Box(
-                        modifier = Modifier.size(ringSize),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            val sw = strokeWidthDp.toPx()
-                            val radius = (size.minDimension - sw) / 2
+                        Box(
+                            modifier = Modifier.size(ringSize),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                val sw = strokeWidthDp.toPx()
+                                val radius = (size.minDimension - sw) / 2
 
-                            drawCircle(
-                                color = Color(0xFFF3F4F6),
-                                radius = radius,
-                                style = Stroke(width = sw, cap = StrokeCap.Round)
-                            )
-                            if (progress > 0f) {
-                                drawArc(
-                                    brush = Brush.sweepGradient(
-                                        listOf(Color(0xFFFBBF24), Color(0xFFFFD700), Color(0xFFF59E0B))
-                                    ),
-                                    startAngle = -90f,
-                                    sweepAngle = 360f * progress,
-                                    useCenter = false,
-                                    style = Stroke(width = sw, cap = StrokeCap.Round),
-                                    size = Size(radius * 2, radius * 2),
-                                    topLeft = Offset((size.width - radius * 2) / 2, (size.height - radius * 2) / 2)
+                                drawCircle(
+                                    color = Color(0xFFF3F4F6),
+                                    radius = radius,
+                                    style = Stroke(width = sw, cap = StrokeCap.Round)
+                                )
+                                if (progress > 0f) {
+                                    drawArc(
+                                        brush = Brush.sweepGradient(
+                                            listOf(Color(0xFFFBBF24), Color(0xFFFFD700), Color(0xFFF59E0B))
+                                        ),
+                                        startAngle = -90f,
+                                        sweepAngle = 360f * progress,
+                                        useCenter = false,
+                                        style = Stroke(width = sw, cap = StrokeCap.Round),
+                                        size = Size(radius * 2, radius * 2),
+                                        topLeft = Offset((size.width - radius * 2) / 2, (size.height - radius * 2) / 2)
+                                    )
+                                }
+                            }
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.offset(y = (-1).dp)
+                            ) {
+                                ResponsiveText(
+                                    text = "$level",
+                                    style = levelNumStyle.copy(lineHeight = levelNumStyle.fontSize * 1.1),
+                                    fontWeight = FontWeight.Black,
+                                    color = Color(0xFF111827),
+                                    maxLines = 1
+                                )
+                                ResponsiveText(
+                                    text = stringResource(R.string.home_lvl),
+                                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.4.sp),
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF9CA3AF),
+                                    maxLines = 1
                                 )
                             }
-                        }
-
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                            modifier = Modifier.offset(y = (-1).dp)
-                        ) {
-                            ResponsiveText(
-                                text = "$level",
-                                style = levelNumStyle.copy(lineHeight = levelNumStyle.fontSize * 1.1),
-                                fontWeight = FontWeight.Black,
-                                color = Color(0xFF111827),
-                                maxLines = 1
-                            )
-                            ResponsiveText(
-                                text = stringResource(R.string.home_lvl),
-                                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.4.sp),
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF9CA3AF),
-                                maxLines = 1
-                            )
                         }
                     }
 
@@ -276,7 +282,7 @@ fun VibeHeader(
                             color = Color(0xFF111827),
                             maxLines = 1
                         )
-                        if (!levelTitle.isNullOrBlank()) {
+                        if (isGamificationEnabled && !levelTitle.isNullOrBlank()) {
                             Spacer(modifier = Modifier.height(1.dp))
                             ResponsiveText(
                                 text = levelTitle.uppercase(),

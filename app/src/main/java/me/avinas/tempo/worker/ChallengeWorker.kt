@@ -78,6 +78,12 @@ class ChallengeWorker @AssistedInject constructor(
         Log.i(TAG, "Running daily ChallengeWorker...")
 
         return try {
+            val isGamificationEnabled = userPreferencesDao.getSync()?.isGamificationEnabled ?: true
+            if (!isGamificationEnabled) {
+                Log.i(TAG, "Gamification is disabled. Skipping challenge generation.")
+                return Result.success()
+            }
+
             // 1. Generate new challenges for today
             challengeRepository.generateDailyChallengesIfNeeded()
 

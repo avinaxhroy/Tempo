@@ -105,6 +105,16 @@ data class UserPreferences(
      * Timestamp when the smart hour was last calculated.
      * Used to refresh the calculation periodically (e.g., every 14 days).
      */
-    val smartChallengeNotifCalcTime: Long? = null
+    val smartChallengeNotifCalcTime: Long? = null,
+    
+    // =====================================================
+    // Feature Toggles
+    // =====================================================
+    
+    /**
+     * Whether gamification features (levels, badges, XP, challenges) are enabled.
+     * When false, these features are hidden from the UI and background processing is stopped.
+     */
+    val isGamificationEnabled: Boolean = true
 )
 

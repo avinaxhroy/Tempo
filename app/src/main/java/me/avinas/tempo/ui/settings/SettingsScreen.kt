@@ -281,20 +281,22 @@ fun SettingsScreen(
                             checked = uiState.weeklyRecapEnabled,
                             onCheckedChange = viewModel::toggleWeeklyRecap
                         )
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
-                        SettingsSwitch(
-                            title = stringResource(R.string.settings_daily_challenges),
-                            subtitle = stringResource(R.string.settings_daily_challenges_desc),
-                            checked = uiState.dailyChallengesEnabled,
-                            onCheckedChange = viewModel::toggleDailyChallenges
-                        )
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
-                        SettingsSwitch(
-                            title = stringResource(R.string.settings_achievements),
-                            subtitle = stringResource(R.string.settings_achievements_desc),
-                            checked = uiState.achievementsEnabled,
-                            onCheckedChange = viewModel::toggleAchievements
-                        )
+                        if (uiState.isGamificationEnabled) {
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                            SettingsSwitch(
+                                title = stringResource(R.string.settings_daily_challenges),
+                                subtitle = stringResource(R.string.settings_daily_challenges_desc),
+                                checked = uiState.dailyChallengesEnabled,
+                                onCheckedChange = viewModel::toggleDailyChallenges
+                            )
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                            SettingsSwitch(
+                                title = stringResource(R.string.settings_achievements),
+                                subtitle = stringResource(R.string.settings_achievements_desc),
+                                checked = uiState.achievementsEnabled,
+                                onCheckedChange = viewModel::toggleAchievements
+                            )
+                        }
                     }
                 }
 
@@ -417,6 +419,13 @@ fun SettingsScreen(
                             subtitle = stringResource(R.string.settings_extended_audio_desc),
                             checked = uiState.extendedAudioAnalysisEnabled,
                             onCheckedChange = viewModel::toggleExtendedAudioAnalysis
+                        )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        SettingsSwitch(
+                            title = "Enable Gamification",
+                            subtitle = "Turn off to hide XP, levels, and badges",
+                            checked = uiState.isGamificationEnabled,
+                            onCheckedChange = viewModel::toggleGamificationEnabled
                         )
                     }
                 }

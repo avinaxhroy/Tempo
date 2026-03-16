@@ -32,7 +32,7 @@ import me.avinas.tempo.data.local.entities.DesktopPairingSession
         DailyChallenge::class, // Gamification: daily challenges
         DesktopPairingSession::class // Desktop Satellite pairing sessions
     ],
-    version = 41, // Fix: non-UNIQUE indices on artists/albums, nullable tags/genres in enriched_metadata
+    version = 42, // Add isGamificationEnabled to user_preferences
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -59,7 +59,7 @@ abstract class AppDatabase : RoomDatabase() {
         private const val TAG = "AppDatabase"
         
         /** Current Room schema version — keep in sync with the @Database(version = ...) annotation. */
-        const val VERSION = 41
+        const val VERSION = 42
         
         /**
          * Migration from version 6 to 7: Add enhanced tracking columns to listening_events.
@@ -1894,6 +1894,24 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 41 to 42.
+         * 
+         * Adds isGamificationEnabled to user_preferences.
+         */
+        val MIGRATION_41_42 = object : Migration(41, 42) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 41 to 42 - Adding isGamificationEnabled")
+                
+                db.execSQL("""
+                    ALTER TABLE user_preferences 
+                    ADD COLUMN isGamificationEnabled INTEGER NOT NULL DEFAULT 1
+                """)
+                
+                Log.i(TAG, "Migration from version 41 to 42 completed successfully")
+            }
+        }
+
+        /**
          * All migrations in order.
          */
         val ALL_MIGRATIONS = arrayOf(
@@ -1931,7 +1949,8 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_37_38,   // Desktop Satellite: add desktop_pairing_sessions table
             MIGRATION_38_39,   // Desktop Satellite v2: add desktop_ip / desktop_port
             MIGRATION_39_40,   // Fix: add smartChallengeNotifHour / smartChallengeNotifCalcTime to user_preferences
-            MIGRATION_40_41    // Fix: non-UNIQUE indices on artists/albums, nullable tags/genres in enriched_metadata
+            MIGRATION_40_41,   // Fix: non-UNIQUE indices on artists/albums, nullable tags/genres in enriched_metadata
+            MIGRATION_41_42    // Add isGamificationEnabled to user_preferences
         )
     }
 }

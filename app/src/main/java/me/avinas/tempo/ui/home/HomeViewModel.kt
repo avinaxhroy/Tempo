@@ -79,6 +79,18 @@ class HomeViewModel @Inject constructor(
                     loadData()
                 }
         }
+        
+        // Listen for preference changes (e.g. Gamification toggle)
+        viewModelScope.launch {
+            var lastGamificationState: Boolean? = null
+            preferencesRepository.preferences().collect { prefs ->
+                val state = prefs?.isGamificationEnabled ?: true
+                if (lastGamificationState != null && lastGamificationState != state) {
+                    loadData() // Reload if toggle changed
+                }
+                lastGamificationState = state
+            }
+        }
     }
 
     fun onTimeRangeSelected(timeRange: TimeRange) {
@@ -140,6 +152,11 @@ class HomeViewModel @Inject constructor(
                     }
                 }
                 
+                // Read isGamificationEnabled setting
+                val isGamificationEnabledDeferred = async {
+                    preferencesRepository.preferences().first()?.isGamificationEnabled ?: true
+                }
+                
                 // Await all results
                 val overview = overviewDeferred.await()
                 val periodComparison = periodComparisonDeferred.await()
@@ -153,25 +170,31 @@ class HomeViewModel @Inject constructor(
                 val userName = userNameDeferred.await()
                 
                 // Fetch Gamification Data
-                val userLevel = gamificationRepository.getUserLevel()
-                val nextBadge = gamificationRepository.getNextEarnableBadge()
+                val isGamificationEnabled = isGamificationEnabledDeferred.await()
+                val userLevel = if (isGamificationEnabled) gamificationRepository.getUserLevel() else null
+                val nextBadge = if (isGamificationEnabled) gamificationRepository.getNextEarnableBadge() else null
                 
                 // Process chart data and generate labels for interactive trend line
                 val (dailyListening, chartLabels) = processChartData(timeRange, rawDailyListening)
                 
-                // Inject Gamification Card
-                val gamificationInsight = InsightCardData(
-                    title = "Level Progress", // Not displayed by GamificationCard
-                    description = "Your current level and next badge",
-                    type = InsightType.LOYALTY,
-                    payload = InsightPayload.GamificationProgress(
-                        level = userLevel,
-                        nextBadge = nextBadge
+                // Inject Gamification Card if enabled
+                val combinedInsights = mutableListOf<InsightCardData>()
+                if (isGamificationEnabled && userLevel != null) {
+                    combinedInsights.add(
+                        InsightCardData(
+                            title = "Level Progress", // Not displayed by GamificationCard
+                            description = "Your current level and next badge",
+                            type = InsightType.LOYALTY,
+                            payload = InsightPayload.GamificationProgress(
+                                level = userLevel,
+                                nextBadge = nextBadge
+                            )
+                        )
                     )
-                )
+                }
                 
                 // Combine insights (Gamification Card first, then others)
-                val combinedInsights = listOf(gamificationInsight) + insightsDeferred.await()
+                combinedInsights.addAll(insightsDeferred.await())
                 
                 val hasData = overview.totalPlayCount > 0
                 val earliestTimestamp = statsRepository.getEarliestDataTimestamp()
@@ -193,12 +216,12 @@ class HomeViewModel @Inject constructor(
                         userName = userName,
                         hasData = hasData,
                         isNewUser = isNewUser,
-                        // Preserve existing true state: once the popup is triggered it must stay
                         // visible until the user actively interacts with it. Without this guard,
                         // any subsequent data reload (e.g. time-range change) would call
                         // shouldShowRateApp() which now sees the 3-day cooldown has just been
                         // written and returns false, silently dismissing the popup mid-interaction.
-                        showRateAppPopup = it.showRateAppPopup || shouldShowRateApp()
+                        showRateAppPopup = it.showRateAppPopup || shouldShowRateApp(),
+                        isGamificationEnabled = isGamificationEnabled
                     )
                 }
             }
@@ -577,6 +600,7 @@ data class HomeUiState(
     val selectedTimeRange: TimeRange = TimeRange.THIS_WEEK,
     val hasData: Boolean = false,
     val isNewUser: Boolean = false,
+    val isGamificationEnabled: Boolean = true,
     
     // Data fields
     val listeningOverview: me.avinas.tempo.data.stats.ListeningOverview? = null,

@@ -113,6 +113,7 @@ fun HomeScreen(
                         userLevel = userLevel?.currentLevel,
                         levelProgress = userLevel?.levelProgress ?: 0f,
                         levelTitle = userLevel?.title,
+                        isGamificationEnabled = uiState.isGamificationEnabled,
                         onLevelClick = onNavigateToProfile
                     )
                     
@@ -327,7 +328,7 @@ fun HomeScreen(
         }
         
         // Level Up Celebration Overlay
-        if (showLevelUp) {
+        if (uiState.isGamificationEnabled && showLevelUp) {
             LevelUpOverlay(
                 newLevel = levelUpLevel,
                 title = levelUpTitle,
