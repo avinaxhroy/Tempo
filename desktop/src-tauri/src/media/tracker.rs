@@ -85,6 +85,10 @@ pub struct PlaybackTracker {
     has_position_data: bool,
     /// Cached raw info for the current track (for finalize when track changes).
     last_raw: Option<RawMediaInfo>,
+    /// Number of consecutive polls where position did not advance.
+    /// After this exceeds a threshold, fall back to wall-clock accumulation
+    /// to handle WinRT position-stuck bugs on Windows.
+    consecutive_stuck_polls: u32,
 }
 
 impl PlaybackTracker {
@@ -109,6 +113,7 @@ impl PlaybackTracker {
             was_interrupted: false,
             has_position_data: false,
             last_raw: None,
+            consecutive_stuck_polls: 0,
         }
     }
 
@@ -149,6 +154,7 @@ impl PlaybackTracker {
             self.was_interrupted = false;
             self.has_position_data = raw.position_ms >= 0;
             self.last_raw = Some(raw.clone());
+            self.consecutive_stuck_polls = 0;
 
             return prev_event;
         }
@@ -226,17 +232,36 @@ impl PlaybackTracker {
             let listen_increment = if raw.position_ms >= 0 && self.last_position_ms >= 0 {
                 // Position data available on both sides — trust it
                 if pos_delta > 0 {
-                    // Normal playback: use whichever is smaller to avoid
-                    // over-counting during seeks
+                    // Normal playback: position is advancing — use min of position
+                    // and wall-clock to avoid over-counting during seeks.
+                    self.consecutive_stuck_polls = 0;
                     pos_delta.min(wall_delta).max(0)
                 } else {
-                    // Position didn't advance (stuck, paused cursor, or
-                    // backward seek). Don't accumulate wall-clock time
-                    // when position says nothing moved.
-                    0
+                    // pos_delta == 0: position not advancing this poll.
+                    // This can happen legitimately (very short poll interval, or
+                    // position updates lag behind playback) or as a WinRT bug
+                    // where GSMTC freezes the reported position.
+                    //
+                    // Strategy: tolerate up to 2 consecutive stuck polls (noise),
+                    // then fall back to wall-clock. Reset as soon as position moves.
+                    self.consecutive_stuck_polls += 1;
+                    if self.consecutive_stuck_polls > 2 {
+                        // Position is genuinely stuck — WinRT not updating.
+                        // Use wall-clock so the track still accumulates.
+                        debug!(
+                            "PlaybackTracker: position stuck for {} polls (pos={}ms), using wall-clock for '{}'",
+                            self.consecutive_stuck_polls, raw.position_ms, raw.title
+                        );
+                        wall_delta
+                    } else {
+                        // First couple of stuck polls — could be polling jitter.
+                        // Don't accumulate yet, wait for next poll.
+                        0
+                    }
                 }
             } else {
-                // Position truly unavailable — fall back to wall-clock
+                // Position truly unavailable (pos < 0) — fall back to wall-clock
+                self.consecutive_stuck_polls = 0;
                 wall_delta
             };
 

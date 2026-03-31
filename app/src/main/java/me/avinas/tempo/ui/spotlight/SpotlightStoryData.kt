@@ -62,6 +62,7 @@ sealed interface SpotlightStoryPage {
         val topSongArtist: String,
         val topSongImageUrl: String?,
         val playCount: Int,
+        val totalTimeMs: Long = 0L,
         val topSongs: List<SongEntry>,
         override val previewUrl: String?
     ) : SpotlightStoryPage {

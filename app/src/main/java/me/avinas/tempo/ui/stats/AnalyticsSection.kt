@@ -56,7 +56,7 @@ fun OverviewSection(overview: ListeningOverview) {
         // Total Time Card
         StatCard(
             modifier = Modifier.weight(1f),
-            gradientColors = listOf(Color(0xFF7F1D1D).copy(alpha = 0.6f), Color(0xFF7F1D1D).copy(alpha = 0.2f))
+            gradientColors = listOf(Color(0xFF5B21B6).copy(alpha = 0.6f), Color(0xFF5B21B6).copy(alpha = 0.2f))
         ) {
             Column {
                 Text(
@@ -162,7 +162,7 @@ fun HourlyChart(hourlyData: List<HourlyDistribution>) {
                             .clip(RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
                             .background(
                                 Brush.verticalGradient(
-                                    colors = listOf(Color(0xFFF42525), Color(0xFFF42525).copy(alpha = 0.3f))
+                                    colors = listOf(Color(0xFFA855F7), Color(0xFFA855F7).copy(alpha = 0.3f))
                                 )
                             )
                     )

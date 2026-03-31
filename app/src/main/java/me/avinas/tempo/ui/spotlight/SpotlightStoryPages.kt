@@ -661,6 +661,28 @@ fun TopSongsPage(page: SpotlightStoryPage.TopSongs) {
                                 color = Color.White.copy(alpha = 0.7f),
                                 textAlign = TextAlign.Center
                             )
+                            // Total playtime chip for #1 song
+                            if (page.totalTimeMs > 0L) {
+                                val totalMinutes = (page.totalTimeMs / 60_000).toInt()
+                                val hours = totalMinutes / 60
+                                val minutes = totalMinutes % 60
+                                val playtimeText = if (hours > 0) "${hours}h ${minutes}m total playtime"
+                                                   else "${minutes}m total playtime"
+                                Spacer(modifier = Modifier.height(dimens.spacerSmall))
+                                GlassCard(
+                                    modifier = Modifier.wrapContentSize(),
+                                    shape = RoundedCornerShape(50),
+                                    backgroundColor = Color(0xFFA855F7).copy(alpha = 0.25f),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 5.dp)
+                                ) {
+                                    Text(
+                                        text = playtimeText,
+                                        style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel),
+                                        color = Color.White.copy(alpha = 0.95f),
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
                         }
                     }
                 }

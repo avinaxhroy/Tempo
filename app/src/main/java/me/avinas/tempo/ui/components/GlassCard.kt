@@ -23,7 +23,7 @@ enum class GlassCardVariant {
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    shape: RoundedCornerShape = RoundedCornerShape(16.dp),
+    shape: RoundedCornerShape = RoundedCornerShape(24.dp), // Increased for softer premium feel
     backgroundColor: Color = Color.White.copy(alpha = 0.05f),
     contentPadding: PaddingValues = PaddingValues(16.dp),
     variant: GlassCardVariant = GlassCardVariant.HighProminence,

@@ -148,10 +148,8 @@ fun ShareCanvasScreen(
         }
     }
     
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF020617))
+    me.avinas.tempo.ui.components.DeepOceanBackground(
+        modifier = Modifier.fillMaxSize()
     ) {
         if (isLoading) {
             // Loading state

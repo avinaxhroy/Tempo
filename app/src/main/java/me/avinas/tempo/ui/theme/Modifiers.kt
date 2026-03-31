@@ -8,6 +8,14 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.composed
+import androidx.compose.runtime.getValue
 
 fun Modifier.innerShadow(
     color: Color = Color.Black,
@@ -41,3 +49,52 @@ fun Modifier.innerShadow(
         )
     }
 }
+
+fun Modifier.premiumClickable(
+    onClick: () -> Unit,
+    pressedScale: Float = 0.95f
+): Modifier = composed {
+    val interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isPressed) pressedScale else 1f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+        ),
+        label = "premium_click_scale"
+    )
+
+    this
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+        .clickable(
+            interactionSource = interactionSource,
+            indication = null, // Remove default ripple for premium feel
+            onClick = onClick
+        )
+}
+
+fun Modifier.glassBlur(
+    radius: Dp = 16.dp,
+    shape: androidx.compose.ui.graphics.Shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+): Modifier = this
+    .clip(shape)
+    .then(
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            Modifier.graphicsLayer {
+                val blurRadius = radius.toPx()
+                if (blurRadius > 0) {
+                    renderEffect = android.graphics.RenderEffect
+                        .createBlurEffect(blurRadius, blurRadius, android.graphics.Shader.TileMode.DECAL)
+                        .asComposeRenderEffect()
+                }
+            }
+        } else {
+            Modifier // Fallback for older Android versions
+        }
+    )
+

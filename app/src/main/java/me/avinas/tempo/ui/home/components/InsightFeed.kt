@@ -93,16 +93,15 @@ fun VibeHeader(
     onLevelClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // Generate colors based on Audio Features
     val energyColor = androidx.compose.ui.graphics.lerp(
-        Color(0xFFdb2777), // Low Energy: Pink 600
-        Color(0xFFef4444), // High Energy: Red
+        Color(0xFF1E103C), // Low Energy: Very Dark Violet
+        Color(0xFF5B21B6), // High Energy: Rich Purple
         energy
     )
     
     val valenceColor = androidx.compose.ui.graphics.lerp(
-        Color(0xFFA21CAF), // Low Valence: Plum 700
-        Color(0xFFF59E0B), // High Valence: Amber
+        Color(0xFF0F172A), // Low Valence: Very Dark Indigo
+        Color(0xFF4C1D95), // High Valence: Deep Violet
         valence
     )
     

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -24,7 +25,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.IntSize
 import kotlin.random.Random
 
-// Global cache for noise bitmap to avoid regeneration across all instances
+// Global cache for noise bitmap to keep glassmorphism texture perfect and performant
 private object NoiseCache {
     val bitmap: ImageBitmap by lazy { 
         generateNoiseBitmap(128, 128) 
@@ -72,71 +73,49 @@ fun DeepOceanBackground(
         0f
     }
 
-    // Noise Texture (Use global cache)
+    // Fetch noise texture purely for the glassmorphism feel
     val noiseBitmap = NoiseCache.bitmap
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(TempoDarkBackground) // Base Obsidian
+            .background(TempoDarkBackground) // Base Obsidian (Permanent Dark)
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
 
-            // 1. Mesh Gradient Layer: Subtle, structured blends
-            // Top-Left: Neutral Dark (MeshGradient1)
-            val center1 = Offset(w * 0.1f + p1Offset, h * 0.1f + p1Offset)
-            val radius1 = w * 0.9f
+            // 1. OLED Abyss Glow: A single, very subtle, wide ambient glow at the edges.
+            // This prevents the "70% purple" linear look and provides a radical 95% pitch-black aesthetic.
+            
+            // Bottom "Abyss" Ambient Edge Glow
+            val bottomCenter = Offset(w * 0.5f + p1Offset, h * 1.05f)
+            val bottomRadius = w * 1.2f
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(MeshGradient1.copy(alpha = 0.2f), Color.Transparent),
-                    center = center1,
-                    radius = radius1
+                    colors = listOf(MeshGradient3.copy(alpha = 0.35f), Color.Transparent),
+                    center = bottomCenter,
+                    radius = bottomRadius
                 ),
-                center = center1,
-                radius = radius1
+                center = bottomCenter,
+                radius = bottomRadius
             )
 
-            // Center-Right: Deepest Charcoal (MeshGradient2) - texture anchor
-            val center2 = Offset(w * 0.8f, h * 0.5f)
-            val radius2 = w * 0.8f
+            // Top-Right "Cosmic Dust" Glow
+            val topRight = Offset(w * 0.9f, h * 0.0f)
+            val topRadius = w * 0.8f
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(MeshGradient2.copy(alpha = 0.15f), Color.Transparent),
-                    center = center2,
-                    radius = radius2
+                    colors = listOf(MeshGradient1.copy(alpha = 0.25f), Color.Transparent),
+                    center = topRight,
+                    radius = topRadius
                 ),
-                center = center2,
-                radius = radius2
+                center = topRight,
+                radius = topRadius
             )
 
-            // Bottom-Left: Soft Dark Overlay (MeshGradient3) - grounding
-            val center3 = Offset(w * 0.2f + p2Offset, h * 0.9f)
-            val radius3 = w * 1.0f
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(MeshGradient3.copy(alpha = 0.2f), Color.Transparent),
-                    center = center3,
-                    radius = radius3
-                ),
-                center = center3,
-                radius = radius3
-            )
-
-            // 2. Cinematic Noise Overlay (The "Premium" Texture)
-            drawNoiseOverlay(noiseBitmap, alpha = 0.05f) // Increased to 5% for visible texture on black
-
-            // 3. Cinematic Vignette (Bottom Fade)
-            // darker grounding for the bottom navigation area
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f)),
-                    startY = h * 0.75f,
-                    endY = h
-                ),
-                size = size
-            )
+            // The perfect texture for glassmorphism: extremely subtle.
+            drawNoiseOverlay(noiseBitmap, alpha = 0.025f) // Lowered slightly to preserve pure black
         }
 
         content()
@@ -144,7 +123,7 @@ fun DeepOceanBackground(
 }
 
 // Helper to draw tiled noise
-private fun DrawScope.drawNoiseOverlay(noise: ImageBitmap, alpha: Float) {
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawNoiseOverlay(noise: androidx.compose.ui.graphics.ImageBitmap, alpha: Float) {
     val noiseW = noise.width
     val noiseH = noise.height
     val cols = (size.width / noiseW).toInt() + 1
@@ -162,18 +141,16 @@ private fun DrawScope.drawNoiseOverlay(noise: ImageBitmap, alpha: Float) {
 }
 
 // Generate a small static noise bitmap
-private fun generateNoiseBitmap(width: Int, height: Int): ImageBitmap {
+private fun generateNoiseBitmap(width: Int, height: Int): androidx.compose.ui.graphics.ImageBitmap {
     val size = width * height
     val pixels = IntArray(size)
-    val random = Random(123) // Seeded for consistency
+    val random = kotlin.random.Random(123) // Seeded for consistency
 
     for (i in 0 until size) {
-        // Random grayscale value
         val gray = random.nextInt(256)
-        // Set alpha to 255 (opaque), we control overall opacity in drawImage
         pixels[i] = (0xFF shl 24) or (gray shl 16) or (gray shl 8) or gray
     }
-
+    
     val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
     bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
     return bitmap.asImageBitmap()

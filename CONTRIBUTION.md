@@ -6,7 +6,7 @@ Your contributions (whether bug fixes, features, documentation, or testing) are 
 
 ## About the Project
 
-Tempo is a **source-available** project with a clear vision: to be the best local-first music companion app that respects user privacy and data ownership. While I built it to solve a specific problem, community contributions help make it better for everyone.
+Tempo is an **AGPLv3-licensed project (with custom limitations)** with a clear vision: to be the best local-first music companion app that respects user privacy and data ownership. While I built it to solve a specific problem, community contributions help make it better for everyone.
 
 The codebase is open for learning, auditing, and contribution, with a license that protects against commercial exploitation while enabling collaboration.
 
@@ -172,7 +172,7 @@ Run `./gradlew build` to ensure your changes compile successfully.
 
 ## Contributor License
 
-By contributing to Tempo, you agree that your contributions will be licensed under the project's [Tempo Source Available License](LICENSE).
+By contributing to Tempo, you agree that your contributions will be licensed under the project's [custom modified AGPLv3 License](LICENSE).
 
 Your contributions remain attributed to you in the git history and may be acknowledged in documentation for significant work.
 
@@ -187,7 +187,7 @@ Your contributions remain attributed to you in the git history and may be acknow
 
 Every contribution makes Tempo better, whether it's a one-line typo fix or a major feature. Your time and effort are valued.
 
-Tempo is **source-available** to protect it from commercial exploitation while keeping it open for learning, auditing, and collaboration. This approach ensures the app stays free, privacy-focused, and user-first.
+Tempo uses a **custom modified AGPLv3 License** to protect it from commercial exploitation while keeping it open for learning, auditing, and collaboration. This approach ensures the app stays free, privacy-focused, and user-first.
 
 Thank you for being part of this project. 🎵
 

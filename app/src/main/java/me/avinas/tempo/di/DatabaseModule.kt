@@ -173,7 +173,8 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_37_38,    // Desktop Satellite: add desktop_pairing_sessions table
                 AppDatabase.MIGRATION_38_39,    // Desktop Satellite v2: add desktop_ip/desktop_port to pairing sessions
                 AppDatabase.MIGRATION_39_40,    // Fix: add smartChallengeNotifHour / smartChallengeNotifCalcTime to user_preferences
-                AppDatabase.MIGRATION_40_41     // Fix: non-UNIQUE indices on artists/albums, nullable tags/genres in enriched_metadata
+                AppDatabase.MIGRATION_40_41,    // Fix: non-UNIQUE indices on artists/albums, nullable tags/genres in enriched_metadata
+                AppDatabase.MIGRATION_41_42     // Add isGamificationEnabled to user_preferences
             )
             // Enable Write-Ahead Logging for better concurrent read/write performance
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)

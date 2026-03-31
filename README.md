@@ -12,7 +12,7 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org) 
 [![Android](https://img.shields.io/badge/Android-16-green.svg?style=flat&logo=android)](https://developer.android.com) 
 [![Version](https://img.shields.io/badge/Version-4.4.7-orange.svg?style=flat)]()
-[![License](https://img.shields.io/badge/License-Source%20Available-blue.svg)](LICENSE) 
+[![License](https://img.shields.io/badge/License-AGPLv3%20Custom-blue.svg)](LICENSE) 
 [![Status](https://img.shields.io/badge/Status-Active_Development-success.svg)]()
 
 
@@ -252,7 +252,7 @@ Tempo uses a **Local-First** architecture built on **Room Database**.
 
 **Contributions are welcome and appreciated!** 🎉
 
-Tempo is a **source-available** project that operates with the collaborative spirit of open source while protecting against commercial exploitation. The code is open for you to read, learn from, modify, and contribute to, but with some guardrails to ensure the project remains user-focused and free.
+Tempo is an **open-source project under a custom modified AGPLv3 License** that operates with the collaborative spirit of open source while explicitly protecting against commercial exploitation and rebranding. The code is open for you to read, learn from, modify, and contribute to, but with some strict limitations to ensure the project remains user-focused and free.
 
 ### Why This Approach?
 
@@ -291,7 +291,7 @@ All merged contributors are credited in commit history. Significant contribution
 
 ## 📄 License & Philosophy
 
-Tempo uses a **Source Available License**, a middle ground between proprietary and fully open source.
+Tempo uses a **custom modified AGPLv3 License**, which applies GNU AGPLv3 terms but adds strict protective limitations regarding commercial use and rebranding.
 
 ### What This Means For You
 
@@ -303,21 +303,15 @@ Tempo uses a **Source Available License**, a middle ground between proprietary a
 - Audit the code for security and privacy
 
 ❌ **You CANNOT:**
-- Sell Tempo or use it in commercial products
-- Republish modified versions on app stores (Play Store, F-Droid, etc.)
+- Sell Tempo or use it in any commercial capacity
 - Add monetization (ads, subscriptions, donations)
-- Rebrand it and distribute as your own app
+- Rebrand it, white-label it, or distribute as your own app
 
-### Why Not Traditional Open Source?
+### The Open Source Spirit, Protected
 
-I want Tempo to remain free and user-focused. Fully open-source licenses like MIT or GPL would allow anyone to:
-- Clone the app and monetize it with ads
-- Publish competing versions that fragment the user base
-- Remove privacy protections or add tracking
+I want Tempo to remain free and user-focused. While a standard open-source license like MIT or plain GPL would allow anyone to clone the app, monetize it with ads, or re-publish competing versions, our custom limitations prevent these scenarios while keeping the code fully transparent and collaborative under AGPLv3 terms.
 
-The current license prevents these scenarios while keeping the code transparent and collaborative.
-
-**Think of it as:** *Open source spirit, with protection against commercial exploitation.*
+**Think of it as:** *Copyleft spirit, with strict protection against commercial exploitation and rebranding.*
 
 📄 Full license details: [LICENSE](LICENSE)
 

@@ -17,7 +17,7 @@ fun SettingsSectionHeader(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleSmall,
-        color = Color(0xFFEF4444), // Red 500
+        color = Color(0xFFA855F7), // Neon Purple/Electric Purple
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
     )
@@ -95,8 +95,8 @@ fun SettingsSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color(0xFFEF4444), // Red 500
-                checkedTrackColor = Color(0xFF7F1D1D), // Red 900
+                checkedThumbColor = Color(0xFF8B5CF6), // Primary Purple
+                checkedTrackColor = Color(0xFF5B21B6), // Tertiary Purple
                 uncheckedThumbColor = Color.Gray,
                 uncheckedTrackColor = Color(0xFF334155) // Slate 700
             )

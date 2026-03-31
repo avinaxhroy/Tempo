@@ -99,19 +99,23 @@ class NotificationWorker @AssistedInject constructor(
                 set(Calendar.HOUR_OF_DAY, targetHour)
                 set(Calendar.MINUTE, 0)
                 set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
             }
 
             // If the target time has already passed:
             //  - within 2 hours: fire immediately (small OS scheduling delay, still relevant)
-            //  - more than 2 hours late: skip today — a stale notification late in the day
-            //    is worse UX than no notification at all. The next day will fire on time.
+            //  - more than 2 hours late: schedule for the SAME hour tomorrow rather than silently
+            //    dropping the notification. A next-morning notification is still useful, and
+            //    prevents the worker from becoming completely silent due to Doze/battery saver delays.
             val missedByMs = now.timeInMillis - target.timeInMillis
             val initialDelay: Long = when {
                 !target.before(now) -> target.timeInMillis - now.timeInMillis
                 missedByMs <= 2 * 60 * 60 * 1000L -> 0L
                 else -> {
-                    Log.w(TAG, "Challenge notification missed target by ${missedByMs / 60_000} min — skipping today.")
-                    return
+                    Log.w(TAG, "Challenge notification missed target by ${missedByMs / 60_000} min — scheduling for tomorrow.")
+                    // Schedule for the same hour tomorrow
+                    target.add(Calendar.DAY_OF_YEAR, 1)
+                    target.timeInMillis - now.timeInMillis
                 }
             }
 

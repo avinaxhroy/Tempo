@@ -22,6 +22,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import android.graphics.drawable.Drawable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +36,15 @@ import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.GlassCardVariant
 import me.avinas.tempo.ui.components.SettingsSectionHeader
 import me.avinas.tempo.ui.theme.TempoRed
+
+
+/**
+ * Semaphore that limits the number of concurrent PackageManager icon loads.
+ * PackageManager.getApplicationIcon() internally acquires locks on AssetManager/ResourcesImpl.
+ * Without this limit, loading many icons in parallel causes severe lock contention which
+ * can starve the main thread and trigger an ANR (Input dispatching timed out).
+ */
+private val iconLoadingSemaphore = Semaphore(permits = 4)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -422,9 +433,13 @@ fun AppIcon(packageName: String, modifier: Modifier = Modifier) {
     LaunchedEffect(packageName) {
         withContext(Dispatchers.IO) {
             try {
-                icon = context.packageManager.getApplicationIcon(packageName)
+                // Acquire semaphore before loading to prevent concurrent lock contention
+                // on the system's AssetManager which can cause ANR.
+                iconLoadingSemaphore.withPermit {
+                    icon = context.packageManager.getApplicationIcon(packageName)
+                }
             } catch (e: Exception) {
-                // Keep null on error
+                // Keep null on error (e.g. package not found)
             }
         }
     }

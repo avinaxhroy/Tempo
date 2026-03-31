@@ -125,10 +125,16 @@ class AppPreferenceRepository @Inject constructor(
     /**
      * Seed database with default apps if empty.
      * Called on first app launch or fresh install.
+     *
+     * Also backfills any missing default apps for existing users
+     * (e.g., when new apps are added to DefaultMusicApps in a later build).
+     * Uses IGNORE conflict strategy so existing user customisations are never overwritten.
      */
     suspend fun seedDefaultAppsIfNeeded() {
-        if (appPreferenceDao.getCount() == 0) {
-            // Add music apps (enabled by default)
+        val existing = appPreferenceDao.getCount()
+        
+        if (existing == 0) {
+            // Fresh install — seed everything
             val musicPrefs = DefaultMusicApps.MUSIC_APPS.map { app ->
                 AppPreference(
                     packageName = app.packageName,
@@ -141,7 +147,6 @@ class AppPreferenceRepository @Inject constructor(
             }
             appPreferenceDao.insertAll(musicPrefs)
             
-            // Add blocked apps
             val blockedPrefs = DefaultMusicApps.BLOCKED_APPS.map { app ->
                 AppPreference(
                     packageName = app.packageName,
@@ -153,6 +158,33 @@ class AppPreferenceRepository @Inject constructor(
                 )
             }
             appPreferenceDao.insertAll(blockedPrefs)
+        } else {
+            // Existing install — only insert apps that are genuinely missing from the DB.
+            // insertAll uses OnConflictStrategy.IGNORE, so apps the user has already
+            // customised (enabled, disabled, blocked) are left untouched.
+            val newMusicPrefs = DefaultMusicApps.MUSIC_APPS.map { app ->
+                AppPreference(
+                    packageName = app.packageName,
+                    displayName = app.displayName,
+                    isEnabled = true,
+                    isUserAdded = false,
+                    isBlocked = false,
+                    category = app.category
+                )
+            }
+            appPreferenceDao.insertAll(newMusicPrefs)   // no-ops for apps already present
+            
+            val newBlockedPrefs = DefaultMusicApps.BLOCKED_APPS.map { app ->
+                AppPreference(
+                    packageName = app.packageName,
+                    displayName = app.displayName,
+                    isEnabled = false,
+                    isUserAdded = false,
+                    isBlocked = true,
+                    category = app.category
+                )
+            }
+            appPreferenceDao.insertAll(newBlockedPrefs) // no-ops for apps already present
         }
     }
 }

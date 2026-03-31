@@ -269,6 +269,7 @@ pub async fn start_polling(app_handle: tauri::AppHandle) {
         };
 
         if !settings.auto_detect_enabled {
+            let _ = app_handle.emit("detection-paused", "disabled");
             continue;
         }
 
@@ -281,6 +282,7 @@ pub async fn start_polling(app_handle: tauri::AppHandle) {
                 settings.low_battery_threshold
             );
             let _ = app_handle.emit("battery-saver-active", true);
+            let _ = app_handle.emit("detection-paused", "battery_saver");
             continue;
         }
 
@@ -359,12 +361,19 @@ pub async fn start_polling(app_handle: tauri::AppHandle) {
                 let _ = app_handle.emit("now-playing-changed", &np);
             }
             DetectResult::TrackFinished { listened_ms, skipped, replay_count, completion_percentage, pause_count, seek_count, session_id: _ } => {
-                debug!(
+                info!(
                     "Track finished: listened={}ms skipped={} replays={} completion={:.1}% pauses={} seeks={}",
                     listened_ms, skipped, replay_count, completion_percentage, pause_count, seek_count
                 );
             }
-            DetectResult::Filtered | DetectResult::NothingPlaying => {}
+            DetectResult::Filtered => {
+                // Content was filtered — detection is working, just not music
+                let _ = app_handle.emit("detection-active", ());
+            }
+            DetectResult::NothingPlaying => {
+                // Detection is working, nothing playing right now
+                let _ = app_handle.emit("detection-active", ());
+            }
         }
     }
 }

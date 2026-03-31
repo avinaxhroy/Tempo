@@ -32,7 +32,7 @@ import me.avinas.tempo.data.local.entities.DesktopPairingSession
         DailyChallenge::class, // Gamification: daily challenges
         DesktopPairingSession::class // Desktop Satellite pairing sessions
     ],
-    version = 42, // Add isGamificationEnabled to user_preferences
+    version = 43, // Migration 43: Backfill Vivi Music & new open-source apps into app_preferences
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -59,7 +59,7 @@ abstract class AppDatabase : RoomDatabase() {
         private const val TAG = "AppDatabase"
         
         /** Current Room schema version — keep in sync with the @Database(version = ...) annotation. */
-        const val VERSION = 42
+        const val VERSION = 43
         
         /**
          * Migration from version 6 to 7: Add enhanced tracking columns to listening_events.
@@ -1912,6 +1912,40 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 42 to 43.
+         *
+         * Backfills newly-added music apps into app_preferences for existing users.
+         * Uses INSERT OR IGNORE so any app the user has already customised
+         * (enabled, disabled, blocked) is left completely untouched.
+         *
+         * DATA PRESERVATION: additive-only, no existing rows are modified or deleted.
+         *
+         * Apps added in this migration:
+         * - com.vivi.vivimusic  (Vivi Music — open-source YouTube Music client)
+         */
+        val MIGRATION_42_43 = object : Migration(42, 43) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 42 to 43 - Backfilling new music apps")
+                val currentTime = System.currentTimeMillis()
+
+                val newApps = listOf(
+                    Triple("com.vivi.vivimusic",   "Vivi Music",  "MUSIC")
+                    // Add future new apps here in subsequent migrations
+                )
+
+                newApps.forEach { (pkg, name, cat) ->
+                    db.execSQL("""
+                        INSERT OR IGNORE INTO app_preferences
+                        (packageName, displayName, isEnabled, isUserAdded, isBlocked, category, addedAt)
+                        VALUES ('$pkg', '$name', 1, 0, 0, '$cat', $currentTime)
+                    """)
+                }
+
+                Log.i(TAG, "Migration from version 42 to 43 completed — inserted ${newApps.size} new app(s) (skipped if already present)")
+            }
+        }
+
+        /**
          * All migrations in order.
          */
         val ALL_MIGRATIONS = arrayOf(
@@ -1950,7 +1984,8 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_38_39,   // Desktop Satellite v2: add desktop_ip / desktop_port
             MIGRATION_39_40,   // Fix: add smartChallengeNotifHour / smartChallengeNotifCalcTime to user_preferences
             MIGRATION_40_41,   // Fix: non-UNIQUE indices on artists/albums, nullable tags/genres in enriched_metadata
-            MIGRATION_41_42    // Add isGamificationEnabled to user_preferences
+            MIGRATION_41_42,   // Add isGamificationEnabled to user_preferences
+            MIGRATION_42_43    // Backfill Vivi Music & new open-source apps into app_preferences
         )
     }
 }

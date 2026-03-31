@@ -10,32 +10,32 @@ val Purple40 = Color(0xFF6650a4)
 val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
-// Red Theme Colors
-val PrimaryRed = Color(0xFFEF4444) // Red 500
-val SecondaryRed = Color(0xFFB91C1C) // Red 700
-val TertiaryRed = Color(0xFF7F1D1D) // Red 900
-val AccentRed = Color(0xFFF87171) // Red 400
+// Purple Theme Colors (Replacing Red)
+val PrimaryPurple = Color(0xFF8B5CF6) // Violet 500
+val SecondaryPurple = Color(0xFF7C3AED) // Violet 600
+val TertiaryPurple = Color(0xFF5B21B6) // Violet 800
+val AccentPurple = Color(0xFFA78BFA) // Violet 400
 
-// Custom App Colors
-val TempoDarkBackground = Color(0xFF050505) // Deep Obsidian (Premium Black)
-val TempoDarkSurface = Color(0xFF0F0F0F) // Very subtle surface distinction
-val TempoPrimary = Color(0xFFEF4444)
+// Custom App Colors (Radical Pitch Black OLED Design)
+val TempoDarkBackground = Color(0xFF000000) // Perfect Pitch Black OLED
+val TempoDarkSurface = Color(0xFF050505) // Barely visible surface distinction
+val TempoPrimary = Color(0xFF8B5CF6) // Shifted from Red to Violet
 val TempoSecondary = Color(0xFF14B8A6) // Teal 500 for calmness
 val TempoError = Color(0xFFF43F5E) // Rose 500
 
-// Premium Mesh Gradient Accents (Subtle/Dark)
-val MeshGradient1 = Color(0xFF121212) // Neutral Dark
-val MeshGradient2 = Color(0xFF0A0A0A) // Deepest Charcoal
-val MeshGradient3 = Color(0xFF141414) // Soft Dark Overlay
+// Premium Mesh Gradient Accents (Beautiful Blend of Dark & Violet)
+val MeshGradient1 = Color(0xFF160D29) // Very subtle dark violet
+val MeshGradient2 = Color(0xFF0B0D1E) // Very subtle dark midnight blue
+val MeshGradient3 = Color(0xFF1B0A21) // Very subtle dark fuchsia
 
 // Legacy Support
-val TempoRed = Color(0xFFEF4444) // Mapped to PrimaryRed equivalent
+val TempoRed = Color(0xFF8B5CF6) // Mapped to PrimaryPurple equivalent to preserve references
 
 val GlassWhite = Color(0xFFFFFFFF).copy(alpha = 0.08f) // Refined for visibility
 val SubtlerGlass = Color(0xFFFFFFFF).copy(alpha = 0.05f)
 
 // Glow & Accents
-val NeonRed = Color(0xFFFF5252)
+val NeonRed = Color(0xFFA855F7) // Remapped to Electric Purple for neon pops
 val ElectricBlue = Color(0xFF3B82F6)
 val GoldenAmber = Color(0xFFF59E0B)
 

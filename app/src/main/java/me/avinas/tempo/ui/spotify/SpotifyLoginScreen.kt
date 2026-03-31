@@ -40,9 +40,8 @@ fun SpotifyLoginScreen(
     val spotifyGreen = Color(0xFF1DB954)
     val spotifyBlack = Color(0xFF191414)
     
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+    me.avinas.tempo.ui.components.DeepOceanBackground(
+        modifier = Modifier.fillMaxSize()
     ) {
         Column(
             modifier = Modifier

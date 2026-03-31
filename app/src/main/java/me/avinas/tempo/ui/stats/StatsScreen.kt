@@ -301,7 +301,6 @@ fun HeroStatItem(item: Any, onNavigate: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .border(0.5.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(16.dp)) // Subtle border for definition
             .clickable(onClick = onNavigate),
         backgroundColor = Color(0xFFF59E0B).copy(alpha = 0.15f), // Reduced from 0.25f for better blend
         contentPadding = PaddingValues(16.dp) // Reduced from 24.dp
@@ -366,11 +365,10 @@ fun GlassStatItem(rank: Int, item: Any, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .border(0.5.dp, tintColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp)) // Border matches tint for harmony
             .clickable(onClick = onClick)
             .innerShadow(
                 color = if (rank <= 3) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.2f),
-                cornersRadius = 16.dp,
+                cornersRadius = 24.dp,
                 spread = 1.dp,
                 blur = 2.dp
             ),

@@ -14,6 +14,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -33,15 +36,23 @@ class SpotlightViewModel @Inject constructor(
         loadCards(TimeRange.THIS_MONTH)
         observeDataChanges()
     }
+
     
     private fun observeDataChanges() {
         viewModelScope.launch {
-            statsRepository.observeListeningOverview(_uiState.value.selectedTimeRange)
+            // flatMapLatest ensures that whenever selectedTimeRange changes, we cancel the old
+            // repository subscription and immediately re-subscribe with the new range.
+            // This prevents stale THIS_MONTH data being pushed when a different filter is active.
+            _uiState
+                .map { it.selectedTimeRange }
+                .distinctUntilChanged()
+                .flatMapLatest { range ->
+                    statsRepository.observeListeningOverview(range)
+                }
                 .collect { _ ->
-                    // Refresh cards when listening overview changes
-                    loadCards(_uiState.value.selectedTimeRange)
-                    // Re-check lock status (e.g. for All Time if new data comes in, though unlikely to change fast)
-                    checkIfStoryLocked(_uiState.value.selectedTimeRange)
+                    val range = _uiState.value.selectedTimeRange
+                    loadCards(range)
+                    checkIfStoryLocked(range)
                 }
         }
     }

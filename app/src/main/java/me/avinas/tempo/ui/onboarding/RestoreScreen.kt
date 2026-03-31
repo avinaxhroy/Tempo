@@ -82,6 +82,18 @@ fun RestoreScreen(
     
     // Track if we've shown the activity error to avoid spamming
     var activityErrorShown by remember { mutableStateOf(false) }
+
+    // Guard against onFinish being called multiple times from different LaunchedEffect blocks.
+    // Multiple paths (import success, Spotify success, Last.fm success, Start Fresh button) can
+    // call onFinish concurrently; calling it more than once causes NavController to try to
+    // transition a back-stack entry that no longer exists → IllegalStateException.
+    var hasFinished by remember { mutableStateOf(false) }
+    val safeOnFinish: () -> Unit = {
+        if (!hasFinished) {
+            hasFinished = true
+            onFinish()
+        }
+    }
     
     // Handle system back press - block during active operations
     val driveOperation by viewModel.driveOperation.collectAsState()
@@ -121,6 +133,7 @@ fun RestoreScreen(
         lastFmUiState.isLoading
     
     androidx.activity.compose.BackHandler(enabled = !isOperationActive, onBack = onBack)
+
     
     // ViewModel State
     val isSignedIn by viewModel.isSignedIn.collectAsState()
@@ -189,7 +202,7 @@ fun RestoreScreen(
     LaunchedEffect(importExportResult) {
         when (val result = importExportResult) {
              is ImportExportResult.Success -> {
-                 onFinish() // Auto-finish on success
+                 safeOnFinish() // Auto-finish on success
                  viewModel.clearImportExportResult()
              }
              is ImportExportResult.Error -> {
@@ -204,7 +217,7 @@ fun RestoreScreen(
     LaunchedEffect(topItemsImportState) {
         when (val state = topItemsImportState) {
             is TopItemsImportState.Success -> {
-                onFinish() // Auto-finish on successful Spotify import
+                safeOnFinish() // Auto-finish on successful Spotify import
                 spotifyViewModel.clearTopItemsImportState()
             }
             is TopItemsImportState.Error -> {
@@ -219,7 +232,7 @@ fun RestoreScreen(
     LaunchedEffect(reconstructionState) {
         when (val state = reconstructionState) {
             is HistoryReconstructionState.Success -> {
-                onFinish() // Auto-finish on successful reconstruction
+                safeOnFinish() // Auto-finish on successful reconstruction
                 spotifyViewModel.clearReconstructionState()
             }
             is HistoryReconstructionState.Error -> {
@@ -330,8 +343,21 @@ fun RestoreScreen(
                                 // Use the new history reconstruction for more accurate data
                                 spotifyViewModel.importWithHistoryReconstruction()
                             } else {
-                                val intent = spotifyViewModel.startLogin()
-                                context.startActivity(intent)
+                                val loginIntent = spotifyViewModel.startLogin().apply {
+                                    // FLAG_ACTIVITY_NEW_TASK is required when starting an activity
+                                    // from a non-Activity Context (e.g., during onboarding where
+                                    // the composable context may not be an Activity), otherwise
+                                    // Android throws a SecurityException.
+                                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                try {
+                                    context.startActivity(loginIntent)
+                                } catch (e: android.content.ActivityNotFoundException) {
+                                    // No browser available
+                                } catch (e: SecurityException) {
+                                    // Fallback: should not happen after adding NEW_TASK flag
+                                    activity?.startActivity(loginIntent)
+                                }
                             }
                         }
                     )
@@ -349,7 +375,7 @@ fun RestoreScreen(
                         onClearError = lastFmViewModel::clearError,
                         onFinishImport = {
                             lastFmViewModel.reset()
-                            onFinish()
+                            safeOnFinish()
                         }
                     )
 
@@ -528,7 +554,7 @@ fun RestoreScreen(
                         .padding(bottom = rememberScreenHeightPercentage(0.03f))
                 ) {
                     Button(
-                        onClick = onFinish,
+                        onClick = safeOnFinish,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(scaledSize(54.dp, 0.85f, 1.1f)),
@@ -771,7 +797,7 @@ fun RestoreScreen(
                 TextButton(onClick = { 
                     spotifyViewModel.clearImportState()
                     if (successState.tracksImported > 0) {
-                        onFinish() // Auto-finish on successful import with tracks
+                        safeOnFinish() // Auto-finish on successful import with tracks
                     }
                 }) {
                     Text(if (successState.tracksImported > 0) "Continue" else "OK")
@@ -870,7 +896,7 @@ fun LastFmImportCard(
     onFinishImport: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val lastFmPurple = Color(0xFFBA0000) // Last.fm red
+    val lastFmPurple = Color(0xFF8B5CF6) // Last.fm red
     var username by remember { mutableStateOf("") }
     var isExpanded by remember { mutableStateOf(false) }
     
@@ -1050,11 +1076,11 @@ private fun LastFmUsernameInput(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White,
-                focusedBorderColor = Color(0xFFBA0000),
+                focusedBorderColor = Color(0xFF8B5CF6),
                 unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
-                focusedLabelColor = Color(0xFFBA0000),
+                focusedLabelColor = Color(0xFF8B5CF6),
                 unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
-                cursorColor = Color(0xFFBA0000)
+                cursorColor = Color(0xFF8B5CF6)
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -1065,8 +1091,8 @@ private fun LastFmUsernameInput(
             onClick = onSubmit,
             enabled = username.isNotBlank(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFBA0000),
-                disabledContainerColor = Color(0xFFBA0000).copy(alpha = 0.5f)
+                containerColor = Color(0xFF8B5CF6),
+                disabledContainerColor = Color(0xFF8B5CF6).copy(alpha = 0.5f)
             ),
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
@@ -1181,7 +1207,7 @@ private fun LastFmTierOption(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = if (isRecommended) Color(0xFFBA0000).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f),
+                color = if (isRecommended) Color(0xFF8B5CF6).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f),
                 shape = RoundedCornerShape(12.dp)
             )
             .clickable(onClick = onClick)
@@ -1210,7 +1236,7 @@ private fun LastFmTierOption(
             Box(
                 modifier = Modifier
                     .background(
-                        color = Color(0xFFBA0000).copy(alpha = 0.3f),
+                        color = Color(0xFF8B5CF6).copy(alpha = 0.3f),
                         shape = RoundedCornerShape(4.dp)
                     )
                     .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -1218,7 +1244,7 @@ private fun LastFmTierOption(
                 Text(
                     text = "Recommended",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFFBA0000)
+                    color = Color(0xFF8B5CF6)
                 )
             }
         }
@@ -1231,7 +1257,7 @@ private fun LastFmImportProgress(
     onCancel: () -> Unit
 ) {
     val numberFormat = remember { java.text.NumberFormat.getNumberInstance(java.util.Locale.getDefault()) }
-    val lastFmRed = Color(0xFFBA0000)
+    val lastFmRed = Color(0xFF8B5CF6)
     
     // Extract progress details including tier info
     val progressData = when (progress) {
@@ -1421,7 +1447,7 @@ private fun LastFmImportComplete(
         Button(
             onClick = onDone,
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFBA0000)
+                containerColor = Color(0xFF8B5CF6)
             ),
             shape = RoundedCornerShape(12.dp)
         ) {

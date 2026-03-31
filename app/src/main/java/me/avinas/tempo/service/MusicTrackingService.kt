@@ -162,7 +162,10 @@ class MusicTrackingService : NotificationListenerService() {
             "io.stellio.music",                        // Stellio (Alt)
             "com.frolo.musp",                          // Frolomuse
             "com.rhmsoft.omnia",                       // Omnia
-            "ru.yandex.music"                          // Yandex Music
+            "ru.yandex.music",                         // Yandex Music
+
+            // Open Source - Vivi Music & similar
+            "com.vivi.vivimusic"                       // Vivi Music (open source)
         )
         
         // Podcast apps - filtered by content filtering settings
@@ -1317,14 +1320,22 @@ class MusicTrackingService : NotificationListenerService() {
     
     /**
      * Check if a package is in the enabled music apps list (dynamic from database).
-     * CRITICAL: Do not fall back to static MUSIC_APPS - user preferences must be respected.
+     *
+     * Falls back to the static MUSIC_APPS set only when the DB cache hasn't loaded yet
+     * (race condition on service start). Once the cache is initialised the DB wins, so
+     * any app the user has explicitly disabled is still respected.
      */
     private fun isInEnabledApps(packageName: String): Boolean {
-        // If cache not initialized yet, don't allow any apps to prevent bypassing user preferences
-        // The service will pick up notifications once the cache loads
+        // Cache not ready yet → fall back to the compile-time whitelist so that apps
+        // already playing when the service starts are not silently dropped.
+        // This fixes the race condition where initializeMediaSessionManager() fires before
+        // refreshAppPreferenceCache() completes and all apps are skipped.
         if (!isAppPreferenceCacheInitialized) {
-            Log.d(TAG, "App preference cache not initialized yet, skipping $packageName")
-            return false
+            val inStaticList = packageName in MUSIC_APPS
+            if (inStaticList) {
+                Log.d(TAG, "App preference cache not ready, using static whitelist for $packageName")
+            }
+            return inStaticList
         }
         return packageName in cachedEnabledApps
     }

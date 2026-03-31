@@ -82,6 +82,7 @@ object DefaultMusicApps {
         AppInfo("com.kapp.youtube.final", "YMusic"),
         AppInfo("org.schabi.newpipe", "NewPipe"),
         AppInfo("org.polymorphicshade.newpipe", "NewPipe (Fork)"),
+        AppInfo("com.vivi.vivimusic", "Vivi Music"),      // Vivi Music (open source)
         
         // Popular Offline Players
         AppInfo("com.maxmpz.audioplayer", "Poweramp"),

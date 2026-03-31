@@ -55,6 +55,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [playerctlMissing, setPlayerctlMissing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [checkingConnection, setCheckingConnection] = useState(false);
+  const [detectionPaused, setDetectionPaused] = useState<"disabled" | "battery_saver" | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -120,12 +121,20 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     const unlistenPlayerctl = listen("playerctl-missing", () => {
       setPlayerctlMissing(true);
     });
+    const unlistenPaused = listen<string>("detection-paused", (e) => {
+      setDetectionPaused(e.payload as "disabled" | "battery_saver");
+    });
+    const unlistenActive = listen("detection-active", () => {
+      setDetectionPaused(null);
+    });
     return () => {
       unlistenNp.then((f) => f());
       unlistenSync.then((f) => f());
       unlistenConn.then((f) => f());
       unlistenJsDisabled.then((f) => f());
       unlistenPlayerctl.then((f) => f());
+      unlistenPaused.then((f) => f());
+      unlistenActive.then((f) => f());
     };
   }, [refresh]);
 
@@ -175,6 +184,45 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         <h2>Dashboard</h2>
         <p>Your desktop listening at a glance</p>
       </div>
+
+      {/* Detection Paused Warning */}
+      {detectionPaused && (
+        <div
+          className="card"
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 12,
+            marginBottom: 16,
+            background: "var(--warning-soft, rgba(255,179,0,0.10))",
+            borderLeft: "3px solid var(--warning, #ffb300)",
+            padding: "12px 16px",
+          }}
+        >
+          <AlertTriangle size={18} style={{ color: "var(--warning, #ffb300)", flexShrink: 0, marginTop: 2 }} />
+          <div style={{ fontSize: 13, lineHeight: 1.5, flex: 1 }}>
+            {detectionPaused === "battery_saver" ? (
+              <>
+                <strong>Tracking paused — Battery Saver</strong>{" "}
+                Your laptop battery is below the threshold set in Settings.
+                Connect to power or lower the battery threshold to resume tracking.
+              </>
+            ) : (
+              <>
+                <strong>Tracking is disabled</strong>{" "}
+                Auto-detect is turned off in Settings. Enable it to start logging plays.
+              </>
+            )}
+          </div>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => onNavigate("settings")}
+            style={{ flexShrink: 0 }}
+          >
+            Open Settings
+          </button>
+        </div>
+      )}
 
       {/* JS-Disabled Warning */}
       {jsDisabledBrowser && (
@@ -325,6 +373,37 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                   Artist info may be incomplete on Windows browsers
                 </div>
               )}
+              {/* Listen progress bar — shows accumulation toward 15s logging threshold */}
+              {nowPlaying.listened_ms >= 0 && (() => {
+                const MIN_LOG_MS = 15_000;
+                const pct = Math.min(100, (nowPlaying.listened_ms / MIN_LOG_MS) * 100);
+                const listenedSec = Math.floor(nowPlaying.listened_ms / 1000);
+                const isLogged = nowPlaying.listened_ms >= MIN_LOG_MS;
+                return (
+                  <div style={{ marginTop: 6 }}>
+                    <div style={{
+                      height: 3,
+                      borderRadius: 2,
+                      background: "var(--border)",
+                      overflow: "hidden",
+                      width: "100%",
+                    }}>
+                      <div style={{
+                        height: "100%",
+                        width: `${pct}%`,
+                        background: isLogged ? "var(--success, #00c853)" : "var(--accent, #7c6af7)",
+                        borderRadius: 2,
+                        transition: "width 1s linear",
+                      }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+                      {isLogged
+                        ? "✓ Logged to queue"
+                        : `${listenedSec}s / 15s to log`}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
             <div className="playing-indicator">
               <span />

@@ -42,6 +42,7 @@ import me.avinas.tempo.ui.components.TrendLine
 import me.avinas.tempo.ui.theme.TempoRed
 import androidx.compose.ui.res.stringResource
 import me.avinas.tempo.R
+import me.avinas.tempo.ui.theme.premiumClickable
 
 @Composable
 fun HeroCard(
@@ -226,8 +227,8 @@ fun SpotlightStoryCard(
     GlassCard(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        backgroundColor = me.avinas.tempo.ui.theme.NeonRed.copy(alpha = 0.15f), // NeonRed
+            .premiumClickable(onClick = onClick, pressedScale = 0.96f),
+        backgroundColor = me.avinas.tempo.ui.theme.NeonRed.copy(alpha = 0.12f), // Restored colorful glass x-factor
         contentPadding = PaddingValues(24.dp)
     ) {
         Row(
@@ -239,7 +240,7 @@ fun SpotlightStoryCard(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(me.avinas.tempo.ui.theme.NeonRed.copy(alpha = 0.2f)),
+                    .background(me.avinas.tempo.ui.theme.NeonRed.copy(alpha = 0.05f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -303,7 +304,7 @@ fun WeekInReviewGrid(
             // Top Artist
             GlassCard(
                 modifier = Modifier.weight(1f),
-                backgroundColor = me.avinas.tempo.ui.theme.NeonRed.copy(alpha = 0.1f),
+                backgroundColor = me.avinas.tempo.ui.theme.NeonRed.copy(alpha = 0.12f), // Restored x-factor
                 variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
             ) {
                 Column(
@@ -340,7 +341,7 @@ fun WeekInReviewGrid(
             // Top Track
             GlassCard(
                 modifier = Modifier.weight(1f),
-                backgroundColor = me.avinas.tempo.ui.theme.ElectricBlue.copy(alpha = 0.1f),
+                backgroundColor = me.avinas.tempo.ui.theme.ElectricBlue.copy(alpha = 0.12f), // Restored x-factor
                 variant = me.avinas.tempo.ui.components.GlassCardVariant.LowProminence
             ) {
                 Column(

@@ -846,6 +846,7 @@ class InsightCardGenerator @Inject constructor(
                 topSongArtist = topTrack.artist,
                 topSongImageUrl = topTrack.albumArtUrl,
                 playCount = topTrack.playCount,
+                totalTimeMs = topTrack.totalTimeMs,
                 topSongs = topTracksList.take(10).mapIndexed { index, track ->
                     SpotlightStoryPage.TopSongs.SongEntry(
                         rank = index + 1,
