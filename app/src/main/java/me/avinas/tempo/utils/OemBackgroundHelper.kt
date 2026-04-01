@@ -34,12 +34,18 @@ object OemBackgroundHelper {
     
     /**
      * Check if device is manufactured by Xiaomi (includes Redmi, POCO, Black Shark).
+     *
+     * Note: On Redmi phones, Build.MANUFACTURER = "Xiaomi" and Build.BRAND = "Redmi".
+     * We check both to cover all sub-brands.
      */
     fun isXiaomiDevice(): Boolean {
         val manufacturer = Build.MANUFACTURER.lowercase()
         val brand = Build.BRAND.lowercase()
+        val model = Build.MODEL.lowercase()
         return manufacturer in listOf("xiaomi", "redmi", "poco", "blackshark") ||
-               brand in listOf("xiaomi", "redmi", "poco", "blackshark")
+               brand in listOf("xiaomi", "redmi", "poco", "blackshark") ||
+               // Fallback: some OEM variants identify by model prefix
+               model.startsWith("redmi") || model.startsWith("poco")
     }
     
     /**
@@ -68,14 +74,22 @@ object OemBackgroundHelper {
     
     /**
      * Get display name for the OS (MIUI or HyperOS).
+     * Falls back to brand name when system properties are unavailable (Android 10+ restriction).
      */
     fun getOsDisplayName(): String? {
-        return when {
-            isHyperOS() -> "HyperOS ${getHyperOSVersion() ?: ""}".trim()
-            getMiuiVersion() != null -> "MIUI ${getMiuiVersion()}"
-            isXiaomiDevice() -> "Xiaomi"
-            else -> null
+        if (!isXiaomiDevice()) return null
+        // Try to detect HyperOS first (newer Xiaomi OS replacing MIUI)
+        val hyperOs = getHyperOSVersion()
+        if (!hyperOs.isNullOrBlank()) return "HyperOS $hyperOs".trim()
+        // Try MIUI
+        val miui = getMiuiVersion()
+        if (!miui.isNullOrBlank()) return "MIUI $miui"
+        // Fallback: system properties unavailable (Android 10+ restriction on getprop)
+        // Use a friendly brand name based on Build fields
+        val brand = Build.BRAND.let {
+            it.replaceFirstChar { c -> c.uppercaseChar() }
         }
+        return brand // e.g. "Redmi", "Poco", "Xiaomi"
     }
     
     // ============================
@@ -90,46 +104,62 @@ object OemBackgroundHelper {
     
     /**
      * Check autostart permission state.
-     * 
-     * Uses reflection to access MIUI's internal AppOpsUtils.
-     * Based on https://github.com/nicholassm/MIUI-autostart
+     *
+     * Uses reflection to access MIUI/HyperOS internal AppOps.
+     * OP codes vary across MIUI versions:
+     *   - MIUI (older): 10008
+     *   - HyperOS / MIUI 14+: may also be 10021 or checked differently
+     * Falls back to content provider if reflection fails.
      */
     fun getAutostartState(context: Context): AutostartState {
         if (!isXiaomiDevice()) return AutostartState.UNKNOWN
-        
+
+        // Try reflection with multiple known OP codes for MIUI/HyperOS autostart
+        val autostartOpCodes = listOf(10008, 10021)
+        for (opCode in autostartOpCodes) {
+            val state = checkAutostartViaReflection(context, opCode)
+            if (state != AutostartState.UNKNOWN) return state
+        }
+
+        // Fallback: content provider (works on some MIUI versions)
+        return getAutostartStateFromProvider(context)
+    }
+
+    /**
+     * Attempt to read autostart state via AppOps reflection for a given op code.
+     */
+    private fun checkAutostartViaReflection(context: Context, opCode: Int): AutostartState {
         return try {
-            // MIUI uses AppOps permission OP_AUTO_START (10008)
             val appOps = context.getSystemService(Context.APP_OPS_SERVICE)
             val appOpsClass = Class.forName("android.app.AppOpsManager")
+            // Signature: checkOpNoThrow(int op, int uid, String packageName)
             val checkOpMethod = appOpsClass.getMethod(
                 "checkOpNoThrow",
-                Integer.TYPE,  // Use primitive int type for reflection
+                Integer.TYPE,
                 Integer.TYPE,
                 String::class.java
             )
-            
-            // OP_AUTO_START = 10008 in MIUI
             val result = checkOpMethod.invoke(
                 appOps,
-                10008,  // OP_AUTO_START
+                opCode,
                 android.os.Process.myUid(),
                 context.packageName
             ) as Int
-            
-            // MODE_ALLOWED = 0, MODE_IGNORED/DENIED = 1/2
-            when (result) {
-                0 -> AutostartState.ENABLED
-                else -> AutostartState.DISABLED
-            }
+            Log.d(TAG, "Autostart op=$opCode result=$result")
+            // MODE_ALLOWED = 0, anything else = not allowed
+            if (result == 0) AutostartState.ENABLED else AutostartState.DISABLED
         } catch (e: Exception) {
-            Log.d(TAG, "Could not determine autostart state: ${e.message}")
-            // Fallback: try content provider method
-            getAutostartStateFromProvider(context)
+            Log.d(TAG, "Reflection check for op=$opCode failed: ${e.message}")
+            AutostartState.UNKNOWN
         }
     }
-    
+
     /**
      * Fallback method using MIUI's content provider.
+     *
+     * Status column semantics on MIUI content provider:
+     *   1 = enabled/allowed, 0 or other = disabled
+     * (Note: This is the OPPOSITE of AppOps MODE_ALLOWED=0 convention)
      */
     private fun getAutostartStateFromProvider(context: Context): AutostartState {
         return try {
@@ -139,10 +169,9 @@ object OemBackgroundHelper {
                     val pkg = cursor.getString(cursor.getColumnIndexOrThrow("package_name"))
                     if (pkg == context.packageName) {
                         val status = cursor.getInt(cursor.getColumnIndexOrThrow("status"))
-                        // MIUI content provider: 0 typically means enabled, 3 means disabled
-                        // But this can vary - log the value for debugging
-                        Log.d(TAG, "Autostart status from content provider: $status")
-                        return@use if (status == 0 || status == 1) AutostartState.ENABLED else AutostartState.DISABLED
+                        // In MIUI's content provider: status=1 means autostart ENABLED
+                        Log.d(TAG, "Autostart content-provider status=$status for $pkg")
+                        return@use if (status == 1) AutostartState.ENABLED else AutostartState.DISABLED
                     }
                 }
                 AutostartState.UNKNOWN
@@ -309,11 +338,15 @@ object OemBackgroundHelper {
     
     private fun getSystemProperty(key: String): String? {
         return try {
-            val process = Runtime.getRuntime().exec("getprop $key")
+            // BUG FIX: Pass as array to avoid the shell treating "getprop key" as a single
+            // command name on Android 10+ (where Runtime.exec(String) splits on spaces
+            // inconsistently across OEM kernels). Using array form is always safe.
+            val process = Runtime.getRuntime().exec(arrayOf("getprop", key))
             BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
                 reader.readLine()?.takeIf { it.isNotBlank() }
             }
         } catch (e: Exception) {
+            Log.d(TAG, "getSystemProperty($key) failed: ${e.message}")
             null
         }
     }

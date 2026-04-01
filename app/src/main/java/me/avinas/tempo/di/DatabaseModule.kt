@@ -139,42 +139,7 @@ object DatabaseModule {
                 MIGRATION_3_4, 
                 MIGRATION_4_5, 
                 MIGRATION_5_6,
-                AppDatabase.MIGRATION_6_7,  // Enhanced ListeningEvent tracking
-                AppDatabase.MIGRATION_7_8,  // Proper relational schema with TrackArtist
-                AppDatabase.MIGRATION_8_9,   // Performance optimization indexes
-                AppDatabase.MIGRATION_9_10,  // ReccoBeats support
-                AppDatabase.MIGRATION_10_11, // Spotify preview URL
-                AppDatabase.MIGRATION_11_12, // Enhanced robustness tracking
-                AppDatabase.MIGRATION_12_13, // iTunes and music links
-                AppDatabase.MIGRATION_13_14,  // Preview URL
-                AppDatabase.MIGRATION_14_15,  // Deezer and Last.fm artist images
-                AppDatabase.MIGRATION_15_16,  // Album art source tracking for robust local fallback
-                AppDatabase.MIGRATION_16_17,  // Fix HTTP URLs to HTTPS for Cover Art Archive
-                AppDatabase.MIGRATION_17_18,  // Track aliases for manual merge tracking
-                AppDatabase.MIGRATION_18_19,  // Content filtering support
-                AppDatabase.MIGRATION_19_20,  // History coach mark
-                AppDatabase.MIGRATION_20_21,  // Remove foreign key from manual_content_marks
-                AppDatabase.MIGRATION_21_22,  // Walkthrough flags
-                AppDatabase.MIGRATION_22_23,  // Artist aliases for artist merging
-                AppDatabase.MIGRATION_23_24,  // Spotlight reminder tracking
-                AppDatabase.MIGRATION_24_25,  // User-controlled app selection
-                AppDatabase.MIGRATION_25_26,  // Spotify Import feature
-                AppDatabase.MIGRATION_26_27,  // All-Time story reminder tracking
-                AppDatabase.MIGRATION_27_28,  // Last.fm import support
-                AppDatabase.MIGRATION_28_29,  // Source index for Last.fm query performance
-                AppDatabase.MIGRATION_29_30,  // Repair indices for existing users
-                AppDatabase.MIGRATION_30_31,  // Gamification: levels & badges
-                AppDatabase.MIGRATION_31_32,  // Badge star tiers
-                AppDatabase.MIGRATION_32_33,   // User known artists for smart rename
-                AppDatabase.MIGRATION_33_34,   // Daily challenges gamification
-                AppDatabase.MIGRATION_34_35,    // Anti-gaming: volume_level on listening_events
-                AppDatabase.MIGRATION_35_36,    // Gamification: add is_acknowledged to badges
-                AppDatabase.MIGRATION_36_37,    // Fix: add genre_source column to enriched_metadata
-                AppDatabase.MIGRATION_37_38,    // Desktop Satellite: add desktop_pairing_sessions table
-                AppDatabase.MIGRATION_38_39,    // Desktop Satellite v2: add desktop_ip/desktop_port to pairing sessions
-                AppDatabase.MIGRATION_39_40,    // Fix: add smartChallengeNotifHour / smartChallengeNotifCalcTime to user_preferences
-                AppDatabase.MIGRATION_40_41,    // Fix: non-UNIQUE indices on artists/albums, nullable tags/genres in enriched_metadata
-                AppDatabase.MIGRATION_41_42     // Add isGamificationEnabled to user_preferences
+                *AppDatabase.ALL_MIGRATIONS
             )
             // Enable Write-Ahead Logging for better concurrent read/write performance
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
