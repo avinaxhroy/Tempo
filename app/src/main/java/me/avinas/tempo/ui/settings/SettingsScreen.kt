@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.app.Activity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -757,10 +758,10 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    AppCompatDelegate.setApplicationLocales(
-                                        LocaleListCompat.forLanguageTags(langTag)
-                                    )
+                                    val localeList = LocaleListCompat.forLanguageTags(langTag)
+                                    AppCompatDelegate.setApplicationLocales(localeList)
                                     showLanguageDialog = false
+                                    (context as? Activity)?.recreate()
                                 }
                                 .padding(vertical = 12.dp, horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -768,10 +769,10 @@ fun SettingsScreen(
                             RadioButton(
                                 selected = currentLocale == langTag,
                                 onClick = {
-                                    AppCompatDelegate.setApplicationLocales(
-                                        LocaleListCompat.forLanguageTags(langTag)
-                                    )
+                                    val localeList = LocaleListCompat.forLanguageTags(langTag)
+                                    AppCompatDelegate.setApplicationLocales(localeList)
                                     showLanguageDialog = false
+                                    (context as? Activity)?.recreate()
                                 },
                                 colors = RadioButtonDefaults.colors(
                                     selectedColor = TempoRed
