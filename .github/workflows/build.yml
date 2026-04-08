@@ -107,12 +107,12 @@ jobs:
           fi
 
       # ── 6. Build via Tauri Action ─────────────────────────────────────────
-      #   • On tag push:  creates/updates a GitHub Release (draft) and uploads
+      #   • On tag push:  creates/updates a GitHub Release and uploads
       #                   all platform bundles to it.
       #   • On workflow_dispatch: just builds; artefacts are uploaded to the
       #                           workflow run instead (no release created).
       - name: Build Tauri app and publish release
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # ── macOS code-signing (optional – set these secrets to enable) ──
@@ -159,7 +159,7 @@ jobs:
             ### Windows: WebView2
             The installer checks for the Edge WebView2 Runtime and downloads it automatically
             if it is not already present (Windows 10 20H2+ / 11 include it by default).
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
 
       # ── 7. Upload artefacts for manual / PR builds (no release) ─────────
