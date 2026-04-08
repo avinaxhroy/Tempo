@@ -95,13 +95,24 @@ jobs:
         working-directory: desktop
         run: npm install
 
-      # ── 5. Build via Tauri Action ─────────────────────────────────────────
+      # ── 5. Extract release version from tag (strips "desktop-" prefix) ────
+      - name: Extract release version
+        id: tag
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF_NAME#desktop-}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── 6. Build via Tauri Action ─────────────────────────────────────────
       #   • On tag push:  creates/updates a GitHub Release (draft) and uploads
       #                   all platform bundles to it.
       #   • On workflow_dispatch: just builds; artefacts are uploaded to the
       #                           workflow run instead (no release created).
       - name: Build Tauri app and publish release
-        uses: tauri-apps/tauri-action@v0.5
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # ── macOS code-signing (optional – set these secrets to enable) ──
@@ -116,12 +127,9 @@ jobs:
           args: ${{ matrix.args }}
           # Release config – these are ignored when there is no tag
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          releaseName: >-
-            ${{ startsWith(github.ref, 'refs/tags/')
-                && format('Tempo Desktop {0}', replace(github.ref_name, 'desktop-', ''))
-                || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Tempo Desktop {0}', steps.tag.outputs.version) || '' }}
           releaseBody: |
-            ## Tempo Desktop ${{ github.ref_name }}
+            ## Tempo Desktop ${{ steps.tag.outputs.version }}
 
             Download the installer for your platform:
 
@@ -154,7 +162,7 @@ jobs:
           releaseDraft: true
           prerelease: false
 
-      # ── 6. Upload artefacts for manual / PR builds (no release) ─────────
+      # ── 7. Upload artefacts for manual / PR builds (no release) ─────────
       - name: Upload build artefacts (non-release runs)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
