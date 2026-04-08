@@ -122,10 +122,11 @@ fn parse_pmset_output(text: &str) -> BatteryStatus {
     // Now drawing from 'AC Power'
     //  -InternalBattery-0 (id=...)	92%; charging; 1:20 remaining
 
-    let charging = text.contains("AC Power")
-        || text.contains("charging")
-        || text.contains("charged")
-        || text.contains("finishing charge");
+    let lower_text = text.to_ascii_lowercase();
+    let charging = lower_text.contains("ac power")
+        || lower_text.contains("; charging;")
+        || lower_text.contains("; charged;")
+        || lower_text.contains("; finishing charge;");
 
     // Find battery percentage
     let mut level: i32 = -1;

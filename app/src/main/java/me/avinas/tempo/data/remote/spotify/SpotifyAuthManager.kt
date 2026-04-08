@@ -134,7 +134,7 @@ class SpotifyAuthManager @Inject constructor(
         // Build authorization URL with state parameter
         val authUrl = buildAuthorizationUrl(codeChallenge, state)
         
-        Log.d(TAG, "Starting login flow with URL: $authUrl")
+        Log.d(TAG, "Starting Spotify login flow")
         
         return Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
     }
@@ -147,7 +147,7 @@ class SpotifyAuthManager @Inject constructor(
      * @return true if authentication was successful
      */
     suspend fun handleCallback(uri: Uri): Boolean {
-        Log.d(TAG, "Handling callback: $uri")
+        Log.d(TAG, "Handling Spotify callback")
 
         // Check for errors
         val error = uri.getQueryParameter("error")

@@ -468,6 +468,7 @@
     <string name="settings_language_french">Français</string>
     <string name="settings_language_german">Deutsch</string>
     <string name="settings_language_hungarian">Ungarisch</string>
+    <string name="settings_language_portuguese">Portugiesisch</string>
     <string name="settings_select_language">Sprache wählen</string>
     <string name="settings_daily_summary">Tägliche Zusammenfassung</string>
     <string name="settings_daily_summary_desc">Erhalte jeden Tag um 20 Uhr eine Zusammenfassung deiner Hörzeit</string>

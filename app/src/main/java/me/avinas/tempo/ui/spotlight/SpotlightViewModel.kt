@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -30,6 +32,8 @@ class SpotlightViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SpotlightUiState())
     val uiState: StateFlow<SpotlightUiState> = _uiState.asStateFlow()
+    private var cardsJob: Job? = null
+    private var storyJob: Job? = null
 
     init {
         checkIfStoryLocked(TimeRange.THIS_MONTH)
@@ -38,6 +42,7 @@ class SpotlightViewModel @Inject constructor(
     }
 
     
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeDataChanges() {
         viewModelScope.launch {
             // flatMapLatest ensures that whenever selectedTimeRange changes, we cancel the old
@@ -58,6 +63,7 @@ class SpotlightViewModel @Inject constructor(
     }
 
     fun onTimeRangeSelected(timeRange: TimeRange) {
+        if (timeRange == _uiState.value.selectedTimeRange) return
         _uiState.value = _uiState.value.copy(selectedTimeRange = timeRange)
         checkIfStoryLocked(timeRange)
         loadCards(timeRange)
@@ -68,11 +74,14 @@ class SpotlightViewModel @Inject constructor(
      * User sees cards immediately while story loads.
      */
     private fun loadCards(timeRange: TimeRange) {
-        viewModelScope.launch {
+        cardsJob?.cancel()
+        storyJob?.cancel()
+        cardsJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, storyLoading = true)
             try {
                 // Cards load first (parallelized)
                 val cards = cardGenerator.generateCards(timeRange)
+                if (_uiState.value.selectedTimeRange != timeRange) return@launch
                 
                 // Pre-warm image cache in background (non-blocking)
                 prefetchCardImages(cards)
@@ -128,9 +137,11 @@ class SpotlightViewModel @Inject constructor(
      * Called after cards display - story is usually ready before user taps "Your Wrapped".
      */
     private fun loadStory(timeRange: TimeRange) {
-        viewModelScope.launch {
+        storyJob?.cancel()
+        storyJob = viewModelScope.launch {
             try {
                 val storyPages = cardGenerator.generateStory(timeRange)
+                if (_uiState.value.selectedTimeRange != timeRange) return@launch
                 _uiState.value = _uiState.value.copy(
                     storyPages = storyPages,
                     storyLoading = false
@@ -150,9 +161,9 @@ class SpotlightViewModel @Inject constructor(
             
             when (timeRange) {
                 TimeRange.THIS_MONTH -> {
-                    // Lock unless it's the last day of the month
+                    // Lock unless it's the last day of the month or within the first 3 days of the next month
                     val lastDay = now.lengthOfMonth()
-                    if (now.dayOfMonth != lastDay) {
+                    if (now.dayOfMonth > 3 && now.dayOfMonth != lastDay) {
                         isLocked = true
                         val monthName = now.month.name.lowercase().replaceFirstChar { it.uppercase() }
                         lockMessage = "Your $monthName Wrapped arrives on ${monthName.take(3)} $lastDay"
@@ -190,8 +201,8 @@ class SpotlightViewModel @Inject constructor(
                     }
                 }
                 TimeRange.THIS_WEEK -> {
-                    // Lock unless it's Sunday
-                    if (now.dayOfWeek != java.time.DayOfWeek.SUNDAY) {
+                    // Lock unless it's Sunday or within the first 3 days of the new week
+                    if (now.dayOfWeek != java.time.DayOfWeek.SUNDAY && now.dayOfWeek.value > 3) {
                         isLocked = true
                         lockMessage = "Your Weekly Wrapped arrives on Sunday"
                     }
@@ -220,4 +231,3 @@ data class SpotlightUiState(
     val isStoryLocked: Boolean = false,
     val storyLockMessage: String = ""
 )
-

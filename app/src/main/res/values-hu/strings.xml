@@ -468,6 +468,7 @@
     <string name="settings_language_french">Français</string>
     <string name="settings_language_german">Deutsch</string>
     <string name="settings_language_hungarian">Magyar</string>
+    <string name="settings_language_portuguese">Portugál</string>
     <string name="settings_select_language">Nyelv kiválasztása</string>
     <string name="settings_daily_summary">Napi Összesítő</string>
     <string name="settings_daily_summary_desc">Kapjon összesítést a napi zenehallgatásról 20:00-kor</string>
@@ -603,4 +604,3 @@
     <string name="ui_no_results">Nincs találat.</string>
     
 </resources>
-

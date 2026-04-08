@@ -47,6 +47,8 @@ class DesktopPairingManager @Inject constructor(
         private const val TAG = "DesktopPairingManager"
         /** Port the phone's NanoHTTPD receiver listens on. */
         const val SERVER_PORT = 8765
+        private const val MIN_TOKEN_LENGTH = 16
+        private const val MAX_TOKEN_LENGTH = 128
     }
 
     // ---------------------------------------------------------------------------
@@ -67,7 +69,7 @@ class DesktopPairingManager @Inject constructor(
             val port = obj.optInt("port", 0).takeIf { it > 0 }
             val deviceName = obj.optString("device_name").trim().ifBlank { null }
 
-            if (token.length < 8) null
+            if (token.length !in MIN_TOKEN_LENGTH..MAX_TOKEN_LENGTH) null
             else {
                 DesktopQrData(
                     token = token,

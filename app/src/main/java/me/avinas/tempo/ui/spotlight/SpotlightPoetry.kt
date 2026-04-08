@@ -10,10 +10,11 @@ object SpotlightPoetry {
 
     fun getHeading(context: Context, timeRange: TimeRange): String {
         return when (timeRange) {
-            TimeRange.THIS_MONTH -> getMonthlyPoetry(context)
+            TimeRange.THIS_WEEK -> SpotlightPeriodFormatter.periodLabel(timeRange)
+            TimeRange.THIS_MONTH -> getMonthlyPoetry(context, timeRange)
             TimeRange.THIS_YEAR -> getYearlyPoetry(context)
             TimeRange.ALL_TIME -> getAllTimePoetry(context)
-            else -> getMonthlyPoetry(context) // Fallback
+            TimeRange.TODAY -> SpotlightPeriodFormatter.periodLabel(timeRange)
         }
     }
 
@@ -26,8 +27,10 @@ object SpotlightPoetry {
         return context.getString(R.string.poetry_all_time)
     }
 
-    private fun getMonthlyPoetry(context: Context): String {
-        val monthValues = LocalDate.now().monthValue
+    private fun getMonthlyPoetry(context: Context, timeRange: TimeRange): String {
+        val monthValues = SpotlightPeriodFormatter
+            .effectivePeriodStart(timeRange)
+            .monthValue
         
         return if (isTropical()) {
             getTropicalPoetry(context, monthValues)

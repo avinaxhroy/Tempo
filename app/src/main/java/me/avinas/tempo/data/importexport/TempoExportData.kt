@@ -17,6 +17,7 @@ import me.avinas.tempo.data.local.entities.*
  * - v6: Added user level (XP, level, streaks) for gamification
  * - v7: Added userName (display name) from DataStore
  * - v8: Added userKnownArtists and dailyChallenges tables
+ * - v9: Added userProfileImagePath from DataStore-backed profile identity
  */
 @JsonClass(generateAdapter = true)
 data class TempoExportData(
@@ -25,8 +26,9 @@ data class TempoExportData(
     val appVersion: String,
     val schemaVersion: Int,
 
-    // v7: User display name (from DataStore)
+    // v7+: User profile identity (from DataStore)
     val userName: String? = null,
+    val userProfileImagePath: String? = null,
 
     // Core data
     val tracks: List<Track> = emptyList(),
@@ -78,7 +80,7 @@ data class TempoExportData(
     val imageManifest: Map<String, String> = emptyMap()
 ) {
     companion object {
-        const val CURRENT_VERSION = 8
+        const val CURRENT_VERSION = 9
         const val DATA_FILENAME = "data.json"
     }
 }

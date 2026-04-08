@@ -7,6 +7,9 @@ use serde::Serialize;
 use tauri::{Emitter, State};
 use uuid::Uuid;
 
+const MIN_TOKEN_LENGTH: usize = 16;
+const MAX_TOKEN_LENGTH: usize = 128;
+
 #[derive(Debug, Serialize)]
 pub struct QrCodeData {
     pub qr_base64: String,
@@ -126,8 +129,8 @@ pub(crate) async fn finalize_pairing(
     if payload.phone_ip.parse::<std::net::IpAddr>().is_err() {
         return Err("Invalid IP address format".to_string());
     }
-    if payload.token.is_empty() {
-        return Err("Token must not be empty".to_string());
+    if !is_valid_token(&payload.token) {
+        return Err("Invalid pairing token".to_string());
     }
 
     let db = state.db.lock().await;
@@ -138,7 +141,7 @@ pub(crate) async fn finalize_pairing(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "No pending pairing found".to_string())?;
 
-    if existing.auth_token != payload.token {
+    if !constant_time_eq(existing.auth_token.as_bytes(), payload.token.as_bytes()) {
         return Err("Token mismatch — QR code may be expired. Generate a new one.".to_string());
     }
 
@@ -253,6 +256,9 @@ pub async fn manual_pair(
     if phone_ip.parse::<std::net::IpAddr>().is_err() {
         return Err("Invalid IP address format".to_string());
     }
+    if !is_valid_token(&auth_token) {
+        return Err("Invalid auth token".to_string());
+    }
 
     let info = PairingInfo {
         phone_ip,
@@ -265,4 +271,20 @@ pub async fn manual_pair(
     let db = state.db.lock().await;
     db.save_pairing(&info).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+fn is_valid_token(token: &str) -> bool {
+    (MIN_TOKEN_LENGTH..=MAX_TOKEN_LENGTH).contains(&token.len())
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+
+    let mut diff = 0u8;
+    for (left, right) in a.iter().zip(b.iter()) {
+        diff |= left ^ right;
+    }
+    diff == 0
 }

@@ -1,6 +1,6 @@
-# 🛰️ Tempo Desktop Satellite
+# 🛰️ Tempo Desktop
 
-A lightweight, cross-platform companion app that captures your desktop listening history and syncs it to the **Tempo Android app** over your local network. No cloud servers, no middleman — just a direct, secure connection between your desktop and phone.
+A lightweight, cross-platform companion app that captures your desktop listening history and syncs it to the **Tempo Android app** over your local network. No cloud servers, no middleman, just a direct, secure connection between your desktop and phone.
 
 ---
 

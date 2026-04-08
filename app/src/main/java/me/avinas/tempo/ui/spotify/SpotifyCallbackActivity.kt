@@ -55,7 +55,7 @@ class SpotifyCallbackActivity : ComponentActivity() {
         val uri = intent?.data
         
         if (uri != null && isSpotifyCallback(uri)) {
-            Log.d(TAG, "Received Spotify callback: $uri")
+            Log.d(TAG, "Received Spotify callback")
             
             // Process the callback using lifecycleScope to prevent memory leaks
             lifecycleScope.launch {
@@ -76,7 +76,7 @@ class SpotifyCallbackActivity : ComponentActivity() {
                 navigateToMain(success)
             }
         } else {
-            Log.w(TAG, "Invalid callback URI: $uri")
+            Log.w(TAG, "Invalid Spotify callback URI")
             navigateToMain(false)
         }
     }

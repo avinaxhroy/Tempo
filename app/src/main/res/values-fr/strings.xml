@@ -468,6 +468,7 @@
     <string name="settings_language_french">Français</string>
     <string name="settings_language_german">Allemand</string>
     <string name="settings_language_hungarian">Hongrois</string>
+    <string name="settings_language_portuguese">Portugais</string>
     <string name="settings_select_language">Choisir la langue</string>
     <string name="settings_daily_summary">Résumé quotidien</string>
     <string name="settings_daily_summary_desc">Recevez un résumé de votre écoute chaque jour à 20h</string>

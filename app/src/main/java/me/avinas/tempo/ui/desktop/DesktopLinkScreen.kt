@@ -919,7 +919,7 @@ private fun DesktopAppDownloadButton(context: Context) {
     OutlinedButton(
         onClick = {
             context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("http://tempo.avinas.me/desktop"))
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://tempo.avinas.me/desktop"))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
         },

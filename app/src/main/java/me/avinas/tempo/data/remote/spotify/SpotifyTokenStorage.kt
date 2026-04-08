@@ -1,6 +1,7 @@
 package me.avinas.tempo.data.remote.spotify
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
@@ -40,7 +41,7 @@ class SpotifyTokenStorage @Inject constructor(
         private const val AUTH_TIMEOUT_MS = 10 * 60 * 1000L
     }
 
-    private val encryptedPrefs by lazy {
+    private val encryptedPrefs: SharedPreferences by lazy {
         try {
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -54,9 +55,8 @@ class SpotifyTokenStorage @Inject constructor(
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create encrypted prefs, falling back to regular prefs", e)
-            // Fallback to regular SharedPreferences (less secure, but still functional)
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            Log.e(TAG, "Failed to create encrypted token storage", e)
+            throw IllegalStateException("Secure Spotify token storage is unavailable", e)
         }
     }
 
@@ -184,7 +184,7 @@ class SpotifyTokenStorage @Inject constructor(
             putLong(KEY_AUTH_TIMESTAMP, System.currentTimeMillis())
             apply()
         }
-        Log.d(TAG, "Pending auth saved with state: $state")
+        Log.d(TAG, "Pending auth saved")
     }
     
     /**
@@ -198,7 +198,7 @@ class SpotifyTokenStorage @Inject constructor(
         
         // Check if state matches
         if (storedState != state) {
-            Log.w(TAG, "State mismatch: expected $storedState, got $state")
+            Log.w(TAG, "State mismatch for pending auth")
             return null
         }
         

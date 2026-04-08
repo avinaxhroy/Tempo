@@ -98,7 +98,10 @@ class GamificationRepository @Inject constructor(
     fun observeRecentBadges(limit: Int = 3): Flow<List<Badge>> = gamificationDao.observeRecentBadges(limit)
     
     suspend fun getEarnedBadgeCount(): Int = gamificationDao.getEarnedBadgeCount()
-    
+
+    /** One-shot snapshot of all badges — used by InsightCardGenerator (not a Flow). */
+    suspend fun getAllBadgesSnapshot(): List<Badge> = gamificationDao.getAllBadges()
+
     suspend fun getUniqueArtistCount(): Int = gamificationDao.getUniqueArtistCount()
 
     fun observeUnacknowledgedBadges(): Flow<List<Badge>> = gamificationDao.observeUnacknowledgedBadges()

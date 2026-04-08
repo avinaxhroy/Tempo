@@ -35,8 +35,8 @@ android {
         applicationId = "me.avinas.tempo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 453
-        versionName = "4.5.3"
+        versionCode = 457
+        versionName = "4.5.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -115,7 +115,7 @@ android {
     }
 
     androidResources {
-        localeFilters += setOf("en", "fr", "de", "hu")
+        localeFilters += setOf("en", "fr", "de", "hu", "pt")
     }
 }
 
@@ -124,6 +124,10 @@ ksp {
     arg("dagger.formatGeneratedSource", "disabled")
     arg("dagger.fastInit", "enabled")
     arg("correctErrorTypes", "true")
+    // Export Room schema to schemas/ so Room validates entity definitions against migrations at
+    // compile time. Commit these JSON files — a schema mismatch will fail the build before
+    // it can ever reach a user and trigger a crash.
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {

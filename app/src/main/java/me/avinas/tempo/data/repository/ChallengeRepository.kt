@@ -139,13 +139,13 @@ class ChallengeRepository @Inject constructor(
             if (currentProgress != challenge.currentProgress) {
                 // Determine if newly completed
                 val isNowCompleted = currentProgress >= challenge.targetValue
-                
+
                 val updated = challenge.copy(
                     currentProgress = currentProgress.coerceAtMost(challenge.targetValue),
                     isCompleted = isNowCompleted,
                     completedAt = if (isNowCompleted) System.currentTimeMillis() else 0
                 )
-                
+
                 gamificationDao.upsertChallenge(updated)
                 madeChanges = true
                 Log.d(TAG, "Updated progress: ${challenge.title} -> $currentProgress / ${challenge.targetValue}")

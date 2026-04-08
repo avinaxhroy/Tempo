@@ -312,6 +312,7 @@
     <string name="spotlight_no_cards">No cards available</string>
     <string name="spotlight_preparing">Preparing your story…</string>
     <string name="spotlight_view_story">View Story</string>
+    <string name="spotlight_view_story_for">View the story for %1$s</string>
     <string name="spotlight_your_music">Your Music %1$s</string>
 
     <!-- Spotlight story pages -->
@@ -457,7 +458,11 @@
     <string name="settings_community">Community</string>
     <string name="settings_about">About</string>
     <string name="settings_tap_to_edit">Tap to edit name</string>
+    <string name="settings_tap_photo_to_change">Tap photo to change it</string>
     <string name="settings_update_name">Update Name</string>
+    <string name="settings_change_photo">Change photo</string>
+    <string name="settings_remove_photo">Remove photo</string>
+    <string name="settings_profile_photo">Profile photo</string>
     <string name="settings_display_name">Display Name</string>
     <string name="settings_save">Save</string>
     <string name="settings_cancel">Cancel</string>
@@ -468,6 +473,7 @@
     <string name="settings_language_french">Français</string>
     <string name="settings_language_german">Deutsch</string>
     <string name="settings_language_hungarian">Magyar</string>
+    <string name="settings_language_portuguese">Português</string>
     <string name="settings_select_language">Select Language</string>
     <string name="settings_daily_summary">Daily Summary</string>
     <string name="settings_daily_summary_desc">Get a summary of your listening each day at 8 PM</string>
@@ -475,7 +481,8 @@
     <string name="settings_weekly_recap_desc">See your top stats every Sunday evening</string>
     <string name="settings_achievements">Achievements</string>
     <string name="settings_achievements_desc">Get notified when you reach milestones</string>
-    <string name="settings_daily_challenges">Daily Challenge Reminders</string>n    <string name="settings_daily_challenges_desc">Get notified when new daily targets are ready</string>
+    <string name="settings_daily_challenges">Daily Challenge Reminders</string>
+    <string name="settings_daily_challenges_desc">Get notified when new daily targets are ready</string>
     <string name="settings_manage_permissions">Manage Permissions</string>
     <string name="settings_manage_permissions_desc">Tempo uses notification access to detect what you\'re listening to</string>
     <string name="settings_manage_apps">Manage Supported Apps</string>

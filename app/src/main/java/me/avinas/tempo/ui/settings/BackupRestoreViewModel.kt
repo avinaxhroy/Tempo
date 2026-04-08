@@ -19,6 +19,7 @@ import me.avinas.tempo.data.importexport.ImportExportManager
 import me.avinas.tempo.data.importexport.ImportExportProgress
 import me.avinas.tempo.data.importexport.ImportExportResult
 import me.avinas.tempo.data.local.AppDatabase
+import me.avinas.tempo.data.profile.ProfileIdentityManager
 import me.avinas.tempo.ui.onboarding.dataStore
 import me.avinas.tempo.utils.formatBytes
 import me.avinas.tempo.worker.DriveBackupWorker
@@ -40,6 +41,7 @@ class BackupRestoreViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val database: AppDatabase,
     private val importExportManager: ImportExportManager,
+    private val profileIdentityManager: ProfileIdentityManager,
     private val googleAuthManager: GoogleAuthManager,
     private val driveService: GoogleDriveService,
     private val backupSettingsManager: BackupSettingsManager
@@ -179,10 +181,29 @@ class BackupRestoreViewModel @Inject constructor(
                         // Ignore invalid file paths
                     }
                 }
+
+                var profileImageSize = 0L
+                val profileImagePath = profileIdentityManager.getStoredProfileImagePath()
+                if (!profileImagePath.isNullOrBlank() && profileImagePath.startsWith("file://")) {
+                    try {
+                        val file = File(profileImagePath.removePrefix("file://"))
+                        if (file.exists()) {
+                            profileImageSize = file.length()
+                            localImageSize += profileImageSize
+                            localImageCount++
+                        }
+                    } catch (e: Exception) {
+                        // Ignore invalid file paths
+                    }
+                }
                 
                 // Estimate export size
                 val estimatedJsonSize = (trackCount + artistCount + eventCount) * 500L
-                val estimatedTotalSize = estimatedJsonSize + localImageSize
+                val estimatedTotalSize = estimatedJsonSize + if (_uiState.value.includeLocalImages) {
+                    localImageSize
+                } else {
+                    profileImageSize
+                }
                 
                 _uiState.value = _uiState.value.copy(
                     trackCount = trackCount,
@@ -202,16 +223,7 @@ class BackupRestoreViewModel @Inject constructor(
             context.dataStore.edit { it[INCLUDE_LOCAL_IMAGES_KEY] = include }
             backupSettingsManager.setIncludeLocalImages(include)
             _uiState.value = _uiState.value.copy(includeLocalImages = include)
-            // Recalculate estimated size
-            if (include) {
-                _uiState.value = _uiState.value.copy(
-                    estimatedExportSizeBytes = (_uiState.value.trackCount + _uiState.value.artistCount + _uiState.value.eventCount) * 500L + _uiState.value.localImageSizeBytes
-                )
-            } else {
-                _uiState.value = _uiState.value.copy(
-                    estimatedExportSizeBytes = (_uiState.value.trackCount + _uiState.value.artistCount + _uiState.value.eventCount) * 500L
-                )
-            }
+            calculateStats()
         }
     }
     

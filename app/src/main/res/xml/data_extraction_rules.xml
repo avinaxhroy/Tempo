@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Backup rules (Android 12+):
+    • Cloud backup — excluded entirely (user data stays private; use the in-app Export feature).
+    • Device-to-device transfer — only the Room database is included so users switching phones
+      keep their full listening history.  Prefs, tokens, and caches are intentionally excluded.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- Exclude everything from cloud backup to protect user privacy. -->
+        <exclude domain="root" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <!--
+            Include only the Room database.  Android checkpoints WAL before the transfer, so
+            including the WAL / SHM files is not required but is added as a safety net.
+        -->
+        <include domain="database" path="tempo.db" />
+        <include domain="database" path="tempo.db-shm" />
+        <include domain="database" path="tempo.db-wal" />
+    </device-transfer>
+</data-extraction-rules>

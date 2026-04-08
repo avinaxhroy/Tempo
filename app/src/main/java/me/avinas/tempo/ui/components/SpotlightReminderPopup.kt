@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -23,6 +24,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 import me.avinas.tempo.data.stats.TimeRange
+import me.avinas.tempo.ui.spotlight.SpotlightPeriodFormatter
 
 enum class SpotlightReminderType {
     MONTHLY,
@@ -36,27 +38,40 @@ enum class SpotlightReminderType {
 @Composable
 fun SpotlightReminderPopup(
     type: SpotlightReminderType,
+    timeRange: TimeRange? = null,
     onDismiss: () -> Unit,
     onViewStory: () -> Unit
 ) {
     // Animation states
     var visible by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     
     LaunchedEffect(Unit) {
         visible = true
     }
     
+    val targetTimeRange = timeRange ?: when (type) {
+        SpotlightReminderType.MONTHLY -> TimeRange.THIS_MONTH
+        SpotlightReminderType.YEARLY -> TimeRange.THIS_YEAR
+    }
+    val targetPeriodLabel = remember(targetTimeRange) {
+        SpotlightPeriodFormatter.periodLabel(targetTimeRange)
+    }
+    val actionText = remember(targetTimeRange) {
+        SpotlightPeriodFormatter.viewStoryText(context, targetTimeRange)
+    }
+
     // Determine messaging based on type
     val (title, subtitle, iconGradient) = when (type) {
         SpotlightReminderType.MONTHLY -> Triple(
             "Your Monthly Wrapped\nIs Ready! 🎉",
-            "Check out your listening story from ${getCurrentMonthName()}",
+            "Check out your listening story from $targetPeriodLabel",
             listOf(Color(0xFFA855F7), Color(0xFFEC4899)) // Purple to Pink
         )
         SpotlightReminderType.YEARLY -> Triple(
             "Your Yearly Wrapped\nIs Here! 🌟",
-            "Dive into your ${getCurrentYear()} listening journey",
+            "Dive into your $targetPeriodLabel listening journey",
             listOf(Color(0xFF8B5CF6), Color(0xFF3B82F6)) // Purple to Blue
         )
     }
@@ -220,7 +235,7 @@ fun SpotlightReminderPopup(
                                         )
                                     ) {
                                         Text(
-                                            text = "View Story",
+                                            text = actionText,
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -233,19 +248,4 @@ fun SpotlightReminderPopup(
             }
         }
     }
-}
-
-/**
- * Get current month name (e.g., "November")
- */
-private fun getCurrentMonthName(): String {
-    val month = java.time.LocalDate.now().month
-    return month.name.lowercase().replaceFirstChar { it.uppercase() }
-}
-
-/**
- * Get current year (e.g., "2026")
- */
-private fun getCurrentYear(): Int {
-    return java.time.LocalDate.now().year
 }

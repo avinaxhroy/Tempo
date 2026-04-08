@@ -59,9 +59,8 @@ class GoogleDriveTokenStorage @Inject constructor(
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create encrypted prefs, falling back to regular prefs", e)
-            // Fallback to regular SharedPreferences (less secure, but keeps app functional)
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            Log.e(TAG, "Failed to create encrypted token storage", e)
+            throw IllegalStateException("Secure Google Drive token storage is unavailable", e)
         }
     }
     

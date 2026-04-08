@@ -1,19 +1,16 @@
 package me.avinas.tempo.ui.profile
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import me.avinas.tempo.data.local.entities.Badge
 import me.avinas.tempo.data.local.entities.DailyChallenge
 import me.avinas.tempo.data.local.entities.UserLevel
+import me.avinas.tempo.data.profile.ProfileIdentityManager
 import me.avinas.tempo.data.repository.ChallengeRepository
 import me.avinas.tempo.data.repository.GamificationRepository
 import me.avinas.tempo.data.repository.RefreshCoordinator
 import me.avinas.tempo.data.stats.GamificationEngine
-import androidx.datastore.preferences.core.stringPreferencesKey
-import me.avinas.tempo.ui.onboarding.dataStore
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,10 +23,10 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    @param:ApplicationContext private val context: Context,
     private val gamificationRepository: GamificationRepository,
     private val challengeRepository: ChallengeRepository,
-    private val refreshCoordinator: RefreshCoordinator
+    private val refreshCoordinator: RefreshCoordinator,
+    private val profileIdentityManager: ProfileIdentityManager
 ) : ViewModel() {
     
     
@@ -82,11 +79,13 @@ class ProfileViewModel @Inject constructor(
         }
         
         viewModelScope.launch {
-            // Watch DataStore for updates
-            val USER_NAME_KEY = stringPreferencesKey("user_name")
-            context.dataStore.data.collect { preferences ->
-                val name = preferences[USER_NAME_KEY]?.takeIf { it.isNotBlank() } ?: "User"
-                _uiState.update { it.copy(userName = name) }
+            profileIdentityManager.profileIdentity.collect { identity ->
+                _uiState.update {
+                    it.copy(
+                        userName = identity.userName,
+                        profileImagePath = identity.profileImagePath
+                    )
+                }
             }
         }
     }
@@ -179,6 +178,7 @@ data class ProfileUiState(
     val userLevel: UserLevel = UserLevel(),
     val userTitle: String = "Newcomer",
     val userName: String = "User",
+    val profileImagePath: String? = null,
     val allBadges: List<Badge> = emptyList(),
     val challenges: List<DailyChallenge> = emptyList(),
     val selectedCategory: String? = null,

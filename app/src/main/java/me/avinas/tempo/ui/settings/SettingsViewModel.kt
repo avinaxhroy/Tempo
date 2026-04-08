@@ -11,6 +11,7 @@ import me.avinas.tempo.data.importexport.ImportExportManager
 import me.avinas.tempo.data.importexport.ImportExportProgress
 import me.avinas.tempo.data.importexport.ImportExportResult
 import me.avinas.tempo.data.local.AppDatabase
+import me.avinas.tempo.data.profile.ProfileIdentityManager
 import me.avinas.tempo.ui.onboarding.dataStore
 import me.avinas.tempo.worker.ChallengeWorker
 import me.avinas.tempo.worker.GamificationWorker
@@ -30,6 +31,7 @@ class SettingsViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val database: AppDatabase,
     private val importExportManager: ImportExportManager,
+    private val profileIdentityManager: ProfileIdentityManager,
     private val userPreferencesDao: me.avinas.tempo.data.local.dao.UserPreferencesDao
 ) : ViewModel() {
 
@@ -44,6 +46,9 @@ class SettingsViewModel @Inject constructor(
     
     private val _showConflictDialog = MutableStateFlow<Uri?>(null)
     val showConflictDialog: StateFlow<Uri?> = _showConflictDialog.asStateFlow()
+
+    private val _profileImageMessage = MutableStateFlow<String?>(null)
+    val profileImageMessage: StateFlow<String?> = _profileImageMessage.asStateFlow()
 
     // Keys
     private val NOTIF_DAILY_KEY = booleanPreferencesKey("notif_daily_summary")
@@ -68,6 +73,7 @@ class SettingsViewModel @Inject constructor(
                 dailyChallengesEnabled = dataStorePrefs[NOTIF_CHALLENGES_KEY] ?: true,
                 extendedAudioAnalysisEnabled = dataStorePrefs[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
                 userName = dataStorePrefs[USER_NAME_KEY] ?: "User",
+                profileImagePath = profileIdentityManager.getStoredProfileImagePath(),
                 mergeAlternateVersions = roomPrefs.mergeAlternateVersions,
                 filterPodcasts = roomPrefs.filterPodcasts,
                 filterAudiobooks = roomPrefs.filterAudiobooks,
@@ -81,14 +87,22 @@ class SettingsViewModel @Inject constructor(
         
         // Watch DataStore for updates
         viewModelScope.launch {
+            profileIdentityManager.profileIdentity.collect { identity ->
+                _uiState.value = _uiState.value.copy(
+                    userName = identity.userName,
+                    profileImagePath = identity.profileImagePath
+                )
+            }
+        }
+
+        viewModelScope.launch {
             context.dataStore.data.collect { preferences ->
                 _uiState.value = _uiState.value.copy(
                     dailySummaryEnabled = preferences[NOTIF_DAILY_KEY] ?: true,
                     weeklyRecapEnabled = preferences[NOTIF_WEEKLY_KEY] ?: true,
                     achievementsEnabled = preferences[NOTIF_ACHIEVEMENTS_KEY] ?: true,
                     dailyChallengesEnabled = preferences[NOTIF_CHALLENGES_KEY] ?: true,
-                    extendedAudioAnalysisEnabled = preferences[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
-                    userName = preferences[USER_NAME_KEY] ?: "User"
+                    extendedAudioAnalysisEnabled = preferences[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false
                 )
             }
         }
@@ -113,7 +127,31 @@ class SettingsViewModel @Inject constructor(
 
     fun updateUserName(name: String) {
         viewModelScope.launch {
-            context.dataStore.edit { it[USER_NAME_KEY] = name }
+            profileIdentityManager.updateUserName(name)
+        }
+    }
+
+    fun updateProfileImage(uri: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                profileIdentityManager.updateProfileImage(uri)
+            }.onSuccess {
+                _profileImageMessage.value = "Profile photo updated"
+            }.onFailure { error ->
+                _profileImageMessage.value = error.message ?: "Failed to update profile photo"
+            }
+        }
+    }
+
+    fun removeProfileImage() {
+        viewModelScope.launch {
+            runCatching {
+                profileIdentityManager.clearProfileImage()
+            }.onSuccess {
+                _profileImageMessage.value = "Profile photo removed"
+            }.onFailure { error ->
+                _profileImageMessage.value = error.message ?: "Failed to remove profile photo"
+            }
         }
     }
 
@@ -234,6 +272,7 @@ class SettingsViewModel @Inject constructor(
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 database.clearAllTables()
             }
+            profileIdentityManager.clearProfileImage()
             context.dataStore.edit { it.clear() }
             NotificationWorker.cancelDaily(context)
             NotificationWorker.cancelWeekly(context)
@@ -281,6 +320,10 @@ class SettingsViewModel @Inject constructor(
     fun clearImportExportResult() {
         _importExportResult.value = null
     }
+
+    fun clearProfileImageMessage() {
+        _profileImageMessage.value = null
+    }
 }
 
 data class SettingsUiState(
@@ -292,6 +335,7 @@ data class SettingsUiState(
     val isSpotifyConnected: Boolean = false,
     val spotifyUsername: String? = null,
     val userName: String = "User",
+    val profileImagePath: String? = null,
     val mergeAlternateVersions: Boolean = true,
     val filterPodcasts: Boolean = true,
     val filterAudiobooks: Boolean = true,

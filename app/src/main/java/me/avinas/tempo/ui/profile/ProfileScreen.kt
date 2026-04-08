@@ -37,9 +37,11 @@ import me.avinas.tempo.data.local.entities.DailyChallenge
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -55,6 +57,7 @@ import java.time.ZoneId
 import me.avinas.tempo.data.local.entities.Badge
 import me.avinas.tempo.data.local.entities.UserLevel
 import me.avinas.tempo.data.stats.GamificationEngine
+import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -62,6 +65,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.rotate
 
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 // =====================
 // Badge Icon Mapping
@@ -122,6 +126,197 @@ private fun getCategoryLabel(category: String): String {
     }
 }
 
+@Composable
+private fun ProfileSectionPanel(
+    modifier: Modifier = Modifier,
+    accent: Color = Color(0xFFA855F7),
+    contentPadding: PaddingValues = PaddingValues(24.dp),
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(32.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        accent.copy(alpha = 0.12f),
+                        Color.White.copy(alpha = 0.05f),
+                        Color(0xFF09090F).copy(alpha = 0.92f)
+                    )
+                )
+            )
+            .border(
+                1.dp,
+                Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.22f),
+                        accent.copy(alpha = 0.28f),
+                        Color.White.copy(alpha = 0.06f)
+                    )
+                ),
+                RoundedCornerShape(32.dp)
+            )
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            accent.copy(alpha = 0.14f),
+                            Color.Transparent
+                        ),
+                        center = Offset(120f, 80f),
+                        radius = 520f
+                    )
+                )
+        )
+
+        Column(
+            modifier = Modifier.padding(contentPadding),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun ProfileSectionHeader(
+    eyebrow: String,
+    title: String,
+    subtitle: String,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = eyebrow.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFFD8B4FE),
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
+                fontWeight = FontWeight.Black
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.65f)
+            )
+        }
+
+        trailing?.invoke()
+    }
+}
+
+@Composable
+private fun ProgressTrack(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    brush: Brush = Brush.horizontalGradient(
+        listOf(Color(0xFFEC4899), Color(0xFFA855F7), Color(0xFF6366F1))
+    ),
+    trackColor: Color = Color.White.copy(alpha = 0.08f),
+    height: Dp = 10.dp
+) {
+    Box(
+        modifier = modifier
+            .height(height)
+            .clip(CircleShape)
+            .background(trackColor)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(progress.coerceIn(0f, 1f))
+                .height(height)
+                .clip(CircleShape)
+                .background(brush)
+        )
+    }
+}
+
+@Composable
+private fun HeroInfoChip(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = 0.06f))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(20.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .background(accent.copy(alpha = 0.16f), CircleShape)
+                .border(1.dp, accent.copy(alpha = 0.3f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.55f),
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopBarActionButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(50.dp)
+            .background(Color.White.copy(alpha = 0.05f), CircleShape)
+            .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White
+        )
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -132,9 +327,45 @@ fun ProfileScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
-    
+    val scrollState = rememberScrollState()
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    val coroutineScope = rememberCoroutineScope()
+    val completedChallenges = uiState.challenges.count { it.isCompleted }
+
     DeepOceanBackground {
         Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .size(280.dp)
+                    .offset(x = (-70).dp, y = 90.dp)
+                    .safeBlur(90.dp)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                Color(0xFFEC4899).copy(alpha = 0.24f),
+                                Color.Transparent
+                            )
+                        ),
+                        CircleShape
+                    )
+            )
+            Box(
+                modifier = Modifier
+                    .size(260.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = 70.dp, y = (-20).dp)
+                    .safeBlur(80.dp)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                Color(0xFF6366F1).copy(alpha = 0.2f),
+                                Color.Transparent
+                            )
+                        ),
+                        CircleShape
+                    )
+            )
+
             PullToRefreshBox(
                 isRefreshing = uiState.isRefreshing,
                 onRefresh = {
@@ -144,177 +375,176 @@ fun ProfileScreen(
                 },
                 modifier = Modifier.fillMaxSize()
             ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Spacer(modifier = Modifier.height(96.dp))
-                
-                // === Hero Section (Avatar + Level Ring) ===
-                HeroProfileSection(
-                    userLevel = uiState.userLevel, 
-                    userTitle = uiState.userTitle,
-                    userName = uiState.userName
-                )
-                
-                Spacer(modifier = Modifier.height(40.dp))
-                
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .padding(bottom = 120.dp),
-                    verticalArrangement = Arrangement.spacedBy(40.dp)
-                ) {
-                    // === Stats Row & Streak Risk ===
-                    ModernStatsSection(
-                        userLevel = uiState.userLevel,
-                        streakAtRisk = uiState.streakAtRisk,
-                        timeRemaining = uiState.streakTimeRemaining,
-                        streakDurationMinutes = uiState.streakDurationMinutes
-                    )
-                    
-                    // === Tabs & Pager ===
-                    val pagerState = rememberPagerState(pageCount = { 2 })
-                    val coroutineScope = rememberCoroutineScope()
-                    val tabs = listOf("Daily Challenges", "Badges")
-                    
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        SecondaryTabRow(
-                            selectedTabIndex = pagerState.currentPage,
-                            containerColor = Color.Transparent,
-                            indicator = {
-                                TabRowDefaults.SecondaryIndicator(
-                                    modifier = Modifier.tabIndicatorOffset(pagerState.currentPage),
-                                    color = Color(0xFFA855F7), // Purple accent
-                                    height = 3.dp
-                                )
-                            },
-                            divider = {
-                                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
-                            }
-                        ) {
-                            tabs.forEachIndexed { index, title ->
-                                val selected = pagerState.currentPage == index
-                                Tab(
-                                    selected = selected,
-                                    onClick = { 
-                                        coroutineScope.launch { 
-                                            pagerState.animateScrollToPage(index) 
-                                        } 
-                                    },
-                                    text = {
-                                        Text(
-                                            text = title,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = if (selected) FontWeight.Black else FontWeight.Medium,
-                                            color = if (selected) Color(0xFFA855F7) else Color.White.copy(alpha = 0.5f)
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(24.dp))
-                        
-                        HorizontalPager(
-                            state = pagerState,
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val compactLayout = maxWidth < 380.dp
+                    val tabs = if (compactLayout) listOf("Quests", "Badges") else listOf("Daily Challenges", "Badges")
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                            .padding(bottom = 132.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Spacer(modifier = Modifier.height(104.dp))
+
+                        HeroProfileSection(
+                            userLevel = uiState.userLevel,
+                            userTitle = uiState.userTitle,
+                            userName = uiState.userName,
+                            profileImagePath = uiState.profileImagePath
+                        )
+
+                        Spacer(modifier = Modifier.height(28.dp))
+
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .animateContentSize(),
-                            verticalAlignment = Alignment.Top
-                        ) { page ->
-                            when (page) {
-                                0 -> {
-                                    if (uiState.challenges.isNotEmpty()) {
-                                        ModernChallengesSection(
-                                            challenges = uiState.challenges,
-                                            totalXpAvailable = uiState.challengeXpTotal,
-                                            onClaimChallenge = viewModel::claimChallenge
+                                .padding(horizontal = if (compactLayout) 16.dp else 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(24.dp)
+                        ) {
+                            ModernStatsSection(
+                                userLevel = uiState.userLevel,
+                                compact = compactLayout,
+                                streakAtRisk = uiState.streakAtRisk,
+                                timeRemaining = uiState.streakTimeRemaining,
+                                streakDurationMinutes = uiState.streakDurationMinutes
+                            )
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(Color.White.copy(alpha = 0.04f))
+                                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
+                                    .padding(6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                tabs.forEachIndexed { index, title ->
+                                    val selected = pagerState.currentPage == index
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(18.dp))
+                                            .background(
+                                                if (selected) {
+                                                    Brush.horizontalGradient(
+                                                        listOf(
+                                                            Color(0xFFEC4899).copy(alpha = 0.32f),
+                                                            Color(0xFFA855F7).copy(alpha = 0.42f)
+                                                        )
+                                                    )
+                                                } else {
+                                                    SolidColor(Color.Transparent)
+                                                }
+                                            )
+                                            .border(
+                                                1.dp,
+                                                if (selected) Color.White.copy(alpha = 0.18f) else Color.Transparent,
+                                                RoundedCornerShape(18.dp)
+                                            )
+                                            .clickable {
+                                                coroutineScope.launch {
+                                                    pagerState.animateScrollToPage(index)
+                                                }
+                                            }
+                                            .padding(vertical = 14.dp, horizontal = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = title,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Black,
+                                            color = if (selected) Color.White else Color.White.copy(alpha = 0.55f),
+                                            maxLines = 1
                                         )
-                                    } else {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(120.dp)
-                                                .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
-                                                .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("No Challenges Available", color = Color.White.copy(alpha = 0.4f))
-                                        }
                                     }
                                 }
-                                1 -> {
-                                    BadgeSection(
-                                        allBadges = uiState.allBadges,
-                                        filteredBadges = uiState.filteredBadges,
-                                        earnedCount = uiState.earnedCount,
-                                        totalCount = uiState.totalCount,
-                                        totalStars = uiState.totalStars,
-                                        maxPossibleStars = uiState.maxPossibleStars,
-                                        categories = uiState.categories,
-                                        selectedCategory = uiState.selectedCategory,
-                                        onCategorySelected = viewModel::onCategorySelected
-                                    )
+                            }
+
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .animateContentSize(),
+                                verticalAlignment = Alignment.Top
+                            ) { page ->
+                                when (page) {
+                                    0 -> {
+                                        if (uiState.challenges.isNotEmpty()) {
+                                            ModernChallengesSection(
+                                                challenges = uiState.challenges,
+                                                totalXpAvailable = uiState.challengeXpTotal,
+                                                onClaimChallenge = viewModel::claimChallenge
+                                            )
+                                        } else {
+                                            ProfileSectionPanel {
+                                                ProfileSectionHeader(
+                                                    eyebrow = "Daily Quests",
+                                                    title = "Nothing queued yet",
+                                                    subtitle = "Pull to refresh or keep listening and new challenges will appear here."
+                                                )
+                                            }
+                                        }
+                                    }
+                                    1 -> {
+                                        BadgeSection(
+                                            allBadges = uiState.allBadges,
+                                            filteredBadges = uiState.filteredBadges,
+                                            earnedCount = uiState.earnedCount,
+                                            totalCount = uiState.totalCount,
+                                            totalStars = uiState.totalStars,
+                                            maxPossibleStars = uiState.maxPossibleStars,
+                                            categories = uiState.categories,
+                                            selectedCategory = uiState.selectedCategory,
+                                            onCategorySelected = viewModel::onCategorySelected
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-            }
-            
-            // Floating Glassmorphic Top Bar
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color(0xFF0A0A1A).copy(alpha = 0.92f),
-                                Color(0xFF0A0A1A).copy(alpha = 0.7f),
-                                Color.Transparent
-                            )
-                        )
-                    )
-                    .padding(top = 48.dp, bottom = 16.dp, start = 24.dp, end = 24.dp),
+                    .statusBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.05f), CircleShape)
-                        .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
-                        .size(48.dp)
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                }
-                
-                Text(
-                    text = "PROFILE",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 6.sp,
-                    color = Color.White.copy(alpha = 0.9f)
+                TopBarActionButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    onClick = onBack
                 )
-                
-                IconButton(
-                    onClick = onNavigateToSettings,
+
+                Box(
                     modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.05f), CircleShape)
-                        .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
-                        .size(48.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 18.dp, vertical = 12.dp)
                 ) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
+                    Text(
+                        text = "PROFILE",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 4.sp,
+                        color = Color.White.copy(alpha = 0.95f)
+                    )
                 }
+
+                TopBarActionButton(
+                    icon = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    onClick = onNavigateToSettings
+                )
             }
         }
-        
-        // Level Up Celebration
+
         if (uiState.showLevelUpCelebration) {
             LevelUpCelebration(
                 level = uiState.userLevel.currentLevel,
@@ -341,7 +571,12 @@ fun ProfileScreen(
 // Hero Profile Section
 // =====================
 @Composable
-private fun HeroProfileSection(userLevel: UserLevel, userTitle: String, userName: String) {
+private fun HeroProfileSection(
+    userLevel: UserLevel,
+    userTitle: String,
+    userName: String,
+    profileImagePath: String?
+) {
     val animatedProgress by animateFloatAsState(
         targetValue = userLevel.levelProgress,
         animationSpec = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
@@ -358,146 +593,282 @@ private fun HeroProfileSection(userLevel: UserLevel, userTitle: String, userName
         ),
         label = "glowScale"
     )
+    val progressPercent = (animatedProgress * 100).roundToInt()
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+    ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val availableWidth = maxWidth
+            val avatarContainerSize = (availableWidth * 0.4f).coerceIn(148.dp, 192.dp)
+            val panelPadding = if (availableWidth < 360.dp) 20.dp else 28.dp
+            val spacing = if (availableWidth < 360.dp) 16.dp else 24.dp
+
+            ProfileSectionPanel(
+                accent = Color(0xFFEC4899),
+                contentPadding = PaddingValues(panelPadding)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.06f))
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = Color(0xFFD8B4FE),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "Listening identity",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(spacing),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HeroAvatar(
+                        animatedProgress = animatedProgress,
+                        glowScale = glowScale,
+                        containerSize = avatarContainerSize,
+                        level = userLevel.currentLevel,
+                        userName = userName,
+                        profileImagePath = profileImagePath
+                    )
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = userName,
+                            style = if (availableWidth < 360.dp) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            letterSpacing = 0.5.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = userTitle.uppercase(),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFFD8B4FE),
+                            letterSpacing = 2.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+
+                HeroProgressSummary(
+                    level = userLevel.currentLevel,
+                    progress = animatedProgress,
+                    progressPercent = progressPercent,
+                    totalXp = userLevel.totalXp,
+                    xpRemaining = userLevel.xpRemaining
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroAvatar(
+    animatedProgress: Float,
+    glowScale: Float,
+    containerSize: Dp,
+    level: Int,
+    userName: String,
+    profileImagePath: String?
+) {
+    val glowSize = containerSize * 0.86f
+    val ringSize = containerSize * 0.93f
+    val innerSize = containerSize * 0.7f
+    val iconSize = innerSize * 0.46f
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(containerSize)
     ) {
         Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.size(220.dp)
-        ) {
-            // Intense Background Glow
-            Box(
-                modifier = Modifier
-                    .size(180.dp)
-                    .scale(glowScale)
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFFEC4899).copy(alpha = 0.5f),
-                                Color(0xFFA855F7).copy(alpha = 0.2f),
-                                Color.Transparent
-                            )
-                        ),
-                        shape = CircleShape
-                    )
+            modifier = Modifier
+                .size(glowSize)
+                .scale(glowScale)
+                .background(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFFEC4899).copy(alpha = 0.55f),
+                            Color(0xFFA855F7).copy(alpha = 0.2f),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = CircleShape
+                )
+        )
+
+        Canvas(modifier = Modifier.size(ringSize)) {
+            val strokeWidth = 10.dp.toPx()
+            val radius = (size.minDimension - strokeWidth) / 2
+            val topLeft = Offset(
+                (size.width - radius * 2) / 2,
+                (size.height - radius * 2) / 2
+            )
+            val arcSize = Size(radius * 2, radius * 2)
+
+            drawArc(
+                color = Color.White.copy(alpha = 0.06f),
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
             )
 
-            // Animated Progress Ring
-            Canvas(modifier = Modifier.size(200.dp)) {
-                val strokeWidth = 8.dp.toPx()
-                val radius = (size.minDimension - strokeWidth) / 2
-                val topLeft = Offset(
-                    (size.width - radius * 2) / 2,
-                    (size.height - radius * 2) / 2
+            drawArc(
+                brush = Brush.sweepGradient(
+                    listOf(Color(0xFFEC4899), Color(0xFFA855F7), Color(0xFF6366F1))
+                ),
+                startAngle = -90f,
+                sweepAngle = 360f * animatedProgress,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .size(innerSize)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.08f))
+                .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (profileImagePath.isNullOrBlank()) {
+                Text(
+                    text = userName.firstOrNull()?.toString()?.uppercase() ?: "U",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White.copy(alpha = 0.92f)
                 )
-                val arcSize = Size(radius * 2, radius * 2)
-                
-                // Track
-                drawArc(
-                    color = Color.White.copy(alpha = 0.05f),
-                    startAngle = -90f,
-                    sweepAngle = 360f,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                )
-                
-                // Gradient Progress
-                val gradientColors = listOf(Color(0xFFEC4899), Color(0xFFA855F7), Color(0xFF6366F1))
-                drawArc(
-                    brush = Brush.sweepGradient(gradientColors),
-                    startAngle = -90f,
-                    sweepAngle = 360f * animatedProgress,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            } else {
+                CachedAsyncImage(
+                    imageUrl = profileImagePath,
+                    contentDescription = "Avatar",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
             }
-            
-            // Avatar Center
+
             Box(
                 modifier = Modifier
-                    .size(156.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.08f))
-                    .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "Avatar",
-                    modifier = Modifier.size(80.dp),
-                    tint = Color.White.copy(alpha = 0.3f)
-                )
-                
-                // Level Badge overlapping avatar
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .offset(y = (-12).dp)
-                        .background(
-                            Brush.horizontalGradient(listOf(Color(0xFFEC4899), Color(0xFFA855F7))),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "LVL ${userLevel.currentLevel}",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White
+                    .align(Alignment.BottomCenter)
+                    .offset(y = (-12).dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(Color(0xFFEC4899), Color(0xFFA855F7))
+                        ),
+                        RoundedCornerShape(12.dp)
                     )
-                }
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "LVL $level",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
             }
         }
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        // Title & Name
-        Text(
-            text = userName,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Black,
-            color = Color.White,
-            letterSpacing = 1.sp
-        )
-        Text(
-            text = userTitle.uppercase(),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Black,
-            color = Color(0xFFA855F7),
-            letterSpacing = 4.sp,
-            modifier = Modifier.padding(top = 8.dp)
-        )
-        
-        // XP Progress
-        Spacer(modifier = Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun HeroProgressSummary(
+    level: Int,
+    progress: Float,
+    progressPercent: Int,
+    totalXp: Long,
+    xpRemaining: Long
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier
-                .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(20.dp))
-                .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
-                .padding(horizontal = 20.dp, vertical = 10.dp)
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(18.dp))
             Text(
-                text = "${userLevel.totalXp} XP",
+                text = "LEVEL $level",
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp
             )
-            Box(modifier = Modifier.size(4.dp).background(Color.White.copy(alpha = 0.3f), CircleShape))
             Text(
-                text = "${userLevel.xpRemaining} to next level",
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.White.copy(alpha = 0.6f)
+                text = "$progressPercent%",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFFD8B4FE),
+                fontWeight = FontWeight.Black
             )
         }
+
+        ProgressTrack(
+            progress = progress,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(12.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "$totalXp XP total",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "$xpRemaining XP to next level",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.62f),
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        Text(
+            text = "Level progress",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.5f),
+            letterSpacing = 1.sp
+        )
     }
 }
 
@@ -510,11 +881,12 @@ private fun HeroProfileSection(userLevel: UserLevel, userTitle: String, userName
 @Composable
 private fun ModernStatsSection(
     userLevel: UserLevel,
+    compact: Boolean,
     streakAtRisk: Boolean = false,
     timeRemaining: String = "",
     streakDurationMinutes: Long = Long.MAX_VALUE
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
         if (streakAtRisk) {
             val riskColor = when {
                 streakDurationMinutes > 360 -> Color(0xFFFCA5A5)
@@ -532,162 +904,297 @@ private fun ModernStatsSection(
             } else { remember { mutableStateOf(1f) } }
 
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .alpha(pulseAlpha)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(riskColor.copy(alpha = 0.1f))
-                    .border(1.dp, riskColor.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
-                    .padding(20.dp)
+                modifier = Modifier.alpha(pulseAlpha),
             ) {
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(riskColor.copy(alpha = 0.12f))
+                        .border(1.dp, riskColor.copy(alpha = 0.24f), RoundedCornerShape(24.dp))
+                        .padding(18.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .size(48.dp)
-                            .background(riskColor.copy(alpha = 0.2f), CircleShape)
-                            .border(1.dp, riskColor.copy(alpha = 0.4f), CircleShape),
+                            .background(riskColor.copy(alpha = 0.18f), CircleShape)
+                            .border(1.dp, riskColor.copy(alpha = 0.35f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.LocalFireDepartment, contentDescription = "Risk", tint = riskColor, modifier = Modifier.size(24.dp))
+                        Icon(
+                            Icons.Default.LocalFireDepartment,
+                            contentDescription = "Risk",
+                            tint = riskColor,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "Streak at Risk!",
+                            text = "Streak at Risk",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Black,
-                            color = riskColor
+                            color = Color.White
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Ends in $timeRemaining",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.White.copy(alpha = 0.8f)
+                            text = "Play something in the next $timeRemaining to keep the run alive.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.75f)
                         )
                     }
                 }
             }
         }
-        
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Day Streak - Large Hero Card
+
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            ProfileSectionHeader(
+                eyebrow = "Momentum",
+                title = "Your listening rhythm",
+                subtitle = if (streakAtRisk) {
+                    "Everything important at a glance, with your streak needing attention."
+                } else {
+                    "You’re building a solid habit. Here’s how the run is shaping up."
+                }
+            )
+
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .height(180.dp)
-                    .clip(RoundedCornerShape(28.dp))
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(30.dp))
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                Color(0xFFEF4444).copy(alpha = 0.15f),
-                                Color(0xFFB91C1C).copy(alpha = 0.05f)
+                                Color(0xFFFB7185).copy(alpha = 0.22f),
+                                Color(0xFF7F1D1D).copy(alpha = 0.08f)
                             )
                         )
                     )
-                    .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.2f), RoundedCornerShape(28.dp))
+                    .border(1.dp, Color(0xFFFB7185).copy(alpha = 0.2f), RoundedCornerShape(30.dp))
                     .padding(24.dp)
             ) {
-                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
-                    Icon(
-                        Icons.Default.LocalFireDepartment,
-                        contentDescription = "Streak",
-                        tint = if (streakAtRisk) Color(0xFFEF4444) else Color(0xFFFCA5A5),
-                        modifier = Modifier.size(36.dp)
-                    )
-                    Column {
-                        Text(
-                            text = "${userLevel.currentStreak}",
-                            style = MaterialTheme.typography.displayMedium,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "Day Streak",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontWeight = FontWeight.Bold
-                        )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    if (compact) {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Current streak",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "${userLevel.currentStreak}",
+                                    style = MaterialTheme.typography.displaySmall,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = if (userLevel.currentStreak == 1) "day in motion" else "days in motion",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Color.White.copy(alpha = 0.74f)
+                                )
+                            }
+
+                            ListeningStatusChip(
+                                streakAtRisk = streakAtRisk,
+                                timeRemaining = timeRemaining
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "Current streak",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "${userLevel.currentStreak}",
+                                    style = MaterialTheme.typography.displayMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = if (userLevel.currentStreak == 1) "day in motion" else "days in motion",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Color.White.copy(alpha = 0.74f)
+                                )
+                            }
+
+                            ListeningStatusChip(
+                                streakAtRisk = streakAtRisk,
+                                timeRemaining = timeRemaining
+                            )
+                        }
                     }
                 }
-                
-                // Background watermarks
-                Icon(
-                    Icons.Default.LocalFireDepartment,
-                    contentDescription = null,
-                    tint = Color(0xFFEF4444).copy(alpha = 0.08f),
-                    modifier = Modifier
-                        .size(110.dp)
-                        .align(Alignment.BottomEnd)
-                        .offset(x = 24.dp, y = 24.dp)
-                )
             }
-            
-            // Total XP and Best Streak column
-            Column(
-                modifier = Modifier.weight(1f).height(180.dp),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                StatCard(
-                    modifier = Modifier.weight(1f),
-                    value = "${userLevel.totalXp}",
-                    label = "Total XP",
-                    icon = Icons.Default.Star,
-                    color = Color(0xFFF59E0B)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                StatCard(
-                    modifier = Modifier.weight(1f),
-                    value = "${userLevel.longestStreak}",
-                    label = "Best Streak",
-                    icon = Icons.Default.EmojiEvents,
-                    color = Color(0xFFA855F7)
-                )
+
+            ProgressTrack(
+                progress = (userLevel.currentStreak.coerceAtMost(userLevel.longestStreak.coerceAtLeast(1))).toFloat() /
+                    userLevel.longestStreak.coerceAtLeast(1).toFloat(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp),
+                brush = Brush.horizontalGradient(
+                    listOf(Color(0xFFFF8FAB), Color(0xFFFB7185), Color(0xFFEF4444))
+                ),
+                trackColor = Color.Black.copy(alpha = 0.24f)
+            )
+
+            Text(
+                text = "Best streak is ${userLevel.longestStreak} days. You're ${(userLevel.levelProgress * 100).roundToInt()}% of the way to the next level.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.68f)
+            )
+
+            if (compact) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StatCard(
+                        value = "${userLevel.longestStreak}",
+                        label = "Best streak",
+                        supporting = "Your all-time record",
+                        icon = Icons.Default.EmojiEvents,
+                        color = Color(0xFFA855F7)
+                    )
+                    StatCard(
+                        value = "${userLevel.xpRemaining}",
+                        label = "Next level",
+                        supporting = "XP left to level up",
+                        icon = Icons.Default.AutoAwesome,
+                        color = Color(0xFFF59E0B)
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    StatCard(
+                        modifier = Modifier.weight(1f),
+                        value = "${userLevel.longestStreak}",
+                        label = "Best streak",
+                        supporting = "Your all-time record",
+                        icon = Icons.Default.EmojiEvents,
+                        color = Color(0xFFA855F7)
+                    )
+                    StatCard(
+                        modifier = Modifier.weight(1f),
+                        value = "${userLevel.xpRemaining}",
+                        label = "Next level",
+                        supporting = "XP left to level up",
+                        icon = Icons.Default.AutoAwesome,
+                        color = Color(0xFFF59E0B)
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun StatCard(modifier: Modifier = Modifier, value: String, label: String, icon: ImageVector, color: Color) {
-    Row(
+private fun ListeningStatusChip(
+    streakAtRisk: Boolean,
+    timeRemaining: String
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = 0.08f))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(18.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.LocalFireDepartment,
+                contentDescription = null,
+                tint = if (streakAtRisk) Color(0xFFFCA5A5) else Color(0xFFFFC4D1),
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = if (streakAtRisk) "Ends in $timeRemaining" else "Safe today",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatCard(
+    modifier: Modifier = Modifier,
+    value: String,
+    label: String,
+    supporting: String,
+    icon: ImageVector,
+    color: Color
+) {
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .background(Color.White.copy(alpha = 0.04f))
-            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        color.copy(alpha = 0.18f),
+                        Color.White.copy(alpha = 0.04f)
+                    )
+                )
+            )
+            .border(1.dp, color.copy(alpha = 0.18f), RoundedCornerShape(24.dp))
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .background(color.copy(alpha = 0.15f), CircleShape)
-                .border(1.dp, color.copy(alpha = 0.3f), CircleShape),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(verticalArrangement = Arrangement.Center) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(color.copy(alpha = 0.16f), CircleShape)
+                    .border(1.dp, color.copy(alpha = 0.32f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+            }
+
             Text(
-                text = value,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Black,
-                color = Color.White
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = label,
+                text = label.uppercase(),
                 style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White.copy(alpha = 0.5f)
+                fontWeight = FontWeight.Black,
+                color = Color.White.copy(alpha = 0.52f),
+                letterSpacing = 1.2.sp
             )
         }
+
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Black,
+            color = Color.White
+        )
+
+        Text(
+            text = supporting,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.64f)
+        )
     }
 }
 
@@ -700,78 +1207,63 @@ private fun ModernChallengesSection(
     totalXpAvailable: Int,
     onClaimChallenge: (Long) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom
-        ) {
-            Column {
-                Text(
-                    text = "DAILY QUESTS",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 2.sp,
-                    color = Color.White
-                )
-                val completedCount = challenges.count { it.isCompleted }
-                Text(
-                    text = "$completedCount/${challenges.size} Completed",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.5f),
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-                val resetLabel = remember {
-                    val midnight = LocalDate.now().plusDays(1)
-                        .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                    val diffMs = midnight - System.currentTimeMillis()
-                    val h = (diffMs / (1000 * 60 * 60)).toInt()
-                    val m = ((diffMs % (1000 * 60 * 60)) / (1000 * 60)).toInt()
-                    if (h > 0) "Resets in ${h}h ${m}m" else "Resets in ${m}m"
-                }
-                Text(
-                    text = resetLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.3f),
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-            
-            // Expected Total XP Pill
-            Surface(
-                color = Color.Transparent,
-                shape = CircleShape,
-                border = BorderStroke(1.dp, Color(0xFFA855F7).copy(alpha = 0.4f))
-            ) {
+    val completedCount = challenges.count { it.isCompleted }
+    val resetLabel = remember {
+        val midnight = LocalDate.now().plusDays(1)
+            .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val diffMs = midnight - System.currentTimeMillis()
+        val h = (diffMs / (1000 * 60 * 60)).toInt()
+        val m = ((diffMs % (1000 * 60 * 60)) / (1000 * 60)).toInt()
+        if (h > 0) "Resets in ${h}h ${m}m" else "Resets in ${m}m"
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        ProfileSectionHeader(
+            eyebrow = "Daily Quests",
+            title = "Keep the streak moving",
+            subtitle = "$completedCount of ${challenges.size} complete. $resetLabel",
+            trailing = {
                 Row(
                     modifier = Modifier
-                        .background(Color(0xFFA855F7).copy(alpha = 0.15f))
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .clip(CircleShape)
+                        .background(Color(0xFFA855F7).copy(alpha = 0.14f))
+                        .border(1.dp, Color(0xFFA855F7).copy(alpha = 0.34f), CircleShape)
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = "XP",
+                        contentDescription = null,
                         tint = Color(0xFFD8B4FE),
                         modifier = Modifier.size(14.dp)
                     )
                     Text(
-                        text = "$totalXpAvailable XP Available",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
+                        text = "$totalXpAvailable XP",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Black,
                         color = Color(0xFFD8B4FE)
                     )
                 }
             }
-        }
-        
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        )
+
+        ProgressTrack(
+            progress = if (challenges.isEmpty()) 0f else completedCount.toFloat() / challenges.size,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp),
+            brush = Brush.horizontalGradient(
+                listOf(Color(0xFFEC4899), Color(0xFFA855F7), Color(0xFF8B5CF6))
+            )
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             challenges.forEach { challenge ->
-                ModernChallengeCard(challenge = challenge, onClaim = { onClaimChallenge(challenge.id) })
+                ModernChallengeCard(
+                    challenge = challenge,
+                    onClaim = { onClaimChallenge(challenge.id) }
+                )
             }
         }
     }
@@ -780,7 +1272,7 @@ private fun ModernChallengesSection(
 @Composable
 private fun ModernChallengeCard(challenge: DailyChallenge, onClaim: () -> Unit) {
     val isCompleted = challenge.isCompleted
-    
+
     val diffColor = when (challenge.difficulty) {
         "EASY" -> Color(0xFF10B981)
         "MEDIUM" -> Color(0xFFF59E0B)
@@ -796,24 +1288,29 @@ private fun ModernChallengeCard(challenge: DailyChallenge, onClaim: () -> Unit) 
 
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = isCompleted) { onClaim() },
+            .fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         border = BorderStroke(
             1.dp,
-            if (isCompleted) Color(0xFF10B981).copy(alpha = 0.4f) else Color.White.copy(alpha = 0.06f)
+            if (isCompleted) Color(0xFF10B981).copy(alpha = 0.4f) else diffColor.copy(alpha = 0.18f)
         )
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            // Background Layer
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(Color.White.copy(alpha = 0.03f))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                diffColor.copy(alpha = if (isCompleted) 0.18f else 0.12f),
+                                Color.White.copy(alpha = 0.03f),
+                                Color(0xFF08080B).copy(alpha = 0.92f)
+                            )
+                        )
+                    )
             )
 
-            // Success Glow
             if (isCompleted) {
                 Box(
                     modifier = Modifier
@@ -826,30 +1323,70 @@ private fun ModernChallengeCard(challenge: DailyChallenge, onClaim: () -> Unit) 
                 )
             }
 
-            Column(modifier = Modifier.padding(24.dp)) {
+            Column(
+                modifier = Modifier.padding(22.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top
                 ) {
-                    // Main Content
                     Column(modifier = Modifier.weight(1f)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(diffColor))
-                            Text(
-                                text = challenge.difficulty,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Black,
-                                color = diffColor,
-                                letterSpacing = 1.sp
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(diffColor.copy(alpha = 0.14f))
+                                    .border(1.dp, diffColor.copy(alpha = 0.28f), CircleShape)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(diffColor)
+                                )
+                                Text(
+                                    text = challenge.difficulty,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Black,
+                                    color = diffColor,
+                                    letterSpacing = 1.sp
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.06f))
+                                    .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.65f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = challenge.category.replace("_", " "),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White.copy(alpha = 0.72f)
+                                )
+                            }
                         }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
                         Text(
                             text = challenge.title,
                             style = MaterialTheme.typography.titleLarge,
@@ -866,32 +1403,48 @@ private fun ModernChallengeCard(challenge: DailyChallenge, onClaim: () -> Unit) 
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(16.dp))
+                    Spacer(modifier = Modifier.width(14.dp))
 
-                    // XP / Completion Indicator
                     if (isCompleted) {
-                        Box(
+                        Column(
                             modifier = Modifier
-                                .size(56.dp)
-                                .background(Color(0xFF10B981).copy(alpha = 0.2f), CircleShape)
-                                .border(1.dp, Color(0xFF10B981).copy(alpha = 0.5f), CircleShape),
-                            contentAlignment = Alignment.Center
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color(0xFF10B981).copy(alpha = 0.16f))
+                                .border(1.dp, Color(0xFF10B981).copy(alpha = 0.38f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Done",
-                                tint = Color(0xFF10B981),
-                                modifier = Modifier.size(28.dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .background(Color(0xFF10B981).copy(alpha = 0.16f), CircleShape)
+                                    .border(1.dp, Color(0xFF10B981).copy(alpha = 0.45f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Done",
+                                    tint = Color(0xFF10B981),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Text(
+                                text = "+${challenge.xpReward} XP",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFA7F3D0)
                             )
                         }
                     } else {
                         Column(
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.Center,
                             modifier = Modifier
-                                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color.White.copy(alpha = 0.05f))
+                                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.Center
                         ) {
                             Text(
                                 text = "+${challenge.xpReward}",
@@ -910,35 +1463,38 @@ private fun ModernChallengeCard(challenge: DailyChallenge, onClaim: () -> Unit) 
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Progress Bar
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ProgressTrack(
+                        progress = animatedProgress,
                         modifier = Modifier
-                            .weight(1f)
-                            .height(12.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.4f))
+                            .fillMaxWidth()
+                            .height(12.dp),
+                        brush = if (isCompleted) {
+                            SolidColor(Color(0xFF10B981))
+                        } else {
+                            Brush.horizontalGradient(listOf(Color(0xFFEC4899), Color(0xFFA855F7)))
+                        },
+                        trackColor = Color.Black.copy(alpha = 0.28f)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(animatedProgress)
-                                .clip(CircleShape)
-                                .background(
-                                    if (isCompleted) SolidColor(Color(0xFF10B981))
-                                    else Brush.horizontalGradient(listOf(Color(0xFFEC4899), Color(0xFFA855F7)))
-                                )
+                        Text(
+                            text = "${challenge.currentProgress}/${challenge.targetValue} progress",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Black,
+                            color = if (isCompleted) Color(0xFF10B981) else Color.White.copy(alpha = 0.68f)
+                        )
+                        Text(
+                            text = if (isCompleted) "Completed" else "In progress",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isCompleted) Color(0xFFA7F3D0) else diffColor
                         )
                     }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text(
-                        text = "${challenge.currentProgress}/${challenge.targetValue}",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Black,
-                        color = if (isCompleted) Color(0xFF10B981) else Color.White.copy(alpha = 0.6f)
-                    )
                 }
             }
         }
@@ -960,57 +1516,51 @@ private fun BadgeSection(
     selectedCategory: String?,
     onCategorySelected: (String?) -> Unit
 ) {
+    val collectionProgress = if (totalCount == 0) 0f else earnedCount.toFloat() / totalCount
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = "ACHIEVEMENTS",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 2.sp,
-                    color = Color.White
-                )
-                Text(
-                    text = "$earnedCount / $totalCount collected",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.5f),
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-            
-            // Total stars indicator
-            if (totalStars > 0) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier
-                        .background(Color(0xFFFBBF24).copy(alpha = 0.15f), RoundedCornerShape(16.dp))
-                        .border(1.dp, Color(0xFFFBBF24).copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = null,
-                        tint = Color(0xFFFBBF24),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "$totalStars / $maxPossibleStars",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFBBF24)
-                    )
+        ProfileSectionHeader(
+            eyebrow = "Achievements",
+            title = "Your collection cabinet",
+            subtitle = "$earnedCount of $totalCount badges collected so far.",
+            trailing = {
+                if (totalStars > 0) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFFFBBF24).copy(alpha = 0.15f))
+                            .border(1.dp, Color(0xFFFBBF24).copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = Color(0xFFFBBF24),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "$totalStars / $maxPossibleStars",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFBBF24)
+                        )
+                    }
                 }
             }
-        }
-        
-        // Category filter chips (horizontally scrollable)
+        )
+
+        ProgressTrack(
+            progress = collectionProgress,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp),
+            brush = Brush.horizontalGradient(
+                listOf(Color(0xFFF59E0B), Color(0xFFFBBF24), Color(0xFFFDE68A))
+            )
+        )
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1022,14 +1572,14 @@ private fun BadgeSection(
                 onClick = { onCategorySelected(null) },
                 label = { Text("All") },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = Color.White.copy(alpha = 0.2f),
+                    selectedContainerColor = Color.White.copy(alpha = 0.18f),
                     containerColor = Color.Transparent,
                     labelColor = Color.White.copy(alpha = 0.7f),
                     selectedLabelColor = Color.White
                 ),
                 border = FilterChipDefaults.filterChipBorder(
                     borderColor = Color.White.copy(alpha = 0.1f),
-                    selectedBorderColor = Color.White.copy(alpha = 0.4f),
+                    selectedBorderColor = Color.White.copy(alpha = 0.32f),
                     enabled = true,
                     selected = selectedCategory == null
                 ),
@@ -1042,14 +1592,14 @@ private fun BadgeSection(
                     onClick = { onCategorySelected(category) },
                     label = { Text(getCategoryLabel(category), maxLines = 1) },
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = categoryColor.copy(alpha = 0.2f),
+                        selectedContainerColor = categoryColor.copy(alpha = 0.16f),
                         containerColor = Color.Transparent,
                         labelColor = Color.White.copy(alpha = 0.7f),
                         selectedLabelColor = categoryColor
                     ),
                     border = FilterChipDefaults.filterChipBorder(
                         borderColor = Color.White.copy(alpha = 0.1f),
-                        selectedBorderColor = categoryColor.copy(alpha = 0.5f),
+                        selectedBorderColor = categoryColor.copy(alpha = 0.45f),
                         enabled = true,
                         selected = selectedCategory == category
                     ),
@@ -1057,22 +1607,24 @@ private fun BadgeSection(
                 )
             }
         }
-        
-        // Spotlight: prefer un-earned badges ("Almost There") over earned-but-not-maxed ("Next Star").
-        // Beginner badges (first_play, time_1h) are participation trophies capped at 1 star with
-        // no further progression — they must never appear in either spotlight slot.
-        val beginnerIds = GamificationEngine.BEGINNER_BADGES
 
-        // "Almost There" — unearned, non-beginner, 50%+ progress toward first unlock
+        val beginnerIds = GamificationEngine.BEGINNER_BADGES
         val almostThereBadge = remember(allBadges) {
-            allBadges.filter { !it.isEarned && !it.isMaxed && it.badgeId !in beginnerIds && it.progressFraction >= 0.5f }
-                     .maxByOrNull { it.progressFraction }
+            allBadges
+                .filter {
+                    !it.isEarned && !it.isMaxed && it.badgeId !in beginnerIds && it.progressFraction >= 0.5f
+                }
+                .maxByOrNull { it.progressFraction }
         }
-        // "Next Star" — earned, non-beginner, not maxed, only when no "Almost There" candidate exists
         val nextStarBadge = remember(allBadges) {
             if (almostThereBadge != null) null
-            else allBadges.filter { it.isEarned && !it.isMaxed && it.badgeId !in beginnerIds && it.progressFraction >= 0.5f }
-                          .maxByOrNull { it.progressFraction }
+            else {
+                allBadges
+                    .filter {
+                        it.isEarned && !it.isMaxed && it.badgeId !in beginnerIds && it.progressFraction >= 0.5f
+                    }
+                    .maxByOrNull { it.progressFraction }
+            }
         }
         val spotlightBadge = almostThereBadge ?: nextStarBadge
 
@@ -1086,7 +1638,7 @@ private fun BadgeSection(
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = Color(0xFFFDE68A),
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
@@ -1096,19 +1648,17 @@ private fun BadgeSection(
                         color = Color.White
                     )
                 }
-                
+
                 BadgeCard(
                     badge = spotlightBadge,
                     modifier = Modifier.fillMaxWidth(),
                     isSpotlight = true
                 )
             }
-            
-            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
         }
 
-        // Badge grid
-        // We'll use a vertical arrangement of rows for the grid
         if (filteredBadges.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -1124,7 +1674,6 @@ private fun BadgeSection(
                 )
             }
         } else {
-            // Chunk badges for a 2-column grid to allow more space for details
             val chunkedBadges = filteredBadges.chunked(2)
             chunkedBadges.forEach { rowBadges ->
                 Row(
@@ -1137,7 +1686,6 @@ private fun BadgeSection(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    // Fill remaining space if less than 2 items
                     repeat(2 - rowBadges.size) {
                         Spacer(modifier = Modifier.weight(1f))
                     }

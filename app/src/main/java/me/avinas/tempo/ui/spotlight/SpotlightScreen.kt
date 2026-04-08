@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import me.avinas.tempo.ui.components.DeepOceanBackground
@@ -38,6 +39,7 @@ fun SpotlightScreen(
     initialTimeRange: TimeRange? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     
     var showStory by remember { mutableStateOf(false) }
     
@@ -51,6 +53,9 @@ fun SpotlightScreen(
     // Navigate to canvas with card ID
     val onShareCard: (SpotlightCardData) -> Unit = { card ->
         navController.navigate(Screen.ShareCanvas.createRoute(card.id))
+    }
+    val storyButtonText = remember(uiState.selectedTimeRange) {
+        SpotlightPeriodFormatter.viewStoryText(context, uiState.selectedTimeRange)
     }
 
     DeepOceanBackground {
@@ -129,6 +134,7 @@ fun SpotlightScreen(
                                         showStory = true 
                                     }
                                 },
+                                buttonText = storyButtonText,
                                 isLocked = uiState.isStoryLocked,
                                 lockMessage = uiState.storyLockMessage
                             )
@@ -237,6 +243,7 @@ fun SpotlightScreen(
 @Composable
 fun SpotlightStoryButton(
     onClick: () -> Unit,
+    buttonText: String,
     isLocked: Boolean = false,
     lockMessage: String = ""
 ) {
@@ -283,13 +290,13 @@ fun SpotlightStoryButton(
             
             Column {
                 Text(
-                    text = if (isLocked) "Story Locked" else "Your Wrapped",
+                    text = if (isLocked) "Story Locked" else buttonText,
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White.copy(alpha = if (isLocked) 0.5f else 1f),
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = if (isLocked) lockMessage else "Tap to view your story",
+                    text = if (isLocked) lockMessage else "Open your spotlight story",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.7f)
                 )
@@ -297,6 +304,5 @@ fun SpotlightStoryButton(
         }
     }
 }
-
 
 

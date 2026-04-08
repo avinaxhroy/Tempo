@@ -34,8 +34,14 @@ class SpotlightAudioController(
     // Current track being played
     private var currentUrl: String? = null
     
+    // Last URL that successfully played (fallback for expired URLs)
+    private var lastWorkingUrl: String? = null
+    
     // State to track if we should be playing (independent of mute)
     private var isPlayingState = false
+    
+    // Error callback for notifying UI of playback failures
+    var onPlaybackError: ((Exception) -> Unit)? = null
 
     init {
         initializePlayer()
@@ -50,7 +56,11 @@ class SpotlightAudioController(
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         when (playbackState) {
                             Player.STATE_BUFFERING -> android.util.Log.d("SpotlightAudio", "Player: BUFFERING")
-                            Player.STATE_READY -> android.util.Log.d("SpotlightAudio", "Player: READY (PlayWhenReady=${player?.playWhenReady})")
+                            Player.STATE_READY -> {
+                                android.util.Log.d("SpotlightAudio", "Player: READY (PlayWhenReady=${player?.playWhenReady})")
+                                // Mark this URL as working
+                                currentUrl?.let { lastWorkingUrl = it }
+                            }
                             Player.STATE_ENDED -> {
                                 android.util.Log.d("SpotlightAudio", "Player: ENDED")
                                 isPlayingState = false
@@ -61,6 +71,13 @@ class SpotlightAudioController(
                     
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                         android.util.Log.e("SpotlightAudio", "Player Error: ${error.message}", error)
+                        onPlaybackError?.invoke(error)
+                        // If this URL failed, try falling back to last working URL
+                        val failedUrl = currentUrl
+                        if (failedUrl != null && lastWorkingUrl != null && lastWorkingUrl != failedUrl) {
+                            android.util.Log.d("SpotlightAudio", "Falling back to last working URL")
+                            playUrl(lastWorkingUrl!!, startVolume = 0.1f, targetVolume = 0.7f, fadeDurationMs = 500)
+                        }
                     }
                 })
             }
@@ -71,14 +88,9 @@ class SpotlightAudioController(
      * Start playing a preview URL with a gentle fade-in (Slide 1 behavior).
      * Used for the "Setup" slide.
      */
-    /**
-     * Start playing a preview URL with a gentle fade-in (Slide 1 behavior).
-     * Used for the "Setup" slide.
-     */
     fun playSetup(url: String) {
         if (currentUrl == url && isPlayingState) return // Already playing
         
-        // Reverted to 0.3f per user request (was temporarily 0.6f)
         playUrl(url, startVolume = 0.1f, targetVolume = 0.3f, fadeDurationMs = 500)
     }
 
@@ -89,7 +101,6 @@ class SpotlightAudioController(
     fun playHighlight(url: String) {
         if (currentUrl != url || !isPlayingState) {
             // New track OR preloaded but not playing -> Start from scratch
-            // Using 500ms fade for snappy start (consistent with playSetup)
             playUrl(url, startVolume = 0.1f, targetVolume = 0.7f, fadeDurationMs = 500)
         } else {
             // Check if user is muted
@@ -145,8 +156,6 @@ class SpotlightAudioController(
             player?.volume = 0f
         } else {
             // Unmute - restore volume
-            // If we are in "highlight" mode (high volume) vs "setup" mode (low volume)
-            // Ideally we'd know which target to restore to. For now, default to 0.7f if playing.
             if (isPlayingState) {
                 player?.volume = 0.5f // Safe middle ground, or ramp up
                 rampVolume(0f, 0.7f, 500)
@@ -178,6 +187,9 @@ class SpotlightAudioController(
              val mediaItem = MediaItem.fromUri(url)
              player?.setMediaItem(mediaItem)
              player?.prepare()
+        } else {
+             // Same URL but player may have ended or stopped — restart from beginning
+             player?.seekTo(0)
         }
         
         if (_isMuted.value) {

@@ -109,7 +109,7 @@ data class Badge(
 data class DailyChallenge(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     @ColumnInfo(name = "challenge_id") val challengeId: String,
-    val date: String, // YYYY-MM-DD
+    val date: String,
     val title: String,
     val description: String,
     @ColumnInfo(name = "xp_reward") val xpReward: Int,
@@ -118,8 +118,8 @@ data class DailyChallenge(
     @ColumnInfo(name = "is_completed") val isCompleted: Boolean = false,
     @ColumnInfo(name = "completed_at") val completedAt: Long = 0,
     val category: String,
-    val difficulty: String, // EASY, MEDIUM, HARD
-    @ColumnInfo(name = "target_metadata") val targetMetadata: String? = null // For specific artists/genres
+    val difficulty: String,
+    @ColumnInfo(name = "target_metadata") val targetMetadata: String? = null
 ) {
     val progressFraction: Float
         get() = if (targetValue > 0) (currentProgress.toFloat() / targetValue).coerceIn(0f, 1f) else 0f

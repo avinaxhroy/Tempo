@@ -1,0 +1,996 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tempo</string>
+    
+    <!-- Service notification -->
+    <string name="tracking_notification_title">Tempo está acompanhando sua música</string>
+    <string name="tracking_notification_idle">Aguardando reprodução de música…</string>
+    <string name="tracking_notification_active">Acompanhando agora: %1$s - %2$s</string>
+    
+    <!-- Permission screen -->
+    <string name="permission_setup_title">Configurar Tempo</string>
+    <string name="permission_setup_subtitle">O Tempo precisa de algumas permissões para rastrear sua audição em segundo plano.</string>
+    <string name="permission_notification_title">Acesso à notificação</string>
+    <string name="permission_notification_desc">O Tempo lê notificações de música para detectar quais músicas você está ouvindo. Isso funciona com YouTube Music, Spotify e outros apps de música.\n\nLemos apenas notificações relacionadas à música e nunca acessamos suas mensagens pessoais nem outras notificações.</string>
+    <string name="permission_notification_button">Conceder acesso</string>
+    <string name="permission_notification_granted">Concedido ✓</string>
+    <string name="permission_battery_title">Otimização da bateria</string>
+    <string name="permission_battery_desc">Para rastrear sua música em segundo plano de maneira confiável, o Tempo precisa ser excluído da otimização da bateria.\n\nIsso evita que o Android interrompa o Tempo quando você estiver ouvindo música. O Tempo foi projetado para usar o mínimo de bateria.</string>
+    <string name="permission_battery_button">Desativar otimização</string>
+    <string name="permission_battery_disabled">Desativado ✓</string>
+    <string name="permission_continue">Começar rastreamento</string>
+    <string name="permission_pending">Conclua a configuração acima</string>
+    <string name="permission_privacy_note">🔒 Todos os seus dados ficam no seu dispositivo. O Tempo nunca envia seu histórico de audição.</string>
+    
+    <!-- Home screen -->
+    <string name="home_tracking_active">✅ Rastreamento de música ativo</string>
+    <string name="home_tracking_hint">Reproduza música no YouTube Music, Spotify ou qualquer outro app de música. O Tempo vai rastrear sua audição automaticamente.</string>
+    <string name="home_title">Início</string>
+    <string name="home_your_signal">Seu sinal</string>
+    <string name="home_settings">Configurações</string>
+    
+    <!-- Widget descriptions -->
+    <string name="widget_stats_desc">Visão geral das estatísticas de audição de hoje</string>
+    <string name="widget_artist_desc">Mostra as estatísticas dos seus principais artistas</string>
+    <string name="widget_dashboard_desc">Visão geral das suas estatísticas de audição musical</string>
+    <string name="widget_discovery_desc">Descubra novas músicas com base no seu gosto</string>
+    <string name="widget_heatmap_desc">Visualize seus padrões de escuta ao longo do tempo</string>
+    <string name="widget_milestone_desc">Acompanhe seus marcos auditivos</string>
+    <string name="widget_mix_desc">Seu mix musical personalizado</string>
+
+    <!-- Home components -->
+    <string name="home_spotlight_title">Destaque do Tempo</string>
+    <string name="home_spotlight_subtitle">Veja sua música visualizada.</string>
+    <string name="home_week_review">Sua semana em revisão</string>
+    <string name="home_listen_time">Tempo de escuta</string>
+    <string name="home_new_finds">Novas descobertas</string>
+    <string name="home_top_artist">Artista principal</string>
+    <string name="home_on_repeat">Em repetição</string>
+    <string name="home_ready_discover">Pronto para descobrir?</string>
+    <string name="home_found_artists">Você encontrou %1$d novos artistas</string>
+    <string name="home_expand_horizon">Expanda seu horizonte musical</string>
+    <string name="home_discovered_tracks">Você descobriu %1$d novas faixas</string>
+    <string name="home_fresh_beats">Batidas frescas para sua playlist</string>
+    <string name="home_variety_score">Pontuação de variedade: %1$d/10</string>
+    <string name="home_how_unique">Quão único é o seu gosto?</string>
+    <string name="home_habits_title">Uma olhada em seus hábitos</string>
+    <string name="home_lvl">LVL</string>
+
+    <!-- Rate App -->
+    <string name="rate_enjoying">Gostando do Tempo?</string>
+    <string name="rate_message">Se você gosta de usar o aplicativo, reserve um momento para avaliá-lo. Isso realmente nos ajuda a crescer!</string>
+    <string name="rate_now">Avalie agora</string>
+    <string name="rate_not_now">Agora não</string>
+    
+    <!-- Gamification / Level -->
+    <string name="level_label">NÍVEL %1$d</string>
+    <string name="level_xp">%1$d XP</string>
+    <string name="level_next_xp">Próximo: %1$d XP</string>
+    <string name="level_up_title">SUBIR DE NÍVEL!</string>
+    <string name="level_up_new_level">Nível %1$d</string>
+    <string name="level_up_awesome">Incrível!</string>
+    <string name="level_reached">Você atingiu o nível %1$d</string>
+
+    <!-- Onboarding: Welcome screen -->
+    <string name="welcome_headline_1">Conheça sua música,</string>
+    <string name="welcome_headline_2">Ame suas estatísticas</string>
+    <string name="welcome_description">O Tempo rastreia automaticamente o que você ouve e mostra belos insights sobre seus hábitos auditivos.</string>
+    <string name="welcome_get_started">Comece</string>
+    <string name="welcome_skip">Pular</string>
+
+    <!-- Onboarding: How It Works -->
+    <string name="how_it_works_title">Veja como funciona</string>
+    <string name="how_it_works_subtitle">Sem login. Nenhuma conta. Apenas música.</string>
+    <string name="how_it_works_step1_title">Você toca música</string>
+    <string name="how_it_works_step1_subtitle">Spotify, YouTube Music ou qualquer aplicativo</string>
+    <string name="how_it_works_step2_title">A notificação aparece</string>
+    <string name="how_it_works_step2_subtitle">Tempo lê apenas informações da música</string>
+    <string name="how_it_works_step3_title">Estatísticas salvas localmente</string>
+    <string name="how_it_works_step3_subtitle">No seu telefone, em nenhum outro lugar</string>
+    <string name="how_it_works_badge_apps">Mais de 20 aplicativos</string>
+    <string name="how_it_works_badge_local">100% local</string>
+    <string name="how_it_works_badge_auto">Rastreamento automático</string>
+    <string name="how_it_works_next">Próximo</string>
+
+    <!-- Onboarding: Privacy -->
+    <string name="privacy_title">Seus dados ficam aqui</string>
+    <string name="privacy_subtitle">Privacidade não é um recurso. É a base.</string>
+    <string name="privacy_local_title">Armazenamento 100% local</string>
+    <string name="privacy_local_desc">Todos os dados permanecem no seu telefone. Sempre.</string>
+    <string name="privacy_no_cloud_title">Sem servidores, sem nuvem</string>
+    <string name="privacy_no_cloud_desc">Não temos back-end. Nenhum dado carregado.</string>
+    <string name="privacy_notif_title">Apenas notificações de música</string>
+    <string name="privacy_notif_desc">Lemos Spotify, YouTube Music, etc. Nunca mensagens.</string>
+    <string name="privacy_open_source_title">Código aberto</string>
+    <string name="privacy_open_source_desc">Verifique nosso código a qualquer momento no GitHub.</string>
+    <string name="privacy_quote">"Não podemos ver seus dados. Não queremos."</string>
+    <string name="privacy_got_it">Entendi</string>
+
+    <!-- Onboarding: Battery Optimization -->
+    <string name="battery_title">Mais uma coisa para melhor precisão</string>
+    <string name="battery_description">Deixe o Tempo rodar em segundo plano para rastreamento contínuo. Isso garante que não perderemos nenhuma música enquanto a tela estiver desligada.</string>
+    <string name="battery_optimize">Otimizar</string>
+    <string name="battery_skip">Pular por enquanto</string>
+
+    <!-- Onboarding: Advanced Settings -->
+    <string name="advanced_data_prefs">Preferências de dados</string>
+    <string name="advanced_choose_data">Escolha quantos dados o Tempo usa para análise de áudio</string>
+    <string name="advanced_basic_title">Análise Básica</string>
+    <string name="advanced_basic_desc">Gênero e humor da pesquisa no banco de dados</string>
+    <string name="advanced_basic_detail">Rápido • Sem download de dados</string>
+    <string name="advanced_extended_title">Análise de áudio estendida [EXPERIMENTAL]</string>
+    <string name="advanced_extended_desc">Humor detalhado &amp; energia da prévia de áudio de 30s</string>
+    <string name="advanced_extended_detail">Aproximadamente 500 KB por faixa • Mais preciso</string>
+    <string name="advanced_merge_title">Versões de mesclagem inteligente</string>
+    <string name="advanced_merge_desc">Trate as versões Live/Remix como a mesma música para uma história mais limpa</string>
+    <string name="advanced_merge_detail">Recomendado para estatísticas mais limpas</string>
+    <string name="advanced_change_settings">Você pode alterar isso a qualquer momento em Configurações</string>
+    <string name="advanced_continue">Continuar</string>
+
+    <!-- Permission screen (standalone) -->
+    <string name="perm_one_needed">É necessária uma permissão</string>
+    <string name="perm_how_tempo_sees">É assim que o Tempo vê o que você está tocando</string>
+    <string name="perm_music_only">SOMENTE MÚSICA</string>
+    <string name="perm_music_apps">Spotify, YouTube,\n&amp; essencialmente qualquer\nreprodutor de música</string>
+    <string name="perm_private_data">DADOS PRIVADOS</string>
+    <string name="perm_we_ignore">Ignoramos bate-papos,\nOTPs, e-mails e\ntodo o resto</string>
+    <string name="perm_enable_access">Habilitar acesso a notificações</string>
+    <string name="perm_do_later">Farei isso mais tarde</string>
+    <string name="perm_runs_efficient">Funciona com eficiência em segundo plano • Sem consumo de bateria</string>
+
+    <!-- Spotify connection bottom sheet -->
+    <string name="spotify_works_any_app">✓ Tempo funciona com qualquer aplicativo de música!</string>
+    <string name="spotify_get_art">Obtenha arte de alta qualidade</string>
+    <string name="spotify_connect_metadata">Conecte-se para usar o banco de dados confiável do Spotify para metadados:</string>
+    <string name="spotify_reliable_art">Capa de álbum confiável</string>
+    <string name="spotify_accurate_genre">Informações precisas sobre o gênero</string>
+    <string name="spotify_mood_energy">Humor &amp; estatísticas de energia</string>
+    <string name="spotify_optional">Isso é opcional. Nunca acessamos suas playlists ou dados pessoais.</string>
+    <string name="spotify_connect">Conecte o Spotify</string>
+    <string name="spotify_skip">Pular por enquanto</string>
+
+    <!-- Restore / Import screen -->
+    <string name="restore_import_title">Importar&amp; Restaurar</string>
+    <string name="restore_import_subtitle">Importe de outros serviços ou restaure seu backup.</string>
+    <string name="restore_import">Importar</string>
+    <string name="restore_section">Restaurar</string>
+    <string name="restore_google_drive">Google Drive</string>
+    <string name="restore_connect_google">Conectar conta do Google</string>
+    <string name="restore_no_backups">Nenhum backup encontrado</string>
+    <string name="restore_from_file">Restaurar do arquivo</string>
+    <string name="restore_select_zip">Selecione um arquivo de backup .zip</string>
+    <string name="restore_start_fresh">Comece do zero</string>
+    <string name="restore_back">Voltar</string>
+    <string name="restore_restoring">Restaurando…</string>
+    <string name="restore_processing">Processamento…</string>
+    <string name="restore_from_cloud">Restaurando da nuvem…</string>
+    <string name="restore_options">Opções de restauração</string>
+    <string name="restore_handle_conflicts">Como devemos lidar com conflitos de dados?</string>
+    <string name="restore_replace_all">Substitua tudo</string>
+    <string name="restore_skip_dupes">Ignorar duplicatas</string>
+    <string name="restore_cancel">Cancelar</string>
+    <string name="restore_this_backup">Restaurar este backup?</string>
+    <string name="restore_restore">Restaurar</string>
+    <string name="restore_importing_spotify">Importando do Spotify…</string>
+    <string name="restore_fetching_plays">Buscando suas reproduções recentes</string>
+    <string name="restore_import_complete">Importação concluída!</string>
+    <string name="restore_import_failed">Falha na importação</string>
+    <string name="restore_ok">OK</string>
+    <string name="restore_analyzing_liked">🕐 Analisando suas músicas favoritas…</string>
+    <string name="restore_finding_playlists">📅 Encontrando listas de reprodução anuais…</string>
+    <string name="restore_collecting_top">🎵 Coletando as melhores faixas…</string>
+    <string name="restore_creating_history">✨ Criando sua história…</string>
+    <string name="restore_using_dates">Usando datas exatas de suas músicas favoritas</string>
+    <string name="restore_finding_top">Encontrando suas playlists de músicas mais populares</string>
+    <string name="restore_building_top">Construindo a partir de suas principais faixas</string>
+    <string name="restore_creating_patterns">Criando padrões de audição realistas</string>
+    <string name="restore_building_history">Construindo sua história musical</string>
+    <string name="restore_completing_auth">Concluindo autenticação</string>
+    <string name="restore_getting_started">Primeiros passos com suas estatísticas</string>
+    <string name="restore_please_wait">Aguarde enquanto preparamos seus dados</string>
+
+    <!-- Import: Last.fm -->
+    <string name="lastfm_import_title">Importar do Last.fm</string>
+    <string name="lastfm_import_desc">Importe seu histórico de scrobble para desbloquear insights de audição poderosos</string>
+    <string name="lastfm_import_years">Importe anos de histórico de audição</string>
+    <string name="lastfm_connect">Conecte Last.fm</string>
+    <string name="lastfm_discovering">Descobrindo sua conta Last.fm…</string>
+    <string name="lastfm_discovering_short">Descobrindo sua conta…</string>
+    <string name="lastfm_welcome">Bem-vindo, %1$s!</string>
+    <string name="lastfm_total_scrobbles">%1$s scrobbles totais</string>
+    <string name="lastfm_choose_level">Escolha o nível de importação</string>
+    <string name="lastfm_recommended">Recomendado</string>
+    <string name="lastfm_recommended_tier">Recomendado: %1$s</string>
+    <string name="lastfm_cancel_import">Cancelar importação</string>
+    <string name="lastfm_progress">%1$s de %2$s scrobbles</string>
+    <string name="lastfm_progress_percent">%1$s%%</string>
+    <string name="lastfm_import_complete">Importação concluída!</string>
+    <string name="lastfm_history_imported">Histórico Last.fm importado</string>
+    <string name="lastfm_complete_history">Seu histórico completo é importado.</string>
+    <string name="lastfm_history_connected">Seu histórico do Last.fm agora está conectado</string>
+    <string name="lastfm_done">Feito</string>
+    <string name="lastfm_this_may_take">Isso pode levar alguns minutos</string>
+    <string name="lastfm_we_analyze">Analisaremos seu histórico de audição e importaremos scrobbles recentes. Seus dados permanecem no seu dispositivo.</string>
+
+    <!-- Import: Spotify -->
+    <string name="spotify_import_title">Importar do Spotify</string>
+    <string name="spotify_import_desc">Conecte-se com o Spotify</string>
+    <string name="spotify_connect_for_stats">Conecte Spotify para\nEstatísticas Avançadas</string>
+    <string name="spotify_connect_unlock">Conecte-se para desbloquear:</string>
+    <string name="spotify_data_stays">Seus dados permanecem no seu dispositivo. Buscamos recursos de áudio apenas para faixas que você já ouviu.</string>
+    <string name="spotify_note_50">"Observação: a API do Spotify fornece apenas suas últimas 50 reproduções."</string>
+
+    <!-- Empty state -->
+    <string name="empty_tracking_active">Rastreamento de música ativo</string>
+    <string name="empty_quiet_week">Semana tranquila até agora</string>
+    <string name="empty_quiet_week_msg">Estamos ouvindo, mas ainda não vimos nenhuma peça. Comece a transmitir para ver seu pulso semanal.</string>
+    <string name="empty_fresh_month">Novo mês, novo começo</string>
+    <string name="empty_fresh_month_msg">Sua história está segura. Toque música para estimular as estatísticas deste mês.</string>
+    <string name="empty_new_year">%1$d começou</string>
+    <string name="empty_new_year_msg">Seu ano em análise começa agora. Continue ouvindo para construir sua história.</string>
+    <string name="empty_no_data">Ainda não há dados</string>
+    <string name="empty_no_data_msg">Comece a ouvir para ver suas estatísticas aqui.</string>
+    <string name="empty_getting_started">Primeiros passos com suas estatísticas</string>
+    <string name="empty_stats_flowing">Vamos fazer suas estatísticas fluirem</string>
+    <string name="empty_no_account">Não é necessária conexão de conta</string>
+    <string name="empty_open_apps">Abra Spotify, YouTube Music ou outros</string>
+    <string name="empty_play_songs">Toque algumas músicas - as estatísticas aparecem em breve</string>
+    <string name="empty_return_insights">Volte aqui para ver seus insights</string>
+    <string name="empty_check_apps">Verifique os aplicativos suportados</string>
+    <string name="empty_play_to_see">Toque uma música para ver aqui.</string>
+
+    <!-- Details screens -->
+    <string name="details_song">Detalhes da música</string>
+    <string name="details_artist">Detalhes do Artista</string>
+    <string name="details_album">Detalhes do álbum</string>
+    <string name="details_plays">Reproduções</string>
+    <string name="details_total_plays">Total de reproduções</string>
+    <string name="details_total_time">Tempo total</string>
+    <string name="details_total_listening">Tempo total de audição</string>
+    <string name="details_listening_time">Tempo de escuta</string>
+    <string name="details_times_played">Vezes reproduzida</string>
+    <string name="details_peak_position">Posição máxima</string>
+    <string name="details_release_date">Data de lançamento</string>
+    <string name="details_top_albums">Principais álbuns</string>
+    <string name="details_top_songs">Melhores músicas</string>
+    <string name="details_genre">Gênero</string>
+    <string name="details_listen_on">Ouça</string>
+    <string name="details_tracks">Faixas</string>
+    <string name="details_listening_activity">Atividade de escuta</string>
+    <string name="details_listening_trends">Tendências auditivas</string>
+    <string name="details_audio_analysis">Análise de Áudio</string>
+    <string name="details_average_tempo">Tempo Médio</string>
+    <string name="details_based_on_tracks">Com base em %1$d faixas com análise de áudio</string>
+    <string name="details_estimated_energy">Energia Estimada</string>
+    <string name="details_tracks_with_audio">Faixas com recursos de áudio</string>
+    <string name="details_pending_enrichment">Enriquecimento pendente</string>
+    <string name="details_share_preview">Compartilhar visualização</string>
+    <string name="details_merge_artist">Mesclar Artista</string>
+    <string name="details_merge_with">Mesclar com…</string>
+    <string name="details_block_artist">BLOQUEAR ARTISTA INTEIRO</string>
+    <string name="details_block_track">BLOQUEAR ESTA FAIXA</string>
+    
+    <!-- Merge dialogs -->
+    <string name="merge_confirm">Confirmar mesclagem</string>
+    <string name="merge_artist_confirm">⚠️ Confirmar mesclagem</string>
+    <string name="merge_artist_into">Mesclar \"%1$s\" em \"%2$s\"?</string>
+    <string name="merge_track_into">Mesclar em \"%1$s\" por %2$s?</string>
+    <string name="merge_cannot_undo">Esta ação não pode ser desfeita. Todo o histórico de audição será combinado.</string>
+    <string name="merge_merging_artists">Mesclando artistas…</string>
+    <string name="merge_artist_search">Procure o artista correto para mesclar. Todo o histórico de audição será combinado.</string>
+    <string name="merge_track_search">Procure a faixa correta para mesclar. Todo o histórico de audição será combinado.</string>
+    <string name="merge_search_artists">Digite para procurar artistas</string>
+    <string name="merge_search_tracks">Digite para procurar faixas</string>
+    <string name="merge_merging">Mesclando: %1$s</string>
+
+    <!-- Engagement -->
+    <string name="engagement_score">Pontuação de engajamento</string>
+    <string name="engagement_your_engagement">Seu envolvimento</string>
+
+    <!-- Profile screen -->
+    <string name="profile_badges">Emblemas</string>
+    <string name="profile_no_badges">Não há emblemas para mostrar</string>
+    <string name="profile_collected">%1$d / %2$d coletado</string>
+    <string name="profile_maxed">MÁXIMO</string>
+    <string name="profile_unlocked">DESBLOQUEADO</string>
+    <string name="profile_level_progress">Progresso de nível</string>
+    <string name="profile_listening_personality">Sua personalidade auditiva</string>
+    <string name="profile_top_genres">Seus principais gêneros</string>
+
+    <!-- History screen -->
+    <string name="history_title">Histórico de filtros</string>
+    <string name="history_empty">A história está vazia</string>
+    <string name="history_search">Pesquisar músicas…</string>
+    <string name="history_sort_by">"Ordenar por: "</string>
+    <string name="history_recent_activity">Atividade recente</string>
+
+    <!-- Spotlight -->
+    <string name="spotlight_title">Destaque</string>
+    <string name="spotlight_share_story">Compartilhar história</string>
+    <string name="spotlight_share_instagram">Compartilhe nas histórias do Instagram</string>
+    <string name="spotlight_loading">Carregando seus cartões…</string>
+    <string name="spotlight_no_cards">Nenhum cartão disponível</string>
+    <string name="spotlight_preparing">Preparando sua história…</string>
+    <string name="spotlight_view_story">Ver história</string>
+    <string name="spotlight_view_story_for">Veja a história de %1$s</string>
+    <string name="spotlight_your_music">Sua música %1$s</string>
+
+    <!-- Spotlight story pages -->
+    <string name="spotlight_top_songs">MÚSICAS PRINCIPAIS</string>
+    <string name="spotlight_daily_rotation">A ROTAÇÃO DIÁRIA</string>
+    <string name="spotlight_your_top_artist">Seu melhor artista</string>
+    <string name="spotlight_your_top_song">Sua melhor música</string>
+    <string name="spotlight_your_all_time">Seu favorito de todos os tempos</string>
+    <string name="spotlight_favorite_msg">Esta é a sua música mais tocada de todos os tempos.</string>
+    <string name="spotlight_top1_fan">TOP 1%% VENTILADOR</string>
+    <string name="spotlight_breaking">★ QUEBRANDO: NOVA OBSESSÃO DETECTADA ★</string>
+    <string name="spotlight_deep_cut">O CORTE PROFUNDO</string>
+    <string name="spotlight_horizon">O HORIZONTE</string>
+    <string name="spotlight_weekly_pulse">O pulso semanal</string>
+    <string name="spotlight_listened_for">Você ouviu por</string>
+    <string name="spotlight_back_to_back">sem parar</string>
+    <string name="spotlight_days_thats_over">Acabou %1$d dias sem parar!</string>
+    <string name="spotlight_new_discoveries">NOVAS DESCOBERTAS</string>
+    <string name="spotlight_mood_genre">Humor &amp; gênero</string>
+    <string name="spotlight_circadian">Ritmo Circadiano</string>
+    <string name="spotlight_streak_risk">Risco de sequência!</string>
+    <string name="spotlight_days_lost">dias perdidos</string>
+    <string name="spotlight_ends_in">Termina em %1$s</string>
+
+    <!-- Spotlight Canvas -->
+    <string name="canvas_add_cards">Toque em + para adicionar cartões ou texto</string>
+    <string name="canvas_choose_bg">Escolha o plano de fundo</string>
+    <string name="canvas_add_card">Adicionar um cartão</string>
+    <string name="canvas_gradients">GRADIENTES</string>
+    <string name="canvas_solid_colors">CORES SÓLIDAS</string>
+    <string name="canvas_intensity">INTENSIDADE</string>
+    <string name="canvas_tempo_label">TEMPO</string>
+
+    <!-- Share Cards -->
+    <string name="share_your_data">SEUS DADOS</string>
+    <string name="share_plays_label">JOGOS</string>
+    <string name="share_minutes">MINUTOS</string>
+    <string name="share_unique_tracks">FAIXAS ÚNICAS</string>
+    <string name="share_weekday">DIA DA SEMANA</string>
+    <string name="share_weekend">FIM DE SEMANA</string>
+    <string name="share_time">Tempo</string>
+    <string name="share_page_a1">Página A1 • Seção de Música</string>
+    <string name="share_tempo_vanguard">TEMPO VANGUARDA</string>
+    <string name="share_early_adopter">ADOPTADOR ANTECIPADO (FUNDADOR)</string>
+    <string name="share_access_pass">PASSE DE ACESSO</string>
+    <string name="share_scan_access">VERIFICAR ACESSO</string>
+    <string name="share_tempo_stats">Estatísticas de tempo</string>
+    <string name="share_photo_archive">Foto: Arquivo</string>
+    <string name="share_from_archive">Do arquivo</string>
+    <string name="share_restored">Restaurado da memória</string>
+
+    <!-- Spotlight Reminder -->
+    <string name="spotlight_reminder_view">Ver história</string>
+
+    <!-- Backup/Restore screen -->
+    <string name="backup_title">Backup&amp; Restaurar</string>
+    <string name="backup_google_drive">GOOGLE DRIVE</string>
+    <string name="backup_local">BACKUP LOCAL</string>
+    <string name="backup_connect_google">Conectar conta do Google</string>
+    <string name="backup_to_drive">Backup para unidade</string>
+    <string name="backup_auto">Backup automático</string>
+    <string name="backup_wifi_only">Apenas Wi-Fi</string>
+    <string name="backup_wifi_desc">Faça backup apenas quando conectado ao Wi-Fi</string>
+    <string name="backup_include_images">Incluir imagens locais</string>
+    <string name="backup_history">Histórico de backup (%1$d)</string>
+    <string name="backup_no_backups">Nenhum backup encontrado</string>
+    <string name="backup_estimated">Tamanho estimado: %1$s</string>
+    <string name="backup_export">Exportar para dispositivo</string>
+    <string name="backup_import">Importar do dispositivo</string>
+    <string name="backup_tips">💡 Dicas de backup</string>
+    <string name="backup_drive_auto">• Os backups do Google Drive são automáticos e criptografados\n</string>
+    <string name="backup_use_different">Use uma conta diferente</string>
+    <string name="backup_last_backup">Último backup: %1$s</string>
+
+    <!-- Supported Apps screen -->
+    <string name="supported_apps_title">Dispositivo detectado</string>
+    <string name="supported_apps_desc">Habilite aplicativos para monitorar a audição de música. Bloqueie aplicativos para excluí-los completamente. Toque em + para adicionar um aplicativo personalizado.</string>
+    <string name="supported_apps_installed">Instalado • Comece a ouvir a faixa</string>
+    <string name="supported_apps_no_apps">Nenhum aplicativo encontrado</string>
+    <string name="supported_apps_add">Adicionar aplicativo</string>
+
+    <!-- Background Protection (Xiaomi) -->
+    <string name="bg_protection_title">Definir configurações</string>
+    <string name="bg_protection_xiaomi_desc">Os dispositivos Xiaomi eliminam agressivamente os aplicativos em segundo plano. Conclua estas etapas para garantir que o Tempo funcione de maneira confiável.</string>
+    <string name="bg_protection_autostart_disabled">A inicialização automática está desabilitada. O Tempo pode parar de funcionar em segundo plano.</string>
+    <string name="bg_protection_enable_autostart">Habilitar inicialização automática</string>
+    <string name="bg_protection_battery_saver">Economia de bateria → Sem restrições</string>
+    <string name="bg_protection_lock_app">Bloquear aplicativo em aplicativos recentes</string>
+    <string name="bg_protection_lock_boost">Bloqueie a velocidade de aumento</string>
+    <string name="bg_protection_disable_miui">Desative as otimizações MIUI</string>
+
+    <!-- Spotify Settings Section -->
+    <string name="spotify_integration">Integração Spotify</string>
+    <string name="spotify_disconnect_title">Desconectar o Spotify?</string>
+    <string name="spotify_disconnect_msg">Isso removerá todos os dados de recursos de áudio. Seu histórico de audição permanecerá, mas estatísticas avançadas, como análise de humor e energia, não estarão mais disponíveis.</string>
+    <string name="spotify_disconnect">Desconectar</string>
+    <string name="spotify_connect_for">Conecte o Spotify</string>
+    <string name="spotify_unlock_analysis">Desbloqueie análises detalhadas de áudio para sua música</string>
+    <string name="spotify_maybe_later">Talvez mais tarde</string>
+    <string name="spotify_connect_button">Conectar</string>
+
+    <!-- Audio features -->
+    <string name="audio_mood_analysis">Análise de humor</string>
+    <string name="audio_energy_insights">Informações sobre energia</string>
+    <string name="audio_danceability">Pontuação de dançabilidade</string>
+    <string name="audio_acousticness">Acústico vs Eletrônico</string>
+    <string name="audio_harmonic">Ressonância Harmônica</string>
+    <string name="audio_sonic">Imersão Sônica</string>
+    <string name="audio_from_spotify">Das notificações do Spotify&amp;</string>
+    <string name="audio_spotify_requires">%1$s requer Spotify</string>
+
+    <!-- Stats screen -->
+    <string name="stats_not_enough">Ainda não há dados suficientes. Continue ouvindo!</string>
+    <string name="stats_forgetten_fav">Favorito esquecido</string>
+
+    <!-- Coach Mark / Walkthrough -->
+    <string name="coach_tip">Dica</string>
+    
+    <!-- Music Links -->
+    <string name="music_links_listen_on">Ouça</string>
+
+    <!-- Common/Shared -->
+    <string name="common_cancel">Cancelar</string>
+    <string name="common_save">Salvar</string>
+    <string name="common_back">Voltar</string>
+    <string name="common_ok">OK</string>
+    <string name="common_done">Feito</string>
+    <string name="common_continue">Continuar</string>
+    <string name="common_skip">Pular</string>
+    <string name="common_connect">Conectar</string>
+
+    <!-- Settings screen: section headers -->
+    <string name="settings_title">Configurações</string>
+    <string name="settings_profile">Perfil</string>
+    <string name="settings_language">Idioma</string>
+    <string name="settings_notifications">Notificações</string>
+    <string name="settings_music_tracking">Rastreamento de música</string>
+    <string name="settings_background_protection">Proteção de fundo</string>
+    <string name="settings_content_filtering">Filtragem de conteúdo</string>
+    <string name="settings_advanced_stats">Estatísticas avançadas</string>
+    <string name="settings_import_history">Histórico de importação</string>
+    <string name="settings_your_data">Seus dados</string>
+    <string name="settings_community">Comunidade</string>
+    <string name="settings_about">Sobre</string>
+    <string name="settings_tap_to_edit">Toque para editar o nome</string>
+    <string name="settings_tap_photo_to_change">Toque na foto para alterá-la</string>
+    <string name="settings_update_name">Atualizar nome</string>
+    <string name="settings_change_photo">Alterar foto</string>
+    <string name="settings_remove_photo">Remover foto</string>
+    <string name="settings_profile_photo">Foto do perfil</string>
+    <string name="settings_display_name">Nome de exibição</string>
+    <string name="settings_save">Salvar</string>
+    <string name="settings_cancel">Cancelar</string>
+    <string name="settings_back">Voltar</string>
+    <string name="settings_language_title">Idioma do aplicativo</string>
+    <string name="settings_language_subtitle">Escolha seu idioma preferido</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_french">Français</string>
+    <string name="settings_language_german">Deutsch</string>
+    <string name="settings_language_hungarian">Magyar</string>
+    <string name="settings_language_portuguese">Português</string>
+    <string name="settings_select_language">Selecione o idioma</string>
+    <string name="settings_daily_summary">Resumo Diário</string>
+    <string name="settings_daily_summary_desc">Obtenha um resumo do que você ouve todos os dias às 20h</string>
+    <string name="settings_weekly_recap">Recapitulação Semanal</string>
+    <string name="settings_weekly_recap_desc">Veja suas principais estatísticas todos os domingos à noite</string>
+    <string name="settings_achievements">Conquistas</string>
+    <string name="settings_achievements_desc">Seja notificado quando você atingir marcos</string>
+    <string name="settings_daily_challenges">Lembretes de desafios diários</string>
+    <string name="settings_daily_challenges_desc">Seja notificado quando novas metas diárias estiverem prontas</string>
+    <string name="settings_manage_permissions">Gerenciar permissões</string>
+    <string name="settings_manage_permissions_desc">Tempo usa acesso a notificações para detectar o que você está ouvindo</string>
+    <string name="settings_manage_apps">Gerenciar aplicativos compatíveis</string>
+    <string name="settings_manage_apps_desc">Escolha quais aplicativos o Tempo acompanha</string>
+    <string name="settings_configure_required">⚠️ Definir as configurações necessárias</string>
+    <string name="settings_xiaomi_settings">Configurações do dispositivo Xiaomi</string>
+    <string name="settings_prevent_killed">Impedir que o Tempo seja morto em segundo plano</string>
+    <string name="settings_filter_podcasts">Filtrar Podcasts</string>
+    <string name="settings_filter_podcasts_desc">Excluir aplicativos e conteúdo de podcast do rastreamento</string>
+    <string name="settings_filter_audiobooks">Filtrar audiolivros</string>
+    <string name="settings_filter_audiobooks_desc">Excluir aplicativos e conteúdo de audiolivros do rastreamento</string>
+    <string name="settings_connected_as">Conectado como %1$s</string>
+    <string name="settings_tap_to_disconnect">Toque para desconectar</string>
+    <string name="settings_connect_spotify">Conectar Spotify</string>
+    <string name="settings_connect_spotify_desc">Desbloqueie recursos de rastreamento de humor e áudio</string>
+    <string name="settings_spotify_api_mode">Modo somente API do Spotify</string>
+    <string name="settings_spotify_api_on">LIGADO: Rastreamento pelos servidores do Spotify (sincroniza periodicamente)</string>
+    <string name="settings_spotify_api_off">DESLIGADO: Rastreamento por notificações do telefone (tempo real)</string>
+    <string name="settings_extended_audio">Análise de áudio estendida (experimental)</string>
+    <string name="settings_extended_audio_desc">Baixe prévias de 30s para análise detalhada de humor (usa dados móveis)</string>
+    <string name="settings_lastfm_connected">Last.fm: %1$s</string>
+    <string name="settings_lastfm_sync_daily">Sincronizando diariamente</string>
+    <string name="settings_lastfm_sync_weekly">Sincronizando semanalmente</string>
+    <string name="settings_lastfm_import_complete">Importação concluída • Toque para gerenciar</string>
+    <string name="settings_import_lastfm">Importar do Last.fm</string>
+    <string name="settings_import_lastfm_desc">Importe seu histórico de scrobble para obter insights mais profundos</string>
+
+    <!-- Desktop Sync -->
+    <string name="desktop_link_section_header">Sincronização de área de trabalho</string>
+    <string name="desktop_link_settings_title">Sincronizar com a área de trabalho</string>
+    <string name="desktop_link_settings_subtitle">Rastreie e sincronize a audição do seu Mac ou PC por Wi-Fi local</string>
+    <string name="desktop_link_title">Sincronizar com a área de trabalho</string>
+    <string name="desktop_link_description">Conecte o aplicativo Tempo Desktop para sincronizar o histórico de audição do seu Mac ou PC com este telefone por Wi-Fi local. Abra o aplicativo de desktop e leia o código QR para começar.</string>
+    <!-- Receiver status (phone hosts the NanoHTTPD server that desktop pushes plays to) -->
+    <string name="desktop_receiver_running">Pronto para sincronizar na porta %1$d</string>
+    <string name="desktop_receiver_stopped">O receptor de sincronização está desligado</string>
+    <!-- Scanner UI -->
+    <string name="desktop_scan_qr_title">Digitalize QR do aplicativo de desktop</string>
+    <string name="desktop_scan_qr_subtitle">Abra o Tempo Desktop no seu Mac ou PC e escaneie o código QR mostrado lá</string>
+    <string name="desktop_scan_button">Digitalize o código QR</string>
+    <string name="desktop_scan_instruction">Aponte sua câmera para o código QR no aplicativo Tempo Desktop</string>
+    <string name="desktop_cancel_scan">Cancelar</string>
+    <!-- Paired state -->
+    <string name="desktop_connected_to">Área de trabalho emparelhada</string>
+    <string name="desktop_phone_address">Endereço de sincronização do telefone</string>
+    <string name="desktop_device_name">Dispositivo</string>
+    <string name="desktop_disconnect">Desconectar</string>
+    <!-- Manual entry -->
+    <string name="desktop_manual_entry">Insira os detalhes manualmente</string>
+    <string name="desktop_ip_hint">Endereço IP da área de trabalho (por exemplo, 192.168.1.10)</string>
+    <string name="desktop_port_hint">Porta (padrão: 8765)</string>
+    <string name="desktop_token_hint">Token de conexão (do aplicativo de desktop)</string>
+    <string name="desktop_connect">Conectar</string>
+    <!-- Shared -->
+    <string name="desktop_auth_token">Token</string>
+    <string name="desktop_copy_code">Copiar token</string>
+    <string name="desktop_last_sync">Última sincronização</string>
+    <!-- Desktop Stats -->
+    <string name="desktop_stats_title">Estatísticas de sincronização de desktop</string>
+    <string name="desktop_stats_total_scrobbles">Total de reproduções</string>
+    <string name="desktop_stats_listening_time">Tempo de escuta</string>
+    <string name="desktop_stats_7day_scrobbles">Últimos 7 dias</string>
+    <string name="desktop_stats_7day_time">Tempo de 7 dias</string>
+    <string name="desktop_stats_top_listened">Mais jogados no desktop</string>
+    <string name="settings_desktop_battery_critical">Bateria crítica (%1$d%%) - A sincronização da área de trabalho é pausada para economizar bateria. Carregue seu telefone para continuar.</string>
+    <string name="settings_desktop_battery_low">Bateria fraca (%1$d%%) - Considere carregar antes de sincronizar com o desktop.</string>
+    <string name="settings_desktop_battery_healthy">Bateria saudável (%1$d%%) - A sincronização da área de trabalho está disponível.</string>
+    <string name="desktop_stats_top_artist">Melhor Artista</string>
+    <string name="desktop_stats_top_track">Faixa principal</string>
+    <string name="desktop_stats_sources">Aplicativos de origem</string>
+    <string name="desktop_download_app">Baixe o aplicativo para desktop</string>
+    <string name="desktop_download_app_desc">Baixe o Tempo para Mac &amp; PC</string>
+    <string name="settings_smart_merge">Versões de mesclagem inteligente</string>
+    <string name="settings_smart_merge_desc">Trate as versões Live/Remix como a mesma música para uma história mais limpa</string>
+    <string name="settings_backup_restore">Backup&amp; Restaurar</string>
+    <string name="settings_backup_restore_desc">Exporte ou importe seus dados</string>
+    <string name="settings_clear_all">Limpar todos os dados</string>
+    <string name="settings_reddit">Comunidade Reddit</string>
+    <string name="settings_reddit_sub">r/TempoStats</string>
+    <string name="settings_telegram">Canal Telegram</string>
+    <string name="settings_telegram_name">Coco Confuso</string>
+    <string name="settings_github">Projeto GitHub</string>
+    <string name="settings_github_desc">Código fonte &amp; Rastreador de problemas</string>
+    <string name="settings_contribute">Contribuir</string>
+    <string name="settings_contribute_desc">Ajude a melhorar o ritmo</string>
+    <string name="settings_rate_play_store">Avalie na Play Store</string>
+    <string name="settings_privacy_policy">Política de Privacidade</string>
+    <string name="settings_version">Versão</string>
+    <string name="settings_processing">Processamento…</string>
+    <string name="settings_import_options">Opções de importação</string>
+    <string name="settings_import_conflict_msg">O que deve acontecer ao importar dados que já existem no aplicativo?</string>
+    <string name="settings_replace_existing">Substituir existente</string>
+    <string name="settings_skip_duplicates">Ignorar duplicatas</string>
+    <string name="settings_clear_data_title">Limpar todos os dados?</string>
+    <string name="settings_clear_data_msg">Esta ação não pode ser desfeita. Todo o seu histórico de audição e preferências serão excluídos permanentemente.</string>
+    <string name="settings_clear_everything">Limpar tudo</string>
+    <string name="settings_disconnect_spotify_title">Desconectar o Spotify?</string>
+    <string name="settings_disconnect_spotify_msg">Isso removerá sua conexão do Spotify. Os recursos de áudio e monitoramento de humor não estarão mais disponíveis.</string>
+    <string name="settings_disconnect">Desconectar</string>
+    <string name="settings_import_success">Registros %1$d e imagens %2$d processados ​​com sucesso</string>
+
+    <!-- Spotlight story slide labels (Wrapped / Year in Review type) -->
+    <string name="spotlight_this_year_title">Seu %1$d Destaque</string>
+    <string name="spotlight_this_month_title">Este mês</string>
+    <string name="spotlight_all_time_title">Estatísticas de todos os tempos</string>
+    <string name="spotlight_default_title">Seu destaque</string>
+    <string name="spotlight_listened_minutes">minutos</string>
+    <string name="spotlight_days_nonstop">Acabou %1$d dias sem parar!</string>
+    <string name="spotlight_top_artist_label">Seu melhor artista</string>
+    <string name="spotlight_top_song_label">Sua melhor música</string>
+    <string name="spotlight_top_genres_label">Seus principais gêneros</string>
+    <string name="spotlight_listening_personality">Sua personalidade auditiva</string>
+    <string name="spotlight_conclusion_listening_time">Tempo de escuta</string>
+    <string name="spotlight_conclusion_min">min</string>
+    <string name="spotlight_conclusion_top_artists">Principais artistas</string>
+    <string name="spotlight_conclusion_top_songs">Melhores músicas</string>
+    <string name="spotlight_conclusion_top_genres">Principais gêneros</string>
+
+    <!-- Stats Screen -->
+    <string name="stats_screen_title">Estatísticas</string>
+    <string name="stats_no_stats_yet">Ainda não há estatísticas</string>
+    <string name="stats_start_listening">Comece a ouvir para ver seus principais rankings!</string>
+    <string name="stats_tab_songs">Músicas</string>
+    <string name="stats_tab_artists">Artistas</string>
+    <string name="stats_tab_albums">Álbuns</string>
+    <string name="stats_sort_by">"Ordenar por: "</string>
+    <string name="stats_sort_combined">Pontuação Combinada</string>
+    <string name="stats_sort_play_count">Contagem de jogos</string>
+    <string name="stats_sort_total_time">Tempo total</string>
+    <string name="stats_rank_1_track">Faixa nº 1</string>
+    <string name="stats_rank_1_artist">Artista nº 1</string>
+    <string name="stats_rank_1_album">Álbum nº 1</string>
+
+    <!-- History Screen -->
+    <string name="history_filter_title">Histórico de filtros</string>
+    <string name="history_time_range">Intervalo de tempo</string>
+    <string name="history_all_time">Todos os tempos</string>
+    <string name="history_7_days_abbr">7 dias</string>
+    <string name="history_30_days_abbr">30 dias</string>
+    <string name="history_last_7_days">Últimos 7 dias</string>
+    <string name="history_last_30_days">Últimos 30 dias</string>
+    <string name="history_playback">Reprodução</string>
+    <string name="history_show_skipped">Mostrar músicas ignoradas</string>
+    <string name="history_reset">Reiniciar</string>
+    <string name="history_apply_filters">Aplicar filtros</string>
+    <string name="history_delete_dialog_title">Excluir do histórico?</string>
+    <string name="history_delete_dialog_message">Isso removerá permanentemente \"%s\" do seu histórico de audição.</string>
+    <string name="history_delete_button">Excluir</string>
+    <string name="history_empty_title">A história está vazia</string>
+    <string name="history_empty_message">Toque uma música para ver aqui.</string>
+
+    <string name="history_recent_activity_subtitle">Das notificações do Spotify&amp;</string>
+    <string name="history_lastfm_history">História do Last.fm</string>
+    <string name="history_lastfm_subtitle">Histórico de audição importado</string>
+    <string name="history_search_hint">Pesquisar músicas...</string>
+
+    <!-- Song Details Screen -->
+    <string name="song_details_title">Detalhes da música</string>
+    <string name="song_details_merge">Mesclar duplicado...</string>
+    <string name="song_details_delete">Excluir música</string>
+    <string name="song_details_delete_dialog_title">Excluir música?</string>
+    <string name="song_details_delete_dialog_message">Tem certeza de que deseja excluir esta música?</string>
+    <string name="song_details_delete_warning">Isso excluirá permanentemente:</string>
+    <string name="song_details_delete_bullet_1">• A música da sua biblioteca</string>
+    <string name="song_details_delete_bullet_2">• Todo o histórico de audição (%d reproduções)</string>
+    <string name="song_details_delete_bullet_3">• Quaisquer metadados enriquecidos</string>
+    <string name="song_details_delete_bullet_4">• Relacionamentos com artistas</string>
+    <string name="song_details_delete_undone">Esta ação não pode ser desfeita.</string>
+    <string name="song_details_delete_confirm">EXCLUIR</string>
+    <string name="song_details_all_time_fav">Seu favorito de todos os tempos</string>
+    <string name="song_details_most_played">Esta é a sua música mais tocada de todos os tempos.</string>
+    <string name="song_details_times_played">Vezes reproduzida</string>
+    <string name="song_details_total_listening">Tempo total de audição</string>
+    <string name="song_details_peak_position">Posição máxima</string>
+    <string name="song_details_release_date">Data de lançamento</string>
+    <string name="song_details_genre">Gênero</string>
+    <string name="song_details_listening_trends">Tendências auditivas</string>
+    <string name="song_details_no_data">Não há dados disponíveis</string>
+    <string name="song_details_mood_genre">Humor &amp; gênero</string>
+    <string name="song_details_mood">Humor</string>
+    <string name="song_details_energy">Energia</string>
+    <string name="song_details_estimated_energy">Energia Estimada</string>
+
+    <!-- Artist Details Screen -->
+    <string name="artist_details_not_found">Artista não encontrado</string>
+    <string name="artist_details_retry">Tentar novamente</string>
+    <string name="artist_details_title">Detalhes do Artista</string>
+    <string name="artist_details_merge">Mesclar com...</string>
+    <string name="artist_details_total_plays">Total de reproduções</string>
+    <string name="artist_details_discovery_insight">Insight de descoberta</string>
+    <string name="artist_details_discovered_part1">"Você descobriu "</string>
+    <string name="artist_details_discovered_part2">" em "</string>
+    <string name="artist_details_discovered_part3">". Desde então, você ouviu por "</string>
+    <string name="artist_details_discovered_part4">" em "</string>
+    <string name="artist_details_discovered_part5">" faixas."</string>
+    <string name="artist_details_top_songs">Melhores músicas</string>
+    <string name="artist_details_unknown_album">Álbum desconhecido</string>
+    <string name="artist_details_plays">reproduções</string>
+    <string name="artist_details_top_albums">Principais álbuns</string>
+
+    <!-- Song Details Delete Dialog -->
+    <string name="details_delete_song_title">Excluir música?</string>
+    <string name="details_delete_song_confirmation">Tem certeza de que deseja excluir esta música?</string>
+    <string name="details_delete_song_warning">Isso excluirá permanentemente:</string>
+    <string name="details_delete_song_bullet_library">• A música da sua biblioteca</string>
+    <string name="details_delete_song_bullet_history">• Todo o histórico de audição (%d reproduções)</string>
+    <string name="details_delete_song_bullet_metadata">• Quaisquer metadados enriquecidos</string>
+    <string name="details_delete_song_bullet_artist">• Relacionamentos com artistas</string>
+    <string name="details_delete_song_undone">Esta ação não pode ser desfeita.</string>
+    <string name="details_mood_genre">Humor &amp; gênero</string>
+    <string name="details_mood_label">Humor</string>
+    <string name="details_energy_label">Energia</string>
+    <string name="details_genre_label">Gênero</string>
+
+    <string name="details_your_engagement">Seu envolvimento</string>
+    <string name="details_engagement_score">Pontuação de engajamento</string>
+    <string name="details_stat_full_plays">Reproduções completas</string>
+    <string name="details_stat_of_plays">de %d</string>
+    <string name="details_stat_avg_completion">Média de conclusão</string>
+    <string name="details_stat_replays">Repetições</string>
+    <string name="details_stat_back_to_back">sem parar</string>
+    <string name="details_completion_rate">Taxa de conclusão</string>
+    <string name="details_skip_rate">Taxa de pulo</string>
+    <string name="details_engagement_skipped">⏭️ Pulou %1$d vez(es) antes de terminar</string>
+    <string name="details_engagement_paused_freq">⏸️ Pausado com frequência (média %1$.1f pausas/reprodução)</string>
+    <string name="details_engagement_paused_occas">⏸️ Pausado ocasionalmente</string>
+    <string name="details_engagement_paused_rare">⏸️ Raramente pausado</string>
+    <string name="details_engagement_sessions">📅 Tocada em %1$d sessões diferentes</string>
+    <!-- Artist Details -->
+    <string name="details_artist_not_found">Artista não encontrado</string>
+    <string name="common_retry">Tentar novamente</string>
+    <string name="details_artist_details_title">Detalhes do Artista</string>
+
+
+    <string name="details_refresh_artist_image">Atualizar imagem do artista</string>
+    <string name="details_rename_artist">Renomear artista</string>
+
+    <string name="details_discovery_insight">Insight de descoberta</string>
+    <string name="details_discovery_part1">"Você descobriu "</string>
+    <string name="details_discovery_part2">" em "</string>
+    <string name="details_discovery_part3">". Desde então, você ouviu por "</string>
+    <string name="details_discovery_part4">" em "</string>
+    <string name="details_discovery_part5">" faixas."</string>
+    <string name="details_unknown_album">Álbum desconhecido</string>
+
+    <!-- Fan Status Percentiles -->
+    <string name="fan_status_top_1">Top 1%% Artista</string>
+    <string name="fan_status_top_1_desc">Este é um dos seus favoritos absolutos!</string>
+    <string name="fan_status_top_5">Top 5%% Artista</string>
+    <string name="fan_status_top_5_desc">Você os ouve mais do que a maioria.</string>
+    <string name="fan_status_top_10">Top 10%% Artista</string>
+    <string name="fan_status_top_10_desc">Definitivamente uma de suas principais escolhas.</string>
+    <string name="fan_status_top_25">Top 25%% Artista</string>
+    <string name="fan_status_top_25_desc">Uma parte sólida da sua rotação.</string>
+    <string name="fan_status_top_50">Top 50%% Artista</string>
+    <string name="fan_status_top_50_desc">Você os ouve ocasionalmente.</string>
+    <!-- Fan Status Counts -->
+    <string name="fan_status_ultimate">Stan definitivo</string>
+    <string name="fan_status_ultimate_desc">Você está no topo dos ouvintes!</string>
+    <string name="fan_status_super">Super fã</string>
+    <string name="fan_status_super_desc">Você realmente ama esse artista.</string>
+    <string name="fan_status_big">Grande fã</string>
+    <string name="fan_status_big_desc">Um dos seus favoritos.</string>
+    <string name="fan_status_regular">Ouvinte regular</string>
+    <string name="fan_status_regular_desc">Você os ouve bastante.</string>
+    <string name="fan_status_listener">Ouvinte</string>
+    <string name="fan_status_listener_desc">Continue ouvindo para subir de nível!</string>
+    <string name="home_user_default">Usuário</string>
+    <!-- Spotlight Poetry -->
+    <string name="poetry_year_unfolds">%1$d se desdobra em som</string>
+    <string name="poetry_all_time">Um som que permanece</string>
+    <string name="poetry_time_forward">O tempo avança</string>
+
+    <string name="poetry_nh_1">Janeiro chega tranquilamente</string>
+    <string name="poetry_nh_2">Fevereiro mantém distância</string>
+    <string name="poetry_nh_3">Março começa a afrouxar seu controle</string>
+    <string name="poetry_nh_4">Abril abre ainda mais o ano</string>
+    <string name="poetry_nh_5">May entra em movimento</string>
+    <string name="poetry_nh_6">Junho estende os dias</string>
+    <string name="poetry_nh_7">Julho contém tudo de uma vez</string>
+    <string name="poetry_nh_8">Agosto demora um pouco mais</string>
+    <string name="poetry_nh_9">Setembro traz arestas de volta</string>
+    <string name="poetry_nh_10">Outubro torna a imagem mais nítida</string>
+    <string name="poetry_nh_11">Novembro se volta para dentro</string>
+    <string name="poetry_nh_12">Dezembro traça uma linha abaixo do ano</string>
+
+    <string name="poetry_sh_1">Janeiro abre amplamente</string>
+    <string name="poetry_sh_2">Fevereiro continua brilhante</string>
+    <string name="poetry_sh_3">Março começa a desacelerar seu ritmo</string>
+    <string name="poetry_sh_4">Abril esfria as bordas</string>
+    <string name="poetry_sh_5">May aproxima as coisas</string>
+    <string name="poetry_sh_6">Junho fica mais quieto</string>
+    <string name="poetry_sh_7">Julho se mantém estável</string>
+    <string name="poetry_sh_8">Agosto espera pacientemente</string>
+    <string name="poetry_sh_9">Setembro começa a abrir novamente</string>
+    <string name="poetry_sh_10">Outubro ganha impulso</string>
+    <string name="poetry_sh_11">Novembro se expande para fora</string>
+    <string name="poetry_sh_12">Dezembro fecha ruidosamente</string>
+
+    <string name="poetry_tr_1">Janeiro marca o início</string>
+    <string name="poetry_tr_2">Fevereiro mantém as coisas em movimento</string>
+    <string name="poetry_tr_3">Março encontra seu fundamento</string>
+    <string name="poetry_tr_4">Abril continua em frente</string>
+    <string name="poetry_tr_5">Maio estabelece o ritmo</string>
+    <string name="poetry_tr_6">Junho chega ao meio</string>
+    <string name="poetry_tr_7">Julho passa pelo centro</string>
+    <string name="poetry_tr_8">Agosto continua</string>
+    <string name="poetry_tr_9">Setembro olha para frente</string>
+    <string name="poetry_tr_10">Outubro ganha clareza</string>
+    <string name="poetry_tr_11">Novembro se prepara para fechar</string>
+    <string name="poetry_tr_12">Dezembro traz o ano para casa</string>
+    <!-- InsightCardGenerator Strings -->
+    <string name="insight_sun_chaser">Caçador do Sol</string>
+    <string name="insight_moon_owl">Coruja da Lua</string>
+    <string name="insight_pure_weekend_warrior">Puro guerreiro de fim de semana</string>
+    <string name="insight_weekday_only">Apenas durante a semana</string>
+    <string name="insight_weekend_warrior">Guerreiro de fim de semana</string>
+    <string name="insight_daily_grinder">No ritmo diário</string>
+    <string name="insight_consistent_vibez">Vibração consistente</string>
+    <string name="insight_last_month">mês passado</string>
+    <string name="insight_couple_months_ago">alguns meses atrás</string>
+    <string name="insight_few_months_ago">alguns meses atrás</string>
+    <string name="insight_earlier_year">no início deste ano</string>
+    <string name="insight_last_year">ano passado</string>
+    <string name="insight_while_ago">há um tempo atrás</string>
+    <string name="insight_recently">Recentemente</string>
+    <string name="insight_the_zone">A Zona</string>
+    <string name="insight_explorer">O Explorador</string>
+    <string name="insight_time_traveler">O Viajante do Tempo</string>
+    <string name="insight_orbiter">O Orbitador</string>
+    
+    <string name="insight_desc_explorer_with_artist">Você se aventurou no desconhecido com a nova música de %1$d%%. Sua principal descoberta foi um novo som como %2$s.</string>
+    <string name="insight_desc_explorer_no_artist">Você se aventurou no desconhecido com a nova música de %1$d%%. Sua principal descoberta foi um novo som.</string>
+    <string name="insight_desc_time_traveler_with_artist">Você encontrou conforto nos seus favoritos em %1$d%% do tempo. Mesmo assim, ainda abriu espaço para descobrir %2$s.</string>
+    <string name="insight_desc_time_traveler_no_artist">Você encontrou conforto nos seus favoritos em %1$d%% do tempo. Mesmo assim, ainda abriu espaço para descobrir coisas novas.</string>
+    <string name="insight_desc_orbiter_with_artist">Perfeitamente equilibrado. Você explorou novos sons como %1$s enquanto manteve %2$d%% de sua audição baseada em favoritos.</string>
+    <string name="insight_desc_orbiter_no_artist">Perfeitamente equilibrado. Você explorou novos sons enquanto mantinha %1$d%% de sua audição baseada em favoritos.</string>
+
+    <string name="spotlight_story_minutes_1">A música não é apenas um hobby, é o seu oxigênio.</string>
+    <string name="spotlight_story_minutes_2">Isso é mais do que a maioria das pessoas ouve durante a vida.</string>
+    <string name="spotlight_story_minutes_3">Um ritmo constante, não ruído de fundo.</string>
+    <string name="spotlight_story_minutes_4">Você manteve a vibração forte.</string>
+    <string name="spotlight_story_minutes_5">Qualidade em vez de quantidade, sempre.</string>
+
+    <string name="spotlight_story_artist_month">Eles definiram seu som este mês.</string>
+    <string name="spotlight_story_artist_year">Eles definiram seu som este ano.</string>
+    <string name="spotlight_story_artist_all_time">Eles definiram o seu som de todos os tempos.</string>
+    
+    <string name="spotlight_story_track_setup">Mas uma música deu o tom.</string>
+    <string name="spotlight_story_track_obsessed">Você claramente não se cansava disso.</string>
+    <string name="spotlight_story_track_stuck">A faixa que ficou com você.</string>
+    <string name="spotlight_story_genre_base">Essa vibração era sua base.</string>
+    <string name="spotlight_story_conclusion">Até a próxima.</string>
+
+    <!-- Personalities -->
+    <string name="personality_hip_hop_head_name">Cabeça de hip-hop</string>
+    <string name="personality_pop_icon_name">Ícone pop</string>
+    <string name="personality_rock_star_name">Estrela do rock</string>
+    <string name="personality_metalhead_name">Metaleiro</string>
+    <string name="personality_rb_soul_name">Alma R&amp;B</string>
+    <string name="personality_electronic_voyager_name">Viajante Eletrônico</string>
+    <string name="personality_jazz_cat_name">Gato Jazz</string>
+    <string name="personality_maestro_name">Maestro</string>
+    <string name="personality_indie_spirit_name">Espírito Indie</string>
+    <string name="personality_party_starter_name">Iniciante da festa</string>
+    <string name="personality_intense_soul_name">Alma Intensa</string>
+    <string name="personality_peaceful_optimist_name">Otimista Pacífico</string>
+    <string name="personality_deep_thinker_name">Pensador Profundo</string>
+    <string name="personality_dance_floor_regular_name">Pista de Dança Regular</string>
+    <string name="personality_balanced_enthusiast_name">Entusiasta Equilibrado</string>
+    <string name="personality_the_explorer_name">O Explorador</string>
+    <string name="personality_the_melophile_name">O Melófilo</string>
+    <!-- Personality Traits -->
+    <string name="pers_desc_hip_hop">Você vive para os bares, as batidas e as histórias.</string>
+    <string name="pers_tag_hip_hop">O ritmo não está apenas nos seus fones de ouvido, está na sua caminhada.</string>
+    
+    <string name="pers_desc_pop">Você mantém o controle sobre o que é tendência e cativante.</string>
+    <string name="pers_tag_pop">Se for um sucesso, você provavelmente ouviu primeiro.</string>
+    
+    <string name="pers_desc_rock">Você anseia por energia bruta e sons autênticos.</string>
+    <string name="pers_tag_rock">Guitarras altas e bateria de verdade são a sua linguagem de amor.</string>
+    
+    <string name="pers_desc_metal">Você encontra paz no caos e no poder da música pesada.</string>
+    <string name="pers_tag_metal">A intensidade não é uma falha, é um requisito.</string>
+    
+    <string name="pers_desc_rb">Você aprecia vocais suaves e ritmos emocionais profundos.</string>
+    <string name="pers_tag_rb">Você sente a música tanto quanto a ouve.</string>
+    
+    <string name="pers_desc_electronic">Você se perde em paisagens sonoras sintéticas e batidas intensas.</string>
+    <string name="pers_tag_electronic">A queda é o seu destino favorito.</string>
+    
+    <string name="pers_desc_jazz">Você tem um ouvido sofisticado para improvisação e complexidade.</string>
+    <string name="pers_tag_jazz">Você ouve as notas que eles não tocam.</string>
+    
+    <string name="pers_desc_maestro">Você valoriza a beleza atemporal e as composições complexas.</string>
+    <string name="pers_tag_maestro">Sua playlist é uma obra-prima.</string>
+    
+    <string name="pers_desc_indie">Você marcha ao ritmo do seu próprio tambor, preferindo sons únicos.</string>
+    <string name="pers_tag_indie">O mainstream é chato; você quer algo real.</string>
+    
+    <string name="pers_desc_party">Você tem tudo a ver com vibrações felizes e de alta energia que fazem todo mundo se mexer!</string>
+    <string name="pers_tag_party">Você traz a energia, todas as vezes.</string>
+    
+    <string name="pers_desc_intense">Você gravita em torno de músicas poderosas e carregadas de emoção.</string>
+    <string name="pers_tag_intense">Você sente cada batida, no fundo.</string>
+    
+    <string name="pers_desc_peaceful">Você prefere música calma e positiva que levanta seu ânimo suavemente.</string>
+    <string name="pers_tag_peaceful">Sua playlist é um suspiro profundo para a alma.</string>
+    
+    <string name="pers_desc_deep_thinker">Você aprecia paisagens sonoras introspectivas e atmosféricas.</string>
+    <string name="pers_tag_deep_thinker">Você ouve para entender, não apenas para ouvir.</string>
+    
+    <string name="pers_desc_dance">O ritmo é a sua linguagem - você adora música que se move!</string>
+    <string name="pers_tag_dance">Ficar parado não é uma opção para você.</string>
+    
+    <string name="pers_desc_balanced">Você gosta de uma mistura saudável de música animada e descontraída.</string>
+    <string name="pers_tag_balanced">Você mantém as coisas perfeitamente em sintonia.</string>
+    
+    <string name="pers_desc_explorer">Você está constantemente em busca de novos sons e novos artistas.</string>
+    <string name="pers_tag_explorer">Você não faz loops em faixas de conforto. Você caça novos.</string>
+    
+    <string name="pers_desc_melophile">Você simplesmente ama a música em todas as suas formas, sem limites.</string>
+    <string name="pers_tag_melophile">Boa música é boa música, ponto final.</string>
+    
+    <string name="pers_desc_default">Você adora música.</string>
+    <string name="pers_tag_default">A música é a sua vida.</string>
+    <!-- Backup and Restore additional strings -->
+    <string name="backup_restore_export_device">Exportar para dispositivo</string>
+    <string name="backup_restore_estimated_size">Tamanho estimado: %s</string>
+    <string name="backup_restore_export_button">Exportar backup</string>
+    <string name="backup_restore_import_device">Importar do dispositivo</string>
+    <string name="backup_restore_import_file_desc">Selecione um arquivo de backup .tempo ou .json</string>
+    <string name="backup_restore_import_button">Selecione o arquivo</string>
+    <!-- Backup and Restore more additional strings -->
+    <string name="backup_restore_last_backup">Último backup em</string>
+    <string name="backup_restore_tracks_label">Faixas</string>
+    <string name="backup_restore_artists_label">Artistas</string>
+    <string name="backup_restore_plays_label">Reproduções</string>
+    <string name="backup_restore_images_label">Imagens</string>
+    <string name="backup_restore_local_backup_header">Opções de backup local</string>
+    <string name="backup_restore_include_local_images">Incluir imagens de artistas</string>
+    <string name="backup_restore_local_images_desc">Incluir imagens locais em cache na exportação</string>
+    <string name="backup_restore_no_local_images">Nenhuma imagem local armazenada em cache</string>
+    <!-- History and Backup more additional strings -->
+    <string name="history_its_a_podcast">É um podcast</string>
+    <string name="history_its_an_audiobook">É um audiolivro</string>
+    <string name="history_remove_and_block">Remover e bloquear</string>
+    <string name="history_block_entire_artist">Bloquear artista inteiro</string>
+    <string name="history_artist_is_podcast">Artista é um podcast</string>
+    <string name="history_artist_is_audiobook">Artista é um audiolivro</string>
+    <string name="history_remove_all_from_source">Remover tudo da fonte</string>
+    <string name="backup_restore_data_header">Visão geral dos dados</string>
+    <!-- More History and Details strings -->
+    <string name="details_stat_plays_this_month">Este mês</string>
+    <string name="details_stat_plays_this_year">Este ano</string>
+    <string name="details_stat_first_played">Primeira reprodução</string>
+    <string name="details_stat_last_played">Última reprodução</string>
+    <string name="details_stat_popularity">Popularidade</string>
+    <string name="details_stat_genre">Gênero</string>
+    <string name="details_no_data_available">Não há dados disponíveis</string>
+    <string name="history_lastfm_imported">Last.fm importado</string>
+    <string name="history_archive_plays">Reproduções do arquivo</string>
+    <string name="history_from_archive">Do arquivo</string>
+    <string name="history_archive_showing_tracks">Mostrando faixas do arquivo</string>
+    <string name="history_archive_plays_item">%d reproduções de arquivo</string>
+    <string name="history_block_track">Bloquear faixa</string>
+    <!-- More Details strings -->
+    <string name="details_merge_duplicate">Mesclar duplicado</string>
+    <string name="details_delete_song">Excluir música</string>
+    <string name="details_favorite_title">Faixa favorita</string>
+    <string name="details_favorite_subtitle">Você já ouviu muito isso!</string>
+    <string name="details_stat_times_played">Vezes reproduzida</string>
+    <string name="details_stat_total_listening">Tempo total de audição</string>
+    <string name="details_stat_peak_position">Posição máxima</string>
+    <string name="details_stat_release_date">Data de lançamento</string>
+    <string name="details_plays_count">%d reproduções</string>
+    <string name="details_track_not_found">Faixa não encontrada</string>
+    <string name="details_song_details_title">Detalhes da música</string>
+
+    <!-- Welcome to Tempo / Onboarding Final -->
+    <string name="welcome_ready">Tudo pronto!</string>
+    <string name="welcome_go">Vamos</string>
+
+    <!-- Errors and notifications -->
+    <string name="error_generic">Algo deu errado. Por favor, tente novamente.</string>
+    <string name="error_network">Sem conexão de rede.</string>
+    <string name="error_save">Falha ao salvar as configurações.</string>
+    <string name="success_save">Configurações salvas com sucesso.</string>
+
+    <!-- App shortcuts -->
+    <string name="shortcut_search">Pesquisar</string>
+    <string name="shortcut_play">Reproduzir</string>
+
+    <!-- About screen -->
+    <string name="about_app_name">Tempo</string>
+    <string name="about_version">Versão %1$s</string>
+    <string name="about_developer">Construído por Avinash</string>
+    <string name="about_license">Licenças</string>
+    <string name="about_source_code">Código Fonte</string>
+    <string name="about_privacy">Política de Privacidade</string>
+    <string name="about_terms">Termos de Uso</string>
+
+    <!-- Misc UI -->
+    <string name="ui_loading">Carregando…</string>
+    <string name="ui_error">Erro</string>
+    <string name="ui_retry">Tentar novamente</string>
+    <string name="ui_empty">Nada para mostrar.</string>
+    <string name="ui_offline">Você está off-line no momento.</string>
+    <string name="ui_search_hint">Pesquisar…</string>
+    <string name="ui_no_results">Sem resultados.</string>
+</resources>

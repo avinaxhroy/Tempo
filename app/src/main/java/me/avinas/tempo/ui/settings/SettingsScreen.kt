@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -23,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
 import androidx.core.os.LocaleListCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import me.avinas.tempo.R
@@ -75,6 +77,7 @@ fun SettingsScreen(
     val importExportProgress by viewModel.importExportProgress.collectAsState()
     val importExportResult by viewModel.importExportResult.collectAsState()
     val conflictDialogUri by viewModel.showConflictDialog.collectAsState()
+    val profileImageMessage by viewModel.profileImageMessage.collectAsState()
     
     // OEM detection for Background Protection
     val isXiaomiDevice = remember { OemBackgroundHelper.isXiaomiDevice() }
@@ -82,10 +85,16 @@ fun SettingsScreen(
     
     // Language selector state
     var showLanguageDialog by remember { mutableStateOf(false) }
-    val currentLocale = remember {
-        val appLocales = AppCompatDelegate.getApplicationLocales()
-        if (appLocales.isEmpty) "en" else appLocales.get(0)?.language ?: "en"
-    }
+    val currentLocale = AppCompatDelegate.getApplicationLocales().get(0)?.language ?: "en"
+    val languages = listOf(
+        "en" to stringResource(R.string.settings_language_english),
+        "fr" to stringResource(R.string.settings_language_french),
+        "de" to stringResource(R.string.settings_language_german),
+        "hu" to stringResource(R.string.settings_language_hungarian),
+        "pt" to stringResource(R.string.settings_language_portuguese)
+    )
+    val currentLanguageSubtitle = languages.firstOrNull { it.first == currentLocale }?.second
+        ?: stringResource(R.string.settings_language_english)
     
     // Battery status monitoring for Desktop Sync
     var batteryLevel by remember { mutableStateOf(BatteryUtils.getBatteryLevel(context)) }
@@ -123,6 +132,12 @@ fun SettingsScreen(
             viewModel.startImport(it)
         }
     }
+
+    val profileImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let(viewModel::updateProfileImage)
+    }
     
     // File creator for export (ZIP)
     val exportLauncher = rememberLauncherForActivityResult(
@@ -150,6 +165,13 @@ fun SettingsScreen(
                 }
             }
             viewModel.clearImportExportResult()
+        }
+    }
+
+    LaunchedEffect(profileImageMessage) {
+        profileImageMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearProfileImageMessage()
         }
     }
     
@@ -197,24 +219,58 @@ fun SettingsScreen(
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Avatar
                         Box(
                             modifier = Modifier
                                 .size(64.dp)
-                                .background(
-                                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                        colors = listOf(TempoRed, Color(0xFF991B1B))
-                                    ),
-                                    shape = androidx.compose.foundation.shape.CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
+                                .clickable {
+                                    profileImageLauncher.launch("image/*")
+                                },
+                            contentAlignment = Alignment.BottomEnd
                         ) {
-                            Text(
-                                text = uiState.userName.firstOrNull()?.toString()?.uppercase() ?: "U",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                color = Color.White
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                                    .background(
+                                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                            colors = listOf(TempoRed, Color(0xFF991B1B))
+                                        ),
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (uiState.profileImagePath.isNullOrBlank()) {
+                                    Text(
+                                        text = uiState.userName.firstOrNull()?.toString()?.uppercase() ?: "U",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                } else {
+                                    me.avinas.tempo.ui.components.CachedAsyncImage(
+                                        imageUrl = uiState.profileImagePath,
+                                        contentDescription = stringResource(R.string.settings_profile_photo),
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xCC111827),
+                                tonalElevation = 0.dp,
+                                modifier = Modifier.size(22.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = stringResource(R.string.settings_change_photo),
+                                        tint = Color.White,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
                         }
                         
                         Spacer(modifier = Modifier.width(16.dp))
@@ -231,13 +287,27 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.White.copy(alpha = 0.6f)
                             )
+                            Text(
+                                text = stringResource(R.string.settings_tap_photo_to_change),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.45f)
+                            )
                         }
                         
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = stringResource(R.string.settings_update_name),
-                            tint = Color.White.copy(alpha = 0.6f)
-                        )
+                        if (uiState.profileImagePath.isNullOrBlank()) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = stringResource(R.string.settings_update_name),
+                                tint = Color.White.copy(alpha = 0.6f)
+                            )
+                        } else {
+                            TextButton(onClick = viewModel::removeProfileImage) {
+                                Text(
+                                    text = stringResource(R.string.settings_remove_photo),
+                                    color = Color.White.copy(alpha = 0.75f)
+                                )
+                            }
+                        }
                     }
                 }
                 
@@ -251,10 +321,7 @@ fun SettingsScreen(
                 ) {
                     SettingsOption(
                         title = stringResource(R.string.settings_language_title),
-                        subtitle = if (currentLocale == "fr") 
-                            stringResource(R.string.settings_language_french) 
-                        else 
-                            stringResource(R.string.settings_language_english),
+                        subtitle = currentLanguageSubtitle,
                         onClick = { showLanguageDialog = true }
                     )
                 }
@@ -620,7 +687,7 @@ fun SettingsScreen(
                         SettingsOption(
                             title = stringResource(R.string.settings_privacy_policy),
                             onClick = { 
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("http://tempo.avinas.me/privacy.html"))
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://tempo.avinas.me/privacy.html"))
                                 context.startActivity(intent)
                             }
                         )
@@ -685,12 +752,6 @@ fun SettingsScreen(
             title = { Text(stringResource(R.string.settings_select_language)) },
             text = {
                 Column {
-                    val languages = listOf(
-                        "en" to stringResource(R.string.settings_language_english),
-                        "fr" to stringResource(R.string.settings_language_french),
-                        "de" to stringResource(R.string.settings_language_german),
-                        "hu" to stringResource(R.string.settings_language_hungarian)
-                    )
                     languages.forEach { (langTag, langName) ->
                         Row(
                             modifier = Modifier

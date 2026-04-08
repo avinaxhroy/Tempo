@@ -33,7 +33,7 @@ import me.avinas.tempo.data.local.entities.DesktopPairingSession
         DesktopPairingSession::class // Desktop Satellite pairing sessions
     ],
     version = 43, // Migration 43: Backfill Vivi Music & new open-source apps into app_preferences
-    exportSchema = false
+    exportSchema = true  // Schema exported to app/schemas/ — commit these files so migration gaps are caught at build time
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

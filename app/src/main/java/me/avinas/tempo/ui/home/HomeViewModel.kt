@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import me.avinas.tempo.data.local.dao.ListeningEventDao
+import me.avinas.tempo.data.profile.ProfileIdentityManager
 import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.data.stats.TimeRange
 import me.avinas.tempo.data.stats.InsightCardData
@@ -39,6 +40,7 @@ class HomeViewModel @Inject constructor(
     private val tokenStorage: me.avinas.tempo.data.remote.spotify.SpotifyTokenStorage,
     private val preferencesRepository: me.avinas.tempo.data.repository.PreferencesRepository,
     private val listeningEventDao: ListeningEventDao,
+    private val profileIdentityManager: ProfileIdentityManager,
     val gamificationRepository: me.avinas.tempo.data.repository.GamificationRepository,
     private val refreshCoordinator: me.avinas.tempo.data.repository.RefreshCoordinator
 ) : ViewModel() {
@@ -142,15 +144,7 @@ class HomeViewModel @Inject constructor(
                 val insightsDeferred = async { statsRepository.getInsights(timeRange) }
                 // Use ALL_TIME stats for rate app check - ensures consistent behavior regardless of current filter
                 val allTimeOverviewDeferred = async { statsRepository.getListeningOverview(TimeRange.ALL_TIME) }
-                val userNameDeferred = async { 
-                    val preferences = context.dataStore.data.first()
-                    val savedName = preferences[stringPreferencesKey("user_name")]
-                    if (!savedName.isNullOrBlank()) {
-                        savedName
-                    } else {
-                        tokenStorage.getUserDisplayName()?.split(" ")?.firstOrNull() ?: "User" 
-                    }
-                }
+                val profileIdentityDeferred = async { profileIdentityManager.getProfileIdentity() }
                 
                 // Read isGamificationEnabled setting
                 val isGamificationEnabledDeferred = async {
@@ -167,7 +161,11 @@ class HomeViewModel @Inject constructor(
                 val mostActiveHour = mostActiveHourDeferred.await()
                 val audioFeatures = audioFeaturesDeferred.await()
                 val allTimeOverview = allTimeOverviewDeferred.await()
-                val userName = userNameDeferred.await()
+                val profileIdentity = profileIdentityDeferred.await()
+                val userName = profileIdentity.userName
+                    .takeIf { it.isNotBlank() }
+                    ?: tokenStorage.getUserDisplayName()?.split(" ")?.firstOrNull()
+                    ?: "User"
                 
                 // Fetch Gamification Data
                 val isGamificationEnabled = isGamificationEnabledDeferred.await()
@@ -214,6 +212,7 @@ class HomeViewModel @Inject constructor(
                         audioFeatures = audioFeatures,
                         insights = combinedInsights,
                         userName = userName,
+                        profileImagePath = profileIdentity.profileImagePath,
                         hasData = hasData,
                         isNewUser = isNewUser,
                         // visible until the user actively interacts with it. Without this guard,
@@ -614,6 +613,7 @@ data class HomeUiState(
     val audioFeatures: me.avinas.tempo.data.stats.AudioFeaturesStats? = null,
     val insights: List<me.avinas.tempo.data.stats.InsightCardData> = emptyList(),
     val userName: String? = null,
+    val profileImagePath: String? = null,
     val showRateAppPopup: Boolean = false,
     
     // Spotlight Story Reminder

@@ -4,12 +4,12 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 # Triggers:
-#   - Push a tag like v1.0.0  → builds all platforms and creates a GitHub Release (draft)
-#   - workflow_dispatch        → manual build (no release created)
+#   - Push a tag like desktop-v1.0.0  → builds all platforms and creates a GitHub Release (draft)
+#   - workflow_dispatch                → manual build (no release created)
 on:
   push:
     tags:
-      - 'v*'
+      - 'desktop-v*'
   workflow_dispatch:
 
 jobs:
@@ -118,7 +118,7 @@ jobs:
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
           releaseName: >-
             ${{ startsWith(github.ref, 'refs/tags/')
-                && format('Tempo Desktop {0}', github.ref_name)
+                && format('Tempo Desktop {0}', replace(github.ref_name, 'desktop-', ''))
                 || '' }}
           releaseBody: |
             ## Tempo Desktop ${{ github.ref_name }}

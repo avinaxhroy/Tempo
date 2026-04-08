@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneId
 
 /**
  * Time range for filtering statistics.
@@ -17,24 +18,34 @@ enum class TimeRange {
 
     /**
      * Get the start timestamp for this time range.
+     * Uses system default timezone for correct local date boundaries.
      */
     fun getStartTimestamp(): Long {
+        val zone = ZoneId.systemDefault()
         val now = LocalDateTime.now()
         val startOfDay = now.toLocalDate().atStartOfDay()
 
         return when (this) {
             TODAY -> startOfDay
             THIS_WEEK -> startOfDay.minusDays(now.dayOfWeek.value.toLong() - 1)
-            THIS_MONTH -> now.toLocalDate().withDayOfMonth(1).atStartOfDay()
+            THIS_MONTH -> {
+                if (now.dayOfMonth <= 3) {
+                    now.toLocalDate().minusMonths(1).withDayOfMonth(1).atStartOfDay()
+                } else {
+                    now.toLocalDate().withDayOfMonth(1).atStartOfDay()
+                }
+            }
             THIS_YEAR -> now.toLocalDate().withDayOfYear(1).atStartOfDay()
             ALL_TIME -> LocalDateTime.of(1970, 1, 1, 0, 0)
-        }.toEpochSecond(java.time.ZoneOffset.UTC) * 1000
+        }.atZone(zone).toInstant().toEpochMilli()
     }
 
     /**
      * Get the end timestamp for this time range (now).
      */
-    fun getEndTimestamp(): Long = System.currentTimeMillis()
+    fun getEndTimestamp(): Long {
+        return System.currentTimeMillis()
+    }
 }
 
 // =====================
@@ -85,11 +96,15 @@ data class ListeningOverview(
 }
 
 private fun TimeRange.getDaysInRange(): Int {
+    val now = LocalDate.now()
     return when (this) {
         TimeRange.TODAY -> 1
         TimeRange.THIS_WEEK -> 7
-        TimeRange.THIS_MONTH -> LocalDate.now().lengthOfMonth()
-        TimeRange.THIS_YEAR -> LocalDate.now().lengthOfYear()
+        TimeRange.THIS_MONTH -> {
+            if (now.dayOfMonth <= 3) now.minusMonths(1).lengthOfMonth()
+            else now.lengthOfMonth()
+        }
+        TimeRange.THIS_YEAR -> now.lengthOfYear()
         TimeRange.ALL_TIME -> 365 // Approximate
     }
 }

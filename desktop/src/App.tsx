@@ -6,6 +6,7 @@ import Pairing from "./components/Pairing";
 import Queue from "./components/Queue";
 import History from "./components/History";
 import Settings from "./components/Settings";
+import UpdateBanner from "./components/UpdateBanner";
 import type { Page } from "./lib/types";
 import { getPairingStatus } from "./lib/api";
 
@@ -78,6 +79,7 @@ function App() {
   if (isOnboarding) {
     return (
       <div className="app">
+        <UpdateBanner />
         <main className="main-content main-content--onboarding">
           <div className="onboarding-header">
             <h1>Welcome to Tempo Desktop</h1>
@@ -91,6 +93,7 @@ function App() {
 
   return (
     <div className="app">
+      <UpdateBanner />
       <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
       <main className="main-content">{renderPage()}</main>
     </div>

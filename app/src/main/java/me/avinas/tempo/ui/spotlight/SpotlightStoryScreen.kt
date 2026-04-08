@@ -108,10 +108,25 @@ fun SpotlightStoryScreen(
             Color(0xFFA855F7), // Purple
             Color(0xFF6366F1)  // Indigo (subtle cooler tone)
         )
+        is SpotlightStoryPage.ListeningStreak -> Triple(
+            Color(0xFFEA580C), // Deep Orange / Fire
+            Color(0xFFFF9900), // Amber
+            Color(0xFFFFD060)  // Golden
+        )
+        is SpotlightStoryPage.ListeningClock -> Triple(
+            Color(0xFF1E1B4B), // Deep Indigo (night)
+            Color(0xFF3730A3), // Indigo
+            Color(0xFF7C3AED)  // Violet
+        )
         is SpotlightStoryPage.TopArtist -> Triple(
             Color(0xFFEC4899), // Pink
             Color(0xFFBE185D), // Dark Pink
             Color(0xFF831843)  // Burgundy
+        )
+        is SpotlightStoryPage.TopAlbum -> Triple(
+            Color(0xFF0F172A), // Near black (let album art dominate)
+            Color(0xFF1E293B), // Slate dark
+            Color(0xFF334155)  // Slate medium
         )
         is SpotlightStoryPage.TopSongs -> Triple(
             Color(0xFFF59E0B), // Amber
@@ -122,6 +137,46 @@ fun SpotlightStoryScreen(
             Color(0xFFF59E0B), // Amber
             Color(0xFFD97706), // Dark Amber
             Color(0xFFB45309)  // Brown/Orange
+        )
+        is SpotlightStoryPage.DiscoveryCount -> Triple(
+            Color(0xFF0E7490), // Cyan dark
+            Color(0xFF0891B2), // Cyan
+            Color(0xFF06B6D4)  // Cyan light
+        )
+        is SpotlightStoryPage.AudioMood -> Triple(
+            Color(0xFF4C1D95), // Deep Violet
+            Color(0xFF6D28D9), // Violet
+            Color(0xFF8B5CF6)  // Light Violet
+        )
+        is SpotlightStoryPage.WeekdayVsWeekend -> Triple(
+            Color(0xFF0C4A6E), // Dark blue
+            Color(0xFF075985), // Blue
+            Color(0xFF0284C7)  // Sky blue
+        )
+        is SpotlightStoryPage.BingeSession -> Triple(
+            Color(0xFF831843), // Deep pink
+            Color(0xFFBE185D), // Pink
+            Color(0xFFEC4899)  // Light pink
+        )
+        is SpotlightStoryPage.TimeOfDayVibes -> Triple(
+            Color(0xFF1C1917), // Near black
+            Color(0xFF292524), // Dark warm
+            Color(0xFF44403C)  // Warm gray
+        )
+        is SpotlightStoryPage.BadgesEarned -> Triple(
+            Color(0xFF78350F), // Deep amber
+            Color(0xFF92400E), // Amber
+            Color(0xFFB45309)  // Gold
+        )
+        is SpotlightStoryPage.LevelUp -> Triple(
+            Color(0xFF451A03), // Deep orange
+            Color(0xFF7C2D12), // Orange-red
+            Color(0xFFC2410C)  // Bright orange
+        )
+        is SpotlightStoryPage.TitleEarned -> Triple(
+            Color(0xFF1E1B4B), // Deep indigo
+            Color(0xFF312E81), // Indigo
+            Color(0xFF4338CA)  // Bright indigo
         )
         is SpotlightStoryPage.TopGenres -> Triple(
             Color(0xFF10B981), // Emerald
@@ -209,16 +264,27 @@ fun SpotlightStoryScreen(
                 ) { pageIndex ->
                     val page = storyPages[pageIndex]
                     Box(modifier = Modifier.fillMaxSize()) {
-                        when (page) {
-                            is SpotlightStoryPage.ListeningMinutes -> ListeningMinutesPage(page)
-                            is SpotlightStoryPage.TopArtist -> TopArtistPage(page)
-                            is SpotlightStoryPage.TopTrackSetup -> TopTrackSetupPage(page)
-                            is SpotlightStoryPage.TopSongs -> TopSongsPage(page)
-                            is SpotlightStoryPage.TopGenres -> TopGenresPage(page)
-                            is SpotlightStoryPage.Personality -> PersonalityPage(page)
-                            is SpotlightStoryPage.Conclusion -> ConclusionPage(page)
+                            when (page) {
+                                is SpotlightStoryPage.ListeningMinutes -> ListeningMinutesPage(page)
+                                is SpotlightStoryPage.ListeningStreak -> ListeningStreakPage(page)
+                                is SpotlightStoryPage.ListeningClock -> ListeningClockPage(page)
+                                is SpotlightStoryPage.TopArtist -> TopArtistPage(page)
+                                is SpotlightStoryPage.TopAlbum -> TopAlbumPage(page)
+                                is SpotlightStoryPage.TopTrackSetup -> TopTrackSetupPage(page)
+                                is SpotlightStoryPage.TopSongs -> TopSongsPage(page)
+                                is SpotlightStoryPage.DiscoveryCount -> DiscoveryCountPage(page)
+                                is SpotlightStoryPage.AudioMood -> AudioMoodPage(page)
+                                is SpotlightStoryPage.WeekdayVsWeekend -> WeekdayVsWeekendPage(page)
+                                is SpotlightStoryPage.BingeSession -> BingeSessionPage(page)
+                                is SpotlightStoryPage.TimeOfDayVibes -> TimeOfDayVibesPage(page)
+                                is SpotlightStoryPage.BadgesEarned -> BadgesEarnedPage(page)
+                                is SpotlightStoryPage.LevelUp -> LevelUpPage(page)
+                                is SpotlightStoryPage.TitleEarned -> TitleEarnedPage(page)
+                                is SpotlightStoryPage.TopGenres -> TopGenresPage(page)
+                                is SpotlightStoryPage.Personality -> PersonalityPage(page)
+                                is SpotlightStoryPage.Conclusion -> ConclusionPage(page)
+                            }
                         }
-                    }
                 }
                 
                 // Watermark (Visible on screen too, optional but keeps consistency)
@@ -426,9 +492,20 @@ fun ShadowStoryRenderer(
                             Box(modifier = Modifier.fillMaxSize()) {
                                 when (page) {
                                     is SpotlightStoryPage.ListeningMinutes -> ListeningMinutesPage(page)
+                                    is SpotlightStoryPage.ListeningStreak -> ListeningStreakPage(page)
+                                    is SpotlightStoryPage.ListeningClock -> ListeningClockPage(page)
                                     is SpotlightStoryPage.TopArtist -> TopArtistPage(page)
+                                    is SpotlightStoryPage.TopAlbum -> TopAlbumPage(page)
                                     is SpotlightStoryPage.TopTrackSetup -> TopTrackSetupPage(page)
                                     is SpotlightStoryPage.TopSongs -> TopSongsPage(page)
+                                    is SpotlightStoryPage.DiscoveryCount -> DiscoveryCountPage(page)
+                                    is SpotlightStoryPage.AudioMood -> AudioMoodPage(page)
+                                    is SpotlightStoryPage.WeekdayVsWeekend -> WeekdayVsWeekendPage(page)
+                                    is SpotlightStoryPage.BingeSession -> BingeSessionPage(page)
+                                    is SpotlightStoryPage.TimeOfDayVibes -> TimeOfDayVibesPage(page)
+                                    is SpotlightStoryPage.BadgesEarned -> BadgesEarnedPage(page)
+                                    is SpotlightStoryPage.LevelUp -> LevelUpPage(page)
+                                    is SpotlightStoryPage.TitleEarned -> TitleEarnedPage(page)
                                     is SpotlightStoryPage.TopGenres -> TopGenresPage(page)
                                     is SpotlightStoryPage.Personality -> PersonalityPage(page)
                                     is SpotlightStoryPage.Conclusion -> ConclusionPage(page)

@@ -3,19 +3,16 @@ package me.avinas.tempo.data.importexport
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import androidx.room.withTransaction
 import me.avinas.tempo.BuildConfig
 import me.avinas.tempo.data.local.AppDatabase
 import me.avinas.tempo.data.local.entities.*
-import me.avinas.tempo.ui.onboarding.dataStore
+import me.avinas.tempo.data.profile.ProfileIdentityManager
 import me.avinas.tempo.worker.PostRestoreCacheWorker
 import okio.buffer
 import okio.source
@@ -40,12 +37,15 @@ import javax.inject.Singleton
 class ImportExportManager @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val database: AppDatabase,
+    private val profileIdentityManager: ProfileIdentityManager,
     private val statsRepository: me.avinas.tempo.data.repository.StatsRepository
 ) {
     companion object {
         private const val TAG = "ImportExportManager"
         private const val ALBUM_ART_DIR = "album_art"
         private const val IMAGES_DIR = "images/"
+        private const val MAX_BUNDLED_IMAGE_BYTES = 10L * 1024L * 1024L
+        private const val MAX_TOTAL_IMAGE_BYTES = 50L * 1024L * 1024L
     }
     
     private val moshi = buildImportExportMoshi()
@@ -87,9 +87,8 @@ class ImportExportManager @Inject constructor(
             val userLevel = database.gamificationDao().getUserLevel()
             val badges = database.gamificationDao().getAllBadges()
 
-            // v7: Collect display name from DataStore
-            val USER_NAME_KEY = stringPreferencesKey("user_name")
-            val userName = context.dataStore.data.first()[USER_NAME_KEY]
+            // v7+: Collect profile identity from DataStore
+            val profileIdentity = profileIdentityManager.getProfileIdentity()
 
             // v8: Collect user-known artists and daily challenge history (completed only)
             val userKnownArtists = database.userKnownArtistDao().getAll()
@@ -99,8 +98,13 @@ class ImportExportManager @Inject constructor(
             
             // Classify image URLs
             val (localPaths, hotlinkUrls) = collectImageUrls(tracks, artists, albums, enrichedMetadata)
+            val profileImagePath = profileIdentity.profileImagePath
+            val backupImagePaths = buildSet {
+                addAll(localPaths)
+                profileImagePath?.takeIf { it.startsWith("file://") }?.let(::add)
+            }
             
-            Log.i(TAG, "Found ${localPaths.size} local images, ${hotlinkUrls.size} hotlinks")
+            Log.i(TAG, "Found ${backupImagePaths.size} local images, ${hotlinkUrls.size} hotlinks")
             
             // Build local image manifest (only if including local images)
             val localImageManifest = mutableMapOf<String, String>()
@@ -112,23 +116,26 @@ class ImportExportManager @Inject constructor(
                     
                     // Bundle local images if enabled
                     var bundledCount = 0
-                    if (includeLocalImages && localPaths.isNotEmpty()) {
-                        _progress.value = ImportExportProgress("Bundling ${localPaths.size} images...", 50, 100)
+                    if (backupImagePaths.isNotEmpty()) {
+                        val bundleCount = if (includeLocalImages) backupImagePaths.size else if (profileImagePath != null) 1 else 0
+                        _progress.value = ImportExportProgress("Bundling $bundleCount images...", 50, 100)
                         
-                        localPaths.forEachIndexed { index, filePath ->
+                        backupImagePaths.forEachIndexed { index, filePath ->
+                            if (!includeLocalImages && filePath != profileImagePath) return@forEachIndexed
                             try {
-                                val originalPath = filePath.removePrefix("file://")
-                                val file = File(originalPath)
-                                if (file.exists()) {
+                                val file = resolveExportableLocalImage(filePath)
+                                if (file != null) {
                                     val bundledName = "img_${index}_${file.name}"
                                     zipOut.putNextEntry(ZipEntry("$IMAGES_DIR$bundledName"))
                                     file.inputStream().use { it.copyTo(zipOut) }
                                     zipOut.closeEntry()
                                     localImageManifest[bundledName] = filePath
                                     bundledCount++
+                                } else {
+                                    Log.w(TAG, "Skipping non-app-local image path in export")
                                 }
                             } catch (e: Exception) {
-                                Log.w(TAG, "Failed to bundle image: $filePath", e)
+                                Log.w(TAG, "Failed to bundle image", e)
                             }
                         }
                     }
@@ -139,7 +146,8 @@ class ImportExportManager @Inject constructor(
                     val exportData = TempoExportData(
                         appVersion = BuildConfig.VERSION_NAME,
                         schemaVersion = AppDatabase.VERSION,
-                        userName = userName,
+                        userName = profileIdentity.userName,
+                        userProfileImagePath = profileImagePath,
                         tracks = tracks,
                         artists = artists,
                         albums = albums,
@@ -206,6 +214,7 @@ class ImportExportManager @Inject constructor(
             // First pass: read data.json to get manifest
             var exportData: TempoExportData? = null
             val extractedImages = mutableMapOf<String, String>() // bundledName -> newPath
+            var totalExtractedImageBytes = 0L
             
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 ZipInputStream(BufferedInputStream(inputStream)).use { zipIn ->
@@ -221,9 +230,16 @@ class ImportExportManager @Inject constructor(
                             entry.name.startsWith(IMAGES_DIR) && !entry.isDirectory -> {
                                 // Extract image to local storage
                                 val bundledName = entry.name.removePrefix(IMAGES_DIR)
-                                val newPath = extractImage(zipIn, bundledName)
-                                if (newPath != null) {
-                                    extractedImages[bundledName] = newPath
+                                val safeBundledName = sanitizeBundledImageName(bundledName)
+                                if (safeBundledName == null) {
+                                    Log.w(TAG, "Skipping unsafe bundled image name in import")
+                                } else {
+                                    val remainingBudget = MAX_TOTAL_IMAGE_BYTES - totalExtractedImageBytes
+                                    val extracted = extractImage(zipIn, safeBundledName, remainingBudget)
+                                    if (extracted != null) {
+                                        extractedImages[safeBundledName] = extracted.path
+                                        totalExtractedImageBytes += extracted.bytesWritten
+                                    }
                                 }
                             }
                         }
@@ -487,12 +503,17 @@ class ImportExportManager @Inject constructor(
             
             } // end database.withTransaction
             
-            // v7: Restore display name to DataStore (outside transaction — independent system)
+            // v7+: Restore profile identity to DataStore (outside transaction — independent system)
             data.userName?.takeIf { it.isNotBlank() }?.let { name ->
-                val USER_NAME_KEY = stringPreferencesKey("user_name")
-                context.dataStore.edit { it[USER_NAME_KEY] = name }
+                profileIdentityManager.updateUserName(name)
                 Log.i(TAG, "Restored user name: $name")
             }
+            val restoredProfileImagePath = resolveRestoredProfileImagePath(
+                exportedProfileImagePath = data.userProfileImagePath,
+                pathMapping = pathMapping
+            )
+            profileIdentityManager.restoreProfileImagePath(restoredProfileImagePath)
+            Log.i(TAG, "Restored profile image path present=${!restoredProfileImagePath.isNullOrBlank()}")
             
             // Schedule pre-caching of hotlinked images
             if (data.hotlinkedUrls.isNotEmpty()) {
@@ -562,19 +583,82 @@ class ImportExportManager @Inject constructor(
     /**
      * Extract an image from the ZIP to local storage.
      */
-    private fun extractImage(zipIn: ZipInputStream, bundledName: String): String? {
+    private fun extractImage(
+        zipIn: ZipInputStream,
+        bundledName: String,
+        remainingTotalBudgetBytes: Long
+    ): ExtractedImage? {
         return try {
+            if (remainingTotalBudgetBytes <= 0L) {
+                Log.w(TAG, "Skipping image extraction: total image budget exhausted")
+                return null
+            }
+
             val albumArtDir = File(context.filesDir, ALBUM_ART_DIR)
             if (!albumArtDir.exists()) albumArtDir.mkdirs()
             
             val newFile = File(albumArtDir, bundledName)
-            newFile.outputStream().use { zipIn.copyTo(it) }
-            
-            "file://${newFile.absolutePath}"
+            val bytesWritten = copyLimited(
+                input = zipIn,
+                outputFile = newFile,
+                byteLimit = minOf(MAX_BUNDLED_IMAGE_BYTES, remainingTotalBudgetBytes)
+            )
+
+            ExtractedImage(
+                path = "file://${newFile.absolutePath}",
+                bytesWritten = bytesWritten
+            )
         } catch (e: Exception) {
+            if (e is SecurityException) throw e
             Log.w(TAG, "Failed to extract image: $bundledName", e)
             null
         }
+    }
+
+    private fun copyLimited(
+        input: InputStream,
+        outputFile: File,
+        byteLimit: Long
+    ): Long {
+        var total = 0L
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        outputFile.outputStream().use { output ->
+            while (true) {
+                val read = input.read(buffer)
+                if (read == -1) break
+                total += read
+                if (total > byteLimit) {
+                    outputFile.delete()
+                    throw SecurityException("Image entry exceeds import size limit")
+                }
+                output.write(buffer, 0, read)
+            }
+        }
+        return total
+    }
+
+    private fun sanitizeBundledImageName(bundledName: String): String? {
+        val candidate = bundledName.trim()
+        if (candidate.isBlank() || candidate.length > 128) return null
+        if (candidate.contains('/') || candidate.contains('\\') || candidate == "." || candidate == "..") return null
+        if (candidate.contains("..")) return null
+        return candidate
+    }
+
+    private fun resolveExportableLocalImage(fileUri: String): File? {
+        if (!fileUri.startsWith("file://")) return null
+
+        val file = File(fileUri.removePrefix("file://"))
+        if (!file.exists() || !file.isFile) return null
+
+        val canonicalFile = file.canonicalFile
+        val allowedRoots = listOf(context.filesDir, context.cacheDir).map { it.canonicalFile }
+        val isAllowed = allowedRoots.any { root ->
+            canonicalFile.path == root.path || canonicalFile.path.startsWith(root.path + File.separator)
+        }
+        if (!isAllowed) return null
+        if (canonicalFile.length() > MAX_BUNDLED_IMAGE_BYTES) return null
+        return canonicalFile
     }
     
     // Path remapping functions for different entity types
@@ -600,5 +684,22 @@ class ImportExportManager @Inject constructor(
             albumArtUrlSmall = meta.albumArtUrlSmall?.let { pathMapping[it] ?: it },
             albumArtUrlLarge = meta.albumArtUrlLarge?.let { pathMapping[it] ?: it }
         )
+    }
+}
+
+private data class ExtractedImage(
+    val path: String,
+    val bytesWritten: Long
+)
+
+internal fun resolveRestoredProfileImagePath(
+    exportedProfileImagePath: String?,
+    pathMapping: Map<String, String>
+): String? {
+    if (exportedProfileImagePath.isNullOrBlank()) return null
+    return if (exportedProfileImagePath.startsWith("file://")) {
+        pathMapping[exportedProfileImagePath]
+    } else {
+        exportedProfileImagePath
     }
 }

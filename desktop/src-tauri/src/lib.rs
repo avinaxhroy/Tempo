@@ -213,6 +213,12 @@ pub fn run() {
                 connection_health_loop(app_handle3).await;
             });
 
+            // Start background update checker (30 s delay, then every 24 h)
+            let app_handle_upd = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                update_check_loop(app_handle_upd).await;
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -255,6 +261,8 @@ pub fn run() {
             commands::settings::get_battery_status,
             commands::settings::get_battery_saver_active,
             commands::settings::enable_browser_apple_events,
+            commands::update::check_for_update,
+            commands::update::open_releases_page,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Tempo Desktop")
@@ -395,6 +403,11 @@ async fn handle_pairing_request(
             }
         })
         .unwrap_or(0);
+
+    if content_length > buf.len().saturating_sub(header_end) {
+        let _ = stream.write_all(http_response(413, "payload_too_large").as_bytes()).await;
+        return;
+    }
 
     while received < header_end + content_length {
         match stream.read(&mut buf[received..]).await {
@@ -607,5 +620,35 @@ async fn connection_health_loop(app_handle: tauri::AppHandle) {
 
         // Check every 60 seconds
         tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+    }
+}
+
+/// Checks for desktop updates on startup (after a short delay) and once every
+/// 24 hours.  Emits `update-available` to the frontend when a newer
+/// `desktop-v*` release is found on GitHub.
+async fn update_check_loop(app_handle: tauri::AppHandle) {
+    // Wait 30 s after startup so the UI is ready and connections are settled.
+    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+
+    loop {
+        match commands::update::check_for_update().await {
+            Ok(info) if info.available => {
+                log::info!(
+                    "Update available: {} (running {})",
+                    info.latest_version,
+                    env!("CARGO_PKG_VERSION")
+                );
+                let _ = app_handle.emit("update-available", &info);
+            }
+            Ok(_) => {
+                log::debug!("Update check: already on latest version");
+            }
+            Err(e) => {
+                log::warn!("Update check failed: {}", e);
+            }
+        }
+
+        // Re-check once every 24 hours.
+        tokio::time::sleep(tokio::time::Duration::from_secs(86_400)).await;
     }
 }

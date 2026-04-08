@@ -905,3 +905,63 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-light);
 }
+
+/* ===== Update Banner ===== */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: var(--warning-soft);
+  border-bottom: 1px solid var(--warning);
+  color: var(--warning);
+  font-size: 0.8rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.update-banner__icon {
+  display: flex;
+  align-items: center;
+  opacity: 0.9;
+}
+
+.update-banner__text {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.update-banner__text strong {
+  color: var(--warning);
+}
+
+.update-banner__cta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--warning) !important;
+  color: #000 !important;
+  border-color: var(--warning) !important;
+  padding: 3px 10px !important;
+  font-size: 0.75rem !important;
+}
+
+.update-banner__cta:hover {
+  opacity: 0.88;
+}
+
+.update-banner__dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s;
+}
+
+.update-banner__dismiss:hover {
+  color: var(--text-primary);
+}

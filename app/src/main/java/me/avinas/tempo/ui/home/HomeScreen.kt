@@ -109,6 +109,7 @@ fun HomeScreen(
                         energy = uiState.audioFeatures?.averageEnergy ?: 0.5f,
                         valence = uiState.audioFeatures?.averageValence ?: 0.5f,
                         userName = uiState.userName ?: stringResource(R.string.home_user_default),
+                        profileImagePath = uiState.profileImagePath,
                         isNewUser = uiState.isNewUser,
                         userLevel = userLevel?.currentLevel,
                         levelProgress = userLevel?.levelProgress ?: 0f,
@@ -317,6 +318,7 @@ fun HomeScreen(
         if (uiState.showSpotlightReminder && reminderType != null) {
             me.avinas.tempo.ui.components.SpotlightReminderPopup(
                 type = reminderType,
+                timeRange = uiState.reminderTimeRange,
                 onDismiss = viewModel::dismissSpotlightReminder,
                 onViewStory = {
                     // Navigate to Spotlight with the specified time range

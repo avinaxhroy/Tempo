@@ -12,6 +12,7 @@ import type {
   ConnectionStatus,
   ExtendedStats,
   BatteryStatus,
+  UpdateInfo,
 } from "./types";
 
 // --- Pairing ---
@@ -192,4 +193,14 @@ export async function getBatteryStatus(): Promise<BatteryStatus> {
 
 export async function getBatterySaverActive(): Promise<boolean> {
   return invoke("get_battery_saver_active");
+}
+
+// --- Updates ---
+
+export async function checkForUpdate(): Promise<UpdateInfo> {
+  return invoke("check_for_update");
+}
+
+export async function openReleasesPage(): Promise<void> {
+  return invoke("open_releases_page");
 }

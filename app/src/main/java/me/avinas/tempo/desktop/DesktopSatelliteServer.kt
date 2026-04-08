@@ -12,9 +12,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.avinas.tempo.utils.BatteryUtils
 import org.json.JSONObject
+import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -48,6 +51,10 @@ class DesktopSatelliteServer @Inject constructor(
         private const val TAG = "DesktopSatelliteServer"
         private const val MIME_JSON = "application/json"
         private const val MAX_BODY_BYTES = 512 * 1024 // 512 KB guard – plenty for any play batch
+        private const val SIGNATURE_HEADER = "x-tempo-signature"
+        private const val HMAC_SHA256 = "HmacSHA256"
+        private const val MIN_TOKEN_LENGTH = 16
+        private const val MAX_TOKEN_LENGTH = 128
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -174,10 +181,19 @@ class DesktopSatelliteServer @Inject constructor(
                 return errorResponse(Response.Status.SERVICE_UNAVAILABLE, "battery_critical")
             }
 
+            val declaredLength = session.headers["content-length"]?.toIntOrNull() ?: 0
+            if (declaredLength > MAX_BODY_BYTES) {
+                return errorResponse(Response.Status.BAD_REQUEST, "payload_too_large")
+            }
+
             val body = try {
                 val buf = HashMap<String, String>()
                 session.parseBody(buf)
-                buf["postData"] ?: return errorResponse(Response.Status.BAD_REQUEST, "empty_body")
+                val raw = buf["postData"] ?: return errorResponse(Response.Status.BAD_REQUEST, "empty_body")
+                if (raw.toByteArray(Charsets.UTF_8).size > MAX_BODY_BYTES) {
+                    return errorResponse(Response.Status.BAD_REQUEST, "payload_too_large")
+                }
+                raw
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to parse pair-confirm body", e)
                 return errorResponse(Response.Status.BAD_REQUEST, "parse_error")
@@ -191,8 +207,11 @@ class DesktopSatelliteServer @Inject constructor(
 
             val token = json.optString("auth_token").takeIf { it.isNotBlank() }
                 ?: return errorResponse(Response.Status.UNAUTHORIZED, "missing_token")
+            if (!isValidToken(token)) {
+                return errorResponse(Response.Status.UNAUTHORIZED, "invalid_token")
+            }
 
-            runBlockingPairingLookup(token)
+            pairingManager.validateTokenBlocking(token)
                 ?: return errorResponse(Response.Status.UNAUTHORIZED, "invalid_token")
 
             val deviceName = Build.MODEL
@@ -236,6 +255,14 @@ class DesktopSatelliteServer @Inject constructor(
             // 3. Extract and validate token from payload
             val token = json.optString("auth_token").takeIf { it.isNotBlank() }
                 ?: return errorResponse(Response.Status.UNAUTHORIZED, "missing_token")
+            if (!isValidToken(token)) {
+                return errorResponse(Response.Status.UNAUTHORIZED, "invalid_token")
+            }
+
+            val signature = session.headers[SIGNATURE_HEADER].orEmpty()
+            if (!isValidSignature(token, body, signature)) {
+                return errorResponse(Response.Status.UNAUTHORIZED, "invalid_signature")
+            }
 
             // 3.5 Battery check: reject plays if battery is critically low (≤ 20%)
             if (BatteryUtils.isCriticalBattery(context, forceRefresh = true)) {
@@ -284,8 +311,26 @@ class DesktopSatelliteServer @Inject constructor(
         private fun errorResponse(status: Response.Status, code: String): Response =
             newFixedLengthResponse(status, MIME_JSON, """{"ok":false,"error":"$code"}""")
 
-        private fun runBlockingPairingLookup(token: String) = kotlinx.coroutines.runBlocking {
-            pairingManager.validateToken(token)
+        private fun DesktopPairingManager.validateTokenBlocking(token: String) = kotlinx.coroutines.runBlocking {
+            validateToken(token)
         }
+
+        private fun isValidSignature(token: String, body: String, signature: String): Boolean {
+            if (signature.length != 64 || !signature.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+                return false
+            }
+
+            val mac = Mac.getInstance(HMAC_SHA256)
+            mac.init(SecretKeySpec(token.toByteArray(Charsets.UTF_8), HMAC_SHA256))
+            val expected = mac.doFinal(body.toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            return MessageDigest.isEqual(
+                expected.toByteArray(Charsets.US_ASCII),
+                signature.lowercase().toByteArray(Charsets.US_ASCII)
+            )
+        }
+
+        private fun isValidToken(token: String): Boolean =
+            token.length in MIN_TOKEN_LENGTH..MAX_TOKEN_LENGTH
     }
 }

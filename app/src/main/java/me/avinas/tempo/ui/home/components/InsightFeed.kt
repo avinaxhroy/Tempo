@@ -49,11 +49,11 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
-import me.avinas.tempo.ui.profile.CompactLevelRing
 import androidx.compose.ui.res.stringResource
 import me.avinas.tempo.R
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.layout.ContentScale
+import me.avinas.tempo.ui.components.CachedAsyncImage
 
 
 @Composable
@@ -85,6 +85,7 @@ fun VibeHeader(
     energy: Float,
     valence: Float,
     userName: String,
+    profileImagePath: String? = null,
     isNewUser: Boolean = false,
     userLevel: Int? = null,
     levelProgress: Float = 0f,
@@ -127,11 +128,52 @@ fun VibeHeader(
         label = "scale"
     )
     
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(110.dp) // Reduced height for balanced profile feel
+            .heightIn(min = 132.dp)
     ) {
+        val outerHorizontalPadding = 16.dp
+        val trailingActionInset = if (maxWidth < 360.dp) 72.dp else 88.dp
+        val availableHeaderWidth = (maxWidth - outerHorizontalPadding - trailingActionInset).coerceAtLeast(180.dp)
+        val compactLayout = availableHeaderWidth < 240.dp
+        val ultraCompactLayout = availableHeaderWidth < 205.dp
+
+        val avatarSize: Dp = when {
+            ultraCompactLayout -> 44.dp
+            compactLayout -> 48.dp
+            else -> 56.dp
+        }
+        val rowPaddingH = when {
+            ultraCompactLayout -> 10.dp
+            compactLayout -> 12.dp
+            else -> 14.dp
+        }
+        val rowPaddingV = when {
+            ultraCompactLayout -> 8.dp
+            else -> 10.dp
+        }
+        val itemSpacing = when {
+            ultraCompactLayout -> 10.dp
+            compactLayout -> 12.dp
+            else -> 16.dp
+        }
+        val nameTextStyle = when {
+            ultraCompactLayout -> MaterialTheme.typography.titleSmall
+            compactLayout -> MaterialTheme.typography.titleMedium
+            else -> MaterialTheme.typography.titleLarge
+        }
+        val levelNumStyle = when {
+            ultraCompactLayout -> MaterialTheme.typography.bodyMedium
+            compactLayout -> MaterialTheme.typography.titleSmall
+            else -> MaterialTheme.typography.titleMedium
+        }
+        val titleStyle = if (compactLayout) {
+            MaterialTheme.typography.labelSmall
+        } else {
+            MaterialTheme.typography.labelMedium
+        }
+
         // Dynamic Nebula Gradient (Enhanced)
         Canvas(modifier = Modifier.fillMaxSize()) {
             val width = size.width
@@ -160,36 +202,12 @@ fun VibeHeader(
             )
         }
         
-        // --- Adaptive sizing based on screen width ---
-        val screenWidthDp = LocalConfiguration.current.screenWidthDp
-        // Available pill width = screenWidth - start(16) - end(120) - card internal padding
-        val availableDp = (screenWidthDp - 16 - 120).coerceAtLeast(120)
-
-        // Ring: scales between 40dp (tiny screens) and 56dp (large screens),
-        // proportional to available space. Clamped for safety.
-        val ringSize: Dp = ((availableDp * 0.18f).coerceIn(40f, 56f)).dp
-        val strokeWidthDp: Dp = ((ringSize.value * 0.09f).coerceIn(3.5f, 5.5f)).dp
-
-        // Row padding and spacing also scale with available width
-        val rowPaddingH: Dp = ((availableDp * 0.04f).coerceIn(8f, 14f)).dp
-        val rowPaddingV: Dp = ((availableDp * 0.03f).coerceIn(6f, 12f)).dp
-        val itemSpacing: Dp = ((availableDp * 0.06f).coerceIn(8f, 16f)).dp
-
-        // Text: use titleMedium on narrow, titleLarge on wide screens
-        val nameTextStyle = if (availableDp < 200) MaterialTheme.typography.titleSmall
-                            else if (availableDp < 260) MaterialTheme.typography.titleMedium
-                            else MaterialTheme.typography.titleLarge
-        val levelNumStyle = if (availableDp < 200) MaterialTheme.typography.bodyMedium
-                            else MaterialTheme.typography.titleMedium
-        val titleStyle = if (availableDp < 200) MaterialTheme.typography.labelSmall
-                         else MaterialTheme.typography.labelMedium
-
         Column(
             modifier = Modifier
                 .statusBarsPadding()
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
-                .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 120.dp)
+                .padding(start = outerHorizontalPadding, top = 8.dp, bottom = 12.dp, end = trailingActionInset)
         ) {
             // Premium Opaque Card for Profile - Minimalist Pill Edition
             Surface(
@@ -199,6 +217,7 @@ fun VibeHeader(
                         enabled = isGamificationEnabled,
                         onClick = onLevelClick
                     )
+                    .defaultMinSize(minHeight = if (!levelTitle.isNullOrBlank()) 72.dp else 64.dp)
                     .shadow(
                         elevation = 12.dp,
                         shape = RoundedCornerShape(100.dp),
@@ -214,81 +233,97 @@ fun VibeHeader(
                     horizontalArrangement = Arrangement.spacedBy(itemSpacing)
                 ) {
                     // Left: Adaptive Level Ring
-                    if (isGamificationEnabled) {
-                        val level = userLevel ?: 0
-                        val progress = levelProgress
-
-                        Box(
-                            modifier = Modifier.size(ringSize),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Canvas(modifier = Modifier.fillMaxSize()) {
-                                val sw = strokeWidthDp.toPx()
-                                val radius = (size.minDimension - sw) / 2
-
-                                drawCircle(
-                                    color = Color(0xFFF3F4F6),
-                                    radius = radius,
-                                    style = Stroke(width = sw, cap = StrokeCap.Round)
-                                )
-                                if (progress > 0f) {
-                                    drawArc(
-                                        brush = Brush.sweepGradient(
-                                            listOf(Color(0xFFFBBF24), Color(0xFFFFD700), Color(0xFFF59E0B))
-                                        ),
-                                        startAngle = -90f,
-                                        sweepAngle = 360f * progress,
-                                        useCenter = false,
-                                        style = Stroke(width = sw, cap = StrokeCap.Round),
-                                        size = Size(radius * 2, radius * 2),
-                                        topLeft = Offset((size.width - radius * 2) / 2, (size.height - radius * 2) / 2)
-                                    )
-                                }
-                            }
-
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center,
-                                modifier = Modifier.offset(y = (-1).dp)
-                            ) {
-                                ResponsiveText(
-                                    text = "$level",
-                                    style = levelNumStyle.copy(lineHeight = levelNumStyle.fontSize * 1.1),
-                                    fontWeight = FontWeight.Black,
-                                    color = Color(0xFF111827),
-                                    maxLines = 1
-                                )
-                                ResponsiveText(
-                                    text = stringResource(R.string.home_lvl),
-                                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.4.sp),
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF9CA3AF),
-                                    maxLines = 1
-                                )
-                            }
+                    Box(
+                        modifier = Modifier
+                            .size(avatarSize)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.16f))
+                            .border(1.dp, Color.White.copy(alpha = 0.34f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (profileImagePath.isNullOrBlank()) {
+                            Text(
+                                text = userName.firstOrNull()?.toString()?.uppercase() ?: "U",
+                                style = levelNumStyle.copy(lineHeight = levelNumStyle.fontSize * 1.1),
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF111827),
+                                maxLines = 1
+                            )
+                        } else {
+                            CachedAsyncImage(
+                                imageUrl = profileImagePath,
+                                contentDescription = "Profile image",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
                         }
                     }
 
                     // Right: User Info - weight(1f) ensures it fills remaining space
                     Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.Center
+                        modifier = Modifier
+                            .weight(1f)
+                            .widthIn(min = 0.dp),
+                        verticalArrangement = Arrangement.spacedBy(if (levelTitle.isNullOrBlank()) 0.dp else 2.dp)
                     ) {
-                        ResponsiveText(
-                            text = userName,
-                            style = nameTextStyle,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF111827),
-                            maxLines = 1
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ResponsiveText(
+                                text = userName,
+                                style = nameTextStyle.copy(
+                                    lineHeight = if (ultraCompactLayout) {
+                                        nameTextStyle.fontSize * 1.05f
+                                    } else {
+                                        nameTextStyle.fontSize * 1.1f
+                                    }
+                                ),
+                                modifier = Modifier.weight(1f),
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF111827),
+                                maxLines = if (ultraCompactLayout) 2 else 1,
+                                softWrap = ultraCompactLayout,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            if (isGamificationEnabled) {
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = Color(0xFFF8FAFC),
+                                    tonalElevation = 0.dp,
+                                    shadowElevation = 0.dp
+                                ) {
+                                    Text(
+                                        text = "LVL ${userLevel ?: 0}",
+                                        modifier = Modifier.padding(
+                                            horizontal = if (compactLayout) 8.dp else 10.dp,
+                                            vertical = 5.dp
+                                        ),
+                                        style = if (compactLayout) {
+                                            MaterialTheme.typography.labelSmall
+                                        } else {
+                                            MaterialTheme.typography.labelMedium
+                                        },
+                                        fontWeight = FontWeight.Black,
+                                        color = Color(0xFF111827),
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
                         if (isGamificationEnabled && !levelTitle.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.height(1.dp))
                             ResponsiveText(
                                 text = levelTitle.uppercase(),
-                                style = titleStyle.copy(letterSpacing = 1.sp),
+                                style = titleStyle.copy(
+                                    letterSpacing = if (compactLayout) 0.6.sp else 0.9.sp,
+                                    lineHeight = titleStyle.fontSize * 1.15f
+                                ),
                                 color = Color(0xFFEC4899),
                                 fontWeight = FontWeight.Bold,
-                                maxLines = 1
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -389,10 +424,12 @@ private fun ResponsiveText(
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
     fontWeight: FontWeight? = null,
-    maxLines: Int = 1
+    maxLines: Int = 1,
+    softWrap: Boolean = false,
+    overflow: TextOverflow = TextOverflow.Clip
 ) {
-    var fontSize by remember(text) { mutableStateOf(style.fontSize) }
-    var readyToDraw by remember(text) { mutableStateOf(false) }
+    var fontSize by remember(text, style.fontSize, maxLines, softWrap) { mutableStateOf(style.fontSize) }
+    var readyToDraw by remember(text, style.fontSize, maxLines, softWrap) { mutableStateOf(false) }
 
     Text(
         text = text,
@@ -403,7 +440,8 @@ private fun ResponsiveText(
         color = color,
         fontWeight = fontWeight,
         maxLines = maxLines,
-        softWrap = false,
+        softWrap = softWrap,
+        overflow = overflow,
         onTextLayout = { textLayoutResult ->
             if (textLayoutResult.hasVisualOverflow && fontSize.value > 12f) {
                 fontSize = (fontSize.value * 0.9f).sp

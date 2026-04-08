@@ -118,6 +118,17 @@ export interface SourceBreakdown {
   count: number;
 }
 
+export interface UpdateInfo {
+  available: boolean;
+  /** Semver string, e.g. "1.2.0" */
+  latest_version: string;
+  /** Full tag name, e.g. "desktop-v1.2.0" */
+  tag_name: string;
+  /** URL to the GitHub release page */
+  release_url: string;
+  release_notes: string;
+}
+
 /** Structured error from the backend */
 export interface AppError {
   kind: string;
