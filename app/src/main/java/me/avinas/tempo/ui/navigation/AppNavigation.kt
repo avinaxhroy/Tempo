@@ -98,6 +98,8 @@ fun AppNavigation(
                 launchSingleTop = true
                 restoreState = true
             }
+        } else if (navigationTrigger == "background_protection") {
+            navController.navigate(Screen.BackgroundProtection.route)
         }
     }
 

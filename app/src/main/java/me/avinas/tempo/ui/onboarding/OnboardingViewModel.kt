@@ -28,12 +28,17 @@ class OnboardingViewModel @Inject constructor(
     val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()
 
     private val ONBOARDING_COMPLETED_KEY = booleanPreferencesKey("onboarding_completed")
+    private val XIAOMI_GUIDANCE_SHOWN_KEY = booleanPreferencesKey("xiaomi_guidance_shown")
 
     init {
         viewModelScope.launch {
             // Load completion status from DataStore
             val onboardingCompleted = context.dataStore.data.map { 
                 it[ONBOARDING_COMPLETED_KEY] ?: false 
+            }.first()
+
+            val xiaomiGuidanceShown = context.dataStore.data.map {
+                it[XIAOMI_GUIDANCE_SHOWN_KEY] ?: false
             }.first()
             
             // Load other preferences from Room
@@ -42,6 +47,7 @@ class OnboardingViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 isOnboardingCompleted = onboardingCompleted,
+                xiaomiGuidanceShown = xiaomiGuidanceShown,
                 extendedAudioAnalysisEnabled = roomPrefs.extendedAudioAnalysis,
                 mergeAlternateVersions = roomPrefs.mergeAlternateVersions
             )
@@ -53,6 +59,15 @@ class OnboardingViewModel @Inject constructor(
             context.dataStore.edit { preferences ->
                 preferences[ONBOARDING_COMPLETED_KEY] = true
             }
+        }
+    }
+
+    fun markXiaomiGuidanceShown() {
+        viewModelScope.launch {
+            context.dataStore.edit { preferences ->
+                preferences[XIAOMI_GUIDANCE_SHOWN_KEY] = true
+            }
+            _uiState.value = _uiState.value.copy(xiaomiGuidanceShown = true)
         }
     }
     
@@ -76,6 +91,7 @@ class OnboardingViewModel @Inject constructor(
 data class OnboardingUiState(
     val isLoading: Boolean = true,
     val isOnboardingCompleted: Boolean = false,
+    val xiaomiGuidanceShown: Boolean = false,
     val extendedAudioAnalysisEnabled: Boolean = false,
     val mergeAlternateVersions: Boolean = true
 )

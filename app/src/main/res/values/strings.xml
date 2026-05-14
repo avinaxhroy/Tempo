@@ -404,6 +404,12 @@
     <string name="bg_protection_lock_boost">Lock in Boost Speed</string>
     <string name="bg_protection_disable_miui">Disable MIUI Optimizations</string>
 
+    <!-- Xiaomi First-Time Guidance Popup -->
+    <string name="xiaomi_guidance_title">Extra Setup Required</string>
+    <string name="xiaomi_guidance_desc">Xiaomi devices aggressively kill background apps. Without extra configuration, Tempo may stop tracking your music.</string>
+    <string name="xiaomi_guidance_configure">Configure Now</string>
+    <string name="xiaomi_guidance_later">Maybe Later</string>
+
     <!-- Spotify Settings Section -->
     <string name="spotify_integration">Spotify Integration</string>
     <string name="spotify_disconnect_title">Disconnect Spotify?</string>

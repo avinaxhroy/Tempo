@@ -1,12 +1,14 @@
 package me.avinas.tempo.ui.desktop
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
@@ -955,10 +957,14 @@ private fun formatListeningTime(ms: Long): String {
 private fun DesktopAppDownloadButton(context: Context) {
     OutlinedButton(
         onClick = {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://tempo.avinas.me/desktop"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
+            try {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("https://tempo.avinas.me/desktop"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(context, "No browser found", Toast.LENGTH_SHORT).show()
+            }
         },
         colors = ButtonDefaults.outlinedButtonColors(contentColor = TempoPrimary),
         border = BorderStroke(1.dp, TempoPrimary.copy(alpha = 0.6f)),

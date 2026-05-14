@@ -22,6 +22,7 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.size.Precision
 import coil3.size.Scale
+import coil3.size.Size
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -109,6 +110,8 @@ fun AlbumArtImage(
                 // INEXACT precision lets Coil reuse cached images even if size doesn't match
                 .precision(Precision.INEXACT)
                 .scale(Scale.FILL)
+                // Cap at 2048px to prevent OOM from extremely large bitmaps
+                .size(Size(2048, 2048))
                 .build()
         }
         

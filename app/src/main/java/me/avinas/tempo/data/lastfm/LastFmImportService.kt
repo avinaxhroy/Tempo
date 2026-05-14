@@ -217,9 +217,12 @@ class LastFmImportService @Inject constructor(
     // ==================== Performance Optimization Caches ====================
 
     // In-memory track cache to avoid N+1 queries during import
-    // Key: "title|artist" normalized, Value: Track or null
+    // Key: "title|artist" normalized, Value: Track
     // ConcurrentHashMap: cancelImport() may clear this while import iterates it.
-    private val trackCache = java.util.concurrent.ConcurrentHashMap<String, Track?>()
+    private val trackCache = java.util.concurrent.ConcurrentHashMap<String, Track>()
+    // Separate cache for confirmed misses (looked up in DB but not found).
+    // ConcurrentHashMap does not allow null values, so we track misses separately.
+    private val trackMissCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
     // Batch pending EnrichedMetadata for bulk insert
     private val pendingMetadata = mutableListOf<EnrichedMetadata>()
@@ -1062,6 +1065,7 @@ class LastFmImportService @Inject constructor(
         
         // Clear performance caches
         trackCache.clear()
+        trackMissCache.clear()
         pendingTracks.clear()
         Log.d(TAG, "Import complete - caches cleared")
         
@@ -1116,16 +1120,20 @@ class LastFmImportService @Inject constructor(
         var isNewArtist = false
         var needsMetadata = false
         
-        // Check if we've already looked this up (null means looked up but not found)
-        if (!trackCache.containsKey(cacheKey)) {
+        // Check if we've already looked this up
+        if (!trackCache.containsKey(cacheKey) && !trackMissCache.containsKey(cacheKey)) {
             // First time seeing this track - check database
             track = trackRepository.findByTitleAndArtist(trackTitle, artistName)
             if (track == null) {
                 // Try fuzzy match
                 track = trackRepository.findByTitleAndArtistFuzzy(trackTitle, artistName)
             }
-            // Cache the result (even null to avoid repeated lookups)
-            trackCache[cacheKey] = track
+            // Cache the result (use miss cache for null to avoid repeated lookups)
+            if (track != null) {
+                trackCache[cacheKey] = track
+            } else {
+                trackMissCache[cacheKey] = true
+            }
         }
         
         if (track == null) {
@@ -1344,6 +1352,7 @@ class LastFmImportService @Inject constructor(
         lovedTrackKeys.clear()
         // Clear performance caches
         trackCache.clear()
+        trackMissCache.clear()
         pendingTracks.clear()
         pendingMetadata.clear()
     }
@@ -1791,12 +1800,28 @@ class LastFmImportService @Inject constructor(
                     if (freeSpaceRatio > 0.10) {
                         Log.d(TAG, "Running incremental VACUUM (free space > 10%)...")
                         // Vacuum up to 1000 pages at a time to avoid blocking
-                        db.execSQL("PRAGMA incremental_vacuum(1000)")
+                        // Note: PRAGMA incremental_vacuum returns a result set
+                        db.query("PRAGMA incremental_vacuum(1000)").use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val pagesFreed = cursor.getInt(0)
+                                Log.d(TAG, "Incremental VACUUM freed $pagesFreed pages")
+                            }
+                        }
                     }
                     
                     // 3. Checkpoint WAL to merge changes into main database
+                    // Note: PRAGMA wal_checkpoint returns a result set, so we must use query()
+                    // instead of execSQL() to avoid "Queries can be performed using SQLiteDatabase
+                    // query or rawQuery methods only" error on some Android versions.
                     Log.d(TAG, "Checkpointing WAL...")
-                    db.execSQL("PRAGMA wal_checkpoint(PASSIVE)")
+                    db.query("PRAGMA wal_checkpoint(PASSIVE)").use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val busy = cursor.getInt(0)
+                            val log = cursor.getInt(1)
+                            val checkpointed = cursor.getInt(2)
+                            Log.d(TAG, "WAL checkpoint result: busy=$busy, log=$log, checkpointed=$checkpointed")
+                        }
+                    }
                 }
                 
                 // 4. Invalidate stats cache

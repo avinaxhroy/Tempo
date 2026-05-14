@@ -196,12 +196,20 @@ fun StatsScreen(
                     // Remaining Items
                     itemsIndexed(
                         items = remainingItems,
-                        key = { index, item -> 
+                        key = { _, item -> 
                             when (item) {
-                                is TopTrack -> "track_${index}_${item.trackId}"
-                                is TopArtist -> "artist_${index}_${item.artistId ?: item.artist}"
-                                is TopAlbum -> "album_${index}_${item.album}_${item.artist}"
-                                else -> "item_${index}"
+                                is TopTrack -> "track_${item.trackId}"
+                                is TopArtist -> "artist_${item.artistId ?: item.artist}"
+                                is TopAlbum -> "album_${item.album}_${item.artist}"
+                                else -> "item_${item.hashCode()}"
+                            }
+                        },
+                        contentType = { _, item ->
+                            when (item) {
+                                is TopTrack -> "track"
+                                is TopArtist -> "artist"
+                                is TopAlbum -> "album"
+                                else -> "unknown"
                             }
                         }
                     ) { index, item ->

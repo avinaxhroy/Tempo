@@ -330,7 +330,8 @@ fun ArtistDetailsContent(
 
             itemsIndexed(
                 items = artistDetails.topSongs.take(5),
-                key = { index, song -> "song_${index}_${song.trackId}" }
+                key = { _, song -> "song_${song.trackId}" },
+                contentType = { _, _ -> "song" }
             ) { _, song ->
                 TopSongItem(song = song, onClick = { onNavigateToSong(song.trackId) })
                 Spacer(modifier = Modifier.height(12.dp))
@@ -357,7 +358,8 @@ fun ArtistDetailsContent(
                     ) {
                         itemsIndexed(
                             items = artistDetails.topAlbums,
-                            key = { index, album -> "album_${index}_${album.album}" }
+                            key = { _, album -> "album_${album.album}" },
+                            contentType = { _, _ -> "album" }
                         ) { _, album ->
                             TopAlbumCard(album = album)
                         }

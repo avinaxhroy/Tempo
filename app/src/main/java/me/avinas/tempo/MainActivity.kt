@@ -30,6 +30,7 @@ import me.avinas.tempo.ui.onboarding.WelcomeScreen
 import me.avinas.tempo.ui.permissions.PermissionScreen
 import me.avinas.tempo.ui.spotify.SpotifyViewModel
 import me.avinas.tempo.ui.theme.TempoTheme
+import me.avinas.tempo.utils.OemBackgroundHelper
 import me.avinas.tempo.worker.ServiceHealthWorker
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -199,6 +200,19 @@ fun TempoApp(
     val scope = rememberCoroutineScope()
     var showSpotifySheet by remember { mutableStateOf(false) }
 
+    // Xiaomi guidance popup state
+    val isXiaomiDevice = remember { OemBackgroundHelper.isXiaomiDevice() }
+    var showXiaomiGuidance by remember { mutableStateOf(false) }
+    var xiaomiGuidanceDismissed by remember { mutableStateOf(false) }
+    var localNavigationTrigger by remember { mutableStateOf<String?>(null) }
+
+    // Show Xiaomi guidance popup after onboarding completes for first-time Xiaomi users
+    LaunchedEffect(uiState.isOnboardingCompleted, uiState.xiaomiGuidanceShown) {
+        if (uiState.isOnboardingCompleted && isXiaomiDevice && !uiState.xiaomiGuidanceShown && !xiaomiGuidanceDismissed) {
+            showXiaomiGuidance = true
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         when (currentStep) {
             OnboardingStep.WELCOME -> {
@@ -279,8 +293,14 @@ fun TempoApp(
                     onResetToOnboarding = {
                         currentStep = OnboardingStep.WELCOME
                     },
-                    navigationTrigger = navigationTrigger
+                    navigationTrigger = localNavigationTrigger ?: navigationTrigger
                 )
+                // Clear local trigger after passing it
+                LaunchedEffect(localNavigationTrigger) {
+                    if (localNavigationTrigger != null) {
+                        localNavigationTrigger = null
+                    }
+                }
             }
         }
 
@@ -323,6 +343,23 @@ fun TempoApp(
                     }
                 )
             }
+        }
+
+        // Xiaomi first-time guidance popup
+        if (showXiaomiGuidance) {
+            me.avinas.tempo.ui.components.XiaomiGuidancePopup(
+                onDismiss = {
+                    showXiaomiGuidance = false
+                    xiaomiGuidanceDismissed = true
+                    viewModel.markXiaomiGuidanceShown()
+                },
+                onConfigure = {
+                    showXiaomiGuidance = false
+                    xiaomiGuidanceDismissed = true
+                    viewModel.markXiaomiGuidanceShown()
+                    localNavigationTrigger = "background_protection"
+                }
+            )
         }
     }
 }

@@ -25,6 +25,7 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.size.Precision
 import coil3.size.Scale
+import coil3.size.Size
 import coil3.request.allowHardware
 import me.avinas.tempo.data.enrichment.MusicBrainzEnrichmentService
 
@@ -102,7 +103,7 @@ fun CachedAsyncImage(
         createCacheKey(fixedUrl)
     }
     
-    // Calculate target size in pixels if provided
+    // Calculate target size in pixels if provided, otherwise cap at 2048px to prevent OOM
     val targetSizePx = remember(targetSizeDp, density) {
         targetSizeDp?.let { dp -> with(density) { dp.toFloat() * this.density }.toInt() }
     }
@@ -120,9 +121,12 @@ fun CachedAsyncImage(
             .precision(Precision.INEXACT)
             .scale(Scale.FILL)
             // Apply target size for memory optimization (if provided)
+            // Always cap at 2048px to prevent OOM from extremely large bitmaps (e.g. 8K album art)
             .apply {
                 if (targetSizePx != null) {
                     size(targetSizePx)
+                } else {
+                    size(Size(2048, 2048))
                 }
             }
             // Disable hardware bitmaps when inside CaptureWrapper (software rendering)
@@ -312,6 +316,7 @@ fun buildCachedImageRequest(
         .diskCacheKey(cacheKey)
         .precision(Precision.INEXACT)
         .scale(Scale.FILL)
+        .size(Size(2048, 2048))
         .memoryCachePolicy(CachePolicy.ENABLED)
         .diskCachePolicy(CachePolicy.ENABLED)
         .networkCachePolicy(CachePolicy.ENABLED)

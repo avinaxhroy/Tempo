@@ -56,7 +56,13 @@ class SpotlightViewModel @Inject constructor(
                 }
                 .collect { _ ->
                     val range = _uiState.value.selectedTimeRange
-                    loadCards(range)
+                    // The Room Flow emits the current DB state immediately on collection.
+                    // This re-fire catches data that the initial loadCards() may have missed
+                    // (e.g. DB queries racing, data settling on cold start).
+                    // Use silent mode when cards are already displayed so we don't flash
+                    // a loading spinner over visible content.
+                    val hasCards = _uiState.value.cards.isNotEmpty()
+                    loadCards(range, silent = hasCards)
                     checkIfStoryLocked(range)
                 }
         }
@@ -72,12 +78,18 @@ class SpotlightViewModel @Inject constructor(
     /**
      * Load cards first (fast path), then load story in background.
      * User sees cards immediately while story loads.
+     *
+     * @param silent When `true`, cards are re-fetched without flashing the loading
+     *   state over already-visible content (e.g. reactive data-change refresh).
+     *   When `false` (initial load, time-range switch), the loading indicator is shown.
      */
-    private fun loadCards(timeRange: TimeRange) {
+    private fun loadCards(timeRange: TimeRange, silent: Boolean = false) {
         cardsJob?.cancel()
         storyJob?.cancel()
         cardsJob = viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, storyLoading = true)
+            if (!silent) {
+                _uiState.value = _uiState.value.copy(isLoading = true, storyLoading = true)
+            }
             try {
                 // Cards load first (parallelized)
                 val cards = cardGenerator.generateCards(timeRange)

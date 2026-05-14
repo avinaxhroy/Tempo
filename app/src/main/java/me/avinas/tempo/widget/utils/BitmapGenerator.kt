@@ -262,7 +262,7 @@ object BitmapGenerator {
         val artY = pad
         if (imagePath != null) {
             try {
-                val artBitmap = BitmapFactory.decodeFile(imagePath)
+                val artBitmap = decodeBitmapSafe(imagePath, (artSize * 2).toInt().coerceAtLeast(256))
                 if (artBitmap != null) {
                     val cropped = cropBitmap(artBitmap, artSize.toInt(), artSize.toInt())
                     val artRect = RectF(artX, artY, artX + artSize, artY + artSize)
@@ -898,7 +898,7 @@ object BitmapGenerator {
 
         if (imagePath != null) {
             try {
-                val artBitmap = BitmapFactory.decodeFile(imagePath)
+                val artBitmap = decodeBitmapSafe(imagePath, (artSize * 2).toInt().coerceAtLeast(256))
                 if (artBitmap != null) {
                     val cropped = cropBitmap(artBitmap, artSize.toInt(), artSize.toInt())
                     val artRect = RectF(artLeft, artTop, artLeft + artSize, artTop + artSize)
@@ -1208,7 +1208,7 @@ object BitmapGenerator {
         
          if (artistImagePath != null) {
             try {
-                val artBitmap = BitmapFactory.decodeFile(artistImagePath)
+                val artBitmap = decodeBitmapSafe(artistImagePath, (avatarSize * 2).toInt().coerceAtLeast(256))
                 if (artBitmap != null) {
                     val cropped = cropBitmap(artBitmap, avatarSize.toInt(), avatarSize.toInt())
                      val layerId = canvas.save()
@@ -1366,5 +1366,46 @@ object BitmapGenerator {
             isAntiAlias = true
         }
         canvas.drawPath(path, strokePaint)
+    }
+
+    /**
+     * Safely decodes a bitmap file with downsampling to prevent OOM from extremely large images.
+     * First reads dimensions, calculates an appropriate inSampleSize, then decodes at reduced resolution.
+     *
+     * @param path File path to the image
+     * @param maxDimension Maximum width or height in pixels (default 1024)
+     * @return Decoded bitmap or null if decoding fails
+     */
+    fun decodeBitmapSafe(path: String, maxDimension: Int = 1024): Bitmap? {
+        return try {
+            // Step 1: Read dimensions only
+            val options = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            BitmapFactory.decodeFile(path, options)
+
+            if (options.outWidth <= 0 || options.outHeight <= 0) return null
+
+            // Step 2: Calculate sample size
+            var inSampleSize = 1
+            val width = options.outWidth
+            val height = options.outHeight
+            if (width > maxDimension || height > maxDimension) {
+                val halfWidth = width / 2
+                val halfHeight = height / 2
+                while (halfWidth / inSampleSize >= maxDimension &&
+                    halfHeight / inSampleSize >= maxDimension) {
+                    inSampleSize *= 2
+                }
+            }
+
+            // Step 3: Decode with sample size
+            val decodeOptions = BitmapFactory.Options().apply {
+                this.inSampleSize = inSampleSize
+            }
+            BitmapFactory.decodeFile(path, decodeOptions)
+        } catch (_: Exception) {
+            null
+        }
     }
 }

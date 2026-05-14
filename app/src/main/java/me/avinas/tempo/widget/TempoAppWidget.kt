@@ -232,12 +232,15 @@ class TempoAppWidget : GlanceAppWidget() {
             ) {
                 // Background Image (if avail)
                  if (artistImagePath != null) {
-                     Image(
-                         provider = ImageProvider(BitmapFactory.decodeFile(artistImagePath)),
-                         contentDescription = null,
-                         contentScale = androidx.glance.layout.ContentScale.Crop,
-                         modifier = GlanceModifier.fillMaxSize().cornerRadius(12.dp)
-                     )
+                     val safeBitmap = me.avinas.tempo.widget.utils.BitmapGenerator.decodeBitmapSafe(artistImagePath, 512)
+                     if (safeBitmap != null) {
+                         Image(
+                             provider = ImageProvider(safeBitmap),
+                             contentDescription = null,
+                             contentScale = androidx.glance.layout.ContentScale.Crop,
+                             modifier = GlanceModifier.fillMaxSize().cornerRadius(12.dp)
+                         )
+                     }
                      // Dark overlay for text readability
                      Box(
                          modifier = GlanceModifier

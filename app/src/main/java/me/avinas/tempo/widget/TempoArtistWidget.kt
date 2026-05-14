@@ -64,9 +64,9 @@ class TempoArtistWidget : GlanceAppWidget() {
                 val widthPx = size.width.value.toInt() * 3 // 3x density assumption for crispness
                 val heightPx = size.height.value.toInt() * 3
                 
-                // Decode artist image
+                // Decode artist image (with size cap to prevent OOM)
                 val artistBitmap = if (artistImageInfo != null) {
-                    BitmapFactory.decodeFile(artistImageInfo)
+                    me.avinas.tempo.widget.utils.BitmapGenerator.decodeBitmapSafe(artistImageInfo, 512)
                 } else null
                 
                 // Generate the ART

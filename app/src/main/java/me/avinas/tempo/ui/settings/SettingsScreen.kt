@@ -1,8 +1,10 @@
 package me.avinas.tempo.ui.settings
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.app.Activity
@@ -381,9 +383,13 @@ fun SettingsScreen(
                             title = stringResource(R.string.settings_manage_permissions),
                             subtitle = stringResource(R.string.settings_manage_permissions_desc),
                             onClick = {
-                                val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                context.startActivity(intent)
+                                try {
+                                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    context.startActivity(intent)
+                                } catch (_: ActivityNotFoundException) {
+                                    Toast.makeText(context, "Unable to open notification settings", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
@@ -645,8 +651,12 @@ fun SettingsScreen(
                             title = stringResource(R.string.settings_reddit),
                             subtitle = stringResource(R.string.settings_reddit_sub),
                             onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.reddit.com/r/TempoStats/"))
-                                context.startActivity(intent)
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.reddit.com/r/TempoStats/"))
+                                    context.startActivity(intent)
+                                } catch (_: ActivityNotFoundException) {
+                                    Toast.makeText(context, "No browser found", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
@@ -654,8 +664,12 @@ fun SettingsScreen(
                             title = stringResource(R.string.settings_telegram),
                             subtitle = stringResource(R.string.settings_telegram_name),
                             onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/confusedcoconut"))
-                                context.startActivity(intent)
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/confusedcoconut"))
+                                    context.startActivity(intent)
+                                } catch (_: ActivityNotFoundException) {
+                                    Toast.makeText(context, "No app found to open this link", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
@@ -663,8 +677,12 @@ fun SettingsScreen(
                             title = stringResource(R.string.settings_github),
                             subtitle = stringResource(R.string.settings_github_desc),
                             onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/avinaxhroy/Tempo"))
-                                context.startActivity(intent)
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/avinaxhroy/Tempo"))
+                                    context.startActivity(intent)
+                                } catch (_: ActivityNotFoundException) {
+                                    Toast.makeText(context, "No browser found", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
@@ -672,8 +690,12 @@ fun SettingsScreen(
                             title = stringResource(R.string.settings_contribute),
                             subtitle = stringResource(R.string.settings_contribute_desc),
                             onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/avinaxhroy/Tempo/blob/main/CONTRIBUTION.md"))
-                                context.startActivity(intent)
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/avinaxhroy/Tempo/blob/main/CONTRIBUTION.md"))
+                                    context.startActivity(intent)
+                                } catch (_: ActivityNotFoundException) {
+                                    Toast.makeText(context, "No browser found", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         )
                     }
@@ -698,8 +720,12 @@ fun SettingsScreen(
                         SettingsOption(
                             title = stringResource(R.string.settings_privacy_policy),
                             onClick = { 
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://tempo.avinas.me/privacy.html"))
-                                context.startActivity(intent)
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://tempo.avinas.me/privacy.html"))
+                                    context.startActivity(intent)
+                                } catch (_: ActivityNotFoundException) {
+                                    Toast.makeText(context, "No browser found", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         )
                         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
