@@ -119,7 +119,7 @@ class LastFmImportWorker @AssistedInject constructor(
                 .setInputData(inputData)
                 .setBackoffCriteria(
                     BackoffPolicy.EXPONENTIAL,
-                    30, TimeUnit.SECONDS
+                    5, TimeUnit.MINUTES
                 )
                 .addTag("lastfm_import")
                 .build()
@@ -155,7 +155,7 @@ class LastFmImportWorker @AssistedInject constructor(
                 .setInputData(inputData)
                 .setBackoffCriteria(
                     BackoffPolicy.EXPONENTIAL,
-                    30, TimeUnit.SECONDS
+                    5, TimeUnit.MINUTES
                 )
                 .addTag("lastfm_import")
                 .build()

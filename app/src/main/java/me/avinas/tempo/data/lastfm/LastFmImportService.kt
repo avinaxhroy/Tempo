@@ -84,7 +84,10 @@ class LastFmImportService @Inject constructor(
         private const val PAGE_SIZE = 200 // Max safe page size
         private const val RATE_LIMIT_MS = 100L // ~10 req/sec, will back off on 429
         private const val RATE_LIMIT_BACKOFF_MS = 5000L // Backoff when rate limited
-        private const val MAX_RETRIES_PER_PAGE = 3
+        private const val MAX_RETRIES_PER_PAGE = 8
+        private const val MAX_BACKOFF_MS = 5 * 60 * 1000L
+        private const val MAX_SYNC_PAGES = 5_000 // 1M scrobbles at PAGE_SIZE=200
+        private const val MAX_CONSECUTIVE_IMPORT_ERRORS = 20
         
         // Source identifier for imported events
         const val IMPORT_SOURCE = "fm.last.import"
@@ -216,10 +219,10 @@ class LastFmImportService @Inject constructor(
 
     // ==================== Performance Optimization Caches ====================
 
-    // In-memory track cache to avoid N+1 queries during import
-    // Key: "title|artist" normalized, Value: Track or null
+    // In-memory track cache to avoid N+1 queries during import.
+    // ConcurrentHashMap does not allow null values, so only found/created tracks are cached.
     // ConcurrentHashMap: cancelImport() may clear this while import iterates it.
-    private val trackCache = java.util.concurrent.ConcurrentHashMap<String, Track?>()
+    private val trackCache = java.util.concurrent.ConcurrentHashMap<String, Track>()
 
     // Batch pending EnrichedMetadata for bulk insert
     private val pendingMetadata = mutableListOf<EnrichedMetadata>()
@@ -300,7 +303,7 @@ class LastFmImportService @Inject constructor(
                         Log.w(TAG, "$operation: Rate limited, waiting ${backoffMs}ms before retry ${attempt + 1}/$maxRetries")
                         _progress.value = ImportProgress.RateLimited(backoffMs)
                         delay(backoffMs)
-                        backoffMs = (backoffMs * 2).coerceAtMost(60_000L) // Max 60 seconds
+                        backoffMs = (backoffMs * 2).coerceAtMost(MAX_BACKOFF_MS)
                         lastError = httpError
                         return@repeat
                     }
@@ -309,7 +312,7 @@ class LastFmImportService @Inject constructor(
                     if (httpError is LastFmApiError.ServiceUnavailable) {
                         Log.w(TAG, "$operation: Service unavailable, waiting ${backoffMs}ms before retry ${attempt + 1}/$maxRetries")
                         delay(backoffMs)
-                        backoffMs = (backoffMs * 2).coerceAtMost(60_000L)
+                        backoffMs = (backoffMs * 2).coerceAtMost(MAX_BACKOFF_MS)
                         lastError = httpError
                         return@repeat
                     }
@@ -350,11 +353,18 @@ class LastFmImportService @Inject constructor(
      */
     suspend fun discoverUser(username: String): Result<DiscoveryResult> = withContext(Dispatchers.IO) {
         try {
+            val apiKey = API_KEY
+            if (apiKey.isBlank()) {
+                val error = LastFmApiError.InvalidApiKey("Last.fm API key is not configured")
+                _progress.value = ImportProgress.Failed("Last.fm API key is not configured", false)
+                return@withContext Result.failure(error)
+            }
+
             _progress.value = ImportProgress.Discovering("Connecting to Last.fm...")
             
             // Fetch user info with robust error handling
             val userInfoResult = executeWithRetry("getUserInfo") {
-                lastFmApi.getUserInfo(user = username, apiKey = API_KEY)
+                lastFmApi.getUserInfo(user = username, apiKey = apiKey)
             }
             
             val userInfo = userInfoResult.getOrElse { error ->
@@ -396,21 +406,21 @@ class LastFmImportService @Inject constructor(
             // Fetch top tracks count with error handling
             delay(RATE_LIMIT_MS)
             val topTracksResult = executeWithRetry("getTopTracks") {
-                lastFmApi.getTopTracks(user = username, apiKey = API_KEY, limit = 1, page = 1)
+                lastFmApi.getTopTracks(user = username, apiKey = apiKey, limit = 1, page = 1)
             }
             val topTracksCount = topTracksResult.getOrNull()?.toptracks?.attr?.getTotal() ?: 0
 
             // Fetch loved tracks count with error handling
             delay(RATE_LIMIT_MS)
             val lovedTracksResult = executeWithRetry("getLovedTracks") {
-                lastFmApi.getLovedTracks(user = username, apiKey = API_KEY, limit = 1, page = 1)
+                lastFmApi.getLovedTracks(user = username, apiKey = apiKey, limit = 1, page = 1)
             }
             val lovedTracksCount = lovedTracksResult.getOrNull()?.lovedtracks?.attr?.getTotal() ?: 0
 
             // Fetch most recent scrobble timestamp (first non-nowplaying track on page 1)
             delay(RATE_LIMIT_MS)
             val recentTracksResult = executeWithRetry("getRecentTracks") {
-                lastFmApi.getRecentTracks(user = username, apiKey = API_KEY, limit = 1, page = 1)
+                lastFmApi.getRecentTracks(user = username, apiKey = apiKey, limit = 1, page = 1)
             }
             val latestScrobble = recentTracksResult.getOrNull()
                 ?.recenttracks?.track
@@ -453,8 +463,15 @@ class LastFmImportService @Inject constructor(
         totalScrobbles: Long
     ): Result<ImportResult> = withContext(Dispatchers.IO) {
         val startTimeMs = System.currentTimeMillis()
+        var importId: Long? = null
         
         try {
+            if (API_KEY.isBlank()) {
+                val error = LastFmApiError.InvalidApiKey("Last.fm API key is not configured")
+                _progress.value = ImportProgress.Failed("Last.fm API key is not configured", false)
+                return@withContext Result.failure(error)
+            }
+
             Log.i(TAG, "Starting Last.fm import for $username with tier ${tier.name}")
             
             // Create import metadata record
@@ -466,7 +483,7 @@ class LastFmImportService @Inject constructor(
                 totalScrobblesFound = totalScrobbles,
                 status = LastFmImportMetadata.STATUS_DISCOVERING
             )
-            val importId = importMetadataDao.insert(importMetadata)
+            importId = importMetadataDao.insert(importMetadata)
             
             // Phase 1: Build active set
             _progress.value = ImportProgress.Discovering("Building active set...")
@@ -486,13 +503,14 @@ class LastFmImportService @Inject constructor(
             }
             
             // Phase 2: Import scrobbles
-            importMetadataDao.updateStatus(importId, LastFmImportMetadata.STATUS_IN_PROGRESS)
-            val result = importScrobbles(username, importId, totalScrobbles, tier, startTimeMs)
+            val activeImportId = importId ?: error("Import metadata was not created")
+            importMetadataDao.updateStatus(activeImportId, LastFmImportMetadata.STATUS_IN_PROGRESS)
+            val result = importScrobbles(username, activeImportId, totalScrobbles, tier, startTimeMs)
             
             // Phase 3: Mark complete
             if (result.success) {
                 importMetadataDao.markCompleted(
-                    id = importId,
+                    id = activeImportId,
                     completedAt = System.currentTimeMillis(),
                     syncCursor = System.currentTimeMillis() / 1000 // Unix timestamp for cursor
                 )
@@ -524,7 +542,7 @@ class LastFmImportService @Inject constructor(
                 }
             } else {
                 importMetadataDao.markFailed(
-                    id = importId,
+                    id = activeImportId,
                     failedAt = System.currentTimeMillis(),
                     errorMessage = result.errorMessage ?: "Unknown error"
                 )
@@ -535,6 +553,13 @@ class LastFmImportService @Inject constructor(
             
         } catch (e: Exception) {
             Log.e(TAG, "Import failed", e)
+            importId?.let { id ->
+                importMetadataDao.markFailed(
+                    id = id,
+                    failedAt = System.currentTimeMillis(),
+                    errorMessage = e.message ?: e::class.java.simpleName
+                )
+            }
             _progress.value = ImportProgress.Failed(e.message ?: "Import failed")
             Result.failure(e)
         }
@@ -548,6 +573,12 @@ class LastFmImportService @Inject constructor(
      */
     suspend fun syncNewScrobbles(): Result<Int> = withContext(Dispatchers.IO) {
         try {
+            if (API_KEY.isBlank()) {
+                val error = LastFmApiError.InvalidApiKey("Last.fm API key is not configured")
+                _progress.value = ImportProgress.Failed("Last.fm API key is not configured", false)
+                return@withContext Result.failure(error)
+            }
+
             // Get the latest completed import
             val lastImport = importMetadataDao.getLatestCompleted()
             if (lastImport == null) {
@@ -572,7 +603,7 @@ class LastFmImportService @Inject constructor(
             var hasMore = true
             
             // Fetch recent scrobbles after the sync cursor
-            while (hasMore && page <= 50) { // Safety limit: max 50 pages
+            while (hasMore && page <= MAX_SYNC_PAGES) {
                 val apiResult = executeWithRetry("syncNewScrobbles page $page") {
                     lastFmApi.getRecentTracks(
                         user = username,
@@ -890,7 +921,6 @@ class LastFmImportService @Inject constructor(
         var page = 1
         var hasMore = true
         var consecutiveErrors = 0
-        val maxConsecutiveErrors = 5
         
         while (hasMore) {
             // Fetch page with robust error handling
@@ -907,7 +937,7 @@ class LastFmImportService @Inject constructor(
                 Log.e(TAG, "Failed to fetch page $page after retries", error)
                 consecutiveErrors++
                 
-                if (consecutiveErrors >= maxConsecutiveErrors) {
+                if (consecutiveErrors >= MAX_CONSECUTIVE_IMPORT_ERRORS) {
                     Log.e(TAG, "Too many consecutive errors ($consecutiveErrors), aborting")
                     return ImportResult(
                         success = false,
@@ -1116,16 +1146,16 @@ class LastFmImportService @Inject constructor(
         var isNewArtist = false
         var needsMetadata = false
         
-        // Check if we've already looked this up (null means looked up but not found)
-        if (!trackCache.containsKey(cacheKey)) {
+        if (track == null) {
             // First time seeing this track - check database
             track = trackRepository.findByTitleAndArtist(trackTitle, artistName)
             if (track == null) {
                 // Try fuzzy match
                 track = trackRepository.findByTitleAndArtistFuzzy(trackTitle, artistName)
             }
-            // Cache the result (even null to avoid repeated lookups)
-            trackCache[cacheKey] = track
+            if (track != null) {
+                trackCache[cacheKey] = track
+            }
         }
         
         if (track == null) {
