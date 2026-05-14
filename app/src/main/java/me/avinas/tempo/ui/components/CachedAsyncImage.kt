@@ -30,6 +30,10 @@ import me.avinas.tempo.data.enrichment.MusicBrainzEnrichmentService
 
 private const val TAG = "CachedAsyncImage"
 
+private val ITUNES_SIZE_REGEX = Regex("\\d+x\\d+bb")
+private val URL_PARAM_STRIP_REGEX = Regex("[?&](t|timestamp|v|version|_)=[^&]*")
+private val URL_TRAILING_SEP_REGEX = Regex("[?&]$")
+
 /**
  * A cached image component that ensures all images are properly cached.
  * 
@@ -255,7 +259,7 @@ fun createCacheKey(url: String?): String {
             host.contains("mzstatic") || host.contains("apple") -> {
                 // iTunes URLs have size in the path like 100x100bb.jpg
                 // Normalize to a standard size for caching
-                val normalizedPath = path.replace(Regex("\\d+x\\d+bb"), "600x600bb")
+                val normalizedPath = path.replace(ITUNES_SIZE_REGEX, "600x600bb")
                 "itunes:$normalizedPath"
             }
             // Spotify CDN
@@ -273,8 +277,8 @@ fun createCacheKey(url: String?): String {
             // Default: use full URL but strip common variable params
             else -> {
                 val cleanUrl = url
-                    .replace(Regex("[?&](t|timestamp|v|version|_)=[^&]*"), "")
-                    .replace(Regex("[?&]$"), "")
+                    .replace(URL_PARAM_STRIP_REGEX, "")
+                    .replace(URL_TRAILING_SEP_REGEX, "")
                 "url:${cleanUrl.hashCode()}"
             }
         }

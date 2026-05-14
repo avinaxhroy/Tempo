@@ -1,14 +1,25 @@
 use crate::db::models::{PairingInfo, QrPayload};
 use crate::AppState;
 use base64::Engine;
+use hkdf::Hkdf;
+use hmac::{Hmac, Mac};
+use p256::ecdh;
+use p256::elliptic_curve::sec1::ToEncodedPoint;
+use p256::{AffinePoint, PublicKey, SecretKey};
 use qrcode::QrCode;
+use rand::rngs::OsRng;
 use serde::Deserialize;
 use serde::Serialize;
+use sha2::Sha256;
 use tauri::{Emitter, State};
 use uuid::Uuid;
 
 const MIN_TOKEN_LENGTH: usize = 16;
 const MAX_TOKEN_LENGTH: usize = 128;
+const HKDF_INFO: &[u8] = b"tempo-sync-auth-v3";
+const HKDF_SALT: &[u8] = b"tempo-ecdh-salt-v1";
+
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Debug, Serialize)]
 pub struct QrCodeData {
@@ -28,15 +39,25 @@ pub struct PairingStatus {
 
 #[derive(Debug, Deserialize)]
 pub struct PairConfirmPayload {
+    #[serde(alias = "auth_token")]
     pub token: String,
     pub phone_ip: String,
     pub phone_port: u16,
     pub device_name: String,
+    #[serde(default)]
+    pub phone_pub_key: Option<String>,
 }
 
 #[tauri::command]
 pub async fn generate_pairing_qr(state: State<'_, AppState>) -> Result<QrCodeData, String> {
-    let token = Uuid::new_v4().to_string().replace('-', "");
+    // Generate ECDH key pair for v3 secure pairing
+    let secret_key = SecretKey::random(&mut OsRng);
+    let public_key = secret_key.public_key();
+    let public_key_bytes = public_key.to_encoded_point(false);
+    let pub_key_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(public_key_bytes.as_bytes());
+
+    // Also generate a legacy UUID token for v1/v2 backward compatibility
+    let legacy_token = Uuid::new_v4().to_string().replace('-', "");
 
     let device_name = hostname::get()
         .ok()
@@ -44,12 +65,19 @@ pub async fn generate_pairing_qr(state: State<'_, AppState>) -> Result<QrCodeDat
         .unwrap_or_else(|| "Desktop".to_string());
 
     let desktop_ip = detect_local_ip();
+
+    // Store the ECDH private key temporarily so we can derive the shared secret
+    // when the phone sends its public key via confirm_pairing
+    let private_key_bytes = secret_key.to_bytes();
+    let private_key_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(private_key_bytes.as_slice());
+
     let qr_payload = QrPayload {
-        token: token.clone(),
+        token: legacy_token.clone(),
         device_name: device_name.clone(),
         ip: desktop_ip,
         port: Some(state.pairing_callback_port),
-        v: 2,
+        pub_key: Some(pub_key_b64.clone()),
+        v: 3,
     };
 
     let payload_json = serde_json::to_string(&qr_payload).map_err(|e| e.to_string())?;
@@ -78,26 +106,25 @@ pub async fn generate_pairing_qr(state: State<'_, AppState>) -> Result<QrCodeDat
 
     let base64_str = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
 
-    // Store pending pairing with the generated token (phone_ip = "pending" until phone confirms)
+    // Store pending pairing with legacy token and ECDH private key
     let db = state.db.lock().await;
     let pending = PairingInfo {
         phone_ip: "pending".to_string(),
         phone_port: 8765,
-        auth_token: token.clone(),
+        auth_token: legacy_token.clone(),
         device_name: String::new(),
         paired_at: None,
+        desktop_private_key: Some(private_key_b64),
     };
     db.save_pairing(&pending).map_err(|e| e.to_string())?;
 
     Ok(QrCodeData {
         qr_base64: base64_str,
-        token,
+        token: legacy_token,
         device_name,
     })
 }
 
-/// Called by the Tempo Android app after scanning the QR code to complete the pairing handshake.
-/// The phone sends its own IP/port so the desktop knows where to POST scrobbles.
 #[tauri::command]
 pub async fn confirm_pairing(
     state: State<'_, AppState>,
@@ -115,6 +142,7 @@ pub async fn confirm_pairing(
             phone_ip,
             phone_port,
             device_name,
+            phone_pub_key: None,
         },
     )
     .await
@@ -126,32 +154,73 @@ pub(crate) async fn finalize_pairing(
     payload: PairConfirmPayload,
 ) -> Result<(), String> {
     // Validate IP
-    if payload.phone_ip.parse::<std::net::IpAddr>().is_err() {
-        return Err("Invalid IP address format".to_string());
-    }
-    if !is_valid_token(&payload.token) {
-        return Err("Invalid pairing token".to_string());
+    let ip: std::net::IpAddr = payload.phone_ip.parse()
+        .map_err(|_| "Invalid IP address format".to_string())?;
+
+    // Require private/local address for safety
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            if !v4.is_private() && !v4.is_loopback() && !v4.is_link_local() {
+                return Err("IP address must be a local/private network address".to_string());
+            }
+        }
+        std::net::IpAddr::V6(v6) => {
+            if !v6.is_loopback() {
+                return Err("IPv6 addresses must be loopback".to_string());
+            }
+        }
     }
 
     let db = state.db.lock().await;
-
-    // Verify the token matches the pending pairing
     let existing = db
         .get_pairing()
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "No pending pairing found".to_string())?;
 
-    if !constant_time_eq(existing.auth_token.as_bytes(), payload.token.as_bytes()) {
-        return Err("Token mismatch — QR code may be expired. Generate a new one.".to_string());
-    }
+    // If v3 ECDH: derive auth token from shared secret
+    let final_auth_token = if payload.phone_pub_key.is_some() && existing.desktop_private_key.is_some() {
+        let pub_key_str = payload.phone_pub_key.as_deref().unwrap();
+        let phone_pub_key_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(pub_key_str)
+            .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(pub_key_str))
+            .map_err(|e| format!("Invalid phone public key: {}", e))?;
+        let phone_pub_key = PublicKey::from_sec1_bytes(&phone_pub_key_bytes)
+            .map_err(|e| format!("Invalid phone public key: {}", e))?;
+
+        let priv_key_str = existing.desktop_private_key.as_deref().unwrap_or("");
+        let desktop_priv_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(priv_key_str)
+            .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(priv_key_str))
+            .map_err(|e| format!("Invalid desktop private key: {}", e))?;
+
+        let desktop_secret_key = SecretKey::from_slice(&desktop_priv_bytes)
+            .map_err(|e| format!("Invalid desktop private key: {}", e))?;
+        let shared_secret = ecdh::diffie_hellman(
+            desktop_secret_key.to_nonzero_scalar(),
+            AffinePoint::from(phone_pub_key),
+        );
+        let shared_secret_bytes = shared_secret.raw_secret_bytes();
+
+        derive_auth_token(shared_secret_bytes.as_slice())
+    } else {
+        // Legacy v1/v2: validate the token directly
+        if !is_valid_token(&payload.token) {
+            return Err("Invalid pairing token".to_string());
+        }
+        if !constant_time_eq(existing.auth_token.as_bytes(), payload.token.as_bytes()) {
+            return Err("Token mismatch — QR code may be expired. Generate a new one.".to_string());
+        }
+        payload.token.clone()
+    };
 
     // Upgrade pending → confirmed
     let confirmed = PairingInfo {
         phone_ip: payload.phone_ip,
         phone_port: payload.phone_port,
-        auth_token: payload.token,
+        auth_token: final_auth_token,
         device_name: payload.device_name,
         paired_at: Some(chrono::Utc::now().to_rfc3339()),
+        desktop_private_key: None, // Clear private key after derivation
     };
     db.save_pairing(&confirmed).map_err(|e| e.to_string())?;
 
@@ -159,6 +228,20 @@ pub(crate) async fn finalize_pairing(
     let _ = app_handle.emit("pairing-confirmed", ());
 
     Ok(())
+}
+
+pub fn derive_auth_token(shared_secret: &[u8]) -> String {
+    let hk = Hkdf::<Sha256>::new(Some(HKDF_SALT), shared_secret);
+    let mut okm = [0u8; 32];
+    hk.expand(HKDF_INFO, &mut okm).expect("HKDF expand should not fail");
+    hex::encode(okm)
+}
+
+pub fn rotate_token(current_token: &str) -> String {
+    let mut mac = HmacSha256::new_from_slice(current_token.as_bytes())
+        .expect("HMAC init should not fail");
+    mac.update(b"tempo-token-rotation-v1");
+    hex::encode(mac.finalize().into_bytes())
 }
 
 fn detect_local_ip() -> Option<String> {
@@ -220,7 +303,6 @@ pub async fn get_pairing_status(
     };
 
     match pairing {
-        // Only report as paired when phone_ip is a real address (not "pending")
         Some(info) if !info.phone_ip.is_empty() && info.phone_ip != "pending" => Ok(PairingStatus {
             is_paired: true,
             phone_ip: Some(info.phone_ip),
@@ -252,10 +334,22 @@ pub async fn manual_pair(
     phone_port: u16,
     auth_token: String,
 ) -> Result<(), String> {
-    // Validate IP format
-    if phone_ip.parse::<std::net::IpAddr>().is_err() {
-        return Err("Invalid IP address format".to_string());
+    let ip: std::net::IpAddr = phone_ip.parse()
+        .map_err(|_| "Invalid IP address format".to_string())?;
+
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            if !v4.is_private() && !v4.is_loopback() && !v4.is_link_local() {
+                return Err("IP address must be a local/private network address".to_string());
+            }
+        }
+        std::net::IpAddr::V6(v6) => {
+            if !v6.is_loopback() {
+                return Err("IPv6 addresses must be loopback".to_string());
+            }
+        }
     }
+
     if !is_valid_token(&auth_token) {
         return Err("Invalid auth token".to_string());
     }
@@ -266,6 +360,7 @@ pub async fn manual_pair(
         auth_token,
         device_name: String::new(),
         paired_at: Some(chrono::Utc::now().to_rfc3339()),
+        desktop_private_key: None,
     };
 
     let db = state.db.lock().await;

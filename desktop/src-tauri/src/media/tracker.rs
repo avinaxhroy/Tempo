@@ -38,6 +38,11 @@ const MAX_DURATION_MULTIPLIER: f64 = 3.0;
 /// to allow a small tolerance for polling jitter.
 const WALL_CLOCK_DURATION_MULTIPLIER: f64 = 1.1;
 
+/// Minimum completion fraction to qualify for logging (when duration is known).
+/// Tracks listened to less than this fraction are considered skipped and not logged.
+/// Matches Android's SKIP_COMPLETION_THRESHOLD (30%).
+const MIN_COMPLETION_FRACTION: f64 = 0.30;
+
 
 
 /// Tracks per-track playback state derived from raw media position samples.
@@ -89,6 +94,8 @@ pub struct PlaybackTracker {
     /// After this exceeds a threshold, fall back to wall-clock accumulation
     /// to handle WinRT position-stuck bugs on Windows.
     consecutive_stuck_polls: u32,
+    /// Track has met the MIN_LISTEN_TIME_MS threshold — eligible for logging at track end.
+    eligible: bool,
 }
 
 impl PlaybackTracker {
@@ -114,6 +121,7 @@ impl PlaybackTracker {
             has_position_data: false,
             last_raw: None,
             consecutive_stuck_polls: 0,
+            eligible: false,
         }
     }
 
@@ -155,6 +163,7 @@ impl PlaybackTracker {
             self.has_position_data = raw.position_ms >= 0;
             self.last_raw = Some(raw.clone());
             self.consecutive_stuck_polls = 0;
+            self.eligible = false;
 
             return prev_event;
         }
@@ -276,10 +285,12 @@ impl PlaybackTracker {
         self.last_poll_time = now;
         self.last_raw = Some(raw.clone());
 
-        // Check if ready to log
-        if !self.logged && self.accumulated_listen_ms >= MIN_LISTEN_TIME_MS {
-            self.logged = true;
-            return TrackEvent::ReadyToLog(self.build_now_playing(raw));
+        // Mark track as eligible for logging when it accumulates enough listen time.
+        // We do NOT emit ReadyToLog here — the play is only committed when the track
+        // actually ends (track change, tab close, or media stop), ensuring the full
+        // accumulated listen time is recorded rather than a premature 15s snapshot.
+        if !self.eligible && self.accumulated_listen_ms >= MIN_LISTEN_TIME_MS {
+            self.eligible = true;
         }
 
         TrackEvent::StillPlaying
@@ -373,9 +384,17 @@ impl PlaybackTracker {
                 self.accumulated_listen_ms, completion, is_skipped, self.pause_count, self.seek_count
             );
 
-            // If it met the minimum listen time, emit as a play
-            if self.accumulated_listen_ms >= MIN_LISTEN_TIME_MS {
+            // Qualification: must meet minimum listen time AND minimum completion fraction.
+            // When duration is known, the user must have listened to at least 30% of the
+            // track (matching Android's SKIP_COMPLETION_THRESHOLD). When duration is unknown,
+            // just meeting the 15s minimum is sufficient.
+            let meets_min_listen = self.accumulated_listen_ms >= MIN_LISTEN_TIME_MS;
+            let meets_min_completion = self.track_duration_ms <= 0
+                || (self.accumulated_listen_ms as f64 / self.track_duration_ms as f64) >= MIN_COMPLETION_FRACTION;
+
+            if meets_min_listen && meets_min_completion {
                 if let Some(ref raw) = self.last_raw {
+                    self.logged = true;
                     return TrackEvent::ReadyToLog(self.build_now_playing(raw));
                 }
             }
@@ -533,7 +552,7 @@ mod tests {
     }
 
     #[test]
-    fn test_log_after_min_listen_time() {
+    fn test_eligible_after_min_listen_time_but_not_logged() {
         let mut tracker = PlaybackTracker::new();
 
         // Start track
@@ -543,10 +562,38 @@ mod tests {
         // Simulate passage of time by manipulating internal state
         tracker.last_poll_time -= 16_000; // pretend 16s of wall-clock passed
 
-        // Next poll with advanced position
+        // Next poll with advanced position — should mark eligible but NOT emit ReadyToLog
         let raw2 = make_raw("Song", "Artist", 16_000, 200_000, "Spotify");
         let event = tracker.process(&raw2);
-        assert!(matches!(event, TrackEvent::ReadyToLog(_)));
+        assert!(matches!(event, TrackEvent::StillPlaying));
+        assert!(tracker.eligible);
+        assert!(!tracker.logged);
+    }
+
+    #[test]
+    fn test_log_on_track_end_when_eligible() {
+        let mut tracker = PlaybackTracker::new();
+
+        // Start track and listen for 20s (past 15s threshold, and >30% of 60s track)
+        let raw = make_raw("Song", "Artist", 0, 60_000, "Spotify");
+        tracker.process(&raw);
+
+        tracker.last_poll_time -= 20_000;
+        let raw2 = make_raw("Song", "Artist", 20_000, 60_000, "Spotify");
+        tracker.process(&raw2);
+        assert!(tracker.eligible);
+
+        // Track change — should emit ReadyToLog with full 20s listen time
+        let raw3 = make_raw("New Song", "New Artist", 0, 180_000, "Spotify");
+        let event = tracker.process(&raw3);
+
+        match event {
+            TrackEvent::ReadyToLog(np) => {
+                assert_eq!(np.listened_ms, 20_000);
+                assert_eq!(np.duration_ms, 60_000);
+            }
+            _ => panic!("Expected ReadyToLog, got {:?}", event),
+        }
     }
 
     #[test]
@@ -748,20 +795,25 @@ mod tests {
     fn test_track_change_finalizes_previous() {
         let mut tracker = PlaybackTracker::new();
 
-        // Start track
-        let raw = make_raw("Song A", "Artist", 0, 200_000, "Spotify");
+        // Start a 60s track (20s listened = 33% > 30% threshold)
+        let raw = make_raw("Song A", "Artist", 0, 60_000, "Spotify");
         tracker.process(&raw);
 
         // Listen for 20s
         tracker.last_poll_time -= 20_000;
-        let raw2 = make_raw("Song A", "Artist", 20_000, 200_000, "Spotify");
-        tracker.process(&raw2); // This triggers scrobble
+        let raw2 = make_raw("Song A", "Artist", 20_000, 60_000, "Spotify");
+        tracker.process(&raw2); // Marks eligible (20s > 15s)
 
-        // Change track
+        // Change track — should finalize previous as ReadyToLog
         let raw3 = make_raw("Song B", "Artist", 0, 180_000, "Spotify");
         let event = tracker.process(&raw3);
 
-        // Previous was already scrobbled, so no finalize needed
-        assert!(matches!(event, TrackEvent::NoAction));
+        match event {
+            TrackEvent::ReadyToLog(np) => {
+                assert_eq!(np.title, "Song A");
+                assert_eq!(np.listened_ms, 20_000);
+            }
+            _ => panic!("Expected ReadyToLog for previous track, got {:?}", event),
+        }
     }
 }

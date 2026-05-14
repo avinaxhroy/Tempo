@@ -69,7 +69,7 @@ class BackupRestoreViewModel @Inject constructor(
     val isSignedIn: StateFlow<Boolean> = googleAuthManager.isSignedIn
     val needsDriveConsent: StateFlow<Boolean> = googleAuthManager.needsDriveConsent
     val backupSettings: StateFlow<BackupSettings> = backupSettingsManager.settings
-        .stateIn(viewModelScope, SharingStarted.Eagerly, BackupSettings())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BackupSettings())
     
     private val _driveBackups = MutableStateFlow<List<DriveBackupInfo>>(emptyList())
     val driveBackups: StateFlow<List<DriveBackupInfo>> = _driveBackups.asStateFlow()
@@ -102,9 +102,9 @@ class BackupRestoreViewModel @Inject constructor(
     private fun loadSettings() {
         viewModelScope.launch {
             context.dataStore.data.collect { preferences ->
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     includeLocalImages = preferences[INCLUDE_LOCAL_IMAGES_KEY] ?: true
-                )
+                ) }
             }
         }
     }
@@ -132,39 +132,18 @@ class BackupRestoreViewModel @Inject constructor(
     private fun calculateStats() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                val trackCount = database.trackDao().getAllSync().size
-                val artistCount = database.artistDao().getAllArtistsSync().size
-                val eventCount = database.listeningEventDao().getAllEventsSync().size
+                val trackCount = database.trackDao().getCount()
+                val artistCount = database.artistDao().getCount()
+                val eventCount = database.listeningEventDao().getCount()
                 
-                // Calculate local image count and size - ONLY count images referenced in database
-                // This matches the logic in ImportExportManager.collectImageUrls()
-                val tracks = database.trackDao().getAllSync()
-                val artists = database.artistDao().getAllArtistsSync()
-                val albums = database.albumDao().getAllSync()
-                val enrichedMetadata = database.enrichedMetadataDao().getAllSync()
-                
-                // Collect all local image URLs (file://) that are actually referenced
+                // Collect local image URLs using targeted queries instead of loading entire tables
                 val localImageUrls = mutableSetOf<String>()
                 
-                fun collectLocal(url: String?) {
-                    url?.let {
-                        if (it.startsWith("file://")) {
-                            localImageUrls.add(it)
-                        }
-                    }
-                }
-                
-                tracks.forEach { collectLocal(it.albumArtUrl) }
-                artists.forEach { collectLocal(it.imageUrl) }
-                albums.forEach { collectLocal(it.artworkUrl) }
-                enrichedMetadata.forEach { meta ->
-                    collectLocal(meta.albumArtUrl)
-                    collectLocal(meta.albumArtUrlSmall)
-                    collectLocal(meta.albumArtUrlLarge)
-                    collectLocal(meta.spotifyArtistImageUrl)
-                    collectLocal(meta.iTunesArtistImageUrl)
-                    collectLocal(meta.deezerArtistImageUrl)
-                    collectLocal(meta.lastFmArtistImageUrl)
+                localImageUrls.addAll(database.trackDao().getLocalImageUrls())
+                localImageUrls.addAll(database.artistDao().getLocalImageUrls())
+                localImageUrls.addAll(database.albumDao().getLocalImageUrls())
+                database.enrichedMetadataDao().getLocalImageUrls().forEach { url ->
+                    if (url.startsWith("file://")) localImageUrls.add(url)
                 }
                 
                 // Calculate size of referenced local images only
@@ -205,7 +184,7 @@ class BackupRestoreViewModel @Inject constructor(
                     profileImageSize
                 }
                 
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     trackCount = trackCount,
                     artistCount = artistCount,
                     eventCount = eventCount,
@@ -213,7 +192,7 @@ class BackupRestoreViewModel @Inject constructor(
                     localImageSizeBytes = localImageSize,
                     estimatedExportSizeBytes = estimatedTotalSize,
                     isLoading = false
-                )
+                ) }
             }
         }
     }
@@ -222,7 +201,7 @@ class BackupRestoreViewModel @Inject constructor(
         viewModelScope.launch {
             context.dataStore.edit { it[INCLUDE_LOCAL_IMAGES_KEY] = include }
             backupSettingsManager.setIncludeLocalImages(include)
-            _uiState.value = _uiState.value.copy(includeLocalImages = include)
+            _uiState.update { it.copy(includeLocalImages = include) }
             calculateStats()
         }
     }
@@ -280,7 +259,7 @@ class BackupRestoreViewModel @Inject constructor(
      * Refresh stats (useful for pull-to-refresh or manual refresh).
      */
     fun refreshStats() {
-        _uiState.value = _uiState.value.copy(isLoading = true)
+        _uiState.update { it.copy(isLoading = true) }
         calculateStats()
     }
     

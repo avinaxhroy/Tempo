@@ -82,8 +82,12 @@ interface ListeningEventDao {
         // Get all track IDs from events to insert
         val trackIds = events.map { it.track_id }.distinct()
         
-        // Fetch existing timestamps for these tracks
-        val existingTimestamps = getTimestampsForTracks(trackIds)
+        // SQLite hard limit is 999 bound parameters. Chunk the track IDs so the IN (:trackIds)
+        // query never exceeds that limit — large libraries (>999 distinct tracks) would otherwise
+        // throw SQLiteException and roll back the entire import transaction.
+        val existingTimestamps = trackIds.chunked(900).flatMap { chunk ->
+            getTimestampsForTracks(chunk)
+        }
         
         // Build a lookup map: trackId -> set of existing timestamps
         val existingMap = mutableMapOf<Long, MutableSet<Long>>()
@@ -268,6 +272,9 @@ interface ListeningEventDao {
      */
     @Query("SELECT * FROM listening_events ORDER BY timestamp DESC")
     suspend fun getAllEventsSync(): List<ListeningEvent>
+
+    @Query("SELECT COUNT(*) FROM listening_events")
+    suspend fun getCount(): Int
     
     /**
      * Delete all listening events for tracks belonging to a specific artist.

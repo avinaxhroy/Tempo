@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -283,7 +284,7 @@ fun ArtistDetailsContent(
             horizontalAlignment = Alignment.CenterHorizontally,
             contentPadding = PaddingValues(bottom = 32.dp)
         ) {
-            item {
+            item(key = "hero_section") {
                 Spacer(modifier = Modifier.height(8.dp))
                 ArtistHeroSection(
                     artistDetails = artistDetails,
@@ -293,14 +294,14 @@ fun ArtistDetailsContent(
                 )
             }
 
-            item {
+            item(key = "stats_grid") {
                 Spacer(modifier = Modifier.height(24.dp))
                 ArtistStatsGrid(artistDetails = artistDetails)
             }
 
             // Fan Status Badge
             if (artistDetails.personalPlayCount > 5) { // Show for almost everyone now
-                item {
+                item(key = "fan_status_badge") {
                     Spacer(modifier = Modifier.height(24.dp))
                     FanStatusBadge(
                         playCount = artistDetails.personalPlayCount,
@@ -310,13 +311,13 @@ fun ArtistDetailsContent(
             }
 
 
-            item {
+            item(key = "discovery_insight") {
                 Spacer(modifier = Modifier.height(24.dp))
                 DiscoveryInsightCard(artistDetails = artistDetails)
             }
             
             // Top Songs Section
-            item {
+            item(key = "top_songs_header") {
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
                     text = stringResource(R.string.details_top_songs),
@@ -327,17 +328,17 @@ fun ArtistDetailsContent(
                 )
             }
 
-            items(
+            itemsIndexed(
                 items = artistDetails.topSongs.take(5),
-                key = { song -> song.trackId }
-            ) { song ->
+                key = { index, song -> "song_${index}_${song.trackId}" }
+            ) { _, song ->
                 TopSongItem(song = song, onClick = { onNavigateToSong(song.trackId) })
                 Spacer(modifier = Modifier.height(12.dp))
             }
             
             // Top Albums Section
             if (artistDetails.topAlbums.isNotEmpty()) {
-                item {
+                item(key = "top_albums_header") {
                     Spacer(modifier = Modifier.height(24.dp))
                     Text(
                         text = stringResource(R.string.details_top_albums),
@@ -349,15 +350,15 @@ fun ArtistDetailsContent(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
                 
-                item {
+                item(key = "top_albums_row") {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         contentPadding = PaddingValues(horizontal = 4.dp)
                     ) {
-                        items(
+                        itemsIndexed(
                             items = artistDetails.topAlbums,
-                            key = { album -> "album_${album.album}_${album.artist}" }
-                        ) { album ->
+                            key = { index, album -> "album_${index}_${album.album}" }
+                        ) { _, album ->
                             TopAlbumCard(album = album)
                         }
                     }
@@ -366,13 +367,13 @@ fun ArtistDetailsContent(
             
             // Mood & Genre Section
             if (artistDetails.moodSummary != null) {
-                item {
+                item(key = "mood_insights") {
                     Spacer(modifier = Modifier.height(32.dp))
                     MoodInsightsSection(moodSummary = artistDetails.moodSummary)
                 }
             }
             
-            item {
+            item(key = "bottom_spacer") {
                 Spacer(modifier = Modifier.height(32.dp))
             }
         }

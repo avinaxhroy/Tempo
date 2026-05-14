@@ -183,7 +183,7 @@ class SpotifyEnrichmentWorker @AssistedInject constructor(
             }
 
             // Get the track
-            val track = trackDao.all().first().find { it.id == metadata.trackId }
+            val track = trackDao.getTrackById(metadata.trackId)
             if (track == null) {
                 Log.w(TAG, "Track ${metadata.trackId} not found")
                 continue

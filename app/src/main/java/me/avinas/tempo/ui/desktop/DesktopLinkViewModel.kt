@@ -1,12 +1,14 @@
 package me.avinas.tempo.ui.desktop
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.compose.runtime.Immutable
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -18,6 +20,7 @@ import me.avinas.tempo.desktop.DesktopMdnsManager
 import me.avinas.tempo.desktop.DesktopPairingManager
 import me.avinas.tempo.desktop.DesktopQrData
 import me.avinas.tempo.desktop.DesktopSatelliteServer
+import me.avinas.tempo.desktop.TokenEncryptor
 import me.avinas.tempo.utils.BatteryUtils
 import javax.inject.Inject
 
@@ -29,6 +32,8 @@ enum class PairingPhase {
     UNPAIRED,
     /** Camera is live and scanning for a desktop QR code. */
     SCANNING,
+    /** QR detected, processing the pairing. */
+    PROCESSING,
     /** A session is active; the NanoHTTPD receiver is running. */
     PAIRED
 }
@@ -45,6 +50,7 @@ enum class PairingPhase {
  * @param batteryLevel Current device battery level (0-100), or -1 if unavailable.
  * @param isBatteryCritical True if battery is ≤ 20% (desktop sync disabled).
  */
+@Immutable
 data class DesktopLinkUiState(
     val phase: PairingPhase = PairingPhase.CHECKING,
     val isServerRunning: Boolean = false,
@@ -54,7 +60,8 @@ data class DesktopLinkUiState(
     val errorMessage: String? = null,
     val desktopStats: DesktopStats? = null,
     val batteryLevel: Int = -1,
-    val isBatteryCritical: Boolean = false
+    val isBatteryCritical: Boolean = false,
+    val scannerKey: Int = 0 // Used to remount scanner for retry
 )
 
 /** Aggregated stats for plays received from the desktop satellite. */
@@ -78,6 +85,10 @@ class DesktopLinkViewModel @Inject constructor(
     private val listeningEventDao: ListeningEventDao,
     private val pairingCallbackClient: DesktopPairingCallbackClient
 ) : ViewModel() {
+
+    companion object {
+        private const val TAG = "DesktopLinkVM"
+    }
 
     private val _uiState = MutableStateFlow(DesktopLinkUiState())
     val uiState: StateFlow<DesktopLinkUiState> = _uiState.asStateFlow()
@@ -127,12 +138,12 @@ class DesktopLinkViewModel @Inject constructor(
 
     /** Activate the camera scanner. */
     fun startScanning() {
-        _uiState.update { it.copy(phase = PairingPhase.SCANNING, errorMessage = null) }
+        _uiState.update { it.copy(phase = PairingPhase.SCANNING, errorMessage = null, scannerKey = it.scannerKey + 1) }
     }
 
     /** Cancel scanning and return to the UNPAIRED view. */
     fun cancelScanning() {
-        _uiState.update { it.copy(phase = PairingPhase.UNPAIRED) }
+        _uiState.update { it.copy(phase = PairingPhase.UNPAIRED, scannerKey = it.scannerKey + 1) }
     }
 
     /**
@@ -140,20 +151,26 @@ class DesktopLinkViewModel @Inject constructor(
      *
      * Parses the Tempo Desktop QR payload, stores the session, and starts the receiver.
      * If the QR is not a valid Tempo Desktop code the user is shown an error and the
-     * scanner is re-activated so they can try again.
+     * scanner continues running so they can try again.
      */
     fun onQrScanned(rawText: String) {
         viewModelScope.launch {
+            Log.d(TAG, "QR scanned: $rawText")
+            
             val qrData = pairingManager.parseDesktopQrPayload(rawText)
             if (qrData == null) {
+                Log.w(TAG, "Invalid QR payload: $rawText")
                 _uiState.update {
                     it.copy(
-                        phase = PairingPhase.UNPAIRED,
-                        errorMessage = "That QR code is not valid. Scan the QR code shown in Tempo Desktop."
+                        phase = PairingPhase.SCANNING,
+                        errorMessage = "That QR code is not valid. Scan the QR code shown in Tempo Desktop.",
+                        scannerKey = it.scannerKey + 1 // Remount scanner for retry
                     )
                 }
                 return@launch
             }
+            
+            Log.d(TAG, "QR parsed successfully: version=${qrData.version}, token=${qrData.token?.take(8)}..., ip=${qrData.ip}, port=${qrData.port}")
             completePairing(qrData)
         }
     }
@@ -200,28 +217,44 @@ class DesktopLinkViewModel @Inject constructor(
     // ---------------------------------------------------------------------------
 
     private suspend fun completePairing(qrData: DesktopQrData) {
+        // Show processing state so user knows something is happening
+        _uiState.update { it.copy(phase = PairingPhase.PROCESSING, errorMessage = null) }
+        
         try {
             if (BatteryUtils.isCriticalBattery(appContext, forceRefresh = true)) {
                 _uiState.update {
                     it.copy(
-                        phase = PairingPhase.UNPAIRED,
+                        phase = PairingPhase.SCANNING,
                         errorMessage = "Desktop sync is unavailable while battery is 20% or below. Charge your phone and try again."
                     )
                 }
                 return
             }
 
+            Log.d(TAG, "Starting pairing process...")
             val session = pairingManager.completePairingFromDesktopQr(qrData)
+            Log.d(TAG, "Session created, starting server...")
+            
             server.start(DesktopPairingManager.SERVER_PORT)
             mdnsManager.register(DesktopPairingManager.SERVER_PORT)
             val phoneIp = pairingManager.getLocalIpAddress()
 
             if (qrData.ip != null && qrData.port != null) {
-                pairingCallbackClient.confirmDesktopPairing(
+                Log.d(TAG, "Attempting desktop callback...")
+                val authToken = TokenEncryptor.decrypt(session.authToken) ?: session.authToken
+                val callbackSuccess = pairingCallbackClient.confirmDesktopPairing(
                     qrData = qrData,
                     phoneIp = phoneIp,
-                    phonePort = DesktopPairingManager.SERVER_PORT
+                    phonePort = DesktopPairingManager.SERVER_PORT,
+                    authToken = authToken
                 )
+                if (!callbackSuccess) {
+                    Log.w(TAG, "Desktop pairing callback failed — desktop may not have confirmed this session")
+                } else {
+                    Log.d(TAG, "Desktop callback successful")
+                }
+            } else {
+                Log.d(TAG, "No desktop IP/port in QR, skipping callback (browser extension pairing)")
             }
 
             _uiState.update {
@@ -235,11 +268,14 @@ class DesktopLinkViewModel @Inject constructor(
                     else null
                 )
             }
+            Log.d(TAG, "Pairing complete!")
         } catch (e: Exception) {
+            Log.e(TAG, "Pairing failed", e)
             _uiState.update {
                 it.copy(
-                    phase = PairingPhase.UNPAIRED,
-                    errorMessage = "Could not connect to desktop: ${e.localizedMessage}"
+                    phase = PairingPhase.SCANNING,
+                    errorMessage = "Could not connect: ${e.localizedMessage}",
+                    scannerKey = it.scannerKey + 1 // Remount scanner for retry
                 )
             }
         }

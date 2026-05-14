@@ -42,6 +42,12 @@ interface TrackDao {
     @Query("SELECT * FROM tracks ORDER BY title ASC")
     suspend fun getAllSync(): List<Track>
     
+    @Query("SELECT COUNT(*) FROM tracks")
+    suspend fun getCount(): Int
+
+    @Query("SELECT album_art_url FROM tracks WHERE album_art_url LIKE 'file://%'")
+    suspend fun getLocalImageUrls(): List<String>
+    
     // =====================
     // Find by Title and Artist
     // =====================

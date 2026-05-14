@@ -466,9 +466,7 @@ object ArtistParser {
      */
     private fun isKnownBand(artist: String): Boolean {
         val lower = artist.trim().lowercase()
-        // Check hardcoded list first (fast path for common bands)
-        if (KNOWN_COMPLEX_BANDS.any { known -> lower == known }) return true
-        // Then check user-defined list
+        if (lower in KNOWN_COMPLEX_BANDS) return true
         return lower in userKnownBands
     }
 

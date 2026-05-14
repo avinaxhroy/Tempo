@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.Immutable
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -840,6 +841,7 @@ class HistoryViewModel @Inject constructor(
 
 }
 
+@Immutable
 data class HistoryUiState(
     val isLoading: Boolean = true,
     val isLoadingMore: Boolean = false,

@@ -107,7 +107,7 @@ fun StatsScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp) // Increased spacing for vertical rhythm
             ) {
                 // 1. Sticky Tab Selector
-                stickyHeader {
+                stickyHeader(key = "sticky_tab_selector") {
                      Box(
                          modifier = Modifier
                              .fillMaxWidth()
@@ -120,12 +120,12 @@ fun StatsScreen(
                      }
                 }
 
-                item {
+                item(key = "sort_by_selector") {
                     // Sort By Selector
 
                     
                     if (uiState.selectedTab != StatsTab.TOP_ALBUMS) {
-                        LaunchedEffect(Unit) {
+                        LaunchedEffect(uiState.selectedTab) {
                             walkthroughController.checkAndTrigger(me.avinas.tempo.ui.components.WalkthroughStep.STATS_SORT)
                         }
                         
@@ -148,7 +148,7 @@ fun StatsScreen(
 
                 // 2. Stats Items
                 if (!uiState.isLoading && uiState.items.isEmpty()) {
-                    item {
+                    item(key = "empty_state") {
                         me.avinas.tempo.ui.components.EmptyState(
                              modifier = Modifier
                                  .fillMaxWidth()
@@ -166,8 +166,8 @@ fun StatsScreen(
                     // Rank 1 Hero
                     // Rank 1 Hero
                     if (firstItem != null) {
-                        item {
-                            LaunchedEffect(Unit) {
+                        item(key = "hero_item") {
+                            LaunchedEffect(firstItem) {
                                 // Try to trigger, controller handles priority/dismissal state
                                 walkthroughController.checkAndTrigger(me.avinas.tempo.ui.components.WalkthroughStep.STATS_ITEM_CLICK)
                             }
@@ -199,9 +199,9 @@ fun StatsScreen(
                         key = { index, item -> 
                             when (item) {
                                 is TopTrack -> "track_${index}_${item.trackId}"
-                                is TopArtist -> "artist_${index}_${item.artist}"
+                                is TopArtist -> "artist_${index}_${item.artistId ?: item.artist}"
                                 is TopAlbum -> "album_${index}_${item.album}_${item.artist}"
-                                else -> "item_$index"
+                                else -> "item_${index}"
                             }
                         }
                     ) { index, item ->
@@ -220,7 +220,7 @@ fun StatsScreen(
 
                 // Loading More Indicator
                 if (uiState.isLoadingMore) {
-                    item {
+                    item(key = "loading_more") {
                         Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(color = TempoRed)
                         }
@@ -230,7 +230,11 @@ fun StatsScreen(
             } // end PullToRefreshBox
 
             // Top Bar
-            val isScrolled = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
+            val isScrolled by remember {
+                derivedStateOf {
+                    listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0
+                }
+            }
             val headerAlpha by animateFloatAsState(targetValue = if (isScrolled) 1f else 0f, label = "headerAlpha")
             
             Surface(
@@ -290,11 +294,29 @@ private fun resolveNavigation(
 
 @Composable
 fun HeroStatItem(item: Any, onNavigate: () -> Unit) {
-    val (title, subtitle, imageUrl, label) = when (item) {
-        is TopTrack -> Quad(item.title, item.artist, item.albumArtUrl, stringResource(R.string.stats_rank_1_track))
-        is TopArtist -> Quad(item.artist, "${item.playCount} plays", item.imageUrl, stringResource(R.string.stats_rank_1_artist))
-        is TopAlbum -> Quad(item.album, item.artist, item.albumArtUrl, stringResource(R.string.stats_rank_1_album))
-        else -> Quad("Unknown", "", null, "")
+    val title = when (item) {
+        is TopTrack -> item.title
+        is TopArtist -> item.artist
+        is TopAlbum -> item.album
+        else -> "Unknown"
+    }
+    val subtitle = when (item) {
+        is TopTrack -> item.artist
+        is TopArtist -> "${item.playCount} plays"
+        is TopAlbum -> item.artist
+        else -> ""
+    }
+    val imageUrl = when (item) {
+        is TopTrack -> item.albumArtUrl
+        is TopArtist -> item.imageUrl
+        is TopAlbum -> item.albumArtUrl
+        else -> null
+    }
+    val label = when (item) {
+        is TopTrack -> stringResource(R.string.stats_rank_1_track)
+        is TopArtist -> stringResource(R.string.stats_rank_1_artist)
+        is TopAlbum -> stringResource(R.string.stats_rank_1_album)
+        else -> ""
     }
 
     GlassCard(
@@ -343,11 +365,29 @@ fun HeroStatItem(item: Any, onNavigate: () -> Unit) {
 
 @Composable
 fun GlassStatItem(rank: Int, item: Any, onClick: () -> Unit) {
-    val (title, subtitle, imageUrl, timeMs) = when (item) {
-        is TopTrack -> Quad(item.title, item.artist, item.albumArtUrl, item.totalTimeMs)
-        is TopArtist -> Quad(item.artist, "${item.playCount} plays", item.imageUrl, item.totalTimeMs)
-        is TopAlbum -> Quad(item.album, item.artist, item.albumArtUrl, item.totalTimeMs)
-        else -> Quad("", "", null, 0L)
+    val title = when (item) {
+        is TopTrack -> item.title
+        is TopArtist -> item.artist
+        is TopAlbum -> item.album
+        else -> ""
+    }
+    val subtitle = when (item) {
+        is TopTrack -> item.artist
+        is TopArtist -> "${item.playCount} plays"
+        is TopAlbum -> item.artist
+        else -> ""
+    }
+    val imageUrl = when (item) {
+        is TopTrack -> item.albumArtUrl
+        is TopArtist -> item.imageUrl
+        is TopAlbum -> item.albumArtUrl
+        else -> null
+    }
+    val timeMs = when (item) {
+        is TopTrack -> item.totalTimeMs
+        is TopArtist -> item.totalTimeMs
+        is TopAlbum -> item.totalTimeMs
+        else -> 0L
     }
 
     val (tintColor, bgAlpha) = when(rank) {
@@ -423,9 +463,6 @@ private val GlassStatItemPalette = listOf(
     Color(0xFFE879F9)  // Orchid
 )
 
-// Utility class for destructuring
-data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
-
 @Composable
 fun EmptyStatsState() {
      Box(modifier = Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
@@ -438,6 +475,8 @@ fun EmptyStatsState() {
         }
     }
 }
+
+private val MutedFuchsia = Color(0xFFCE58E0)
 
 @Composable
 fun StatsTabSelector(selectedTab: StatsTab, onTabSelected: (StatsTab) -> Unit) {
@@ -453,9 +492,8 @@ fun StatsTabSelector(selectedTab: StatsTab, onTabSelected: (StatsTab) -> Unit) {
     ) {
         StatsTab.entries.forEach { tab ->
             val isSelected = tab == selectedTab
-            val MutedFuchsia = Color(0xFFCE58E0) // Desaturated for tabs
             val backgroundColor by animateColorAsState(if (isSelected) MutedFuchsia else Color.Transparent, label = "tabBackgroundColor")
-            val contentColor by animateColorAsState(if (isSelected) Color.White else Color(0xFFE5E7EB), label = "tabContentColor") // Slightly brighter muted gray
+            val contentColor by animateColorAsState(if (isSelected) Color.White else Color(0xFFE5E7EB), label = "tabContentColor")
             
             Box(
                 modifier = Modifier
@@ -529,5 +567,3 @@ fun SortBySelector(
         }
     }
 }
-
-

@@ -627,7 +627,7 @@ fun HistoryListContent(
             // Empty State
             val allEmpty = groupedItems.isEmpty() && lastFmGroupedItems.isEmpty() && archiveItems.isEmpty()
             if (!isLoading && allEmpty) {
-                item {
+                item(key = "empty_state") {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -679,7 +679,7 @@ fun HistoryListContent(
 
                 items(
                     count = itemsList.size,
-                    key = { index -> "recent_${groupIndex}_${index}_${itemsList[index].id}" }
+                    key = { index -> "recent_${itemsList[index].id}" }
                 ) { index ->
                     val item = itemsList[index]
                     val isFirstItem = groupIndex == 0 && index == 0
@@ -755,7 +755,7 @@ fun HistoryListContent(
 
                     items(
                         count = itemsList.size,
-                        key = { index -> "lastfm_${groupIndex}_${index}_${itemsList[index].id}" }
+                        key = { index -> "lastfm_${itemsList[index].id}" }
                     ) { index ->
                         val item = itemsList[index]
                         Box(modifier = Modifier.fillMaxWidth()) {
@@ -797,7 +797,7 @@ fun HistoryListContent(
                     
                     items(
                         count = archiveItems.size,
-                        key = { index -> "archive_sep_${index}_${archiveItems[index].archiveId}_${archiveItems[index].timestamp}" }
+                    key = { index -> "archive_sep_${archiveItems[index].archiveId}" }
                     ) { index ->
                         val archiveItem = archiveItems[index]
                         ArchiveHistoryListItem(item = archiveItem)
@@ -817,7 +817,7 @@ fun HistoryListContent(
                 
                 items(
                     count = archiveItems.size,
-                    key = { index -> "archive_uni_${index}_${archiveItems[index].archiveId}_${archiveItems[index].timestamp}" }
+                    key = { index -> "archive_uni_${archiveItems[index].archiveId}" }
                 ) { index ->
                     val archiveItem = archiveItems[index]
                     ArchiveHistoryListItem(item = archiveItem)

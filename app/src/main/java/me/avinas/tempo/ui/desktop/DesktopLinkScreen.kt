@@ -76,6 +76,7 @@ fun DesktopLinkScreen(
     // ── Full-screen scanning mode — no Scaffold chrome ───────────────────────
     if (uiState.phase == PairingPhase.SCANNING) {
         DesktopScanningScreen(
+            scannerKey = uiState.scannerKey,
             onQrDetected = viewModel::onQrScanned,
             onCancel = viewModel::cancelScanning
         )
@@ -173,6 +174,38 @@ fun DesktopLinkScreen(
                     }
 
                     PairingPhase.SCANNING -> Unit // handled above as an early return
+                    
+                    PairingPhase.PROCESSING -> {
+                        GlassCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(20.dp),
+                            variant = GlassCardVariant.LowProminence
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                CircularProgressIndicator(
+                                    color = TempoPrimary,
+                                    strokeWidth = 3.dp,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "Processing QR code...",
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Please wait while we connect to your device",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
                 }
 
                 uiState.errorMessage?.let { error ->
@@ -346,6 +379,7 @@ private fun MiniInfoTile(
 
 @Composable
 private fun DesktopScanningScreen(
+    scannerKey: Int,
     onQrDetected: (String) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -354,10 +388,13 @@ private fun DesktopScanningScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        QrScannerView(
-            modifier = Modifier.fillMaxSize(),
-            onQrDetected = onQrDetected
-        )
+        // Use key to force remount scanner when needed (for retry)
+        key(scannerKey) {
+            QrScannerView(
+                modifier = Modifier.fillMaxSize(),
+                onQrDetected = onQrDetected
+            )
+        }
 
         // Dimmed border outside the scanning frame
         Column(

@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" >
+    <title>qrcode | default</title>
+    <script src="../dist/qrcode.js"></script>
+    <script type="module">
+
+import { runTests } from '@web/test-runner-mocha';
+import { overview as test } from './qrcode-test-impl.js';
+
+runTests(async () => {
+  test(qrcode);
+});
+
+    </script>
+  </head>
+</html>

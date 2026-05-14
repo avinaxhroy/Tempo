@@ -296,7 +296,7 @@ fun InlineTextEditor(
                 contentPadding = PaddingValues(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                 items(FontPreset.values()) { preset ->
+                 items(FontPreset.values(), key = { preset -> preset.name }) { preset ->
                     FontStyleChip(
                         name = preset.displayName,
                         isSelected = localStyle.fontPreset == preset,

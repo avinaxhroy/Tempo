@@ -298,7 +298,7 @@ class LastFmEnrichmentService @Inject constructor(
 
         for (tag in tags) {
             val normalizedTag = tag.lowercase().trim()
-            if (genreKeywords.any { normalizedTag.contains(it) || it.contains(normalizedTag) }) {
+            if (genreKeywords.any { normalizedTag.contains(it) }) {
                 genres.add(tag)
             } else {
                 generalTags.add(tag)

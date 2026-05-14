@@ -102,7 +102,7 @@ class DesktopPlayIngestionService @Inject constructor(
 
         var accepted = 0
         var duplicates = 0
-        val newTrackIds = mutableListOf<Long>()
+        val newTrackIds = mutableSetOf<Long>()
 
         for (i in 0 until playsArray.length()) {
             val entry = playsArray.optJSONObject(i) ?: continue
@@ -160,9 +160,7 @@ class DesktopPlayIngestionService @Inject constructor(
                             // Reset status to PENDING so the worker picks it up again
                             enrichedMetadataRepository.markForReEnrichment(trackId)
                         }
-                        if (!newTrackIds.contains(trackId)) {
-                            newTrackIds.add(trackId)
-                        }
+                        newTrackIds.add(trackId)
                     }
                 }
 
@@ -201,6 +199,10 @@ class DesktopPlayIngestionService @Inject constructor(
             deviceName = deviceName.ifBlank { session.deviceName }
         )
 
+        // 7. Rotate auth token for forward secrecy (client will use the new token next time)
+        val rotatedToken = pairingManager.rotateToken(token)
+        val rotatedTokenStr = rotatedToken ?: token
+
         // Enqueue per-track immediate enrichment for each new track, identical to how
         // MusicTrackingService handles real-time plays.  Using per-track IDs (rather than
         // a single batch call) ensures the tracks are not lost at the bottom of the
@@ -210,7 +212,7 @@ class DesktopPlayIngestionService @Inject constructor(
         }
 
         Log.i(TAG, "Ingestion complete: $accepted accepted, $duplicates duplicates (device: $deviceName)")
-        return IngestionResult.Success(accepted, duplicates)
+        return IngestionResult.Success(accepted, duplicates, nextToken = rotatedTokenStr)
     }
 
     // --------------------------------------------------------------------------

@@ -56,4 +56,7 @@ interface AlbumDao {
      */
     @Query("SELECT * FROM albums")
     suspend fun getAllSync(): List<Album>
+
+    @Query("SELECT artwork_url FROM albums WHERE artwork_url LIKE 'file://%'")
+    suspend fun getLocalImageUrls(): List<String>
 }

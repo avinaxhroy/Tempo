@@ -2,10 +2,14 @@ package me.avinas.tempo.data.remote.spotify
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,8 +45,40 @@ class SpotifyTokenStorage @Inject constructor(
         private const val AUTH_TIMEOUT_MS = 10 * 60 * 1000L
     }
 
-    private val encryptedPrefs: SharedPreferences by lazy {
+    private var _encryptedPrefs: SharedPreferences? = null
+
+    private val encryptedPrefs: SharedPreferences
+        get() = _encryptedPrefs ?: createEncryptedPrefs().also { _encryptedPrefs = it }
+
+    private fun createEncryptedPrefs(): SharedPreferences {
         try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+
+            return EncryptedSharedPreferences.create(
+                context,
+                PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to open encrypted prefs, clearing and retrying", e)
+            return resetEncryptedPrefs()
+        }
+    }
+
+    private fun resetEncryptedPrefs(): SharedPreferences {
+        deleteEncryptedPrefsFiles()
+        deleteMasterKey()
+
+        // Wrap in try/catch: on some OEM devices (Samsung, etc.) the Keystore can be in a
+        // corrupted or locked state after a fresh install, causing MasterKey.Builder.build() or
+        // EncryptedSharedPreferences.create() to throw GeneralSecurityException even after the
+        // key+file cleanup above.  Without this guard the exception escapes into the Hilt
+        // component graph initialisation and crashes the app on every subsequent cold start.
+        return try {
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
@@ -55,8 +91,38 @@ class SpotifyTokenStorage @Inject constructor(
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create encrypted token storage", e)
-            throw IllegalStateException("Secure Spotify token storage is unavailable", e)
+            Log.e(TAG, "Failed to reset encrypted prefs, falling back to plain prefs", e)
+            context.getSharedPreferences("${PREFS_NAME}_fallback", android.content.Context.MODE_PRIVATE)
+        }
+    }
+
+    private fun deleteEncryptedPrefsFiles() {
+        try {
+            val prefsDir = File(context.filesDir, "../shared_prefs")
+            File(prefsDir, "$PREFS_NAME.xml").delete()
+            File(prefsDir, "$PREFS_NAME.xml.bak").delete()
+        } catch (e: IOException) {
+            Log.w(TAG, "Failed to delete encrypted prefs files", e)
+        }
+    }
+
+    private fun deleteMasterKey() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        try {
+            val keyStore = java.security.KeyStore.getInstance("AndroidKeyStore")
+            keyStore.load(null)
+            val aliases = listOf(
+                "_androidx_security_crypto_encryption_master_key",
+                "_androidx_security_crypto_encryption_master_key_256"
+            )
+            for (alias in aliases) {
+                if (keyStore.containsAlias(alias)) {
+                    keyStore.deleteEntry(alias)
+                    Log.d(TAG, "Deleted keystore entry: $alias")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to delete master key from keystore", e)
         }
     }
 

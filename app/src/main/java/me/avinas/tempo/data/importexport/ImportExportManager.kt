@@ -394,9 +394,21 @@ class ImportExportManager @Inject constructor(
             
             _progress.value = ImportExportProgress("Importing preferences...", 90, 100)
             
-            // Import UserPreferences
+            // Import UserPreferences.
+            // Sanitize device-specific / auth-bound fields before upserting so that a backup
+            // restored on a *different* (or freshly reinstalled) device does not carry over
+            // Spotify polling state that has no valid tokens on the new device.  Leaving
+            // spotifyApiOnlyMode=true would (a) permanently suppress Spotify notification
+            // tracking and (b) schedule SpotifyPollingWorker in a perpetual failure loop.
             data.userPreferences?.let { prefs ->
-                database.userPreferencesDao().upsert(prefs)
+                database.userPreferencesDao().upsert(
+                    prefs.copy(
+                        spotifyLinked = false,
+                        spotifyApiOnlyMode = false,
+                        spotifyImportCursor = null,
+                        lastSpotifyImportTimestamp = null
+                    )
+                )
             }
 
             // v6: Import UserLevel (gamification data)

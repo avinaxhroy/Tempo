@@ -23,8 +23,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.compose.runtime.Immutable
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -66,7 +68,8 @@ class SettingsViewModel @Inject constructor(
             // Load Room preferences
             val roomPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
             
-            _uiState.value = SettingsUiState(
+            _uiState.update {
+                SettingsUiState(
                 dailySummaryEnabled = dataStorePrefs[NOTIF_DAILY_KEY] ?: true,
                 weeklyRecapEnabled = dataStorePrefs[NOTIF_WEEKLY_KEY] ?: true,
                 achievementsEnabled = dataStorePrefs[NOTIF_ACHIEVEMENTS_KEY] ?: true,
@@ -81,29 +84,31 @@ class SettingsViewModel @Inject constructor(
                 isLastFmConnected = roomPrefs.lastfmConnected,
                 lastFmUsername = roomPrefs.lastfmUsername,
                 lastFmSyncFrequency = roomPrefs.lastfmSyncFrequency,
-                isGamificationEnabled = roomPrefs.isGamificationEnabled
-            )
+                isGamificationEnabled = roomPrefs.isGamificationEnabled,
+                pauseTrackingOnLowBattery = roomPrefs.pauseTrackingOnLowBattery
+                )
+            }
         }
         
         // Watch DataStore for updates
         viewModelScope.launch {
             profileIdentityManager.profileIdentity.collect { identity ->
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     userName = identity.userName,
                     profileImagePath = identity.profileImagePath
-                )
+                ) }
             }
         }
 
         viewModelScope.launch {
             context.dataStore.data.collect { preferences ->
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     dailySummaryEnabled = preferences[NOTIF_DAILY_KEY] ?: true,
                     weeklyRecapEnabled = preferences[NOTIF_WEEKLY_KEY] ?: true,
                     achievementsEnabled = preferences[NOTIF_ACHIEVEMENTS_KEY] ?: true,
                     dailyChallengesEnabled = preferences[NOTIF_CHALLENGES_KEY] ?: true,
                     extendedAudioAnalysisEnabled = preferences[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false
-                )
+                ) }
             }
         }
         
@@ -111,7 +116,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesDao.preferences().collect { roomPrefs ->
                 val prefs = roomPrefs ?: me.avinas.tempo.data.local.entities.UserPreferences()
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     mergeAlternateVersions = prefs.mergeAlternateVersions,
                     filterPodcasts = prefs.filterPodcasts,
                     filterAudiobooks = prefs.filterAudiobooks,
@@ -119,8 +124,9 @@ class SettingsViewModel @Inject constructor(
                     isLastFmConnected = prefs.lastfmConnected,
                     lastFmUsername = prefs.lastfmUsername,
                     lastFmSyncFrequency = prefs.lastfmSyncFrequency,
-                    isGamificationEnabled = prefs.isGamificationEnabled
-                )
+                    isGamificationEnabled = prefs.isGamificationEnabled,
+                    pauseTrackingOnLowBattery = prefs.pauseTrackingOnLowBattery
+                ) }
             }
         }
     }
@@ -208,7 +214,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
             userPreferencesDao.upsert(currentPrefs.copy(isGamificationEnabled = enabled))
-            _uiState.value = _uiState.value.copy(isGamificationEnabled = enabled)
+            _uiState.update { it.copy(isGamificationEnabled = enabled) }
             if (!enabled) {
                 // If gamification is completely disabled, cancel workers that compute XP/challenges
                 NotificationWorker.cancelChallengeReady(context)
@@ -226,8 +232,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
             userPreferencesDao.upsert(currentPrefs.copy(mergeAlternateVersions = enabled))
-            // Update UI state immediately
-            _uiState.value = _uiState.value.copy(mergeAlternateVersions = enabled)
+            _uiState.update { it.copy(mergeAlternateVersions = enabled) }
         }
     }
     
@@ -235,7 +240,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
             userPreferencesDao.upsert(currentPrefs.copy(filterPodcasts = enabled))
-            _uiState.value = _uiState.value.copy(filterPodcasts = enabled)
+            _uiState.update { it.copy(filterPodcasts = enabled) }
         }
     }
     
@@ -243,7 +248,19 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
             userPreferencesDao.upsert(currentPrefs.copy(filterAudiobooks = enabled))
-            _uiState.value = _uiState.value.copy(filterAudiobooks = enabled)
+            _uiState.update { it.copy(filterAudiobooks = enabled) }
+        }
+    }
+    
+    /**
+     * Toggle whether music tracking pauses automatically when battery drops ≤ 20%.
+     * Persists to Room so the setting survives app restarts.
+     */
+    fun togglePauseTrackingOnLowBattery(enabled: Boolean) {
+        viewModelScope.launch {
+            val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
+            userPreferencesDao.upsert(currentPrefs.copy(pauseTrackingOnLowBattery = enabled))
+            _uiState.update { it.copy(pauseTrackingOnLowBattery = enabled) }
         }
     }
     
@@ -256,7 +273,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val currentPrefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
             userPreferencesDao.upsert(currentPrefs.copy(spotifyApiOnlyMode = enabled))
-            _uiState.value = _uiState.value.copy(spotifyApiOnlyMode = enabled)
+            _uiState.update { it.copy(spotifyApiOnlyMode = enabled) }
             
             // Schedule or cancel the polling worker based on mode
             if (enabled) {
@@ -326,6 +343,7 @@ class SettingsViewModel @Inject constructor(
     }
 }
 
+@Immutable
 data class SettingsUiState(
     val dailySummaryEnabled: Boolean = true,
     val weeklyRecapEnabled: Boolean = true,
@@ -345,5 +363,7 @@ data class SettingsUiState(
     val lastFmUsername: String? = null,
     val lastFmSyncFrequency: String = "NONE",
     // Gamification state
-    val isGamificationEnabled: Boolean = true
+    val isGamificationEnabled: Boolean = true,
+    // Battery saver tracking pause
+    val pauseTrackingOnLowBattery: Boolean = true
 )

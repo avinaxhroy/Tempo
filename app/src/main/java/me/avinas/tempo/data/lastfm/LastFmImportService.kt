@@ -93,9 +93,6 @@ class LastFmImportService @Inject constructor(
         private const val DEFAULT_DURATION_MS = 210_000L // 3.5 minutes
         private const val DEFAULT_COMPLETION_PERCENTAGE = 100
         
-        // Duplicate detection tolerance (60 seconds)
-        private const val DUPLICATE_TOLERANCE_MS = 60_000L
-        
         // Replay detection threshold (same track within 5 minutes)
         private const val REPLAY_THRESHOLD_MS = 5 * 60 * 1000L
         
@@ -212,18 +209,21 @@ class LastFmImportService @Inject constructor(
     val progress: StateFlow<ImportProgress> = _progress.asStateFlow()
     
     // Active set tracking (built during discovery)
-    private var activeSetKeys = mutableSetOf<String>()
-    private var lovedTrackKeys = mutableSetOf<String>()
-    
+    // synchronizedSet: cancelImport() may clear these from the ViewModel thread while
+    // buildActiveSet() is iterating them on the IO dispatcher.
+    private val activeSetKeys = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val lovedTrackKeys = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
     // ==================== Performance Optimization Caches ====================
-    
+
     // In-memory track cache to avoid N+1 queries during import
     // Key: "title|artist" normalized, Value: Track or null
-    private val trackCache = mutableMapOf<String, Track?>()
-    
+    // ConcurrentHashMap: cancelImport() may clear this while import iterates it.
+    private val trackCache = java.util.concurrent.ConcurrentHashMap<String, Track?>()
+
     // Batch pending EnrichedMetadata for bulk insert
     private val pendingMetadata = mutableListOf<EnrichedMetadata>()
-    
+
     // Batch pending Tracks for bulk insert
     // Key: cacheKey ("title|artist"), Value: PendingTrack with scrobble data
     private data class PendingTrack(
@@ -231,7 +231,8 @@ class LastFmImportService @Inject constructor(
         val cacheKey: String,
         val scrobble: LastFmScrobble
     )
-    private val pendingTracks = mutableMapOf<String, PendingTrack>()
+    // ConcurrentHashMap: cancelImport() may clear this while import iterates it.
+    private val pendingTracks = java.util.concurrent.ConcurrentHashMap<String, PendingTrack>()
     
     // ==================== API Error Handling ====================
     
@@ -344,15 +345,6 @@ class LastFmImportService @Inject constructor(
     }
     
     /**
-     * Check if we have network connectivity before starting long operations.
-     */
-    private fun isNetworkAvailable(): Boolean {
-        // This would ideally use ConnectivityManager, but for now we'll rely on
-        // the network errors being caught during API calls
-        return true
-    }
-
-    /**
      * Discover user's Last.fm account information.
      * This is the first step - shows user what will be imported.
      */
@@ -407,22 +399,32 @@ class LastFmImportService @Inject constructor(
                 lastFmApi.getTopTracks(user = username, apiKey = API_KEY, limit = 1, page = 1)
             }
             val topTracksCount = topTracksResult.getOrNull()?.toptracks?.attr?.getTotal() ?: 0
-            
+
             // Fetch loved tracks count with error handling
             delay(RATE_LIMIT_MS)
             val lovedTracksResult = executeWithRetry("getLovedTracks") {
                 lastFmApi.getLovedTracks(user = username, apiKey = API_KEY, limit = 1, page = 1)
             }
             val lovedTracksCount = lovedTracksResult.getOrNull()?.lovedtracks?.attr?.getTotal() ?: 0
-            
+
+            // Fetch most recent scrobble timestamp (first non-nowplaying track on page 1)
+            delay(RATE_LIMIT_MS)
+            val recentTracksResult = executeWithRetry("getRecentTracks") {
+                lastFmApi.getRecentTracks(user = username, apiKey = API_KEY, limit = 1, page = 1)
+            }
+            val latestScrobble = recentTracksResult.getOrNull()
+                ?.recenttracks?.track
+                ?.firstOrNull { it.date != null }
+                ?.getTimestampMs()
+
             _progress.value = ImportProgress.Idle
-            
+
             Result.success(
                 DiscoveryResult(
                     username = user.name ?: username,
                     totalScrobbles = user.getPlayCountLong() ?: 0,
                     registeredDate = user.getRegisteredTimestampMs(),
-                    latestScrobble = System.currentTimeMillis(), // Will be updated during import
+                    latestScrobble = latestScrobble,
                     profileImageUrl = user.getBestImageUrl(),
                     topTracksCount = topTracksCount,
                     lovedTracksCount = lovedTracksCount
@@ -1127,23 +1129,7 @@ class LastFmImportService @Inject constructor(
         }
         
         if (track == null) {
-            // Check if already in pending batch (not yet flushed to DB)
-            val pendingTrack = pendingTracks[cacheKey]
-            if (pendingTrack != null) {
-                // Use track from pending batch (will get ID after flush)
-                track = pendingTrack.track
-                if (track.id == 0L) {
-                    // Track not yet flushed - flush now to get IDs
-                    flushPendingTracks()
-                    // Re-fetch from cache after flush
-                    track = trackCache[cacheKey]
-                }
-                isNewTrack = false // Already counted as new
-            }
-        }
-        
-        if (track == null) {
-            // Create new track and queue for batch insert
+            // Create new track and insert immediately to DB
             val newTrack = Track(
                 title = trackTitle,
                 artist = artistName,
@@ -1155,28 +1141,13 @@ class LastFmImportService @Inject constructor(
                 primaryArtistId = null, // DEFERRED: Artist linking handled by background worker
                 contentType = "MUSIC"
             )
-            
-            // Queue for batch insert
-            pendingTracks[cacheKey] = PendingTrack(newTrack, cacheKey, scrobble)
+
+            val trackId = trackRepository.insert(newTrack)
+            track = newTrack.copy(id = trackId)
+            trackCache[cacheKey] = track
+            queueEnrichedMetadata(track, scrobble)
             isNewTrack = true
-            
-            // Flush when batch reaches threshold
-            if (pendingTracks.size >= EVENT_BATCH_SIZE) {
-                flushPendingTracks()
-                // Get the inserted track with ID
-                track = trackCache[cacheKey]
-            } else {
-                // Track will be flushed later, insert immediately for now
-                // (This ensures we have track ID for listening event)
-                val trackId = trackRepository.insert(newTrack)
-                track = newTrack.copy(id = trackId)
-                trackCache[cacheKey] = track
-                pendingTracks.remove(cacheKey) // Remove since we inserted directly
-                
-                // BATCHED: Queue metadata instead of immediate insert  
-                queueEnrichedMetadata(track, scrobble)
-            }
-            
+
             // DEFERRED: Skip artist linking during import for performance
             // The existing ArtistLinkingService.processUnlinkedTracks() background worker
             // will handle this after import completes
@@ -1219,31 +1190,6 @@ class LastFmImportService @Inject constructor(
         )
         
         return ScrobblePrepareResult.Ready(event, isNewTrack, isNewArtist)
-    }
-    
-    /**
-     * Create enriched metadata for a new track (used for sync operations).
-     */
-    private suspend fun createEnrichedMetadata(track: Track, scrobble: LastFmScrobble) {
-        try {
-            val albumArtUrl = scrobble.getBestImageUrl()
-            val metadata = EnrichedMetadata(
-                trackId = track.id,
-                musicbrainzRecordingId = scrobble.mbid,
-                musicbrainzArtistId = scrobble.artist?.mbid,
-                albumTitle = scrobble.album?.name,
-                musicbrainzReleaseId = scrobble.album?.mbid,
-                albumArtUrl = albumArtUrl,
-                // Use DEEZER priority level for Last.fm art (reasonable quality)
-                albumArtSource = if (albumArtUrl != null) AlbumArtSource.DEEZER else AlbumArtSource.NONE,
-                artistName = scrobble.artist?.getArtistName(),
-                enrichmentStatus = EnrichmentStatus.PENDING,
-                cacheTimestamp = System.currentTimeMillis()
-            )
-            enrichedMetadataDao.upsert(metadata)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to create enriched metadata for track ${track.id}", e)
-        }
     }
     
     /**
@@ -1600,28 +1546,32 @@ class LastFmImportService @Inject constructor(
      */
     private fun decompressTimestamps(blob: ByteArray): List<Long> {
         if (blob.isEmpty()) return emptyList()
-        
-        val input = java.io.DataInputStream(java.io.ByteArrayInputStream(blob))
-        
-        // Read base timestamp
-        val baseTimestamp = input.readLong()
-        
-        // Read count
-        val count = input.readInt()
-        
-        if (count <= 1) return listOf(baseTimestamp)
-        
-        // Read deltas and reconstruct timestamps
-        val timestamps = mutableListOf(baseTimestamp)
-        var current = baseTimestamp
-        
-        repeat(count - 1) {
-            val deltaSec = input.readInt()
-            current += deltaSec * 1000L
-            timestamps.add(current)
+        return try {
+            val input = java.io.DataInputStream(java.io.ByteArrayInputStream(blob))
+
+            // Read base timestamp
+            val baseTimestamp = input.readLong()
+
+            // Read count
+            val count = input.readInt()
+
+            if (count <= 1) return listOf(baseTimestamp)
+
+            // Read deltas and reconstruct timestamps
+            val timestamps = mutableListOf(baseTimestamp)
+            var current = baseTimestamp
+
+            repeat(count - 1) {
+                val deltaSec = input.readInt()
+                current += deltaSec * 1000L
+                timestamps.add(current)
+            }
+
+            timestamps
+        } catch (e: java.io.IOException) {
+            Log.w(TAG, "decompressTimestamps: truncated or malformed blob (${blob.size} bytes), returning empty list", e)
+            emptyList()
         }
-        
-        return timestamps
     }
     
     /**

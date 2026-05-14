@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.drawable.Icon
@@ -15,7 +16,6 @@ import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Build
-import android.os.BatteryManager
 import android.os.IBinder
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -43,6 +43,8 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import me.avinas.tempo.receiver.BatteryStateReceiver
+import me.avinas.tempo.utils.BatteryUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import java.io.File
@@ -91,6 +93,9 @@ class MusicTrackingService : NotificationListenerService() {
         private const val TAG = "MusicTrackingService"
         private const val CHANNEL_ID = "tempo_tracking_channel"
         private const val NOTIFICATION_ID = 1001
+
+        /** Sent by [BatteryStateReceiver] to trigger a re-scan of active media sessions. */
+        const val ACTION_BATTERY_RECOVERED = "me.avinas.tempo.ACTION_BATTERY_RECOVERED"
 
         // Music app package names to monitor (ONLY music apps, no video)
         private val MUSIC_APPS = setOf(
@@ -832,7 +837,7 @@ class MusicTrackingService : NotificationListenerService() {
     private val serviceStartTime = AtomicLong(0)
     
     // Recent plays cache for replay detection (trackId -> lastPlayTimestamp)
-    private val recentPlaysCache = mutableMapOf<Long, Long>()
+    private val recentPlaysCache = java.util.concurrent.ConcurrentHashMap<Long, Long>()
     
     // Estimated durations cache (title+artist hash -> duration) for when MediaSession doesn't provide duration
     private val durationEstimateCache = mutableMapOf<String, Long>()
@@ -1217,6 +1222,9 @@ class MusicTrackingService : NotificationListenerService() {
         }
     }
 
+    /** Dynamically-registered receiver so it only lives while the service is running. */
+    private var batteryStateReceiver: BatteryStateReceiver? = null
+
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "MusicTrackingService created")
@@ -1238,10 +1246,27 @@ class MusicTrackingService : NotificationListenerService() {
         // Initialize MediaSessionManager
         initializeMediaSessionManager()
 
+        // Register battery state receiver so we resume tracking the moment battery recovers.
+        // Dynamic registration means it only fires while this service is running.
+        // NOTE: ACTION_BATTERY_CHANGED is a sticky broadcast — Android delivers it immediately
+        // on registration with the current level. We set batteryReceiverReady AFTER registering
+        // so the receiver can suppress the initial spurious delivery.
+        val receiver = BatteryStateReceiver()
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_BATTERY_OKAY)
+            addAction(Intent.ACTION_BATTERY_CHANGED)
+        }
+        registerReceiver(receiver, filter)
+        batteryStateReceiver = receiver
+        // Signal receiver that the startup-sticky delivery has passed
+        receiver.markReady()
+        Log.d(TAG, "BatteryStateReceiver registered")
+
         // Initial check for service lifecycle
         updateServiceLifecycle()
     }
-    
+
+
     private fun initializeDependencies() {
         try {
             val entryPoint = EntryPointAccessors.fromApplication(
@@ -1287,10 +1312,15 @@ class MusicTrackingService : NotificationListenerService() {
             }
             
             Log.d(TAG, "Dependencies initialized successfully")
+
+            // Start watching the battery pause preference so the cached flag stays live
+            watchBatteryPreference()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize dependencies", e)
             throw e
         }
+        // watchBatteryPreference is intentionally called INSIDE the try block above,
+        // but is safe because it only launches a coroutine (no throws).
     }
     
     /**
@@ -1698,6 +1728,29 @@ class MusicTrackingService : NotificationListenerService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.i(TAG, "onStartCommand: action=${intent?.action}")
+        when (intent?.action) {
+            ACTION_BATTERY_RECOVERED -> {
+                Log.i(TAG, "Battery recovered — rescanning active notifications and media sessions")
+                // Invalidate battery cache so shouldPauseForBattery() reads fresh level
+                BatteryUtils.invalidateCache()
+                // Re-scan any notifications and media sessions that were missed while paused
+                serviceScope.launch {
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        try {
+                            activeNotifications?.forEach { sbn ->
+                                if (isMusicNotification(sbn)) {
+                                    processNotificationPosted(sbn)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error rescanning notifications after battery recovery", e)
+                        }
+                        rescanActiveMediaSessions()
+                        updateServiceLifecycle()
+                    }
+                }
+            }
+        }
         return START_STICKY // Restart if killed
     }
 
@@ -1811,13 +1864,16 @@ class MusicTrackingService : NotificationListenerService() {
     }
 
     private fun processNotificationPosted(sbn: StatusBarNotification) {
-        if (isBatteryLow()) {
-            Log.d(TAG, "Battery level is low (< 20%), stopping tracking from notification")
+        if (shouldPauseForBattery()) {
+            Log.d(TAG, "Tracking paused (low battery) — ignoring notification from ${sbn.packageName}")
+            // Save any in-progress session so no listening data is lost
             val session = playbackStates.remove(sbn.packageName)
             if (session != null) {
                 session.pause()
                 saveListeningEvent(session)
             }
+            // Ensure the foreground notification reflects the paused-for-battery state
+            updateTrackingNotification(null, null)
             return
         }
 
@@ -1901,8 +1957,7 @@ class MusicTrackingService : NotificationListenerService() {
                     session.trackId?.let { trackId ->
                         serviceScope.launch {
                             try {
-                                val tracks = trackRepository.all().first()
-                                val track = tracks.find { it.id == trackId }
+                                val track = trackRepository.getById(trackId).first()
                                 if (track != null && me.avinas.tempo.utils.ArtistParser.isUnknownArtist(track.artist)) {
                                     Log.i(TAG, "Updating track $trackId artist from '${track.artist}' to '$artist' (via notification)")
                                     val updatedTrack = track.copy(artist = artist)
@@ -2544,8 +2599,7 @@ class MusicTrackingService : NotificationListenerService() {
      */
     private suspend fun updateTrackAlbumArtIfNeeded(trackId: Long, localArtUrl: String) {
         try {
-            val tracks = trackRepository.all().first()
-            val track = tracks.find { it.id == trackId } ?: return
+            val track = trackRepository.getById(trackId).first() ?: return
             
             // Only update if track doesn't have album art URL
             if (track.albumArtUrl.isNullOrBlank()) {
@@ -2658,12 +2712,7 @@ class MusicTrackingService : NotificationListenerService() {
         
         // Clean old entries from cache (older than replay threshold)
         val oldThreshold = currentTime - REPLAY_THRESHOLD_MS
-        val iterator = recentPlaysCache.entries.iterator()
-        while (iterator.hasNext()) {
-            if (iterator.next().value < oldThreshold) {
-                iterator.remove()
-            }
-        }
+        recentPlaysCache.entries.removeIf { it.value < oldThreshold }
         
         // Record duration with smart estimator for future learning (only full plays are reliable)
         // Record duration with smart estimator for future learning (only full plays are reliable)
@@ -2966,14 +3015,15 @@ class MusicTrackingService : NotificationListenerService() {
 
     private fun processMediaControllerState(controller: MediaController) {
         val packageName = controller.packageName
-        
-        if (isBatteryLow()) {
-            Log.d(TAG, "Battery level is low (< 20%), stopping tracking from MediaController")
+
+        if (shouldPauseForBattery()) {
+            Log.d(TAG, "Tracking paused (low battery) — ignoring MediaController update from $packageName")
             val session = playbackStates.remove(packageName)
             if (session != null) {
                 session.pause()
                 saveListeningEvent(session)
             }
+            updateTrackingNotification(null, null)
             return
         }
 
@@ -3165,8 +3215,7 @@ class MusicTrackingService : NotificationListenerService() {
                 currentSession.trackId?.let { trackId ->
                     serviceScope.launch {
                         try {
-                            val tracks = trackRepository.all().first()
-                            val track = tracks.find { it.id == trackId }
+                            val track = trackRepository.getById(trackId).first()
                             if (track != null && me.avinas.tempo.utils.ArtistParser.isUnknownArtist(track.artist)) {
                                 Log.i(TAG, "Updating track $trackId artist from '${track.artist}' to '$artist'")
                                 val updatedTrack = track.copy(artist = artist)
@@ -3394,6 +3443,23 @@ class MusicTrackingService : NotificationListenerService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // If we are paused specifically due to low battery, show a clear status.
+        // This keeps users informed instead of silently showing "Waiting for music..."
+        if (shouldPauseForBattery()) {
+            val batteryLevel = BatteryUtils.getBatteryLevel(this)
+            return NotificationCompat.Builder(this, CHANNEL_ID + "_silent")
+                .setContentTitle("Tempo — Tracking paused")
+                .setContentText("🪫 Battery at $batteryLevel%. Tracking resumes above ${BatteryUtils.CRITICAL_BATTERY_LEVEL}%.")
+                .setSmallIcon(R.drawable.ic_notification)
+                .setOngoing(true)
+                .setShowWhen(false)
+                .setPriority(NotificationCompat.PRIORITY_MIN)
+                .setContentIntent(contentIntent)
+                .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+                .setSilent(true)
+                .build()
+        }
+
         // Count music sessions being actively tracked
         val activeMusicSessions = playbackStates.count { it.value.isLikelyMusic && it.value.isPlaying }
         val isActivelyTracking = currentTrack != null || activeMusicSessions > 0
@@ -3448,9 +3514,13 @@ class MusicTrackingService : NotificationListenerService() {
     private fun updateTrackingNotification(currentTrack: String?, currentArtist: String?) {
         val now = System.currentTimeMillis()
         val currentVolume = getCurrentMusicStreamVolume()
+        val isPausedForBattery = shouldPauseForBattery()
         
-        // Create notification content identifier for comparison
-        val contentId = "$currentTrack|$currentArtist|${hasActivePlayback()}|$currentVolume"
+        // Create notification content identifier for comparison.
+        // Include isPausedForBattery so the "🪫" notification always appears immediately
+        // when battery drops and disappears immediately when it recovers — the debounce
+        // must not suppress a battery-state transition.
+        val contentId = "$currentTrack|$currentArtist|${hasActivePlayback()}|$currentVolume|$isPausedForBattery"
         
         // Debounce: skip update if content hasn't changed and updated within last 2 seconds
         // Increased from 1s to 2s to reduce notification spam during rapid MediaSession callbacks
@@ -3490,6 +3560,17 @@ class MusicTrackingService : NotificationListenerService() {
         // Cancel auto-save job and position polling
         autoSaveJob?.cancel()
         positionPollingJob?.cancel()
+        
+        // Unregister battery state receiver
+        batteryStateReceiver?.let {
+            try {
+                unregisterReceiver(it)
+                Log.d(TAG, "BatteryStateReceiver unregistered")
+            } catch (e: Exception) {
+                Log.w(TAG, "Error unregistering BatteryStateReceiver", e)
+            }
+            batteryStateReceiver = null
+        }
         
         // Reset connection state
         synchronized(connectionLock) {
@@ -3539,31 +3620,36 @@ class MusicTrackingService : NotificationListenerService() {
         super.onDestroy()
     }
     
+    /**
+     * Cached preference value — whether to pause tracking when battery is low.
+     * Updated from the service's coroutine scope every time preferences change.
+     * Defaults to true so the first check (before prefs load) is conservative.
+     */
     @Volatile
-    private var lastBatteryCheckTime = 0L
-    @Volatile
-    private var isBatteryLowCached = false
-    private val BATTERY_CHECK_INTERVAL_MS = 2 * 60 * 1000L // 2 minutes
+    private var cachedPauseOnLowBattery: Boolean = true
 
     /**
-     * Checks if the device battery level is below 20%.
-     * Tracking is completely stopped to optimize battery.
-     * The battery level is cached for 2 minutes to minimize system calls.
+     * Called from [initializeDependencies] to keep [cachedPauseOnLowBattery] in sync.
      */
-    private fun isBatteryLow(): Boolean {
-        val now = System.currentTimeMillis()
-        if (now - lastBatteryCheckTime > BATTERY_CHECK_INTERVAL_MS) {
-            try {
-                val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-                val batteryPct = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                isBatteryLowCached = batteryPct in 0..19
-                lastBatteryCheckTime = now
-            } catch (e: Exception) {
-                Log.e(TAG, "Error checking battery level", e)
-                return false
+    private fun watchBatteryPreference() {
+        serviceScope.launch {
+            userPreferencesDao.preferences().collect { prefs ->
+                cachedPauseOnLowBattery = prefs?.pauseTrackingOnLowBattery ?: true
             }
         }
-        return isBatteryLowCached
+    }
+
+    /**
+     * Returns true if tracking should be paused because:
+     *   1. The user has "Pause tracking on low battery" enabled (default: true).
+     *   2. The device battery is at or below [BatteryUtils.CRITICAL_BATTERY_LEVEL] (20%).
+     *
+     * Uses [BatteryUtils]' shared cached implementation (refreshed every 2 minutes) so
+     * there is no duplicate BatteryManager polling across the app.
+     */
+    private fun shouldPauseForBattery(): Boolean {
+        if (!cachedPauseOnLowBattery) return false
+        return BatteryUtils.isCriticalBattery(this)
     }
 
     /**

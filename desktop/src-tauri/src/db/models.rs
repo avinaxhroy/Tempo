@@ -110,6 +110,8 @@ pub struct PairingInfo {
     pub auth_token: String,
     pub device_name: String,
     pub paired_at: Option<String>,
+    #[serde(default)]
+    pub desktop_private_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -274,5 +276,7 @@ pub struct QrPayload {
     pub ip: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pub_key: Option<String>,
     pub v: u8,
 }

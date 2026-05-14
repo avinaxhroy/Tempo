@@ -18,6 +18,7 @@ import me.avinas.tempo.data.stats.InsightType
 import me.avinas.tempo.data.stats.InsightPayload
 import me.avinas.tempo.ui.onboarding.dataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
@@ -27,12 +28,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-@OptIn(FlowPreview::class)
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -56,10 +60,15 @@ class HomeViewModel @Inject constructor(
     
     private fun observeDataChanges() {
         viewModelScope.launch {
-            statsRepository.observeListeningOverview(_uiState.value.selectedTimeRange)
+            _uiState
+                .map { it.selectedTimeRange }
+                .distinctUntilChanged()
+                .flatMapLatest { timeRange ->
+                    statsRepository.observeListeningOverview(timeRange)
+                }
+                .distinctUntilChanged()
                 .collect { overview ->
                     _uiState.update { it.copy(listeningOverview = overview, hasData = overview.totalPlayCount > 0) }
-                    // Refresh other data when overview changes
                     loadData()
                 }
         }
@@ -67,8 +76,8 @@ class HomeViewModel @Inject constructor(
         // Also observe metadata updates (album art, artist images) from enrichment
         viewModelScope.launch {
             statsRepository.observeMetadataUpdates()
+                .debounce(3_000)
                 .collect {
-                    // Refresh data to pick up new album art, artist images, etc.
                     loadData()
                 }
         }
@@ -76,7 +85,7 @@ class HomeViewModel @Inject constructor(
         // Listen for new track events from MusicTrackingService
         viewModelScope.launch {
             refreshCoordinator.refreshEvents
-                .debounce(2_000) // Wait 2s to avoid excessive refreshes
+                .debounce(2_000)
                 .collect {
                     loadData()
                 }
@@ -290,9 +299,10 @@ class HomeViewModel @Inject constructor(
                     today.minusDays(dayOffset.toLong()) 
                 }.reversed()
                 
+                val rawDataMap = rawData.associateBy { it.date }
                 val data = last7Days.map { date ->
                     val dateStr = date.toString()
-                    rawData.find { it.date == dateStr } ?: me.avinas.tempo.data.stats.DailyListening(
+                    rawDataMap[dateStr] ?: me.avinas.tempo.data.stats.DailyListening(
                         date = dateStr,
                         playCount = 0,
                         totalTimeMs = 0,
@@ -318,9 +328,10 @@ class HomeViewModel @Inject constructor(
                     firstDayOfMonth.plusDays(it.toLong()) 
                 }
                 
+                val rawDataMap = rawData.associateBy { it.date }
                 val data = daysInMonth.map { date ->
                     val dateStr = date.toString()
-                    rawData.find { it.date == dateStr } ?: me.avinas.tempo.data.stats.DailyListening(
+                    rawDataMap[dateStr] ?: me.avinas.tempo.data.stats.DailyListening(
                         date = dateStr,
                         playCount = 0,
                         totalTimeMs = 0,

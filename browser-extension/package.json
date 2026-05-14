@@ -1,0 +1,20 @@
+{
+  "name": "tempo-stats-extension",
+  "version": "1.0.0",
+  "description": "Tempo Stats — Advanced browser music tracking extension",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "@types/chrome": "^0.1.40",
+    "qrcode-generator": "^2.0.4"
+  }
+}

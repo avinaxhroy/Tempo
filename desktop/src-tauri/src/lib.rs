@@ -404,6 +404,17 @@ async fn handle_pairing_request(
         })
         .unwrap_or(0);
 
+    let signature_header = lines
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            if name.eq_ignore_ascii_case("x-tempo-signature") {
+                Some(value.trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
+
     if content_length > buf.len().saturating_sub(header_end) {
         let _ = stream.write_all(http_response(413, "payload_too_large").as_bytes()).await;
         return;
@@ -431,6 +442,40 @@ async fn handle_pairing_request(
         }
     };
 
+    // HMAC signature is mandatory for pairing confirmation
+    if signature_header.is_empty() {
+        let _ = stream.write_all(http_response(401, "missing_signature").as_bytes()).await;
+        return;
+    }
+
+    // Verify HMAC signature using constant-time comparison
+    {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        type HmacSha256 = Hmac<Sha256>;
+        let body_str = std::str::from_utf8(body).unwrap_or("");
+        match HmacSha256::new_from_slice(payload.token.as_bytes()) {
+            Ok(mut mac) => {
+                mac.update(body_str.as_bytes());
+                let sig_bytes = match hex::decode(&signature_header) {
+                    Ok(b) => b,
+                    Err(_) => {
+                        let _ = stream.write_all(http_response(401, "invalid_signature").as_bytes()).await;
+                        return;
+                    }
+                };
+                if mac.verify_slice(&sig_bytes).is_err() {
+                    let _ = stream.write_all(http_response(401, "invalid_signature").as_bytes()).await;
+                    return;
+                }
+            }
+            Err(_) => {
+                let _ = stream.write_all(http_response(401, "invalid_signature").as_bytes()).await;
+                return;
+            }
+        }
+    }
+
     match crate::commands::pairing::finalize_pairing(app_handle.state::<AppState>().inner(), &app_handle, payload).await {
         Ok(()) => {
             let _ = stream.write_all(http_ok_response().as_bytes()).await;
@@ -451,11 +496,14 @@ fn http_ok_response() -> String {
 }
 
 fn http_response(status: u16, code: &str) -> String {
-    let body = format!(r#"{{"ok":false,"error":"{}"}}"#, code);
+    let escaped = serde_json::to_string(code).unwrap_or_else(|_| "\"error\"".to_string());
+    let body = format!(r#"{{"ok":false,"error":{}}}"#, escaped);
     let reason = match status {
         400 => "Bad Request",
+        401 => "Unauthorized",
         404 => "Not Found",
         413 => "Payload Too Large",
+        429 => "Too Many Requests",
         _ => "Error",
     };
     format!(

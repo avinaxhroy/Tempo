@@ -23,6 +23,12 @@ interface ArtistDao {
     @Query("SELECT * FROM artists")
     suspend fun getAllArtistsSync(): List<Artist>
 
+    @Query("SELECT COUNT(*) FROM artists")
+    suspend fun getCount(): Int
+
+    @Query("SELECT image_url FROM artists WHERE image_url LIKE 'file://%'")
+    suspend fun getLocalImageUrls(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(artist: Artist): Long
     

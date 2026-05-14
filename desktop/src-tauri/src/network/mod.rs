@@ -48,13 +48,23 @@ fn compute_hmac(auth_token: &str, payload_json: &str) -> String {
     hex::encode(result.into_bytes())
 }
 
-/// Detailed result returned from a sync to provide feedback to the UI.
-#[derive(Debug, Clone, serde::Serialize)]
-#[allow(dead_code)]
-pub struct SyncResult {
-    pub synced_count: usize,
-    pub method: String, // "primary", "network_memory", "mdns", "hotspot", "subnet_scan"
-    pub resolved_ip: String,
+#[derive(Debug, Clone, serde::Deserialize)]
+struct PlaysResponse {
+    #[allow(dead_code)]
+    ok: bool,
+    #[allow(dead_code)]
+    accepted: Option<i64>,
+    #[allow(dead_code)]
+    duplicates: Option<i64>,
+    next_token: Option<String>,
+    #[allow(dead_code)]
+    error: Option<String>,
+}
+
+fn extract_next_token(response_body: &str) -> Option<String> {
+    serde_json::from_str::<PlaysResponse>(response_body)
+        .ok()
+        .and_then(|r| r.next_token)
 }
 
 #[derive(Debug, Clone)]
@@ -80,7 +90,7 @@ pub async fn discover_confirmed_phone(
     // the caller (sync_to_phone / connection_health_loop) before invoking this.
 
     // Strategy A: mDNS discovery
-    if let Some(discovered) = mdns::discover_phone().await {
+    if let Some(discovered) = mdns::discover_phone(Some(auth_token)).await {
         if let Some(device_name) = confirm_pairing_token(&discovered.ip, discovered.port, auth_token).await {
             return Some(ResolvedPhone {
                 ip: discovered.ip,
@@ -206,13 +216,21 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
     let mut last_error_reason = format!("primary ({}): no response", pairing.phone_ip);
 
     match send_with_retry(&phone_url, &payload).await {
-        Ok(()) => {
+        Ok(body_text) => {
             let db = state.db.lock().await;
             db.mark_plays_synced(&ids)
                 .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
             db.record_sync(count as i64, "success", None)
                 .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
-            // Remember this IP for the current WiFi network
+            if let Some(next_token) = extract_next_token(&body_text) {
+                let mut updated = pairing.clone();
+                updated.auth_token = next_token;
+                if let Err(e) = db.save_pairing(&updated) {
+                    warn!("Failed to rotate auth token: {}", e);
+                } else {
+                    info!("Auth token rotated after successful sync");
+                }
+            }
             if let Some(ref net_id) = current_network {
                 let _ = db.upsert_network_ip(net_id, &pairing.phone_ip, pairing.phone_port);
             }
@@ -252,9 +270,11 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
                 info!("Trying network-remembered IP for '{}': {}", net_id, net_url);
 
                 match send_with_retry(&net_url, &payload).await {
-                    Ok(()) => {
-                        // Update stored primary IP too
+                    Ok(body_text) => {
                         let mut updated_pairing = pairing.clone();
+                        if let Some(next_token) = extract_next_token(&body_text) {
+                            updated_pairing.auth_token = next_token;
+                        }
                         updated_pairing.phone_ip = remembered_ip.clone();
                         updated_pairing.phone_port = remembered_port;
                         let db = state.db.lock().await;
@@ -287,7 +307,7 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
     }
 
     // Strategy 2: mDNS auto-discovery (handles DHCP IP changes)
-    if let Some(discovered) = mdns::discover_phone().await {
+    if let Some(discovered) = mdns::discover_phone(Some(&pairing.auth_token)).await {
         let mdns_url = format!(
             "http://{}:{}/api/plays",
             discovered.ip, discovered.port
@@ -295,9 +315,11 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
         info!("mDNS discovered phone at {}, attempting sync...", mdns_url);
 
         match send_with_retry(&mdns_url, &payload).await {
-            Ok(()) => {
-                // Update the stored IP so future syncs use the new address directly
+            Ok(body_text) => {
                 let mut updated_pairing = pairing.clone();
+                if let Some(next_token) = extract_next_token(&body_text) {
+                    updated_pairing.auth_token = next_token;
+                }
                 updated_pairing.phone_ip = discovered.ip.clone();
                 updated_pairing.phone_port = discovered.port;
                 let db = state.db.lock().await;
@@ -309,7 +331,6 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
                     .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
                 db.record_sync(count as i64, "success", None)
                     .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
-                // Remember this IP for the current WiFi network
                 if let Some(ref net_id) = current_network {
                     let _ = db.upsert_network_ip(net_id, &discovered.ip, discovered.port);
                 }
@@ -345,9 +366,11 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
         info!("Trying hotspot fallback: {}", fallback_url);
 
         match send_with_retry(&fallback_url, &payload).await {
-            Ok(()) => {
-                // Update stored IP to gateway since that's where the phone is reachable
+            Ok(body_text) => {
                 let mut updated_pairing = pairing.clone();
+                if let Some(next_token) = extract_next_token(&body_text) {
+                    updated_pairing.auth_token = next_token;
+                }
                 updated_pairing.phone_ip = gateway.clone();
                 let db = state.db.lock().await;
                 if let Err(e) = db.save_pairing(&updated_pairing) {
@@ -358,7 +381,6 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
                     .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
                 db.record_sync(count as i64, "success", None)
                     .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
-                // Remember this IP for the current WiFi network
                 if let Some(ref net_id) = current_network {
                     let _ = db.upsert_network_ip(net_id, &gateway, pairing.phone_port);
                 }
@@ -393,8 +415,11 @@ pub async fn sync_to_phone(app_handle: &tauri::AppHandle) -> Result<usize, SyncE
         info!("Subnet scan found phone at {}, attempting sync...", scan_url);
 
         match send_with_retry(&scan_url, &payload).await {
-            Ok(()) => {
+            Ok(body_text) => {
                 let mut updated_pairing = pairing.clone();
+                if let Some(next_token) = extract_next_token(&body_text) {
+                    updated_pairing.auth_token = next_token;
+                }
                 updated_pairing.phone_ip = found_ip.clone();
                 let db = state.db.lock().await;
                 let _ = db.save_pairing(&updated_pairing);
@@ -454,9 +479,16 @@ async fn confirm_pairing_token(ip: &str, port: u16, auth_token: &str) -> Option<
         .build()
         .ok()?;
 
+    let payload = serde_json::json!({ "auth_token": auth_token });
+    let payload_json = serde_json::to_string(&payload).ok()?;
+    let signature = compute_hmac(auth_token, &payload_json);
+
     let response = client
         .post(url)
-        .json(&serde_json::json!({ "auth_token": auth_token }))
+        .header("Authorization", format!("Bearer {}", auth_token))
+        .header("X-Tempo-Signature", &signature)
+        .header("Content-Type", "application/json")
+        .body(payload_json)
         .send()
         .await
         .ok()?;
@@ -486,14 +518,31 @@ pub async fn ping_phone(ip: &str, port: u16) -> bool {
     client.get(&url).send().await.map(|r| r.status().is_success()).unwrap_or(false)
 }
 
-/// Send payload with exponential backoff retries and HMAC signature.
-async fn send_with_retry(url: &str, payload: &SyncPayload) -> Result<(), SyncError> {
+/// Check if the phone is reachable at the given address via /api/ping with auth token.
+pub async fn ping_phone_with_auth(ip: &str, port: u16, auth_token: &str) -> bool {
+    let url = format!("http://{}:{}/api/ping", ip, port);
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    client.get(&url)
+        .header("Authorization", format!("Bearer {}", auth_token))
+        .header("X-Tempo-Signature", compute_hmac(auth_token, "{}"))
+        .send()
+        .await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false)
+}
+
+async fn send_with_retry(url: &str, payload: &SyncPayload) -> Result<String, SyncError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .build()
         .map_err(|e| SyncError::Network(e.to_string()))?;
 
-    // Compute HMAC signature for payload integrity verification
     let payload_json = serde_json::to_string(payload)
         .map_err(|e| SyncError::Network(e.to_string()))?;
     let signature = compute_hmac(&payload.auth_token, &payload_json);
@@ -506,24 +555,24 @@ async fn send_with_retry(url: &str, payload: &SyncPayload) -> Result<(), SyncErr
             .post(url)
             .header("X-Tempo-Signature", &signature)
             .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", &payload.auth_token))
             .body(payload_json.clone())
             .send()
             .await
         {
             Ok(response) => {
-                if response.status().is_success() {
-                    return Ok(());
-                }
                 let status = response.status();
-                let body = response.text().await.unwrap_or_default();
-                if body.contains("battery_critical") {
+                let body_text = response.text().await.unwrap_or_default();
+                if status.is_success() {
+                    return Ok(body_text);
+                }
+                if body_text.contains("battery_critical") {
                     return Err(SyncError::BatteryCritical);
                 }
-                // Don't retry on auth errors (4xx)
                 if status.is_client_error() {
-                    return Err(SyncError::Rejected(format!("HTTP {} - {}", status, body)));
+                    return Err(SyncError::Rejected(format!("HTTP {} - {}", status, body_text)));
                 }
-                last_error = SyncError::Rejected(format!("HTTP {} - {}", status, body));
+                last_error = SyncError::Rejected(format!("HTTP {} - {}", status, body_text));
             }
             Err(e) => {
                 last_error = SyncError::Unreachable(e.to_string());
@@ -536,7 +585,7 @@ async fn send_with_retry(url: &str, payload: &SyncPayload) -> Result<(), SyncErr
                 attempt, MAX_RETRIES, url, delay_ms
             );
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
-            delay_ms *= 2; // exponential backoff
+            delay_ms *= 2;
         }
     }
 

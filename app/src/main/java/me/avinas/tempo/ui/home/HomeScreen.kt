@@ -20,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -129,24 +130,24 @@ fun HomeScreen(
                             val overview = uiState.listeningOverview
                             val comparison = uiState.periodComparison
                             
-                            // Format time (e.g., "42h 15m" or "0.5h" or "30m")
-                            val totalMinutes = (overview?.totalListeningTimeMs ?: 0) / 1000 / 60
-                            val hours = totalMinutes / 60
-                            val minutes = totalMinutes % 60
-                            
-                            val decimalTime = String.format(java.util.Locale.US, "%.1f", totalMinutes / 60.0)
-                            val timeString = if (hours == 0L) {
-                                 if (minutes > 0) "${minutes}m" else "0m"
-                            } else {
-                                 if (hours < 10) {
-                                     "${decimalTime}h"
-                                 } else {
-                                     "${hours}h ${minutes}m"
-                                 }
+                            val timeString = remember(uiState.listeningOverview?.totalListeningTimeMs) {
+                                val totalMs = uiState.listeningOverview?.totalListeningTimeMs ?: 0
+                                val totalMinutes = totalMs / 1000 / 60
+                                val hours = totalMinutes / 60
+                                val minutes = totalMinutes % 60
+                                val decimalTime = String.format(java.util.Locale.US, "%.1f", totalMinutes / 60.0)
+                                if (hours == 0L) {
+                                    if (minutes > 0) "${minutes}m" else "0m"
+                                } else if (hours < 10) {
+                                    "${decimalTime}h"
+                                } else {
+                                    "${hours}h ${minutes}m"
+                                }
                             }
-                            
-                            // Trend data
-                            val trendData = uiState.dailyListening.map { it.totalTimeMs.toFloat() / 1000 / 60 } // Convert to minutes
+
+                            val trendData = remember(uiState.dailyListening) {
+                                uiState.dailyListening.map { it.totalTimeMs.toFloat() / 1000 / 60 }
+                            }
                             
                             // Use labels from ViewModel (already processed)
                             val dailyLabels = uiState.chartLabels
@@ -164,8 +165,10 @@ fun HomeScreen(
 
                             // Trigger Walkthrough
                             val walkthroughController = me.avinas.tempo.ui.components.LocalWalkthroughController.current
-                            LaunchedEffect(Unit) {
-                                walkthroughController.checkAndTrigger(me.avinas.tempo.ui.components.WalkthroughStep.HOME_SPOTLIGHT)
+                            LaunchedEffect(uiState.hasData) {
+                                if (uiState.hasData) {
+                                    walkthroughController.checkAndTrigger(me.avinas.tempo.ui.components.WalkthroughStep.HOME_SPOTLIGHT)
+                                }
                             }
 
                             SpotlightStoryCard(
@@ -214,26 +217,27 @@ fun HomeScreen(
                                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                             )
                             
-                            InsightFeed(
+                            val emptyNavigateToArtist: (String) -> Unit = remember { { /* Handle Artist Nav */ } }
+                    InsightFeed(
                                 insights = uiState.insights,
                                 onNavigateToTrack = onNavigateToTrack,
-                                onNavigateToArtist = { /* Handle Artist Nav */ }
+                                onNavigateToArtist = emptyNavigateToArtist
                             )
                         }
                     }
                 }
             }
 
-            // Top Bar
-            val scrollOffset = scrollState.value.toFloat()
-            val maxScroll = 400f // px to fully transition
-            val headerAlpha by animateFloatAsState(
-                targetValue = (scrollOffset / maxScroll).coerceIn(0f, 1f),
+            val headerAlpha by remember {
+                derivedStateOf {
+                    (scrollState.value.toFloat() / 400f).coerceIn(0f, 1f)
+                }
+            }
+            val headerAlphaAnimated by animateFloatAsState(
+                targetValue = headerAlpha,
                 label = "headerAlpha"
             )
-            
-            val backgroundColor = TempoDarkBackground.copy(alpha = headerAlpha)
-            val elevation = if (scrollOffset > 0) 4.dp * headerAlpha else 0.dp
+            val backgroundColor = TempoDarkBackground.copy(alpha = headerAlphaAnimated)
 
             // Custom Top Bar (Non-blocking when transparent)
             Box(
@@ -253,7 +257,7 @@ fun HomeScreen(
                         text = stringResource(R.string.home_title),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = headerAlpha)
+                        color = Color.White.copy(alpha = headerAlphaAnimated)
                     )
                 }
                 
@@ -264,7 +268,7 @@ fun HomeScreen(
                         .align(Alignment.CenterEnd)
                         .padding(end = 8.dp),
                     colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = if (headerAlpha > 0.5f) Color.Transparent else Color.White.copy(alpha = 0.1f),
+                        containerColor = if (headerAlphaAnimated > 0.5f) Color.Transparent else Color.White.copy(alpha = 0.1f),
                         contentColor = Color.White
                     )
                 ) {

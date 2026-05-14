@@ -1,0 +1,80 @@
+{
+  "manifest_version": 3,
+  "name": "Tempo Stats",
+  "version": "1.0.0",
+  "description": "Advanced music tracking for your browser. Track what you listen to on YouTube Music, Spotify Web, SoundCloud, and more — then sync to your Tempo app.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    },
+    "default_title": "Tempo Stats"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://*:8765/*"
+  ],
+  "optional_host_permissions": [
+    "http://*:*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://music.youtube.com/*",
+        "*://www.youtube.com/*",
+        "*://youtube.com/*",
+        "*://m.youtube.com/*",
+        "*://youtu.be/*",
+        "*://open.spotify.com/*",
+        "*://soundcloud.com/*",
+        "*://www.soundcloud.com/*",
+        "*://tidal.com/*",
+        "*://listen.tidal.com/*",
+        "*://music.apple.com/*",
+        "*://music.amazon.com/*",
+        "*://music.amazon.in/*",
+        "*://www.deezer.com/*",
+        "*://deezer.com/*",
+        "*://www.pandora.com/*",
+        "*://pandora.com/*",
+        "*://*.bandcamp.com/*",
+        "*://www.last.fm/*",
+        "*://last.fm/*",
+        "*://www.jiosaavn.com/*",
+        "*://jiosaavn.com/*",
+        "*://gaana.com/*",
+        "*://www.gaana.com/*",
+        "*://wynk.in/*",
+        "*://www.audiomack.com/*",
+        "*://audiomack.com/*",
+        "*://play.napster.com/*",
+        "*://napster.com/*",
+        "*://www.qobuz.com/*",
+        "*://qobuz.com/*"
+      ],
+      "js": [
+        "content/media-probe.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "minimum_chrome_version": "110"
+}

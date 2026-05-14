@@ -39,11 +39,9 @@ impl Database {
 
     /// Run an integrity check on the database.
     pub fn check_integrity(&self) -> Result<bool, rusqlite::Error> {
-        let result: String = self.conn.query_row(
-            "PRAGMA integrity_check",
-            [],
-            |row| row.get(0),
-        )?;
+        let result: String = self
+            .conn
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
         Ok(result == "ok")
     }
 
@@ -166,10 +164,7 @@ impl Database {
         ];
 
         for (col_name, col_type) in &migration_columns {
-            let sql = format!(
-                "ALTER TABLE scrobbles ADD COLUMN {} {}",
-                col_name, col_type
-            );
+            let sql = format!("ALTER TABLE scrobbles ADD COLUMN {} {}", col_name, col_type);
             // Ignore "duplicate column name" errors — means migration already ran
             match self.conn.execute(&sql, []) {
                 Ok(_) => log::info!("Migration: added column '{}' to scrobbles", col_name),
@@ -180,14 +175,9 @@ impl Database {
         }
 
         // Migrate settings table (add new columns if missing)
-        let settings_migrations = [
-            ("low_battery_threshold", "INTEGER DEFAULT 15"),
-        ];
+        let settings_migrations = [("low_battery_threshold", "INTEGER DEFAULT 15")];
         for (col_name, col_type) in &settings_migrations {
-            let sql = format!(
-                "ALTER TABLE settings ADD COLUMN {} {}",
-                col_name, col_type
-            );
+            let sql = format!("ALTER TABLE settings ADD COLUMN {} {}", col_name, col_type);
             match self.conn.execute(&sql, []) {
                 Ok(_) => log::info!("Migration: added column '{}' to settings", col_name),
                 Err(rusqlite::Error::ExecuteReturnedResults) => {}
@@ -237,7 +227,12 @@ impl Database {
         Ok(self.conn.last_insert_rowid())
     }
 
-    pub fn has_recent_play(&self, title: &str, artist: &str, timestamp: i64) -> Result<bool, rusqlite::Error> {
+    pub fn has_recent_play(
+        &self,
+        title: &str,
+        artist: &str,
+        timestamp: i64,
+    ) -> Result<bool, rusqlite::Error> {
         let window = 60_000; // ±60 seconds
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM scrobbles WHERE title = ?1 AND artist = ?2
@@ -274,7 +269,9 @@ impl Database {
                 seek_count: row.get::<_, u32>(14).unwrap_or(0),
                 session_id: row.get::<_, String>(15).unwrap_or_default(),
                 site: row.get::<_, String>(16).unwrap_or_default(),
-                content_type: row.get::<_, String>(17).unwrap_or_else(|_| "MUSIC".to_string()),
+                content_type: row
+                    .get::<_, String>(17)
+                    .unwrap_or_else(|_| "MUSIC".to_string()),
                 volume_level: row.get::<_, f64>(18).unwrap_or(-1.0),
             })
         })?;
@@ -306,7 +303,9 @@ impl Database {
                 seek_count: row.get::<_, u32>(14).unwrap_or(0),
                 session_id: row.get::<_, String>(15).unwrap_or_default(),
                 site: row.get::<_, String>(16).unwrap_or_default(),
-                content_type: row.get::<_, String>(17).unwrap_or_else(|_| "MUSIC".to_string()),
+                content_type: row
+                    .get::<_, String>(17)
+                    .unwrap_or_else(|_| "MUSIC".to_string()),
                 volume_level: row.get::<_, f64>(18).unwrap_or(-1.0),
             })
         })?;
@@ -326,7 +325,8 @@ impl Database {
             .iter()
             .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
             .collect();
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
         self.conn.execute(&sql, param_refs.as_slice())?;
         Ok(())
     }
@@ -356,7 +356,9 @@ impl Database {
                 seek_count: row.get::<_, u32>(14).unwrap_or(0),
                 session_id: row.get::<_, String>(15).unwrap_or_default(),
                 site: row.get::<_, String>(16).unwrap_or_default(),
-                content_type: row.get::<_, String>(17).unwrap_or_else(|_| "MUSIC".to_string()),
+                content_type: row
+                    .get::<_, String>(17)
+                    .unwrap_or_else(|_| "MUSIC".to_string()),
                 volume_level: row.get::<_, f64>(18).unwrap_or(-1.0),
             })
         })?;
@@ -397,16 +399,17 @@ impl Database {
             [],
             |row| row.get(0),
         )?;
-        let total: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM scrobbles",
-            [],
-            |row| row.get(0),
-        )?;
+        let total: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM scrobbles", [], |row| row.get(0))?;
         Ok((queued, total))
     }
 
     pub fn clear_queue(&self) -> Result<usize, rusqlite::Error> {
-        let count = self.conn.execute("DELETE FROM scrobbles WHERE status IN ('queued', 'failed')", [])?;
+        let count = self.conn.execute(
+            "DELETE FROM scrobbles WHERE status IN ('queued', 'failed')",
+            [],
+        )?;
         Ok(count)
     }
 
@@ -434,29 +437,43 @@ impl Database {
     // --- Pairing ---
 
     pub fn save_pairing(&self, info: &PairingInfo) -> Result<(), rusqlite::Error> {
+        // Add column if it doesn't exist (migration)
+        let _ = self.conn.execute(
+            "ALTER TABLE pairing ADD COLUMN desktop_private_key TEXT DEFAULT NULL",
+            [],
+        );
+
         self.conn.execute(
-            "INSERT INTO pairing (id, phone_ip, phone_port, auth_token, device_name, paired_at)
-             VALUES (1, ?1, ?2, ?3, ?4, COALESCE(?5, datetime('now')))
+            "INSERT INTO pairing (id, phone_ip, phone_port, auth_token, device_name, paired_at, desktop_private_key)
+             VALUES (1, ?1, ?2, ?3, ?4, COALESCE(?5, datetime('now')), ?6)
              ON CONFLICT(id) DO UPDATE SET
                  phone_ip = excluded.phone_ip,
                  phone_port = excluded.phone_port,
                  auth_token = excluded.auth_token,
                  device_name = excluded.device_name,
-                 paired_at = COALESCE(?5, pairing.paired_at, datetime('now'))",
+                 paired_at = COALESCE(?5, pairing.paired_at, datetime('now')),
+                 desktop_private_key = COALESCE(?6, pairing.desktop_private_key)",
             params![
                 info.phone_ip,
                 info.phone_port,
                 info.auth_token,
                 info.device_name,
                 info.paired_at,
+                info.desktop_private_key,
             ],
         )?;
         Ok(())
     }
 
     pub fn get_pairing(&self) -> Result<Option<PairingInfo>, rusqlite::Error> {
+        // Add column if it doesn't exist (migration)
+        let _ = self.conn.execute(
+            "ALTER TABLE pairing ADD COLUMN desktop_private_key TEXT DEFAULT NULL",
+            [],
+        );
+
         let mut stmt = self.conn.prepare(
-            "SELECT phone_ip, phone_port, auth_token, device_name, paired_at FROM pairing WHERE id = 1",
+            "SELECT phone_ip, phone_port, auth_token, device_name, paired_at, desktop_private_key FROM pairing WHERE id = 1",
         )?;
         let result = stmt.query_row([], |row| {
             Ok(PairingInfo {
@@ -465,6 +482,7 @@ impl Database {
                 auth_token: row.get(2)?,
                 device_name: row.get(3)?,
                 paired_at: row.get(4)?,
+                desktop_private_key: row.get(5)?,
             })
         });
         match result {
@@ -522,7 +540,12 @@ impl Database {
 
     // --- Sync History ---
 
-    pub fn record_sync(&self, count: i64, status: &str, error: Option<&str>) -> Result<(), rusqlite::Error> {
+    pub fn record_sync(
+        &self,
+        count: i64,
+        status: &str,
+        error: Option<&str>,
+    ) -> Result<(), rusqlite::Error> {
         self.conn.execute(
             "INSERT INTO sync_history (synced_count, status, error_message) VALUES (?1, ?2, ?3)",
             params![count, status, error],
@@ -552,23 +575,32 @@ impl Database {
     }
 
     pub fn get_stats(&self) -> Result<models::AppStats, rusqlite::Error> {
-        let total_plays: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM scrobbles", [], |r| r.get(0)
-        )?;
+        let total_plays: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM scrobbles", [], |r| r.get(0))?;
         let queued: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM scrobbles WHERE status = 'queued'", [], |r| r.get(0)
-        )?;
-        let synced: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM scrobbles WHERE status = 'synced'", [], |r| r.get(0)
-        )?;
-        let total_syncs: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM sync_history WHERE status = 'success'", [], |r| r.get(0)
-        )?;
-        let top_artist: Option<String> = self.conn.query_row(
-            "SELECT artist FROM scrobbles GROUP BY artist ORDER BY COUNT(*) DESC LIMIT 1",
+            "SELECT COUNT(*) FROM scrobbles WHERE status = 'queued'",
             [],
             |r| r.get(0),
-        ).ok();
+        )?;
+        let synced: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM scrobbles WHERE status = 'synced'",
+            [],
+            |r| r.get(0),
+        )?;
+        let total_syncs: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sync_history WHERE status = 'success'",
+            [],
+            |r| r.get(0),
+        )?;
+        let top_artist: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT artist FROM scrobbles GROUP BY artist ORDER BY COUNT(*) DESC LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .ok();
         let top_track: Option<String> = self.conn.query_row(
             "SELECT title || ' - ' || artist FROM scrobbles GROUP BY title, artist ORDER BY COUNT(*) DESC LIMIT 1",
             [],
@@ -694,9 +726,9 @@ impl Database {
 
     /// Get all user YouTube channels (for display).
     pub fn get_user_youtube_channels(&self) -> Result<Vec<(i64, String)>, rusqlite::Error> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id, channel_name FROM user_youtube_channels ORDER BY channel_name ASC")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT id, channel_name FROM user_youtube_channels ORDER BY channel_name ASC",
+        )?;
         let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
         rows.collect()
     }
@@ -747,7 +779,9 @@ impl Database {
                 seek_count: row.get::<_, u32>(14).unwrap_or(0),
                 session_id: row.get::<_, String>(15).unwrap_or_default(),
                 site: row.get::<_, String>(16).unwrap_or_default(),
-                content_type: row.get::<_, String>(17).unwrap_or_else(|_| "MUSIC".to_string()),
+                content_type: row
+                    .get::<_, String>(17)
+                    .unwrap_or_else(|_| "MUSIC".to_string()),
                 volume_level: row.get::<_, f64>(18).unwrap_or(-1.0),
             })
         })?;
@@ -772,7 +806,12 @@ impl Database {
 
     /// Record or update the phone's IP for a specific network (SSID or identifier).
     /// Increments success_count on subsequent successful connections from the same network.
-    pub fn upsert_network_ip(&self, network_id: &str, phone_ip: &str, phone_port: u16) -> Result<(), rusqlite::Error> {
+    pub fn upsert_network_ip(
+        &self,
+        network_id: &str,
+        phone_ip: &str,
+        phone_port: u16,
+    ) -> Result<(), rusqlite::Error> {
         self.conn.execute(
             "INSERT INTO network_history (network_id, phone_ip, phone_port, last_seen, success_count)
              VALUES (?1, ?2, ?3, datetime('now'), 1)
@@ -787,10 +826,13 @@ impl Database {
     }
 
     /// Look up the last known phone IP for a specific network.
-    pub fn get_network_ip(&self, network_id: &str) -> Result<Option<(String, u16)>, rusqlite::Error> {
-        let mut stmt = self.conn.prepare(
-            "SELECT phone_ip, phone_port FROM network_history WHERE network_id = ?1",
-        )?;
+    pub fn get_network_ip(
+        &self,
+        network_id: &str,
+    ) -> Result<Option<(String, u16)>, rusqlite::Error> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT phone_ip, phone_port FROM network_history WHERE network_id = ?1")?;
         let result = stmt.query_row(params![network_id], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, u16>(1)?))
         });
@@ -815,7 +857,8 @@ impl Database {
             .iter()
             .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
             .collect();
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
         self.conn.execute(&sql, param_refs.as_slice())?;
         Ok(())
     }

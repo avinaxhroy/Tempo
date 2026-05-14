@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import androidx.compose.runtime.Immutable
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
@@ -48,17 +49,50 @@ class ProfileViewModel @Inject constructor(
                 
                 val calculatedTitle = GamificationEngine.computeTitle(level?.currentLevel ?: 0, uniqueArtists)
                 
-                if (level != null && level.currentLevel > uiState.value.userLevel.currentLevel && uiState.value.userLevel.currentLevel > 0) {
-                     _uiState.update { it.copy(userLevel = level, showLevelUpCelebration = true, userTitle = calculatedTitle) }
-                } else {
-                     _uiState.update { it.copy(userLevel = level ?: UserLevel(), isLoading = false, userTitle = calculatedTitle) }
+                val streakAtRisk = if (level?.currentStreak == 0) false else try {
+                    level?.lastStreakDate != java.time.LocalDate.now().toString()
+                } catch (e: Exception) { false }
+                
+                val streakDurationMinutes = if (!streakAtRisk) Long.MAX_VALUE else try {
+                    java.time.Duration.between(java.time.LocalTime.now(), java.time.LocalTime.MAX).toMinutes()
+                } catch (e: Exception) { Long.MAX_VALUE }
+                
+                val hours = streakDurationMinutes / 60
+                val minutes = streakDurationMinutes % 60
+                val streakTimeRemaining = if (!streakAtRisk) "" else "${hours}h ${minutes}m"
+
+                _uiState.update { state ->
+                    val challengeXpTotal = state.challenges.sumOf { it.xpReward }
+                    val shouldCelebrate = level != null &&
+                        level.currentLevel > state.userLevel.currentLevel &&
+                        state.userLevel.currentLevel > 0
+
+                    state.copy(
+                        userLevel = level ?: UserLevel(),
+                        isLoading = false,
+                        showLevelUpCelebration = shouldCelebrate || state.showLevelUpCelebration,
+                        userTitle = calculatedTitle,
+                        streakDurationMinutes = streakDurationMinutes,
+                        streakTimeRemaining = streakTimeRemaining,
+                        challengeXpTotal = challengeXpTotal
+                    )
                 }
             }
         }
         
         viewModelScope.launch {
             gamificationRepository.observeAllBadges().collect { badges ->
-                _uiState.update { it.copy(allBadges = badges) }
+                _uiState.update { state ->
+                    val filteredBadges = if (state.selectedCategory == null) badges
+                        else badges.filter { it.category == state.selectedCategory }
+                    state.copy(
+                        allBadges = badges,
+                        filteredBadges = filteredBadges,
+                        earnedCount = badges.count { it.isEarned },
+                        totalCount = badges.size,
+                        categories = badges.map { it.category }.distinct().sorted()
+                    )
+                }
             }
         }
         
@@ -74,7 +108,10 @@ class ProfileViewModel @Inject constructor(
             
             // Then observe them
             challengeRepository.observeTodayChallenges().collect { challenges ->
-                _uiState.update { it.copy(challenges = challenges) }
+                _uiState.update { it.copy(
+                    challenges = challenges,
+                    challengeXpTotal = challenges.sumOf { challenge -> challenge.xpReward }
+                ) }
             }
         }
         
@@ -156,7 +193,11 @@ class ProfileViewModel @Inject constructor(
     }
     
     fun onCategorySelected(category: String?) {
-        _uiState.update { it.copy(selectedCategory = category) }
+        _uiState.update { state ->
+            val filteredBadges = if (category == null) state.allBadges
+                else state.allBadges.filter { it.category == category }
+            state.copy(selectedCategory = category, filteredBadges = filteredBadges)
+        }
     }
     
     fun dismissLevelUpCelebration() {
@@ -171,6 +212,7 @@ class ProfileViewModel @Inject constructor(
     }
 }
 
+@Immutable
 data class ProfileUiState(
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
@@ -183,66 +225,26 @@ data class ProfileUiState(
     val challenges: List<DailyChallenge> = emptyList(),
     val selectedCategory: String? = null,
     val showLevelUpCelebration: Boolean = false,
-    val unacknowledgedBadges: List<Badge> = emptyList()
+    val unacknowledgedBadges: List<Badge> = emptyList(),
+    val challengeXpTotal: Int = 0,
+    val streakDurationMinutes: Long = Long.MAX_VALUE,
+    val streakTimeRemaining: String = "",
+    val filteredBadges: List<Badge> = emptyList(),
+    val earnedCount: Int = 0,
+    val totalCount: Int = 0,
+    val categories: List<String> = emptyList()
 ) {
-    val challengeXpTotal: Int
-        get() = challenges.sumOf { it.xpReward }
-
     val streakAtRisk: Boolean
-        get() {
-            // Logic: If user has a streak (>0) but hasn't listened TODAY, they are at risk.
-            // In a real app, we'd parse lastStreakDate. For now, assuming lastStreakDate is YYYY-MM-DD.
-            if (userLevel.currentStreak == 0) return false
-            
-            // Simple check: if lastStreakDate is not today, it's at risk
-            // Note: This relies on the repository updating lastStreakDate correctly on listening
-            // ideally we would compare dates, but we'll use a simplified check for now
-            // or we could check if lastStreakDate != today's date string
-            return try {
-                val today = java.time.LocalDate.now().toString()
-                userLevel.lastStreakDate != today
-            } catch (e: Exception) {
-                false
-            }
-        }
-        
-    val streakDurationMinutes: Long
-        get() {
-            if (!streakAtRisk) return Long.MAX_VALUE
-            val now = java.time.LocalTime.now()
-            val endOfDay = java.time.LocalTime.MAX
-            return java.time.Duration.between(now, endOfDay).toMinutes()
-        }
+        get() = userLevel.currentStreak > 0 && try {
+            userLevel.lastStreakDate != java.time.LocalDate.now().toString()
+        } catch (e: Exception) { false }
 
-    val streakTimeRemaining: String
-        get() {
-            if (!streakAtRisk) return ""
-            val minutesTotal = streakDurationMinutes
-            val hours = minutesTotal / 60
-            val minutes = minutesTotal % 60
-            return "${hours}h ${minutes}m"
-        }
-        
     val almostUnlockedBadges: List<Badge>
         get() = allBadges.filter { !it.isMaxed && it.progressFraction >= 0.7f }
 
-    val filteredBadges: List<Badge>
-        get() = if (selectedCategory == null) allBadges
-                else allBadges.filter { it.category == selectedCategory }
-    
-    val earnedCount: Int get() = allBadges.count { it.isEarned }
-    val totalCount: Int get() = allBadges.size
+    val totalStars: Int
+        get() = allBadges.filter { it.badgeId !in GamificationEngine.BEGINNER_BADGES }.sumOf { it.stars }
 
-    /** Total stars earned across all progression badges (excludes beginner badges) */
-    val totalStars: Int get() = allBadges
-        .filter { it.badgeId !in GamificationEngine.BEGINNER_BADGES }
-        .sumOf { it.stars }
-
-    /** Maximum possible stars (5 per progression badge, excludes beginner badges) */
-    val maxPossibleStars: Int get() = allBadges
-        .filter { it.badgeId !in GamificationEngine.BEGINNER_BADGES }
-        .size * 5
-    
-    val categories: List<String>
-        get() = allBadges.map { it.category }.distinct().sorted()
+    val maxPossibleStars: Int
+        get() = allBadges.filter { it.badgeId !in GamificationEngine.BEGINNER_BADGES }.size * 5
 }

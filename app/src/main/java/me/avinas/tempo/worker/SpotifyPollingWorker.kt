@@ -4,10 +4,14 @@ import android.content.Context
 import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
+import com.google.common.util.concurrent.ListenableFuture
 import me.avinas.tempo.data.local.dao.UserPreferencesDao
 import me.avinas.tempo.data.spotify.SpotifyImportService
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -74,7 +78,7 @@ class SpotifyPollingWorker @AssistedInject constructor(
         suspend fun isScheduled(context: Context): Boolean {
             val workInfos = WorkManager.getInstance(context)
                 .getWorkInfosForUniqueWork(WORK_NAME)
-                .get()
+                .awaitResult()
             return workInfos.any { 
                 it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING 
             }
@@ -124,4 +128,18 @@ class SpotifyPollingWorker @AssistedInject constructor(
             Result.retry()
         }
     }
+}
+
+private suspend fun <T> ListenableFuture<T>.awaitResult(): T = suspendCancellableCoroutine { continuation ->
+    addListener(
+        {
+            try {
+                continuation.resume(get())
+            } catch (error: Exception) {
+                continuation.resumeWithException(error)
+            }
+        },
+        java.util.concurrent.Executor { command -> command.run() }
+    )
+    continuation.invokeOnCancellation { cancel(true) }
 }

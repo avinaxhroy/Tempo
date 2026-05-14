@@ -8,75 +8,83 @@ import me.avinas.tempo.data.local.dao.DesktopPairingDao
 import me.avinas.tempo.data.local.entities.DesktopPairingSession
 import org.json.JSONException
 import org.json.JSONObject
+import java.security.KeyPair
+import java.security.PrivateKey
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Holds the data extracted from a desktop Tempo Satellite QR code.
+ * Holds the data extracted from a desktop Tempo QR code.
  *
- * Supported QR formats from the desktop app:
+ * Supported QR formats:
  * ```json
- * {"token":"abc123...","device_name":"MacBook Pro","v":1}
- * {"ip":"192.168.1.10","port":8765,"token":"abc123...","v":1}
+ * {"token":"abc123...","device_name":"MacBook Pro","v":1}       // v1: legacy plaintext token
+ * {"ip":"192.168.1.10","port":8765,"token":"abc123...","v":2}  // v2: legacy with IP
+ * {"pub_key":"B64_ECDH_P256_KEY","device_name":"MacBook Pro","v":3}  // v3: ECDH key exchange
+ * {"pub_key":"B64_ECDH_P256_KEY","ip":"192.168.1.10","port":8765,"device_name":"MacBook Pro","v":3}
  * ```
  */
 data class DesktopQrData(
-    /** Auth token the desktop will use when POSTing plays to the phone's server. */
-    val token: String,
+    val token: String? = null,
+    val pubKey: String? = null,
     val ip: String? = null,
     val port: Int? = null,
-    val deviceName: String? = null
+    val deviceName: String? = null,
+    val version: Int = 1
 )
 
-/**
- * Manages the lifecycle of a Desktop Satellite pairing session.
- *
- * Pairing direction: the **desktop app** shows a QR code containing its play
- * endpoint address and auth token. The **phone** (this app) scans it with the camera,
- * stores the credentials, and starts the local NanoHTTPD receiver so the desktop can
- * begin forwarding plays.
- */
 @Singleton
 class DesktopPairingManager @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val desktopPairingDao: DesktopPairingDao
 ) {
-
     companion object {
         private const val TAG = "DesktopPairingManager"
-        /** Port the phone's NanoHTTPD receiver listens on. */
         const val SERVER_PORT = 8765
         private const val MIN_TOKEN_LENGTH = 16
         private const val MAX_TOKEN_LENGTH = 128
     }
 
-    // ---------------------------------------------------------------------------
-    // QR parsing (desktop shows QR → phone scans it)
-    // ---------------------------------------------------------------------------
+    private var phoneKeyPair: KeyPair? = null
 
-    /**
-     * Parses the JSON payload from a desktop Tempo Satellite QR code.
-     *
-     * @return [DesktopQrData] on success, or null if the payload is not a valid
-     *         Tempo Desktop QR code (e.g., user accidentally scanned something else).
-     */
     fun parseDesktopQrPayload(json: String): DesktopQrData? {
         return try {
             val obj = JSONObject(json)
-            val token = obj.optString("token").trim()
-            val ip = obj.optString("ip").trim().ifBlank { null }
-            val port = obj.optInt("port", 0).takeIf { it > 0 }
-            val deviceName = obj.optString("device_name").trim().ifBlank { null }
+            val version = obj.optInt("v", 1)
 
-            if (token.length !in MIN_TOKEN_LENGTH..MAX_TOKEN_LENGTH) null
-            else {
-                DesktopQrData(
-                    token = token,
-                    ip = ip,
-                    port = port,
-                    deviceName = deviceName
-                )
+            when (version) {
+                3 -> {
+                    val pubKey = obj.optString("pub_key").trim().ifBlank { null }
+                    val ip = obj.optString("ip").trim().ifBlank { null }
+                    val port = obj.optInt("port", 0).takeIf { it > 0 }
+                    val deviceName = obj.optString("device_name").trim().ifBlank { null }
+                    if (pubKey == null) {
+                        Log.w(TAG, "v3 QR missing pub_key")
+                        return null
+                    }
+                    DesktopQrData(
+                        pubKey = pubKey,
+                        ip = ip,
+                        port = port,
+                        deviceName = deviceName,
+                        version = 3
+                    )
+                }
+                else -> {
+                    val token = obj.optString("token").trim().ifBlank { null }
+                    val ip = obj.optString("ip").trim().ifBlank { null }
+                    val port = obj.optInt("port", 0).takeIf { it > 0 }
+                    val deviceName = obj.optString("device_name").trim().ifBlank { null }
+                    if (token == null || token.length !in MIN_TOKEN_LENGTH..MAX_TOKEN_LENGTH) return null
+                    DesktopQrData(
+                        token = token,
+                        ip = ip,
+                        port = port,
+                        deviceName = deviceName,
+                        version = version
+                    )
+                }
             }
         } catch (e: JSONException) {
             Log.w(TAG, "Invalid QR payload: $json", e)
@@ -84,65 +92,120 @@ class DesktopPairingManager @Inject constructor(
         }
     }
 
-    /**
-     * Creates and persists a new pairing session from a successfully scanned QR code.
-     * Deactivates any previously active session beforehand (one active session at a time).
-     */
     suspend fun completePairingFromDesktopQr(qrData: DesktopQrData): DesktopPairingSession {
-        desktopPairingDao.deactivateAll()
+        val authToken: String
+        val phonePublicKey: String?
+        val desktopPublicKey: String?
+
+        if (qrData.version == 3 && qrData.pubKey != null) {
+            val keyPair = EcdhKeyExchange.generateKeyPair()
+            val desktopPubKey = EcdhKeyExchange.base64ToPublicKey(qrData.pubKey)
+            if (desktopPubKey != null) {
+                phoneKeyPair = keyPair
+                phonePublicKey = EcdhKeyExchange.publicKeyToBase64(keyPair.public)
+                desktopPublicKey = qrData.pubKey
+
+                val sharedSecret = EcdhKeyExchange.deriveSharedSecret(keyPair.private, desktopPubKey)
+                authToken = EcdhKeyExchange.deriveAuthToken(sharedSecret)
+            } else {
+                Log.e(TAG, "Failed to parse desktop ECDH public key — cannot complete v3 pairing")
+                throw IllegalStateException("Failed to parse desktop ECDH public key. Try generating a new QR code.")
+            }
+        } else {
+            authToken = qrData.token ?: UUID.randomUUID().toString().replace("-", "")
+            phonePublicKey = null
+            desktopPublicKey = null
+        }
+
+        val encryptedToken = TokenEncryptor.encrypt(authToken)
         val session = DesktopPairingSession(
             id = UUID.randomUUID().toString(),
-            authToken = qrData.token,
+            authToken = encryptedToken ?: authToken,
             deviceName = qrData.deviceName.orEmpty(),
             desktopIp = qrData.ip,
             desktopPort = qrData.port,
             pairedAtMs = System.currentTimeMillis(),
-            isActive = true
+            isActive = true,
+            phonePublicKey = phonePublicKey,
+            desktopPublicKey = desktopPublicKey,
+            tokenVersion = 0
         )
-        desktopPairingDao.insertOrUpdate(session)
+        desktopPairingDao.deactivateAndInsert(session)
+
         Log.i(
             TAG,
             if (qrData.ip != null && qrData.port != null) {
-                "Paired with desktop at ${qrData.ip}:${qrData.port}"
+                "Paired with desktop at ${qrData.ip}:${qrData.port} (v${qrData.version})"
             } else {
-                "Paired with desktop using auth token only"
+                "Paired with desktop (v${qrData.version})"
             }
         )
         return session
     }
 
-    // ---------------------------------------------------------------------------
-    // Session management
-    // ---------------------------------------------------------------------------
-
-    /** Returns the active pairing session, or null if not yet paired. */
     suspend fun getActiveSession(): DesktopPairingSession? =
         desktopPairingDao.getActiveSession()
 
-    /** Validates an incoming auth token from a desktop play sync request. */
-    suspend fun validateToken(token: String): DesktopPairingSession? =
-        desktopPairingDao.findByToken(token)
-
-    /** Updates last-seen metadata after a successful ingestion batch. */
-    suspend fun recordSuccessfulSync(token: String, deviceName: String) {
-        desktopPairingDao.updateLastSeen(token, System.currentTimeMillis(), deviceName)
+    suspend fun validateToken(token: String): DesktopPairingSession? {
+        val session = desktopPairingDao.getActiveSession() ?: return null
+        val storedToken = TokenEncryptor.decrypt(session.authToken) ?: session.authToken
+        // Direct match (current token)
+        if (constantTimeEquals(storedToken, token)) return session
+        // One-step backward: client sends previous token, stored is already rotated
+        val prevToken = EcdhKeyExchange.rotateAuthToken(token)
+        if (constantTimeEquals(storedToken, prevToken)) return session
+        // Two-step backward: client missed two rotation responses
+        val prevToken2 = EcdhKeyExchange.rotateAuthToken(prevToken)
+        if (constantTimeEquals(storedToken, prevToken2)) return session
+        return null
     }
 
-    /** Soft-deactivates the current pairing (user taps Disconnect). */
+    private fun constantTimeEquals(a: String, b: String): Boolean {
+        if (a.length != b.length) return false
+        var result = 0
+        for (i in a.indices) {
+            result = result or (a[i].code xor b[i].code)
+        }
+        return result == 0
+    }
+
+    suspend fun recordSuccessfulSync(token: String, deviceName: String) {
+        val session = desktopPairingDao.getActiveSession() ?: return
+        desktopPairingDao.updateLastSeen(session.id, System.currentTimeMillis(), deviceName)
+    }
+
+    suspend fun rotateToken(clientToken: String): String? {
+        val session = desktopPairingDao.getActiveSession() ?: return null
+        val storedToken = TokenEncryptor.decrypt(session.authToken) ?: session.authToken
+
+        // Direct match: client token equals stored token — rotate normally
+        if (constantTimeEquals(storedToken, clientToken)) {
+            val newToken = EcdhKeyExchange.rotateAuthToken(clientToken)
+            val encryptedNew = TokenEncryptor.encrypt(newToken) ?: return null
+            desktopPairingDao.updateToken(session.id, encryptedNew)
+            return newToken
+        }
+
+        // One-step behind: client sent previous token, stored is already rotated
+        // In this case, rotate from the stored token (not the client token) to advance
+        val prevToken = EcdhKeyExchange.rotateAuthToken(clientToken)
+        if (constantTimeEquals(storedToken, prevToken)) {
+            val newToken = EcdhKeyExchange.rotateAuthToken(storedToken)
+            val encryptedNew = TokenEncryptor.encrypt(newToken) ?: return null
+            desktopPairingDao.updateToken(session.id, encryptedNew)
+            return newToken
+        }
+
+        // Token doesn't match at all
+        return null
+    }
+
     suspend fun deactivate() {
         desktopPairingDao.deactivateAll()
+        phoneKeyPair = null
         Log.i(TAG, "Desktop pairing session deactivated")
     }
 
-    // ---------------------------------------------------------------------------
-    // Network utilities — phone IP discovery for the receiver address display
-    // ---------------------------------------------------------------------------
-
-    /**
-     * Returns the best available local IP address of this phone.
-     *
-     * Priority: WiFi → physical network interface → "0.0.0.0" fallback.
-     */
     fun getLocalIpAddress(): String {
         val wifiIp = getWifiIpAddress()
         if (wifiIp != null) return wifiIp
@@ -167,6 +230,12 @@ class DesktopPairingManager @Inject constructor(
         return "0.0.0.0"
     }
 
+    fun getPhonePublicKey(): String? {
+        return phoneKeyPair?.let { EcdhKeyExchange.publicKeyToBase64(it.public) }
+    }
+
+    fun getPhoneKeyPair(): KeyPair? = phoneKeyPair
+
     @Suppress("DEPRECATION")
     private fun getWifiIpAddress(): String? {
         return try {
@@ -187,5 +256,4 @@ class DesktopPairingManager @Inject constructor(
             null
         }
     }
-
 }

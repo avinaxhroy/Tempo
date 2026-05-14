@@ -392,6 +392,16 @@ fun SettingsScreen(
                             subtitle = stringResource(R.string.settings_manage_apps_desc),
                             onClick = { onNavigateToSupportedApps?.invoke() }
                         )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        SettingsSwitch(
+                            title = "Pause tracking on low battery",
+                            subtitle = if (uiState.pauseTrackingOnLowBattery)
+                                "Tracking pauses below 20% battery to save power (currently $batteryLevel%)"
+                            else
+                                "Tracking continues at all battery levels — no automatic pausing",
+                            checked = uiState.pauseTrackingOnLowBattery,
+                            onCheckedChange = viewModel::togglePauseTrackingOnLowBattery
+                        )
                     }
                 }
 

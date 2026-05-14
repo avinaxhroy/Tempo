@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -32,38 +33,40 @@ fun GlassCard(
 ) {
     // Hero (HighProminence): light-catching top edge gradient for depth
     // Normal (LowProminence): single flat stroke, no gradient
-    val borderBrush = if (variant == GlassCardVariant.HighProminence) {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.35f), // Strong top-edge highlight
-                Color.White.copy(alpha = 0.05f)
+    val borderBrush = remember(variant) {
+        if (variant == GlassCardVariant.HighProminence) {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.35f),
+                    Color.White.copy(alpha = 0.05f)
+                )
             )
-        )
-    } else {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.10f),
-                Color.White.copy(alpha = 0.10f)
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.10f),
+                    Color.White.copy(alpha = 0.10f)
+                )
             )
-        )
+        }
     }
 
-    // Hero: vertical gradient for lifted/3D feel
-    // Normal: flat solid fill — no gradient, leaner 2D look
-    val backgroundBrush = if (variant == GlassCardVariant.HighProminence) {
-        Brush.verticalGradient(
-            colors = listOf(
-                androidx.compose.ui.graphics.lerp(backgroundColor, Color.White, 0.07f),
-                backgroundColor.copy(alpha = (backgroundColor.alpha * 0.85f).coerceAtLeast(0.02f))
+    val backgroundBrush = remember(variant, backgroundColor) {
+        if (variant == GlassCardVariant.HighProminence) {
+            Brush.verticalGradient(
+                colors = listOf(
+                    androidx.compose.ui.graphics.lerp(backgroundColor, Color.White, 0.07f),
+                    backgroundColor.copy(alpha = (backgroundColor.alpha * 0.85f).coerceAtLeast(0.02f))
+                )
             )
-        )
-    } else {
-        Brush.verticalGradient(
-            colors = listOf(
-                backgroundColor,
-                backgroundColor
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(
+                    backgroundColor,
+                    backgroundColor
+                )
             )
-        )
+        }
     }
 
     Box(

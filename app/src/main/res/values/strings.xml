@@ -520,10 +520,10 @@
     <string name="desktop_receiver_running">Ready to sync on port %1$d</string>
     <string name="desktop_receiver_stopped">Sync receiver is off</string>
     <!-- Scanner UI -->
-    <string name="desktop_scan_qr_title">Scan QR from Desktop App</string>
-    <string name="desktop_scan_qr_subtitle">Open Tempo Desktop on your Mac or PC, then scan the QR code shown there</string>
+    <string name="desktop_scan_qr_title">Scan QR from Desktop or Browser</string>
+    <string name="desktop_scan_qr_subtitle">Open Tempo Desktop (Mac/PC) or the Tempo Stats browser extension, then scan the QR code shown there</string>
     <string name="desktop_scan_button">Scan QR Code</string>
-    <string name="desktop_scan_instruction">Point your camera at the QR code in the Tempo Desktop app</string>
+    <string name="desktop_scan_instruction">Point your camera at the QR code in Tempo Desktop or the browser extension</string>
     <string name="desktop_cancel_scan">Cancel</string>
     <!-- Paired state -->
     <string name="desktop_connected_to">Paired Desktop</string>

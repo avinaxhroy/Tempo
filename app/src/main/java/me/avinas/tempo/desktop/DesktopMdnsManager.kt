@@ -5,19 +5,14 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Registers and manages an mDNS/DNS-SD service so the desktop app can auto-discover
- * this phone on the local network when DHCP IPs change.
- *
- * Service type: `_tempo._tcp.` (matches desktop's mDNS browse query)
- * Port: [DesktopPairingManager.SERVER_PORT]
- */
 @Singleton
 class DesktopMdnsManager @Inject constructor(
-    @param:ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context,
+    private val pairingManager: DesktopPairingManager
 ) {
     companion object {
         private const val TAG = "DesktopMdnsManager"
@@ -53,20 +48,27 @@ class DesktopMdnsManager @Inject constructor(
         }
     }
 
-    /**
-     * Register the Tempo receiver mDNS service at the given port.
-     * Call when the satellite HTTP server starts.
-     */
     fun register(port: Int = DesktopPairingManager.SERVER_PORT) {
         if (isRegistered) {
-            Log.d(TAG, "mDNS service already registered, skipping")
-            return
+            // Must unregister first so TXT records (tsha) update on re-registration
+            try {
+                nsdManager.unregisterService(registrationListener)
+            } catch (_: Exception) { /* wasn't registered */ }
+            isRegistered = false
         }
 
         val serviceInfo = NsdServiceInfo().apply {
             serviceName = SERVICE_NAME
             serviceType = SERVICE_TYPE
             setPort(port)
+            val session = try {
+                kotlinx.coroutines.runBlocking { pairingManager.getActiveSession() }
+            } catch (_: Exception) { null }
+            session?.let {
+                val decrypted = TokenEncryptor.decrypt(it.authToken) ?: it.authToken
+                val hash = sha256Truncate(decrypted, 8)
+                setAttribute("tsha", hash)
+            }
         }
 
         try {
@@ -77,10 +79,6 @@ class DesktopMdnsManager @Inject constructor(
         }
     }
 
-    /**
-     * Unregister the mDNS service.
-     * Call when the satellite HTTP server stops or pairing is disconnected.
-     */
     fun unregister() {
         if (!isRegistered) return
 
@@ -90,5 +88,10 @@ class DesktopMdnsManager @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to unregister mDNS service", e)
         }
+    }
+
+    private fun sha256Truncate(input: String, length: Int): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
+        return digest.take(length).joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 }

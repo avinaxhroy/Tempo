@@ -1,5 +1,6 @@
 use log::{debug, info, warn};
 use mdns_sd::{ServiceDaemon, ServiceEvent};
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -18,15 +19,28 @@ pub struct DiscoveredPhone {
     pub device_name: String,
 }
 
-/// Browse the local network for a Tempo phone receiver via mDNS.
-///
-/// Returns the first discovered phone within the timeout, or `None`.
-pub async fn discover_phone() -> Option<DiscoveredPhone> {
-    // Run mDNS browse on a blocking thread since mdns-sd is sync
-    tokio::task::spawn_blocking(discover_phone_blocking).await.ok()?
+/// Compute a truncated SHA-256 hash of the auth token (same as Android's `sha256Truncate`).
+/// Returns the first `len` bytes of SHA-256 as hex.
+fn sha256_truncate(input: &str, len: usize) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    let result = hasher.finalize();
+    result[..len].iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-fn discover_phone_blocking() -> Option<DiscoveredPhone> {
+/// Browse the local network for a Tempo phone receiver via mDNS.
+///
+/// If `auth_token` is provided, only returns phones whose `tsha` TXT record
+/// matches the truncated SHA-256 hash of the token, preventing connection
+/// to the wrong Tempo instance on a shared network.
+pub async fn discover_phone(auth_token: Option<&str>) -> Option<DiscoveredPhone> {
+    let auth_token_owned = auth_token.map(|s| s.to_string());
+    tokio::task::spawn_blocking(move || discover_phone_blocking(auth_token_owned.as_deref())).await.ok()?
+}
+
+fn discover_phone_blocking(auth_token: Option<&str>) -> Option<DiscoveredPhone> {
+    let expected_tsha = auth_token.map(|t| sha256_truncate(t, 8));
+
     let mdns = match ServiceDaemon::new() {
         Ok(d) => d,
         Err(e) => {
@@ -60,6 +74,22 @@ fn discover_phone_blocking() -> Option<DiscoveredPhone> {
                 ServiceEvent::ServiceResolved(info) => {
                     let addresses = info.get_addresses();
                     if let Some(addr) = addresses.iter().find(|a| a.is_ipv4()) {
+                        // Verify tsha TXT record if we have an auth token
+                        // Only reject if tsha is present and doesn't match.
+                        // Missing tsha (e.g., before pairing) is accepted.
+                        if let Some(ref expected) = expected_tsha {
+                            let actual_tsha = info.get_property("tsha")
+                                .map(|val| val.val_str().to_string())
+                                .unwrap_or_default();
+                            if !actual_tsha.is_empty() && !expected.eq_ignore_ascii_case(&actual_tsha) {
+                                info!(
+                                    "mDNS: skipping phone at {} — tsha mismatch (expected={}, got={})",
+                                    addr, expected, actual_tsha
+                                );
+                                continue;
+                            }
+                        }
+
                         let phone = DiscoveredPhone {
                             ip: addr.to_string(),
                             port: info.get_port(),

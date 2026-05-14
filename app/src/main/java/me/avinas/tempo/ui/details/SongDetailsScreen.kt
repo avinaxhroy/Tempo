@@ -232,13 +232,13 @@ fun SongDetailsContent(
             horizontalAlignment = Alignment.CenterHorizontally,
             contentPadding = PaddingValues(bottom = 32.dp)
         ) {
-            item {
+            item(key = "hero_section") {
                 SongHeroSection(trackDetails = trackDetails)
             }
             
             // Streaming Links
             if (trackDetails.appleMusicUrl != null || (isSpotifyConnected && trackDetails.spotifyUrl != null)) {
-                item {
+                item(key = "streaming_links") {
                     Spacer(modifier = Modifier.height(16.dp))
                     me.avinas.tempo.ui.components.MusicLinksRow(
                         appleMusicUrl = trackDetails.appleMusicUrl,
@@ -247,7 +247,7 @@ fun SongDetailsContent(
                 }
             }
             
-            item {
+            item(key = "achievement_badge") {
                 Spacer(modifier = Modifier.height(24.dp))
                 if (trackDetails.isFavorite) {
                     AchievementBadge()
@@ -255,7 +255,7 @@ fun SongDetailsContent(
                 }
             }
 
-            item {
+            item(key = "stats_grid") {
                 StatsGrid(
                     trackDetails = trackDetails,
                     genre = genre,
@@ -264,14 +264,14 @@ fun SongDetailsContent(
                 )
             }
 
-            item {
+            item(key = "listening_trends") {
                 Spacer(modifier = Modifier.height(16.dp))
                 ListeningTrendsChart(history = listeningHistory)
             }
 
             // Mood & Genre Section (from MusicBrainz tags)
             if (moodSummary != null) {
-                item {
+                item(key = "mood_insights") {
                     Spacer(modifier = Modifier.height(24.dp))
                     MoodInsightsSection(moodSummary = moodSummary)
                 }
@@ -279,7 +279,7 @@ fun SongDetailsContent(
 
             // Engagement Section (from user behavior)
             if (engagement != null) {
-                item {
+                item(key = "engagement_section") {
                     Spacer(modifier = Modifier.height(24.dp))
                     EngagementSection(engagement = engagement)
                 }

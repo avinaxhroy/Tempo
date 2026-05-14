@@ -122,7 +122,7 @@ fun SpotlightScreen(
                     contentPadding = PaddingValues(bottom = 100.dp) // Space for bottom bar
                 ) {
                     // Spotlight Story Button
-                    item {
+                    item(key = "story_button") {
                         AnimatedVisibility(
                             visible = true,
                             enter = fadeIn(animationSpec = tween(500)) + 

@@ -18,11 +18,13 @@ import com.google.zxing.NotFoundException
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A Compose wrapper around CameraX that continuously analyses camera frames and
- * invokes [onQrDetected] exactly once when a valid QR code is found.
+ * invokes [onQrDetected] when a valid QR code is found.
+ *
+ * The scanner can be reset by changing the key parameter - useful when the user
+ * needs to scan again after a failed attempt.
  *
  * Caller is responsible for ensuring the CAMERA permission has been granted
  * before this composable is placed in the hierarchy.
@@ -33,8 +35,8 @@ fun QrScannerView(
     onQrDetected: (rawText: String) -> Unit
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    // One-shot guard: only fire the callback for the first successful decode.
-    val hasDetected = remember { AtomicBoolean(false) }
+    // Allow multiple scans by not using hasDetected guard
+    // Caller is responsible for resetting/remounting when needed
     val executor = remember { Executors.newSingleThreadExecutor() }
 
     DisposableEffect(Unit) {
@@ -67,12 +69,6 @@ fun QrScannerView(
                     .build()
                     .also { analysis ->
                         analysis.setAnalyzer(executor) { imageProxy ->
-                            // Drop frames after first successful decode
-                            if (hasDetected.get()) {
-                                imageProxy.close()
-                                return@setAnalyzer
-                            }
-
                             val planeBuffer = imageProxy.planes[0].buffer
                             val bytes = ByteArray(planeBuffer.remaining())
                             planeBuffer.get(bytes)
@@ -90,9 +86,7 @@ fun QrScannerView(
                             try {
                                 val result = MultiFormatReader()
                                     .decode(BinaryBitmap(HybridBinarizer(source)))
-                                if (hasDetected.compareAndSet(false, true)) {
-                                    onQrDetected(result.text)
-                                }
+                                onQrDetected(result.text)
                             } catch (_: NotFoundException) {
                                 // No QR code in this frame — expected, keep scanning
                             } catch (e: Exception) {

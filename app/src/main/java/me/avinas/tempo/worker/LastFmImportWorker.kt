@@ -10,9 +10,11 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
+import com.google.common.util.concurrent.ListenableFuture
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import me.avinas.tempo.MainActivity
 import me.avinas.tempo.R
@@ -20,6 +22,8 @@ import me.avinas.tempo.data.lastfm.LastFmImportService
 import me.avinas.tempo.data.local.dao.LastFmImportMetadataDao
 import me.avinas.tempo.data.local.dao.UserPreferencesDao
 import me.avinas.tempo.data.local.entities.LastFmImportMetadata
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -228,7 +232,7 @@ class LastFmImportWorker @AssistedInject constructor(
             try {
                 val workInfos = WorkManager.getInstance(context)
                     .getWorkInfosForUniqueWork(INITIAL_IMPORT_WORK)
-                    .get()
+                    .awaitResult()
                 workInfos.any { it.state == WorkInfo.State.RUNNING }
             } catch (e: Exception) {
                 false
@@ -254,7 +258,7 @@ class LastFmImportWorker @AssistedInject constructor(
         )
         
         val notificationBuilder = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Last.fm Import")
             .setContentText(message)
             .setContentIntent(pendingIntent)
@@ -268,7 +272,12 @@ class LastFmImportWorker @AssistedInject constructor(
             notificationBuilder.setProgress(0, 0, true) // Indeterminate
         }
         
-        return ForegroundInfo(NOTIFICATION_ID, notificationBuilder.build())
+        val notification = notificationBuilder.build()
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            ForegroundInfo(NOTIFICATION_ID, notification)
+        }
     }
     
     /**
@@ -443,6 +452,20 @@ class LastFmImportWorker @AssistedInject constructor(
             Result.retry()
         }
     }
+}
+
+private suspend fun <T> ListenableFuture<T>.awaitResult(): T = suspendCancellableCoroutine { continuation ->
+    addListener(
+        {
+            try {
+                continuation.resume(get())
+            } catch (error: Exception) {
+                continuation.resumeWithException(error)
+            }
+        },
+        java.util.concurrent.Executor { command -> command.run() }
+    )
+    continuation.invokeOnCancellation { cancel(true) }
 }
 
 /**

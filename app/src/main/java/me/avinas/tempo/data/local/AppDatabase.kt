@@ -32,7 +32,7 @@ import me.avinas.tempo.data.local.entities.DesktopPairingSession
         DailyChallenge::class, // Gamification: daily challenges
         DesktopPairingSession::class // Desktop Satellite pairing sessions
     ],
-    version = 43, // Migration 43: Backfill Vivi Music & new open-source apps into app_preferences
+    version = 46, // Migration 46: Add indexes on enriched_metadata(spotify_id, spotify_artist_id, spotify_enrichment_status)
     exportSchema = true  // Schema exported to app/schemas/ — commit these files so migration gaps are caught at build time
 )
 @TypeConverters(Converters::class)
@@ -59,7 +59,7 @@ abstract class AppDatabase : RoomDatabase() {
         private const val TAG = "AppDatabase"
         
         /** Current Room schema version — keep in sync with the @Database(version = ...) annotation. */
-        const val VERSION = 43
+        const val VERSION = 46
         
         /**
          * Migration from version 6 to 7: Add enhanced tracking columns to listening_events.
@@ -1946,6 +1946,99 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * Migration from version 43 to 44.
+         *
+         * Two additive-only changes, no existing data modified:
+         *
+         * 1. Adds [pauseTrackingOnLowBattery] to user_preferences.
+         *    Default is 1 (true) to preserve existing behaviour for all upgrading users.
+         *    Users can change this in Settings → Music Tracking.
+         *
+         * 2. Adds three ECDH pairing columns to desktop_pairing_sessions that were added
+         *    to [DesktopPairingSession] entity but never migrated:
+         *    - phone_public_key   : phone's P-256 public key (base64url SPKI)
+         *    - desktop_public_key : desktop's P-256 public key received from QR
+         *    - token_version      : rotation counter, starts at 0
+         */
+        val MIGRATION_43_44 = object : Migration(43, 44) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 43 to 44")
+
+                // --- 1. user_preferences: add pauseTrackingOnLowBattery ---
+                db.execSQL("""
+                    ALTER TABLE user_preferences
+                    ADD COLUMN pauseTrackingOnLowBattery INTEGER NOT NULL DEFAULT 1
+                """)
+
+                // --- 2. desktop_pairing_sessions: add ECDH key columns ---
+                db.execSQL("""
+                    ALTER TABLE desktop_pairing_sessions
+                    ADD COLUMN phone_public_key TEXT DEFAULT NULL
+                """)
+                db.execSQL("""
+                    ALTER TABLE desktop_pairing_sessions
+                    ADD COLUMN desktop_public_key TEXT DEFAULT NULL
+                """)
+                db.execSQL("""
+                    ALTER TABLE desktop_pairing_sessions
+                    ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0
+                """)
+
+                Log.i(TAG, "Migration from version 43 to 44 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 44 to 45.
+         *
+         * Originally added ECDH key exchange fields (phone_public_key, desktop_public_key,
+         * token_version) to desktop_pairing_sessions, but those columns were already
+         * added in MIGRATION_43_44. This migration is now a safe no-op that checks
+         * whether each column already exists before attempting to add it, preventing
+         * "duplicate column name" crashes for users upgrading through 43→44→45.
+         */
+        val MIGRATION_44_45 = object : Migration(44, 45) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 44 to 45 - ECDH key exchange fields (idempotent)")
+
+                val existingColumns = mutableSetOf<String>()
+                db.query("PRAGMA table_info(desktop_pairing_sessions)").use { cursor ->
+                    val nameIndex = cursor.getColumnIndex("name")
+                    while (cursor.moveToNext()) {
+                        existingColumns.add(cursor.getString(nameIndex))
+                    }
+                }
+
+                if (!existingColumns.contains("phone_public_key")) {
+                    db.execSQL("ALTER TABLE desktop_pairing_sessions ADD COLUMN phone_public_key TEXT DEFAULT NULL")
+                }
+                if (!existingColumns.contains("desktop_public_key")) {
+                    db.execSQL("ALTER TABLE desktop_pairing_sessions ADD COLUMN desktop_public_key TEXT DEFAULT NULL")
+                }
+                if (!existingColumns.contains("token_version")) {
+                    db.execSQL("ALTER TABLE desktop_pairing_sessions ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0")
+                }
+
+                Log.i(TAG, "Migration from version 44 to 45 completed successfully")
+            }
+        }
+
+        /**
+         * Migration from version 45 to 46.
+         * Add indexes on enriched_metadata for spotify_id, spotify_artist_id,
+         * and spotify_enrichment_status to speed up enrichment lookups.
+         */
+        val MIGRATION_45_46 = object : Migration(45, 46) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i(TAG, "Starting migration from version 45 to 46 - Add spotify indexes to enriched_metadata")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_enriched_metadata_spotify_id ON enriched_metadata(spotify_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_enriched_metadata_spotify_artist_id ON enriched_metadata(spotify_artist_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_enriched_metadata_spotify_enrichment_status ON enriched_metadata(spotify_enrichment_status)")
+                Log.i(TAG, "Migration from version 45 to 46 completed successfully")
+            }
+        }
+
+        /**
          * All migrations in order.
          */
         val ALL_MIGRATIONS = arrayOf(
@@ -1985,7 +2078,10 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_39_40,   // Fix: add smartChallengeNotifHour / smartChallengeNotifCalcTime to user_preferences
             MIGRATION_40_41,   // Fix: non-UNIQUE indices on artists/albums, nullable tags/genres in enriched_metadata
             MIGRATION_41_42,   // Add isGamificationEnabled to user_preferences
-            MIGRATION_42_43    // Backfill Vivi Music & new open-source apps into app_preferences
+            MIGRATION_42_43,   // Backfill Vivi Music & new open-source apps into app_preferences
+            MIGRATION_43_44,    // Add pauseTrackingOnLowBattery to user_preferences
+            MIGRATION_44_45,     // ECDH key exchange: add phone_public_key, desktop_public_key, token_version
+            MIGRATION_45_46      // Add spotify indexes on enriched_metadata
         )
     }
 }

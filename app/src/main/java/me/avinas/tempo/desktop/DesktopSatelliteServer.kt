@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import me.avinas.tempo.utils.BatteryUtils
 import org.json.JSONObject
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -21,25 +22,6 @@ import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * A lightweight NanoHTTPD-based HTTP server that runs on the Android phone.
- *
- * Exposed endpoints:
- * - `GET  /api/ping`             — liveness check; no auth required; returns `{"ok":true}`
- * - `GET  /api/battery`          — battery status; no auth required; returns `{"level":XX,"critical":false}`
- * - `POST /api/plays`         — receives a batch of desktop plays; requires valid Bearer token
- *
- * The token is validated against [DesktopPairingManager] on every POST. All actual
- * business logic (deduplication, DB insertion) is delegated to [DesktopPlayIngestionService].
- *
- * Battery Optimization:
- * - Play sync requests are rejected if battery level is ≤ 20% (critical)
- * - Desktop app should check battery status before attempting sync
- * - Battery level is cached for 2 minutes to minimize system calls
- *
- * Thread model: NanoHTTPD delivers requests on its own background threads. We bridge to
- * coroutines via a dedicated [CoroutineScope] so we can call suspend functions safely.
- */
 @Singleton
 class DesktopSatelliteServer @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -50,14 +32,23 @@ class DesktopSatelliteServer @Inject constructor(
     companion object {
         private const val TAG = "DesktopSatelliteServer"
         private const val MIME_JSON = "application/json"
-        private const val MAX_BODY_BYTES = 512 * 1024 // 512 KB guard – plenty for any play batch
+        private const val MAX_BODY_BYTES = 512 * 1024
         private const val SIGNATURE_HEADER = "x-tempo-signature"
+        private const val AUTHORIZATION_HEADER = "authorization"
+        private const val BEARER_PREFIX = "Bearer "
         private const val HMAC_SHA256 = "HmacSHA256"
         private const val MIN_TOKEN_LENGTH = 16
         private const val MAX_TOKEN_LENGTH = 128
+        private const val MAX_PAIR_CONFIRM_PER_MINUTE = 20
+        private const val MAX_PLAYS_PER_MINUTE = 120
+        private const val MAX_PLAYS_ARRAY_LENGTH = 100
+        private const val MAX_FIELD_LENGTH = 500
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val pairConfirmAttempts = ConcurrentHashMap<String, LongArray>()
+    private val playsAttempts = ConcurrentHashMap<String, LongArray>()
 
     @Volatile
     private var httpd: InternalHttpd? = null
@@ -67,10 +58,6 @@ class DesktopSatelliteServer @Inject constructor(
     init {
         startBatteryWatchdog()
     }
-
-    // --------------------------------------------------------------------------
-    // Lifecycle
-    // --------------------------------------------------------------------------
 
     fun start(port: Int = DesktopPairingManager.SERVER_PORT) {
         if (isRunning) {
@@ -93,15 +80,6 @@ class DesktopSatelliteServer @Inject constructor(
         Log.i(TAG, "Desktop satellite server stopped")
     }
 
-    // --------------------------------------------------------------------------
-    // Battery watchdog — runs for the whole app lifetime (singleton scope)
-    // --------------------------------------------------------------------------
-
-    /**
-     * Monitors battery every 60 seconds regardless of which screen is open.
-     * Stops the server (and unregisters mDNS) when battery drops to critical (≤ 20%),
-     * and restarts it when battery recovers — as long as a pairing session exists.
-     */
     private fun startBatteryWatchdog() {
         scope.launch {
             while (true) {
@@ -124,17 +102,20 @@ class DesktopSatelliteServer @Inject constructor(
         }
     }
 
-    // --------------------------------------------------------------------------
-    // Inner NanoHTTPD implementation
-    // --------------------------------------------------------------------------
-
     private inner class InternalHttpd(port: Int) : NanoHTTPD(port) {
 
         override fun serve(session: IHTTPSession): Response {
             return try {
-                when {
-                    session.method == Method.GET && session.uri == "/api/ping" -> handlePing()
-                    session.method == Method.GET && session.uri == "/api/battery" -> handleBattery()
+                // Handle CORS preflight. Chrome extensions send OPTIONS before any request
+                // that has custom headers (Authorization, X-Tempo-Signature, etc.).
+                // Without this, Chrome blocks the request with a CORS error.
+                if (session.method == Method.OPTIONS) {
+                    return corsPreflightResponse()
+                }
+
+                val response = when {
+                    session.method == Method.GET && session.uri == "/api/ping" -> handlePing(session)
+                    session.method == Method.GET && session.uri == "/api/battery" -> handleBattery(session)
                     session.method == Method.POST && session.uri == "/api/pair/confirm" -> handlePairConfirm(session)
                     session.method == Method.POST && session.uri == "/api/plays" -> handlePlays(session)
                     else -> newFixedLengthResponse(
@@ -142,25 +123,95 @@ class DesktopSatelliteServer @Inject constructor(
                         """{"error":"not_found"}"""
                     )
                 }
+                addSecurityHeaders(response)
             } catch (e: Exception) {
                 Log.e(TAG, "Unhandled error serving ${session.uri}", e)
-                newFixedLengthResponse(
+                val resp = newFixedLengthResponse(
                     Response.Status.INTERNAL_ERROR, MIME_JSON,
                     """{"error":"internal_error"}"""
                 )
+                addSecurityHeaders(resp)
             }
         }
 
-        // GET /api/ping  -------------------------------------------------------
-        private fun handlePing(): Response {
+        /**
+         * CORS preflight response for OPTIONS requests.
+         *
+         * Chrome extensions with host_permissions bypass same-origin policy, but
+         * still send preflight OPTIONS requests when the request contains custom
+         * headers (Authorization, X-Tempo-Signature, X-Tempo-Timestamp, X-Tempo-Nonce).
+         * NanoHTTPD must respond to these with the correct ACAO header or Chrome
+         * will block the actual request with a CORS error.
+         */
+        private fun corsPreflightResponse(): Response {
+            val resp = newFixedLengthResponse(Response.Status.OK, MIME_JSON, "")
+            resp.addHeader("Access-Control-Allow-Origin", "*")
+            resp.addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            resp.addHeader(
+                "Access-Control-Allow-Headers",
+                "Authorization, Content-Type, X-Tempo-Signature, X-Tempo-Timestamp, X-Tempo-Nonce"
+            )
+            resp.addHeader("Access-Control-Max-Age", "86400") // cache preflight for 1 day
+            resp.addHeader("Cache-Control", "no-store")
+            return resp
+        }
+
+        private fun addSecurityHeaders(response: Response): Response {
+            response.addHeader("X-Content-Type-Options", "nosniff")
+            response.addHeader("X-Frame-Options", "DENY")
+            response.addHeader("Cache-Control", "no-store")
+            // Allow Chrome extensions (and browsers) to read responses.
+            // Using "*" instead of "null" is required — Chrome rejects "null" ACAO.
+            // This is safe because all endpoints require HMAC authentication anyway.
+            response.addHeader("Access-Control-Allow-Origin", "*")
+            return response
+        }
+
+        private fun authenticateRequest(session: IHTTPSession, body: String): String? {
+            val headerToken = extractBearerToken(session)
+            val json = try { JSONObject(body) } catch (_: Exception) { null }
+            val bodyToken = json?.optString("auth_token")?.takeIf { it.isNotBlank() }
+                ?: json?.optString("token")?.takeIf { it.isNotBlank() }
+            val token = headerToken ?: bodyToken ?: return null
+            if (!isValidToken(token)) return null
+
+            val signature = session.headers[SIGNATURE_HEADER].orEmpty()
+            if (signature.isNotBlank()) {
+                if (!isValidSignature(token, body, signature)) return null
+            } else {
+                return null
+            }
+            return token
+        }
+
+        private fun handlePing(session: IHTTPSession): Response {
+            val token = authenticateRequest(session, "{}")
+            val activeSession = pairingManager.getActiveSessionBlocking()
+            if (activeSession != null) {
+                // A pairing session exists: the token must match the stored session
+                if (token == null) return errorResponse(Response.Status.UNAUTHORIZED, "unauthorized")
+                pairingManager.validateTokenBlocking(token)
+                    ?: return errorResponse(Response.Status.UNAUTHORIZED, "invalid_token")
+            }
             if (BatteryUtils.isCriticalBattery(context, forceRefresh = true)) {
                 return errorResponse(Response.Status.SERVICE_UNAVAILABLE, "battery_critical")
             }
-            return newFixedLengthResponse(Response.Status.OK, MIME_JSON, """{"ok":true}""")
+            val deviceName = Build.MODEL
+            return newFixedLengthResponse(
+                Response.Status.OK, MIME_JSON,
+                """{"ok":true,"device_name":${JSONObject.quote(deviceName)}}"""
+            )
         }
 
-        // GET /api/battery  -------------------------------------------------------
-        private fun handleBattery(): Response {
+        private fun handleBattery(session: IHTTPSession): Response {
+            val token = authenticateRequest(session, "{}")
+            val activeSession = pairingManager.getActiveSessionBlocking()
+            if (activeSession != null) {
+                // A pairing session exists: the token must match the stored session
+                if (token == null) return errorResponse(Response.Status.UNAUTHORIZED, "unauthorized")
+                pairingManager.validateTokenBlocking(token)
+                    ?: return errorResponse(Response.Status.UNAUTHORIZED, "invalid_token")
+            }
             val batteryLevel = BatteryUtils.getBatteryLevel(context)
             val isCritical = BatteryUtils.isCriticalBattery(context)
             val isLow = BatteryUtils.isLowBattery(context)
@@ -174,11 +225,16 @@ class DesktopSatelliteServer @Inject constructor(
             return newFixedLengthResponse(Response.Status.OK, MIME_JSON, response.toString())
         }
 
-        // POST /api/pair/confirm  ----------------------------------------------
         private fun handlePairConfirm(session: IHTTPSession): Response {
             if (BatteryUtils.isCriticalBattery(context, forceRefresh = true)) {
                 Log.w(TAG, "Rejecting pair confirmation: battery level is critical (<= 20%)")
                 return errorResponse(Response.Status.SERVICE_UNAVAILABLE, "battery_critical")
+            }
+
+            val clientIp = session.remoteIpAddress ?: "unknown"
+            if (isRateLimited(clientIp, pairConfirmAttempts, MAX_PAIR_CONFIRM_PER_MINUTE)) {
+                Log.w(TAG, "Rate limiting pair confirmation from $clientIp")
+                return errorResponse(Response.Status.TOO_MANY_REQUESTS, "rate_limited")
             }
 
             val declaredLength = session.headers["content-length"]?.toIntOrNull() ?: 0
@@ -205,10 +261,18 @@ class DesktopSatelliteServer @Inject constructor(
                 return errorResponse(Response.Status.BAD_REQUEST, "invalid_json")
             }
 
-            val token = json.optString("auth_token").takeIf { it.isNotBlank() }
+            val bodyToken = json.optString("auth_token").takeIf { it.isNotBlank() }
+                ?: json.optString("token").takeIf { it.isNotBlank() }
+            val headerToken = extractBearerToken(session)
+            val token = headerToken ?: bodyToken
                 ?: return errorResponse(Response.Status.UNAUTHORIZED, "missing_token")
             if (!isValidToken(token)) {
                 return errorResponse(Response.Status.UNAUTHORIZED, "invalid_token")
+            }
+
+            val signature = session.headers[SIGNATURE_HEADER].orEmpty()
+            if (!signature.isNotBlank() || !isValidSignature(token, body, signature)) {
+                return errorResponse(Response.Status.UNAUTHORIZED, "invalid_signature")
             }
 
             pairingManager.validateTokenBlocking(token)
@@ -222,11 +286,20 @@ class DesktopSatelliteServer @Inject constructor(
             )
         }
 
-        // POST /api/plays  --------------------------------------------------
         private fun handlePlays(session: IHTTPSession): Response {
-            // 1. Read body safely
-            // Check Content-Length header first as an early fast-reject, but do NOT rely on it
-            // alone: a client can omit the header. The actual body is checked after parseBody.
+            val clientIp = session.remoteIpAddress ?: "unknown"
+
+            // Battery check first — reject before any heavy processing
+            if (BatteryUtils.isCriticalBattery(context, forceRefresh = true)) {
+                Log.w(TAG, "Rejecting play sync: battery level is critical (≤ 20%)")
+                return errorResponse(Response.Status.SERVICE_UNAVAILABLE, "battery_critical")
+            }
+
+            if (isRateLimited(clientIp, playsAttempts, MAX_PLAYS_PER_MINUTE)) {
+                Log.w(TAG, "Rate limiting plays from $clientIp")
+                return errorResponse(Response.Status.TOO_MANY_REQUESTS, "rate_limited")
+            }
+
             val declaredLength = session.headers["content-length"]?.toIntOrNull() ?: 0
             if (declaredLength > MAX_BODY_BYTES) {
                 return errorResponse(Response.Status.BAD_REQUEST, "payload_too_large")
@@ -235,8 +308,7 @@ class DesktopSatelliteServer @Inject constructor(
                 val buf = HashMap<String, String>()
                 session.parseBody(buf)
                 val raw = buf["postData"] ?: return errorResponse(Response.Status.BAD_REQUEST, "empty_body")
-                // Guard actual body size regardless of Content-Length header
-                if (raw.length > MAX_BODY_BYTES) {
+                if (raw.toByteArray(Charsets.UTF_8).size > MAX_BODY_BYTES) {
                     return errorResponse(Response.Status.BAD_REQUEST, "payload_too_large")
                 }
                 raw
@@ -245,33 +317,54 @@ class DesktopSatelliteServer @Inject constructor(
                 return errorResponse(Response.Status.BAD_REQUEST, "parse_error")
             }
 
-            // 2. Parse JSON
             val json = try {
                 JSONObject(body)
             } catch (e: Exception) {
                 return errorResponse(Response.Status.BAD_REQUEST, "invalid_json")
             }
 
-            // 3. Extract and validate token from payload
-            val token = json.optString("auth_token").takeIf { it.isNotBlank() }
+            val headerToken = extractBearerToken(session)
+            val bodyToken = json.optString("auth_token").takeIf { it.isNotBlank() }
+                ?: json.optString("token").takeIf { it.isNotBlank() }
+            val token = headerToken ?: bodyToken
                 ?: return errorResponse(Response.Status.UNAUTHORIZED, "missing_token")
             if (!isValidToken(token)) {
                 return errorResponse(Response.Status.UNAUTHORIZED, "invalid_token")
             }
 
             val signature = session.headers[SIGNATURE_HEADER].orEmpty()
-            if (!isValidSignature(token, body, signature)) {
+            if (!signature.isNotBlank() || !isValidSignature(token, body, signature)) {
                 return errorResponse(Response.Status.UNAUTHORIZED, "invalid_signature")
             }
 
-            // 3.5 Battery check: reject plays if battery is critically low (≤ 20%)
-            if (BatteryUtils.isCriticalBattery(context, forceRefresh = true)) {
-                Log.w(TAG, "Rejecting play sync: battery level is critical (≤ 20%)")
-                return errorResponse(Response.Status.SERVICE_UNAVAILABLE, "battery_critical")
+            // Validate plays array size
+            val playsArray = try {
+                json.getJSONArray("plays")
+            } catch (e: Exception) {
+                return errorResponse(Response.Status.BAD_REQUEST, "missing_plays_array")
+            }
+            if (playsArray.length() > MAX_PLAYS_ARRAY_LENGTH) {
+                return errorResponse(Response.Status.BAD_REQUEST, "too_many_plays")
             }
 
-            // 4. Delegate to coroutine-aware ingestion — result is sent back synchronously
-            //    via a blocking latch so NanoHTTPD's thread stays alive long enough.
+            // Validate individual field lengths in plays array
+            for (i in 0 until playsArray.length()) {
+                val entry = playsArray.optJSONObject(i) ?: continue
+                if (entry.optString("title").length > MAX_FIELD_LENGTH ||
+                    entry.optString("artist").length > MAX_FIELD_LENGTH ||
+                    entry.optString("album").length > MAX_FIELD_LENGTH ||
+                    entry.optString("source_app").length > MAX_FIELD_LENGTH ||
+                    entry.optString("device_name").length > MAX_FIELD_LENGTH) {
+                    return errorResponse(Response.Status.BAD_REQUEST, "field_too_long")
+                }
+            }
+
+            // Validate device_name field length
+            val deviceName = json.optString("device_name", "")
+            if (deviceName.length > MAX_FIELD_LENGTH) {
+                return errorResponse(Response.Status.BAD_REQUEST, "field_too_long")
+            }
+
             val responseBodyRef = AtomicReference("""{"ok":false,"message":"processing"}""")
             val statusRef = AtomicReference(Response.Status.INTERNAL_ERROR)
             val latch = CountDownLatch(1)
@@ -280,14 +373,19 @@ class DesktopSatelliteServer @Inject constructor(
                 try {
                     val result = ingestionService.ingest(token, json)
                     val (httpStatus, body) = when (result) {
-                        is IngestionResult.Success ->
-                            Response.Status.OK to
-                                """{"ok":true,"accepted":${result.accepted},"duplicates":${result.duplicates}}"""
+                        is IngestionResult.Success -> {
+                            val nextTokenPart = result.nextToken?.let { """"next_token":${JSONObject.quote(it)},""" } ?: ""
+                            if (result.nextToken != null) {
+                                try {
+                                    mdnsManager.register(DesktopPairingManager.SERVER_PORT)
+                                } catch (_: Exception) { /* non-critical */ }
+                            }
+                            Response.Status.OK to """{"ok":true,${nextTokenPart}"accepted":${result.accepted},"duplicates":${result.duplicates}}"""
+                        }
                         is IngestionResult.InvalidToken ->
                             Response.Status.UNAUTHORIZED to
                                 """{"ok":false,"error":"invalid_token"}"""
                         is IngestionResult.Error -> {
-                            // Escape the error message to prevent JSON injection via malformed strings
                             val escaped = JSONObject.quote(result.message)
                             Response.Status.BAD_REQUEST to
                                 """{"ok":false,"error":$escaped}"""
@@ -300,7 +398,6 @@ class DesktopSatelliteServer @Inject constructor(
                 }
             }
 
-            // Wait up to 10 s for the coroutine to finish (DB insert is fast)
             val completed = latch.await(10, TimeUnit.SECONDS)
             if (!completed) {
                 Log.e(TAG, "Ingest coroutine timed out after 10 s — returning 500 to caller")
@@ -308,11 +405,39 @@ class DesktopSatelliteServer @Inject constructor(
             return newFixedLengthResponse(statusRef.get(), MIME_JSON, responseBodyRef.get())
         }
 
-        private fun errorResponse(status: Response.Status, code: String): Response =
-            newFixedLengthResponse(status, MIME_JSON, """{"ok":false,"error":"$code"}""")
+        private fun errorResponse(status: Response.Status, code: String): Response {
+            val escapedCode = JSONObject.quote(code) ?: "\"error\""
+            return newFixedLengthResponse(status, MIME_JSON, """{"ok":false,"error":$escapedCode}""")
+        }
+
+        private fun extractBearerToken(session: IHTTPSession): String? {
+            val authHeader = session.headers[AUTHORIZATION_HEADER] ?: return null
+            if (authHeader.startsWith(BEARER_PREFIX, ignoreCase = true)) {
+                val token = authHeader.substring(BEARER_PREFIX.length).trim()
+                return token.takeIf { it.isNotBlank() }
+            }
+            return null
+        }
+
+        private fun isRateLimited(clientKey: String, attemptsMap: ConcurrentHashMap<String, LongArray>, maxPerMinute: Int): Boolean {
+            val now = System.currentTimeMillis()
+            val window = attemptsMap.getOrPut(clientKey) { LongArray(maxPerMinute) }
+            return synchronized(window) {
+                val cutoff = now - 60_000L
+                val count = window.count { it > cutoff }
+                if (count >= maxPerMinute) return@synchronized true
+                val oldestSlot = window.withIndex().minByOrNull { it.value }?.index ?: return@synchronized true
+                window[oldestSlot] = now
+                false
+            }
+        }
 
         private fun DesktopPairingManager.validateTokenBlocking(token: String) = kotlinx.coroutines.runBlocking {
             validateToken(token)
+        }
+
+        private fun DesktopPairingManager.getActiveSessionBlocking() = kotlinx.coroutines.runBlocking {
+            getActiveSession()
         }
 
         private fun isValidSignature(token: String, body: String, signature: String): Boolean {

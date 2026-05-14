@@ -324,6 +324,9 @@ interface EnrichedMetadataDao {
      */
     @Query("SELECT * FROM enriched_metadata")
     suspend fun getAllSync(): List<EnrichedMetadata>
+
+    @Query("SELECT album_art_url FROM enriched_metadata WHERE album_art_url LIKE 'file://%' UNION SELECT spotify_artist_image_url FROM enriched_metadata WHERE spotify_artist_image_url LIKE 'file://%' UNION SELECT album_art_url_small FROM enriched_metadata WHERE album_art_url_small LIKE 'file://%' UNION SELECT album_art_url_large FROM enriched_metadata WHERE album_art_url_large LIKE 'file://%' UNION SELECT itunes_artist_image_url FROM enriched_metadata WHERE itunes_artist_image_url LIKE 'file://%' UNION SELECT deezer_artist_image_url FROM enriched_metadata WHERE deezer_artist_image_url LIKE 'file://%' UNION SELECT lastfm_artist_image_url FROM enriched_metadata WHERE lastfm_artist_image_url LIKE 'file://%'")
+    suspend fun getLocalImageUrls(): List<String>
     
     /**
      * Get count of tracks pending enrichment from Last.fm imports.

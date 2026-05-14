@@ -74,6 +74,7 @@ class RoomStatsRepository @Inject constructor(
         private const val CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
         private const val MAX_CACHE_SIZE = 64 // LRU cache max entries
         private const val CACHE_SIZE_BYTES = 4 * 1024 * 1024 // 4MB max cache memory
+        private const val MAX_ARTIST_IMAGE_SEARCH_CACHE = 2_048
     }
 
     // Thread-safe LRU cache with expiration
@@ -82,9 +83,9 @@ class RoomStatsRepository @Inject constructor(
     }
     private val cacheMutex = Mutex()
     
-    // Session cache to prevent redundant API calls for artist images within the same session
-    // This is cleared only on app restart
-    private val artistImageSearchCache = mutableSetOf<String>()
+    // Session cache to prevent redundant API calls for artist images within the same session.
+    // Keep this bounded so long sessions with many unique artists do not grow unbounded.
+    private val artistImageSearchCache = linkedSetOf<String>()
     
     // Flow to notify UI of metadata updates (album art, etc.)
     private val _metadataUpdateFlow = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(replay = 0, extraBufferCapacity = 1)
@@ -196,7 +197,9 @@ class RoomStatsRepository @Inject constructor(
     }
 
     override fun clearArtistImageSearchCache() {
-        artistImageSearchCache.clear()
+        synchronized(artistImageSearchCache) {
+            artistImageSearchCache.clear()
+        }
         Log.d(TAG, "Artist image search cache cleared")
     }
 
@@ -221,7 +224,9 @@ class RoomStatsRepository @Inject constructor(
 
         // Clear existing image and caches
         artistDao.updateImageUrl(artistId, null)
-        artistImageSearchCache.remove(artistName.lowercase().trim())
+        synchronized(artistImageSearchCache) {
+            artistImageSearchCache.remove(artistName.lowercase().trim())
+        }
 
         // Try iTunes first (high quality, no auth required)
         // Use searchAndFetchSingleArtistImage: strict matching, no multi-artist splitting,
@@ -744,37 +749,49 @@ class RoomStatsRepository @Inject constructor(
         
         // Check session cache - if we already searched for this artist in this session, skip API calls
         val cacheKey = artistName.lowercase().trim()
-        if (cacheKey in artistImageSearchCache) {
-            Log.d(TAG, "Already searched for '$artistName' this session, skipping API calls")
-            return null
-        }
-        // Mark as searched to prevent redundant API calls
-        artistImageSearchCache.add(cacheKey)
-        
-        // 5. Fallback: Search iTunes (High quality, no auth required)
-        if (iTunesEnrichmentService.isAvailable()) {
-            Log.d(TAG, "Fetching artist image from iTunes for: $artistName")
-            val fromITunes = iTunesEnrichmentService.searchAndFetchArtistImage(artistName)
-            if (!fromITunes.isNullOrBlank()) {
-                Log.d(TAG, "Found and cached artist image from iTunes: $artistName")
-                // Save to DB so we don't query again
-                persistImageToArtistTable(artistName, fromITunes)
-                return fromITunes
+        synchronized(artistImageSearchCache) {
+            if (cacheKey in artistImageSearchCache) {
+                Log.d(TAG, "Already searched for '$artistName' this session, skipping API calls")
+                return null
             }
+            if (artistImageSearchCache.size >= MAX_ARTIST_IMAGE_SEARCH_CACHE) {
+                val iterator = artistImageSearchCache.iterator()
+                if (iterator.hasNext()) {
+                    iterator.next()
+                    iterator.remove()
+                }
+            }
+            artistImageSearchCache.add(cacheKey)
+        }
+        
+        val fromFallbackApis = coroutineScope {
+            val iTunesDeferred = if (iTunesEnrichmentService.isAvailable()) {
+                async {
+                    Log.d(TAG, "Fetching artist image from iTunes for: $artistName")
+                    iTunesEnrichmentService.searchAndFetchArtistImage(artistName)
+                }
+            } else {
+                null
+            }
+
+            val spotifyDeferred = if (spotifyEnrichmentService.isAvailable()) {
+                async {
+                    Log.d(TAG, "Fetching artist image from Spotify API for: $artistName (will save to DB)")
+                    spotifyEnrichmentService.searchAndFetchArtistImage(artistName)
+                }
+            } else {
+                null
+            }
+
+            val fromITunes = iTunesDeferred?.await()
+            val fromSpotify = spotifyDeferred?.await()
+            fromITunes.takeUnless { it.isNullOrBlank() } ?: fromSpotify.takeUnless { it.isNullOrBlank() }
         }
 
-        // 6. Final fallback: Fetch from Spotify API and SAVE to database for future use
-        // This ensures we only make the API call once per artist - subsequent requests use cached data
-        if (spotifyEnrichmentService.isAvailable()) {
-            Log.d(TAG, "Fetching artist image from Spotify API for: $artistName (will save to DB)")
-            val fromSpotify = spotifyEnrichmentService.searchAndFetchArtistImage(artistName)
-            if (!fromSpotify.isNullOrBlank()) {
-                Log.d(TAG, "Found and cached artist image from Spotify: $artistName")
-                // Note: searchAndFetchArtistImage already saves to DB via cacheArtistImageResult
-                // But let's also update the artists table directly if the artist exists
-                persistImageToArtistTable(artistName, fromSpotify)
-                return fromSpotify
-            }
+        if (!fromFallbackApis.isNullOrBlank()) {
+            Log.d(TAG, "Found and cached artist image from fallback API: $artistName")
+            persistImageToArtistTable(artistName, fromFallbackApis)
+            return fromFallbackApis
         }
         
         Log.d(TAG, "No artist image found for: $artistName")

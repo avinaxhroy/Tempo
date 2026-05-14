@@ -23,7 +23,10 @@ import androidx.room.PrimaryKey
     indices = [
         Index(value = ["track_id"], unique = true),
         Index(value = ["musicbrainz_recording_id"]),
-        Index(value = ["enrichment_status"])
+        Index(value = ["enrichment_status"]),
+        Index(value = ["spotify_id"]),
+        Index(value = ["spotify_artist_id"]),
+        Index(value = ["spotify_enrichment_status"])
     ]
 )
 data class EnrichedMetadata(

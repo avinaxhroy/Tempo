@@ -115,6 +115,19 @@ data class UserPreferences(
      * Whether gamification features (levels, badges, XP, challenges) are enabled.
      * When false, these features are hidden from the UI and background processing is stopped.
      */
-    val isGamificationEnabled: Boolean = true
+    val isGamificationEnabled: Boolean = true,
+    
+    /**
+     * Whether music tracking is automatically paused when battery falls below the low threshold
+     * (defined by BatteryUtils.CRITICAL_BATTERY_LEVEL, currently 20%).
+     *
+     * When true (default): tracking pauses on low battery to save power. The foreground
+     * notification will clearly indicate the paused state, and tracking resumes automatically
+     * once the battery recovers.
+     *
+     * When false: tracking continues at all battery levels (uses slightly more power on low
+     * battery but ensures no listening sessions are missed).
+     */
+    val pauseTrackingOnLowBattery: Boolean = true
 )
 
