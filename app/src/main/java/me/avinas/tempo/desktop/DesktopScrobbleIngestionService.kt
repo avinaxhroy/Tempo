@@ -8,6 +8,7 @@ import me.avinas.tempo.data.repository.EnrichedMetadataRepository
 import me.avinas.tempo.data.local.entities.ListeningEvent
 import me.avinas.tempo.data.local.entities.Track
 import me.avinas.tempo.data.repository.ListeningRepository
+import me.avinas.tempo.data.repository.RefreshCoordinator
 import me.avinas.tempo.data.repository.TrackRepository
 import me.avinas.tempo.utils.ArtistParser
 import me.avinas.tempo.utils.BatteryUtils
@@ -57,7 +58,8 @@ class DesktopPlayIngestionService @Inject constructor(
     private val trackRepository: TrackRepository,
     private val listeningRepository: ListeningRepository,
     private val enrichedMetadataRepository: EnrichedMetadataRepository,
-    private val artistLinkingService: ArtistLinkingService
+    private val artistLinkingService: ArtistLinkingService,
+    private val refreshCoordinator: RefreshCoordinator
 ) {
     companion object {
         private const val TAG = "DesktopIngestion"
@@ -112,6 +114,10 @@ class DesktopPlayIngestionService @Inject constructor(
             val album = entry.optString("album").takeIf { it.isNotBlank() }
             val timestampUtc = entry.optLong("timestamp_utc", 0L).takeIf { it > 0L } ?: continue
             val durationMs = entry.optLong("duration_ms", 0L)
+            // listened_ms is sent by the browser extension and represents actual listened time.
+            // Fall back to duration_ms (full track duration) for desktop app plays that
+            // don't send this field.
+            val listenedMs = entry.optLong("listened_ms", 0L).takeIf { it > 0L } ?: durationMs
             val sourceApp = entry.optString("source_app", "Desktop").trim()
 
             // Guard: ignore implausibly short plays
@@ -173,13 +179,21 @@ class DesktopPlayIngestionService @Inject constructor(
                 }
 
                 // 5. Insert the ListeningEvent
+                // Use listenedMs as playDuration — this is the actual listened time sent by the
+                // browser extension. For desktop app plays that don't send listened_ms, this
+                // falls back to the full track duration_ms.
+                val completionPct = if (durationMs > 0L) {
+                    ((listenedMs.toDouble() / durationMs) * 100).toInt().coerceIn(0, 100)
+                } else {
+                    DESKTOP_COMPLETION_PERCENT
+                }
                 val event = ListeningEvent(
                     track_id = trackId,
                     timestamp = timestampUtc,
-                    playDuration = durationMs.coerceAtLeast(0L),
-                    completionPercentage = DESKTOP_COMPLETION_PERCENT,
+                    playDuration = listenedMs.coerceAtLeast(0L),
+                    completionPercentage = completionPct,
                     source = "desktop:$sourceApp",
-                    wasSkipped = false,
+                    wasSkipped = completionPct < 30,
                     isReplay = false,
                     estimatedDurationMs = durationMs.takeIf { it > 0L }
                 )
@@ -209,6 +223,15 @@ class DesktopPlayIngestionService @Inject constructor(
         // play-count-ordered PENDING queue and cannot be displaced by concurrent calls.
         for (trackId in newTrackIds) {
             EnrichmentWorker.enqueueImmediate(context, trackId)
+        }
+
+        // 8. Notify the History screen (and other observers) that new plays were added.
+        // Without this, the History ViewModel only reacts through the Room-backed
+        // observeListeningOverview() Flow, which may not fire while the screen is
+        // in the background or on a non-zero page. This mirrors what MusicTrackingService
+        // does after recording a live play.
+        if (accepted > 0) {
+            refreshCoordinator.notifyNewTrackRecorded()
         }
 
         Log.i(TAG, "Ingestion complete: $accepted accepted, $duplicates duplicates (device: $deviceName)")
