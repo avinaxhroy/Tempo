@@ -23,8 +23,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil3.compose.AsyncImage
 import me.avinas.tempo.data.local.entities.Artist
+import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.ui.theme.TempoRed
 
 /**
@@ -290,11 +290,12 @@ private fun ArtistSearchItem(
             contentAlignment = Alignment.Center
         ) {
             if (artist.imageUrl != null) {
-                AsyncImage(
-                    model = artist.imageUrl,
+                CachedAsyncImage(
+                    imageUrl = artist.imageUrl,
                     contentDescription = artist.name,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    targetSizeDp = 48
                 )
             } else {
                 Icon(

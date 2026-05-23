@@ -106,12 +106,12 @@ fun AlbumArtImage(
                 // Use smart cache keys that normalize URLs for better cache hits
                 .memoryCacheKey(cacheKey)
                 .diskCacheKey(cacheKey)
-                // CRITICAL: Allow using smaller cached images and scaling up
-                // INEXACT precision lets Coil reuse cached images even if size doesn't match
-                .precision(Precision.INEXACT)
+                // EXACT precision with 1024px cap guarantees the decoded bitmap never exceeds
+                // a safe size, preventing Canvas "too large bitmap" crashes on devices with
+                // strict software bitmap limits.
+                .precision(Precision.EXACT)
                 .scale(Scale.FILL)
-                // Cap at 2048px to prevent OOM from extremely large bitmaps
-                .size(Size(2048, 2048))
+                .size(Size(1024, 1024))
                 .build()
         }
         

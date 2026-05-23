@@ -121,12 +121,15 @@ fun CachedAsyncImage(
             .precision(Precision.INEXACT)
             .scale(Scale.FILL)
             // Apply target size for memory optimization (if provided)
-            // Always cap at 2048px to prevent OOM from extremely large bitmaps (e.g. 8K album art)
+            // Always cap at 1024px to prevent OOM from extremely large bitmaps.
+            // Use EXACT precision for the fallback cap to guarantee the bitmap never exceeds it.
             .apply {
                 if (targetSizePx != null) {
                     size(targetSizePx)
+                    precision(Precision.INEXACT)
                 } else {
-                    size(Size(2048, 2048))
+                    size(Size(1024, 1024))
+                    precision(Precision.EXACT)
                 }
             }
             // Disable hardware bitmaps when inside CaptureWrapper (software rendering)
@@ -314,9 +317,9 @@ fun buildCachedImageRequest(
         .data(fixedUrl)
         .memoryCacheKey(cacheKey)
         .diskCacheKey(cacheKey)
-        .precision(Precision.INEXACT)
+        .precision(Precision.EXACT)
         .scale(Scale.FILL)
-        .size(Size(2048, 2048))
+        .size(Size(1024, 1024))
         .memoryCachePolicy(CachePolicy.ENABLED)
         .diskCachePolicy(CachePolicy.ENABLED)
         .networkCachePolicy(CachePolicy.ENABLED)

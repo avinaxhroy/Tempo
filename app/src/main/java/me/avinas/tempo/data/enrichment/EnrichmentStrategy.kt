@@ -186,7 +186,8 @@ class LastFmEnrichmentSource @Inject constructor(
 class ITunesEnrichmentSource @Inject constructor(
     private val iTunesService: ITunesEnrichmentService,
     private val metadataDao: me.avinas.tempo.data.local.dao.EnrichedMetadataDao,
-    private val artistDao: me.avinas.tempo.data.local.dao.ArtistDao
+    private val artistDao: me.avinas.tempo.data.local.dao.ArtistDao,
+    private val artistAliasDao: me.avinas.tempo.data.local.dao.ArtistAliasDao
 ) : EnrichmentSource {
     override val name = "iTunes"
     override val priority = 5
@@ -275,26 +276,33 @@ class ITunesEnrichmentSource @Inject constructor(
 
         for (artistName in allArtists) {
             try {
-                // Check if we already have an image for this artist
+                // Resolve alias first if it exists
                 val normalizedName = Artist.normalizeName(artistName)
-                val existingArtist = artistDao.getArtistByNormalizedName(normalizedName)
-                    ?: artistDao.getArtistByName(artistName)
+                val alias = artistAliasDao.findAlias(normalizedName)
+                val existingArtist = if (alias != null) {
+                    artistDao.getArtistById(alias.targetArtistId)
+                } else {
+                    artistDao.getArtistByNormalizedName(normalizedName)
+                        ?: artistDao.getArtistByName(artistName)
+                }
+
+                val resolvedArtistName = existingArtist?.name ?: artistName
 
                 if (existingArtist != null && !existingArtist.imageUrl.isNullOrBlank()) {
-                    Log.d("EnrichmentSource", "Artist '$artistName' already has image, skipping.")
+                    Log.d("EnrichmentSource", "Artist '$resolvedArtistName' (resolved from '$artistName') already has image, skipping.")
                     // Still capture the primary artist's image for reuse
-                    if (ArtistParser.isSameArtist(artistName, primaryArtist)) {
+                    if (ArtistParser.isSameArtist(resolvedArtistName, primaryArtist) || ArtistParser.isSameArtist(artistName, primaryArtist)) {
                         primaryArtistImageUrl = existingArtist.imageUrl
                     }
                     continue
                 }
 
                 // If this is the primary artist and we already have the ID from the main search result
-                val isPrimary = ArtistParser.isSameArtist(artistName, primaryArtist)
+                val isPrimary = ArtistParser.isSameArtist(resolvedArtistName, primaryArtist) || ArtistParser.isSameArtist(artistName, primaryArtist)
                 if (isPrimary && result.artistId != null) {
                     val imageUrl = iTunesService.fetchArtistImage(result.artistId)
                     if (imageUrl != null) {
-                        persistImage(artistName, imageUrl, result.artistId.toString())
+                        persistImage(resolvedArtistName, imageUrl, result.artistId.toString())
                         primaryArtistImageUrl = imageUrl
                         continue
                     }
@@ -302,14 +310,14 @@ class ITunesEnrichmentSource @Inject constructor(
 
                 // For other artists (or if primary failed), do a dedicated search.
                 // Pass track + album hints so same-name artists can be correctly disambiguated.
-                Log.d("EnrichmentSource", "Fetching missing image for artist: $artistName")
+                Log.d("EnrichmentSource", "Fetching missing image for artist: $resolvedArtistName")
                 val imageUrl = iTunesService.searchAndFetchArtistImage(
-                    artistName = artistName,
+                    artistName = resolvedArtistName,
                     trackHint = trackTitle,
                     albumHint = result.albumTitle
                 )
                 if (imageUrl != null) {
-                    persistImage(artistName, imageUrl, null)
+                    persistImage(resolvedArtistName, imageUrl, null)
                     if (isPrimary) primaryArtistImageUrl = imageUrl
                 }
 

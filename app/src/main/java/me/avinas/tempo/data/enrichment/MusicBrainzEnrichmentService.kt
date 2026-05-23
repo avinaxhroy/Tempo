@@ -2,6 +2,7 @@ package me.avinas.tempo.data.enrichment
 
 import android.util.Log
 import me.avinas.tempo.data.local.dao.AlbumDao
+import me.avinas.tempo.data.local.dao.ArtistAliasDao
 import me.avinas.tempo.data.local.dao.ArtistDao
 import me.avinas.tempo.data.local.dao.EnrichedMetadataDao
 import me.avinas.tempo.data.local.dao.TrackDao
@@ -56,7 +57,8 @@ class MusicBrainzEnrichmentService @Inject constructor(
     private val enrichedMetadataDao: EnrichedMetadataDao,
     private val trackDao: TrackDao,
     private val artistDao: ArtistDao,
-    private val albumDao: AlbumDao
+    private val albumDao: AlbumDao,
+    private val artistAliasDao: ArtistAliasDao
 ) {
     companion object {
         private const val TAG = "MBEnrichmentService"
@@ -638,7 +640,15 @@ class MusicBrainzEnrichmentService @Inject constructor(
         try {
             // Step 1: Find or create Artist entity
             val primaryArtistName = ArtistParser.getPrimaryArtist(artistName)
-            var artist = artistDao.getArtistByName(primaryArtistName)
+            
+            // Check alias table first to avoid recreating a merged artist
+            val normalizedName = Artist.normalizeName(primaryArtistName)
+            val alias = artistAliasDao.findAlias(normalizedName)
+            var artist = if (alias != null) {
+                artistDao.getArtistById(alias.targetArtistId)
+            } else {
+                artistDao.getArtistByName(primaryArtistName)
+            }
             
             if (artist == null) {
                 // Create new artist
@@ -661,7 +671,7 @@ class MusicBrainzEnrichmentService @Inject constructor(
                     )
                     artistDao.update(updatedArtist)
                     artist = updatedArtist
-                    Log.d(TAG, "Updated artist: '$primaryArtistName' with MusicBrainz data")
+                    Log.d(TAG, "Updated artist: '${artist.name}' with MusicBrainz data")
                 }
             }
             

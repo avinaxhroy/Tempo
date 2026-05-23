@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -92,7 +91,7 @@ fun HistoryScreen(
     onNavigateToTrack: (Long) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val listState = rememberLazyListState()
+    val listState = remember(uiState.viewMode, uiState.startDate, uiState.endDate, uiState.showSkips) { LazyListState() }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     
@@ -607,6 +606,36 @@ fun HistoryListContent(
     onLoadMoreLastFm: () -> Unit = {},
     onViewModeChange: (HistoryViewMode) -> Unit = {}
 ) {
+    // Workaround for LazyColumn crash when item count drops below current scroll index
+    val totalItemCount = remember(
+        groupedItems, lastFmGroupedItems, archiveItems,
+        viewMode, hasArchiveData, isLoading,
+        isLoadingMore, isLoadingMoreLastFm
+    ) {
+        var count = 0
+        if (hasArchiveData && viewMode == HistoryViewMode.SEPARATED) count += 1
+        val allEmpty = groupedItems.isEmpty() && lastFmGroupedItems.isEmpty() && archiveItems.isEmpty()
+        if (!isLoading && allEmpty) count += 1
+        if (viewMode == HistoryViewMode.SEPARATED && groupedItems.isNotEmpty()) count += 1
+        groupedItems.values.forEach { count += it.size + 1 }
+        if (isLoadingMore) count += 1
+        if (viewMode == HistoryViewMode.SEPARATED && (lastFmGroupedItems.isNotEmpty() || archiveItems.isNotEmpty())) {
+            count += 1
+            lastFmGroupedItems.values.forEach { count += it.size + 1 }
+            if (isLoadingMoreLastFm) count += 1
+            if (archiveItems.isNotEmpty()) {
+                count += 1 + archiveItems.size
+            }
+        }
+        if (viewMode == HistoryViewMode.UNIFIED && archiveItems.isNotEmpty()) {
+            count += 1 + archiveItems.size
+        }
+        count
+    }
+    if (totalItemCount > 0 && listState.firstVisibleItemIndex >= totalItemCount) {
+        listState.requestScrollToItem(totalItemCount - 1)
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
@@ -679,7 +708,7 @@ fun HistoryListContent(
 
                 items(
                     count = itemsList.size,
-                    key = { index -> "recent_${itemsList[index].id}" }
+                    key = { index -> "recent_${header}_${index}_${itemsList[index].id}" }
                 ) { index ->
                     val item = itemsList[index]
                     val isFirstItem = groupIndex == 0 && index == 0
@@ -755,7 +784,7 @@ fun HistoryListContent(
 
                     items(
                         count = itemsList.size,
-                        key = { index -> "lastfm_${itemsList[index].id}" }
+                        key = { index -> "lastfm_${header}_${index}_${itemsList[index].id}" }
                     ) { index ->
                         val item = itemsList[index]
                         Box(modifier = Modifier.fillMaxWidth()) {
@@ -797,7 +826,7 @@ fun HistoryListContent(
                     
                     items(
                         count = archiveItems.size,
-                    key = { index -> "archive_sep_${archiveItems[index].archiveId}" }
+                        key = { index -> "archive_sep_${index}_${archiveItems[index].archiveId}" }
                     ) { index ->
                         val archiveItem = archiveItems[index]
                         ArchiveHistoryListItem(item = archiveItem)
@@ -817,7 +846,7 @@ fun HistoryListContent(
                 
                 items(
                     count = archiveItems.size,
-                    key = { index -> "archive_uni_${archiveItems[index].archiveId}" }
+                    key = { index -> "archive_uni_${index}_${archiveItems[index].archiveId}" }
                 ) { index ->
                     val archiveItem = archiveItems[index]
                     ArchiveHistoryListItem(item = archiveItem)

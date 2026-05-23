@@ -6,7 +6,7 @@
 //   3. Extension auto-discovers phone (same hotspot/subnet IPs as sync.ts)
 //   4. Done — no manual IP/port entry required
 //
-// Fallback: if auto-discovery fails within 45s, show a one-field IP input.
+// Fallback: if auto-discovery fails within 30s, show a one-field IP input.
 // ============================================================================
 
 import { MessageType } from '../shared/types';
@@ -20,6 +20,7 @@ const QR_TOKEN_KEY    = 'tempo_pairing_token';
 const QR_EXPIRY_KEY   = 'tempo_pairing_token_expiry';
 const QR_TOKEN_TTL_MS = 10 * 60 * 1000;   // 10 minutes
 const SERVER_PORT     = 8765;
+const MANUAL_FALLBACK_AFTER_SECONDS = 30;
 
 /** Hotspot seeds — only valid when the PHONE is the hotspot gateway itself */
 const HOTSPOT_SEEDS = [
@@ -29,9 +30,9 @@ const HOTSPOT_SEEDS = [
 ];
 
 /**
- * mDNS hostname the Android app advertises via NsdManager._tempo._tcp.
- * Chrome resolves .local hostnames natively on macOS, Windows, and Linux,
- * so this works even when DHCP assigns a new IP — hostname stays stable.
+ * Best-effort .local hostname. Android advertises a DNS-SD service; some
+ * networks/OSes also make a stable host name reachable, but many do not.
+ * Keep this as a fast path, not the only IP-change recovery strategy.
  */
 const MDNS_HOSTNAME = 'tempo-phone.local';
 
@@ -396,7 +397,7 @@ document.getElementById('btn-clear-queue')?.addEventListener('click', async () =
 //    3. Status bar below QR updates live: "Looking for phone… attempt N"
 //    4. Phone scans QR → phone starts HTTP server → extension pings and finds it
 //    5. Automatically transitions to connected state — zero extra clicks
-//    6. If not found after 60 s → manual IP fallback slides in below QR
+//    6. If not found after 30 s → manual IP fallback slides in below QR
 //    7. QR expiry → auto-refreshes and restarts discovery
 // ============================================================================
 
@@ -652,6 +653,7 @@ async function startAutoDiscovery(token: string) {
 
   let secondsEl  = 0;
   let manualShown = false;
+  let lastGuidance = '';
 
   setQrStatus('searching', 'Scanning network for your phone…', '0s');
 
@@ -660,11 +662,25 @@ async function startAutoDiscovery(token: string) {
     const el = document.getElementById('qr-status-elapsed');
     if (el) el.textContent = `${secondsEl}s`;
 
-    if (secondsEl >= 90 && !manualShown && !discoveryAborted) {
+    let guidance = '';
+    if (secondsEl >= 60) {
+      guidance = 'Still searching. Hotspot is the most reliable workaround on restricted WiFi.';
+    } else if (secondsEl >= MANUAL_FALLBACK_AFTER_SECONDS) {
+      guidance = 'Still searching. Enter the phone IP below, or keep waiting.';
+    } else if (secondsEl >= 15) {
+      guidance = 'Still searching. Check same WiFi or use phone hotspot.';
+    }
+
+    if (guidance && guidance !== lastGuidance && !discoveryAborted) {
+      lastGuidance = guidance;
+      setQrStatus(secondsEl >= MANUAL_FALLBACK_AFTER_SECONDS ? 'error' : 'searching', guidance, `${secondsEl}s`);
+    }
+
+    if (secondsEl >= MANUAL_FALLBACK_AFTER_SECONDS && !manualShown && !discoveryAborted) {
       manualShown = true;
       setDiscoveryState('manual');
       setQrStatus('error',
-        'Still searching… enter IP from Tempo → Desktop Link',
+        'Still searching. Enter IP from Tempo > Desktop Link, or keep waiting.',
         `${secondsEl}s`
       );
     }
@@ -673,9 +689,11 @@ async function startAutoDiscovery(token: string) {
   // Step 3: Scan candidates in parallel batches.
   //   800ms timeout per IP — unassigned hosts fail in <10ms (TCP RST / ARP miss),
   //   so each batch of 64 typically completes in well under 1 second.
-  //   mDNS is tried first in every pass via the dedicated mdnsPing() probe (3s timeout).
+  //   mDNS is tried on the first pass, then throttled so a slow .local lookup
+  //   cannot block subnet scanning on networks where it will never resolve.
   const BATCH = 64;
   let pass = 0;
+  let lastMdnsProbeAt = -30;
 
   const tryAll = async () => {
     if (discoveryAborted) return;
@@ -689,14 +707,17 @@ async function startAutoDiscovery(token: string) {
     }
 
     // ── Fast path: mDNS (dedicated 3s timeout — keeps it out of the 800ms batch) ──
-    const mdnsDev = await mdnsPing(token);
-    if (discoveryAborted) return;
-    if (mdnsDev !== null) {
-      clearInterval(elapsedTimer);
-      stopDiscovery();
-      setQrStatus('found', `Found ${mdnsDev} via mDNS — connecting…`);
-      await completePairing(MDNS_HOSTNAME, SERVER_PORT, token, mdnsDev);
-      return;
+    if (pass === 1 || secondsEl - lastMdnsProbeAt >= 30) {
+      lastMdnsProbeAt = secondsEl;
+      const mdnsDev = await mdnsPing(token);
+      if (discoveryAborted) return;
+      if (mdnsDev !== null) {
+        clearInterval(elapsedTimer);
+        stopDiscovery();
+        setQrStatus('found', `Found ${mdnsDev} via mDNS — connecting…`);
+        await completePairing(MDNS_HOSTNAME, SERVER_PORT, token, mdnsDev);
+        return;
+      }
     }
 
     // ── Hotspot seeds + subnet sweep ────────────────────────────────────────────
@@ -720,10 +741,10 @@ async function startAutoDiscovery(token: string) {
       }
     }
 
-    // ── Schedule next pass: 3s for first 90s (tight window after phone scans QR),
+    // ── Schedule next pass: 3s for first 30s (tight window after phone scans QR),
     //    then 10s once the manual fallback is shown. ────────────────────────────
     if (!discoveryAborted) {
-      const delay = secondsEl < 90 ? 3000 : 10000;
+      const delay = secondsEl < MANUAL_FALLBACK_AFTER_SECONDS ? 3000 : 10000;
       discoveryTimer = setTimeout(tryAll, delay) as unknown as ReturnType<typeof setInterval>;
     }
   };

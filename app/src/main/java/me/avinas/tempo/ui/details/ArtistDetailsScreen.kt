@@ -35,10 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil3.compose.AsyncImage
-import coil3.imageLoader
 import me.avinas.tempo.ui.components.CachedAsyncImage
-import me.avinas.tempo.ui.components.buildCachedImageRequest
 import me.avinas.tempo.data.stats.ArtistDetails
 import me.avinas.tempo.data.stats.TopAlbum
 import me.avinas.tempo.data.stats.TagBasedMoodAnalyzer
@@ -358,7 +355,7 @@ fun ArtistDetailsContent(
                     ) {
                         itemsIndexed(
                             items = artistDetails.topAlbums,
-                            key = { _, album -> "album_${album.album}" },
+                            key = { index, album -> "album_${index}_${album.album}" },
                             contentType = { _, _ -> "album" }
                         ) { _, album ->
                             TopAlbumCard(album = album)
@@ -472,54 +469,20 @@ fun ArtistHeroSection(
                         )
                     }
                 } else {
-                    var showPlaceholder by remember { mutableStateOf(false) }
-
-                    // Use cached image request for proper caching
-                    val imageRequest = remember(imageUrl) {
-                        buildCachedImageRequest(
-                            context = context,
-                            url = imageUrl,
-                            allowHardware = true,
-                            crossfade = 150
-                        )
-                    }
-
                     // Image container with circular clip (no refresh button inside)
                     Box(
                         modifier = Modifier.size(220.dp).clip(CircleShape)
                     ) {
-                        AsyncImage(
-                            model = imageRequest,
-                            imageLoader = context.imageLoader,
+                        CachedAsyncImage(
+                            imageUrl = imageUrl,
                             contentDescription = "Artist Image",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
+                            targetSizeDp = 220,
                             onError = {
                                 android.util.Log.e("ArtistHeroSection", "Failed to load image: ${it.result.throwable.message}")
-                                showPlaceholder = true
                             }
                         )
-
-                        // Show placeholder on error
-                        if (showPlaceholder) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.linearGradient(
-                                            colors = listOf(Color(0xFF6366F1), Color(0xFF8B5CF6))
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = artistDetails.artist.name.firstOrNull()?.uppercase() ?: "?",
-                                    fontSize = 64.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        }
                     }
 
                     // Refresh button overlay (positioned at bottom-right of circular image)

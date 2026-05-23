@@ -149,7 +149,7 @@
 
           <div class="paired-info-grid">
             <div class="paired-info-cell">
-              <div class="info-label">Phone IP</div>
+              <div class="info-label">Phone Address</div>
               <div class="info-value mono" id="paired-ip"></div>
             </div>
             <div class="paired-info-cell">
@@ -226,6 +226,11 @@
                 <span class="qr-status-elapsed" id="qr-status-elapsed" style="display:none;"></span>
               </div>
 
+              <div class="pairing-expectation">
+                <div class="expectation-title">Usually connects in 5-30 seconds</div>
+                <div class="expectation-copy">Keep this popup open after scanning. At 30 seconds you can enter the IP shown in Tempo, while auto-search keeps running in the background.</div>
+              </div>
+
               <!-- Instructions -->
               <div class="qr-instructions">
                 <div class="qr-step">
@@ -234,11 +239,31 @@
                 </div>
                 <div class="qr-step">
                   <span class="step-num">2</span>
-                  <span>Go to <strong>Desktop Link</strong> → <strong>Scan QR Code</strong></span>
+                  <span>Go to <strong>Desktop Link</strong> → <strong>Browser Extension</strong> → <strong>Scan QR</strong></span>
                 </div>
                 <div class="qr-step">
                   <span class="step-num">3</span>
-                  <span>Point camera — connects automatically ✓</span>
+                  <span>Scan, then wait here until the status changes to connected</span>
+                </div>
+              </div>
+
+              <div class="pairing-checklist" id="pairing-checklist">
+                <div class="checklist-title">If it is still searching</div>
+                <div class="checklist-item">
+                  <span class="check-icon">1</span>
+                  <span>Phone and browser must be on the same WiFi. If you are travelling, connect the computer to the phone hotspot, then scan again.</span>
+                </div>
+                <div class="checklist-item">
+                  <span class="check-icon">2</span>
+                  <span>Keep Tempo open on the Desktop Link screen. Battery saver can pause the local server.</span>
+                </div>
+                <div class="checklist-item">
+                  <span class="check-icon">3</span>
+                  <span>Some guest, office, campus WiFi, and VPNs block device-to-device traffic. Hotspot is the quickest workaround.</span>
+                </div>
+                <div class="checklist-item">
+                  <span class="check-icon">4</span>
+                  <span>If the phone IP changed, Tempo will try to repair it on the next sync. Use Rebuild Connection if it stays unreachable.</span>
                 </div>
               </div>
 
@@ -250,7 +275,7 @@
             </div>
           </div>
 
-          <!-- ─ Manual fallback (IP only) — shown after 60s ─ -->
+          <!-- ─ Manual fallback (IP only) — shown after 30s ─ -->
           <div id="manual-section" style="display:none;">
             <div class="manual-card">
               <div class="manual-header">
@@ -259,7 +284,7 @@
                 </svg>
                 <div>
                   <div class="manual-title">Phone not found automatically</div>
-                  <div class="manual-sub">Enter the IP shown in Tempo → Desktop Link</div>
+                  <div class="manual-sub">Auto-search is still running. Manual IP is the fastest fix for blocked WiFi or a changed phone address.</div>
                 </div>
               </div>
               <form id="manual-form" class="manual-form">
@@ -267,7 +292,7 @@
                   <label for="manual-ip">Phone IP Address</label>
                   <input type="text" id="manual-ip" placeholder="192.168.1.100" autocomplete="off" spellcheck="false" required/>
                 </div>
-                <p class="manual-hint">Port (8765) and token are carried over from the QR scan.</p>
+                <p class="manual-hint">Find it in Tempo → Desktop Link. Use the current WiFi or hotspot IP, not mobile data. Port 8765 and the QR token are already handled.</p>
                 <div id="manual-error" class="manual-error"></div>
                 <button type="submit" class="btn btn-primary" id="btn-manual-connect"
                         style="width:100%;justify-content:center;">

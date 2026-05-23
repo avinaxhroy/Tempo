@@ -2,7 +2,9 @@ package me.avinas.tempo.data.enrichment
 
 import android.util.Log
 import com.squareup.moshi.Moshi
+import me.avinas.tempo.data.local.dao.ArtistAliasDao
 import me.avinas.tempo.data.local.dao.EnrichedMetadataDao
+import me.avinas.tempo.data.local.entities.Artist
 import me.avinas.tempo.data.local.entities.EnrichedMetadata
 import me.avinas.tempo.data.local.entities.Track
 import me.avinas.tempo.data.remote.spotify.SpotifyApi
@@ -58,6 +60,7 @@ class SpotifyEnrichmentService @Inject constructor(
     private val authManager: SpotifyAuthManager,
     private val enrichedMetadataDao: EnrichedMetadataDao,
     private val artistDao: me.avinas.tempo.data.local.dao.ArtistDao,
+    private val artistAliasDao: ArtistAliasDao,
     private val moshi: Moshi
 ) {
     companion object {
@@ -131,8 +134,17 @@ class SpotifyEnrichmentService @Inject constructor(
 
         val authHeader = "Bearer $accessToken"
 
+        // Resolve artist alias if exists
+        val normalizedArtistName = Artist.normalizeName(track.artist)
+        val alias = artistAliasDao.findAlias(normalizedArtistName)
+        val resolvedArtistName = if (alias != null) {
+            artistDao.getArtistById(alias.targetArtistId)?.name ?: track.artist
+        } else {
+            track.artist
+        }
+
         // Step 1: Search for the track on Spotify
-        val spotifyTrack = searchTrack(track.title, track.artist, authHeader)
+        val spotifyTrack = searchTrack(track.title, resolvedArtistName, authHeader)
             ?: return SpotifyEnrichmentResult.TrackNotFound
 
         // Step 2: Update metadata with Spotify data (just basic info, no audio features)
@@ -574,8 +586,15 @@ class SpotifyEnrichmentService @Inject constructor(
         // Update Artist table if we have artist info
         if (primaryArtistId != null) {
             // 1. Try to link by name if not already linked
-            val artistName = spotifyTrack.artists.firstOrNull()?.name ?: "Unknown"
-            artistDao.updateSpotifyIdByName(artistName.toString(), primaryArtistId)
+            val rawArtistName = spotifyTrack.artists.firstOrNull()?.name ?: "Unknown"
+            val normalizedName = Artist.normalizeName(rawArtistName)
+            val alias = artistAliasDao.findAlias(normalizedName)
+            val targetArtistName = if (alias != null) {
+                artistDao.getArtistById(alias.targetArtistId)?.name ?: rawArtistName
+            } else {
+                rawArtistName
+            }
+            artistDao.updateSpotifyIdByName(targetArtistName, primaryArtistId)
             
             // Note: We cannot update the image here because SpotifyTrack.artists (simplified object)
             // does not contain images. Images are fetched separately via fetchMissingArtistImages.
@@ -661,7 +680,16 @@ class SpotifyEnrichmentService @Inject constructor(
                 return@forEachIndexed
             }
 
-            val spotifyTrack = searchTrack(track.title, track.artist, authHeader)
+            // Resolve artist alias if exists
+            val normalizedArtistName = Artist.normalizeName(track.artist)
+            val alias = artistAliasDao.findAlias(normalizedArtistName)
+            val resolvedArtistName = if (alias != null) {
+                artistDao.getArtistById(alias.targetArtistId)?.name ?: track.artist
+            } else {
+                track.artist
+            }
+
+            val spotifyTrack = searchTrack(track.title, resolvedArtistName, authHeader)
             if (spotifyTrack != null) {
                 searchResults.add(Triple(track, metadata, spotifyTrack))
                 // Update basic metadata immediately
@@ -751,8 +779,17 @@ class SpotifyEnrichmentService @Inject constructor(
 
         val authHeader = "Bearer $accessToken"
 
+        // Resolve artist alias if exists
+        val normalizedArtistName = Artist.normalizeName(track.artist)
+        val alias = artistAliasDao.findAlias(normalizedArtistName)
+        val resolvedArtistName = if (alias != null) {
+            artistDao.getArtistById(alias.targetArtistId)?.name ?: track.artist
+        } else {
+            track.artist
+        }
+
         // Search for the track on Spotify
-        val spotifyTrack = searchTrack(track.title, track.artist, authHeader)
+        val spotifyTrack = searchTrack(track.title, resolvedArtistName, authHeader)
             ?: return BasicMetadataResult.TrackNotFound
 
         // Extract metadata from the search result
@@ -854,22 +891,30 @@ class SpotifyEnrichmentService @Inject constructor(
             return null
         }
         
+        val normalizedName = Artist.normalizeName(artistName)
+        val alias = artistAliasDao.findAlias(normalizedName)
+        val resolvedArtistName = if (alias != null) {
+            artistDao.getArtistById(alias.targetArtistId)?.name ?: artistName
+        } else {
+            artistName
+        }
+        
         val accessToken = authManager.getValidAccessToken() ?: return null
         val authHeader = "Bearer $accessToken"
-        val normalizedSearchName = normalizeArtistNameForComparison(artistName)
+        val normalizedSearchName = normalizeArtistNameForComparison(resolvedArtistName)
         
         return try {
             // PRIORITY 1: Direct artist search (most reliable!)
             // This searches Spotify's artist catalog directly and returns full artist info with images
-            val artistSearchResult = searchArtistsDirectly(authHeader, artistName, normalizedSearchName)
+            val artistSearchResult = searchArtistsDirectly(authHeader, resolvedArtistName, normalizedSearchName)
             if (artistSearchResult != null) {
                 return artistSearchResult
             }
             
             // PRIORITY 2: Fallback to track search
             // Search for tracks by this artist and find the correct artist in results
-            Log.d(TAG, "Direct artist search failed for '$artistName', trying track search fallback")
-            searchArtistViaTrackSearch(authHeader, artistName, normalizedSearchName)
+            Log.d(TAG, "Direct artist search failed for '$resolvedArtistName', trying track search fallback")
+            searchArtistViaTrackSearch(authHeader, resolvedArtistName, normalizedSearchName)
         } catch (e: Exception) {
             Log.e(TAG, "Error searching for artist image", e)
             null
@@ -1055,7 +1100,13 @@ class SpotifyEnrichmentService @Inject constructor(
         imageUrl: String,
         spotifyArtistName: String
     ) {
-        val existingArtist = artistDao.getArtistByName(searchedArtistName)
+        val normalizedName = Artist.normalizeName(searchedArtistName)
+        val alias = artistAliasDao.findAlias(normalizedName)
+        val existingArtist = if (alias != null) {
+            artistDao.getArtistById(alias.targetArtistId)
+        } else {
+            artistDao.getArtistByName(searchedArtistName)
+        }
         if (existingArtist != null) {
             artistDao.updateImageUrl(existingArtist.id, imageUrl)
             if (existingArtist.spotifyId.isNullOrBlank()) {
@@ -1140,7 +1191,13 @@ class SpotifyEnrichmentService @Inject constructor(
         
         // CRITICAL FIX: Also update by artist name (for artists without spotify_id)
         // This handles artists created from MediaSession metadata
-        val existingArtist = artistDao.getArtistByName(artistName)
+        val normalizedName = Artist.normalizeName(artistName)
+        val alias = artistAliasDao.findAlias(normalizedName)
+        val existingArtist = if (alias != null) {
+            artistDao.getArtistById(alias.targetArtistId)
+        } else {
+            artistDao.getArtistByName(artistName)
+        }
         if (existingArtist != null) {
             artistDao.updateImageUrl(existingArtist.id, imageUrl)
             // Link the Spotify ID if not already set

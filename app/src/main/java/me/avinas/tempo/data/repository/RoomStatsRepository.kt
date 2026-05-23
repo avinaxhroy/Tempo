@@ -66,7 +66,8 @@ class RoomStatsRepository @Inject constructor(
     private val enrichedMetadataDao: EnrichedMetadataDao,
     private val spotifyEnrichmentService: me.avinas.tempo.data.enrichment.SpotifyEnrichmentService,
     private val iTunesEnrichmentService: me.avinas.tempo.data.enrichment.ITunesEnrichmentService,
-    private val userPreferencesDao: UserPreferencesDao
+    private val userPreferencesDao: UserPreferencesDao,
+    private val artistAliasDao: ArtistAliasDao
 ) : StatsRepository {
 
     companion object {
@@ -604,17 +605,30 @@ class RoomStatsRepository @Inject constructor(
         
         // Split multi-artist entries and aggregate by individual artist
         val artistStatsMap = mutableMapOf<String, ArtistAggregator>()
+        val aliases = artistAliasDao.getAllSync()
+        val aliasMap = aliases.associateBy({ it.originalNameNormalized }, { it.targetArtistId })
+        val resolvedNamesCache = mutableMapOf<Long, String>()
         
         for (raw in rawStats) {
             // Parse the artist string to get individual artists
             val individualArtists = ArtistParser.getAllArtists(raw.artist)
             
             for (artistName in individualArtists) {
-                val normalizedName = artistName.trim()
-                if (normalizedName.isBlank()) continue
+                val trimmedName = artistName.trim()
+                if (trimmedName.isBlank()) continue
                 
-                val aggregator = artistStatsMap.getOrPut(normalizedName) { 
-                    ArtistAggregator(normalizedName) 
+                val normalizedName = me.avinas.tempo.data.local.entities.Artist.normalizeName(trimmedName)
+                val targetArtistId = aliasMap[normalizedName]
+                val resolvedName = if (targetArtistId != null) {
+                    resolvedNamesCache.getOrPut(targetArtistId) {
+                        artistDao.getArtistById(targetArtistId)?.name ?: trimmedName
+                    }
+                } else {
+                    trimmedName
+                }
+                
+                val aggregator = artistStatsMap.getOrPut(resolvedName) { 
+                    ArtistAggregator(resolvedName) 
                 }
                 aggregator.addStats(raw)
             }
@@ -655,8 +669,13 @@ class RoomStatsRepository @Inject constructor(
                     val country = getArtistCountry(artist.artist)
                     // Try to find the artist ID from the database
                     val normalizedName = me.avinas.tempo.data.local.entities.Artist.normalizeName(artist.artist)
-                    val artistEntity = artistDao.getArtistByNormalizedName(normalizedName)
-                        ?: artistDao.getArtistByName(artist.artist)
+                    val alias = artistAliasDao.findAlias(normalizedName)
+                    val artistEntity = if (alias != null) {
+                        artistDao.getArtistById(alias.targetArtistId)
+                    } else {
+                        artistDao.getArtistByNormalizedName(normalizedName)
+                            ?: artistDao.getArtistByName(artist.artist)
+                    }
                     artist.copy(
                         artistId = artistEntity?.id,
                         imageUrl = imageUrl, 
@@ -724,15 +743,20 @@ class RoomStatsRepository @Inject constructor(
      * 3. Spotify API search (searches by this artist's name, saves to DB)
      */
     private suspend fun getArtistImageUrlWithFallback(artistName: String): String? {
-        // 0. First find the artist entity in the database
+        // Resolve alias first if it exists
         val normalizedName = me.avinas.tempo.data.local.entities.Artist.normalizeName(artistName)
-        val artistEntity = artistDao.getArtistByNormalizedName(normalizedName)
-            ?: artistDao.getArtistByName(artistName)
+        val alias = artistAliasDao.findAlias(normalizedName)
+        val artistEntity = if (alias != null) {
+            artistDao.getArtistById(alias.targetArtistId)
+        } else {
+            artistDao.getArtistByNormalizedName(normalizedName)
+                ?: artistDao.getArtistByName(artistName)
+        }
         
         if (artistEntity != null) {
             // 0a. Check artist entity's own image_url first (most reliable)
             if (!artistEntity.imageUrl.isNullOrBlank()) {
-                Log.d(TAG, "Found artist image from artist entity: $artistName")
+                Log.d(TAG, "Found artist image from artist entity: ${artistEntity.name}")
                 return artistEntity.imageUrl
             }
             
@@ -740,18 +764,19 @@ class RoomStatsRepository @Inject constructor(
             // This prevents returning another artist's image from a collab track
             val fromVerifiedEnriched = statsDao.getArtistImageByArtistId(artistEntity.id)
             if (!fromVerifiedEnriched.isNullOrBlank()) {
-                Log.d(TAG, "Found verified artist image via track_artists junction: $artistName")
-                persistImageToArtistTable(artistName, fromVerifiedEnriched)
+                Log.d(TAG, "Found verified artist image via track_artists junction: ${artistEntity.name}")
+                persistImageToArtistTable(artistEntity.name, fromVerifiedEnriched)
                 return fromVerifiedEnriched
             }
         }
         
         
+        val resolvedArtistName = artistEntity?.name ?: artistName
         // Check session cache - if we already searched for this artist in this session, skip API calls
-        val cacheKey = artistName.lowercase().trim()
+        val cacheKey = resolvedArtistName.lowercase().trim()
         synchronized(artistImageSearchCache) {
             if (cacheKey in artistImageSearchCache) {
-                Log.d(TAG, "Already searched for '$artistName' this session, skipping API calls")
+                Log.d(TAG, "Already searched for '$resolvedArtistName' this session, skipping API calls")
                 return null
             }
             if (artistImageSearchCache.size >= MAX_ARTIST_IMAGE_SEARCH_CACHE) {
@@ -767,8 +792,8 @@ class RoomStatsRepository @Inject constructor(
         val fromFallbackApis = coroutineScope {
             val iTunesDeferred = if (iTunesEnrichmentService.isAvailable()) {
                 async {
-                    Log.d(TAG, "Fetching artist image from iTunes for: $artistName")
-                    iTunesEnrichmentService.searchAndFetchArtistImage(artistName)
+                    Log.d(TAG, "Fetching artist image from iTunes for: $resolvedArtistName")
+                    iTunesEnrichmentService.searchAndFetchArtistImage(resolvedArtistName)
                 }
             } else {
                 null
@@ -776,8 +801,8 @@ class RoomStatsRepository @Inject constructor(
 
             val spotifyDeferred = if (spotifyEnrichmentService.isAvailable()) {
                 async {
-                    Log.d(TAG, "Fetching artist image from Spotify API for: $artistName (will save to DB)")
-                    spotifyEnrichmentService.searchAndFetchArtistImage(artistName)
+                    Log.d(TAG, "Fetching artist image from Spotify API for: $resolvedArtistName (will save to DB)")
+                    spotifyEnrichmentService.searchAndFetchArtistImage(resolvedArtistName)
                 }
             } else {
                 null
@@ -789,8 +814,8 @@ class RoomStatsRepository @Inject constructor(
         }
 
         if (!fromFallbackApis.isNullOrBlank()) {
-            Log.d(TAG, "Found and cached artist image from fallback API: $artistName")
-            persistImageToArtistTable(artistName, fromFallbackApis)
+            Log.d(TAG, "Found and cached artist image from fallback API: $resolvedArtistName")
+            persistImageToArtistTable(resolvedArtistName, fromFallbackApis)
             return fromFallbackApis
         }
         
@@ -803,11 +828,17 @@ class RoomStatsRepository @Inject constructor(
      */
     private suspend fun persistImageToArtistTable(artistName: String, imageUrl: String) {
         try {
-            val existingArtist = artistDao.getArtistByName(artistName)
-                ?: artistDao.getArtistByNormalizedName(Artist.normalizeName(artistName))
+            val normalizedName = Artist.normalizeName(artistName)
+            val alias = artistAliasDao.findAlias(normalizedName)
+            val existingArtist = if (alias != null) {
+                artistDao.getArtistById(alias.targetArtistId)
+            } else {
+                artistDao.getArtistByName(artistName)
+                    ?: artistDao.getArtistByNormalizedName(normalizedName)
+            }
             if (existingArtist != null && existingArtist.imageUrl.isNullOrBlank()) {
                 artistDao.updateImageUrl(existingArtist.id, imageUrl)
-                Log.d(TAG, "Persisted image to artists table for: $artistName")
+                Log.d(TAG, "Persisted image to artists table for: ${existingArtist.name} (resolved from $artistName)")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to persist artist image to DB for: $artistName", e)
@@ -1763,58 +1794,63 @@ class RoomStatsRepository @Inject constructor(
     override suspend fun getArtistDetailsByName(artistName: String): ArtistDetails? {
         val key = "artist_details_name_$artistName"
         return getCached(key) {
-            // Try to find the artist in the database first by normalized name
+            // Resolve alias first if it exists
             val normalizedName = me.avinas.tempo.data.local.entities.Artist.normalizeName(artistName)
-            val existingArtist = artistDao.getArtistByNormalizedName(normalizedName)
-                ?: artistDao.getArtistByName(artistName)
+            val alias = artistAliasDao.findAlias(normalizedName)
+            val targetArtist = if (alias != null) {
+                artistDao.getArtistById(alias.targetArtistId)
+            } else {
+                artistDao.getArtistByNormalizedName(normalizedName)
+                    ?: artistDao.getArtistByName(artistName)
+            }
             
-            if (existingArtist != null) {
+            if (targetArtist != null) {
                 // Artist found in database - use ID-based queries for proper relational lookups
-                Log.d(TAG, "getArtistDetailsByName: Found artist '${existingArtist.name}' (ID=${existingArtist.id}), " +
-                    "existing imageUrl=${existingArtist.imageUrl?.take(80) ?: "null"}")
+                Log.d(TAG, "getArtistDetailsByName: Found artist '${targetArtist.name}' (ID=${targetArtist.id}), " +
+                    "existing imageUrl=${targetArtist.imageUrl?.take(80) ?: "null"}")
                 
-                val playCount = statsDao.getArtistPlayCountById(existingArtist.id)
-                val totalTime = statsDao.getArtistTotalTimeById(existingArtist.id)
-                val topSongs = statsDao.getTopTracksForArtistById(existingArtist.id, 10)
-                val firstDiscovery = statsDao.getArtistFirstListenById(existingArtist.id)
+                val playCount = statsDao.getArtistPlayCountById(targetArtist.id)
+                val totalTime = statsDao.getArtistTotalTimeById(targetArtist.id)
+                val topSongs = statsDao.getTopTracksForArtistById(targetArtist.id, 10)
+                val firstDiscovery = statsDao.getArtistFirstListenById(targetArtist.id)
                 
                 // Extended data using ID-based queries
-                val uniqueAlbums = statsDao.getArtistUniqueAlbumsPlayedById(existingArtist.id)
-                val uniqueTracks = statsDao.getArtistUniqueTracksPlayedById(existingArtist.id)
-                val listeningDates = statsDao.getArtistListeningDatesById(existingArtist.id)
-                val peakHour = statsDao.getArtistPeakListeningHourById(existingArtist.id)
-                val topAlbums = statsDao.getTopAlbumsForArtistById(existingArtist.id, 5)
+                val uniqueAlbums = statsDao.getArtistUniqueAlbumsPlayedById(targetArtist.id)
+                val uniqueTracks = statsDao.getArtistUniqueTracksPlayedById(targetArtist.id)
+                val listeningDates = statsDao.getArtistListeningDatesById(targetArtist.id)
+                val peakHour = statsDao.getArtistPeakListeningHourById(targetArtist.id)
+                val topAlbums = statsDao.getTopAlbumsForArtistById(targetArtist.id, 5)
                 
                 // Get artist image URL with fallback strategy
                 // Priority: artist table → verified enriched_metadata → direct API search
-                val imageUrl = existingArtist.imageUrl?.takeIf { it.isNotBlank() }
-                    ?: statsDao.getArtistImageByArtistId(existingArtist.id)?.also {
+                val imageUrl = targetArtist.imageUrl?.takeIf { it.isNotBlank() }
+                    ?: statsDao.getArtistImageByArtistId(targetArtist.id)?.also {
                         Log.d(TAG, "getArtistDetailsByName: Found verified image via track_artists join")
                     }
-                    ?: getArtistImageUrlWithFallback(existingArtist.name)?.also {
+                    ?: getArtistImageUrlWithFallback(targetArtist.name)?.also {
                         Log.d(TAG, "getArtistDetailsByName: Found image via direct search")
                     }
                 
                 if (imageUrl != null) {
                     Log.d(TAG, "getArtistDetailsByName: Resolved image: ${imageUrl.take(80)}")
                     // Update artist table with found image for future lookups
-                    if (existingArtist.imageUrl.isNullOrBlank()) {
+                    if (targetArtist.imageUrl.isNullOrBlank()) {
                         try {
-                            artistDao.updateImageUrl(existingArtist.id, imageUrl)
+                            artistDao.updateImageUrl(targetArtist.id, imageUrl)
                             Log.d(TAG, "getArtistDetailsByName: Persisted image URL to artists table")
                         } catch (e: Exception) {
                             Log.w(TAG, "getArtistDetailsByName: Failed to persist image URL", e)
                         }
                     }
                 } else {
-                    Log.w(TAG, "getArtistDetailsByName: No image found for artist '${existingArtist.name}'")
+                    Log.w(TAG, "getArtistDetailsByName: No image found for artist '${targetArtist.name}'")
                 }
                 
                 // Create artist with resolved image URL
-                val artistWithImage = if (imageUrl != existingArtist.imageUrl) {
-                    existingArtist.copy(imageUrl = imageUrl)
+                val artistWithImage = if (imageUrl != targetArtist.imageUrl) {
+                    targetArtist.copy(imageUrl = imageUrl)
                 } else {
-                    existingArtist
+                    targetArtist
                 }
                 
                 // Country from artist table or enriched metadata
@@ -2204,8 +2240,13 @@ class RoomStatsRepository @Inject constructor(
             artistNames.forEach { name ->
                 // Try ID-based lookup first (faster with proper indices)
                 val normalizedName = me.avinas.tempo.data.local.entities.Artist.normalizeName(name)
-                val artist = artistDao.getArtistByNormalizedName(normalizedName)
-                    ?: artistDao.getArtistByName(name)
+                val alias = artistAliasDao.findAlias(normalizedName)
+                val artist = if (alias != null) {
+                    artistDao.getArtistById(alias.targetArtistId)
+                } else {
+                    artistDao.getArtistByNormalizedName(normalizedName)
+                        ?: artistDao.getArtistByName(name)
+                }
                 
                 val playCount = if (artist != null) {
                     statsDao.getArtistPlayCountById(artist.id)

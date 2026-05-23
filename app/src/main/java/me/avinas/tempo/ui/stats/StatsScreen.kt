@@ -16,7 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -65,8 +65,24 @@ fun StatsScreen(
     onNavigateToSupportedApps: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val listState = rememberLazyListState()
+    val listState = remember(uiState.selectedTab, uiState.selectedTimeRange, uiState.selectedSortBy) { LazyListState() }
     val scope = rememberCoroutineScope()
+
+    // Workaround for LazyColumn crash when item count drops below current scroll index
+    val totalItemCount = remember(uiState.isLoading, uiState.items, uiState.isLoadingMore, uiState.selectedTab) {
+        var count = 1 // sticky tab selector
+        if (uiState.selectedTab != StatsTab.TOP_ALBUMS) count += 1 // sort selector
+        if (!uiState.isLoading && uiState.items.isEmpty()) {
+            count += 1 // empty state
+        } else if (!uiState.isLoading && uiState.items.isNotEmpty()) {
+            count += uiState.items.size // hero + remaining items
+        }
+        if (uiState.isLoadingMore) count += 1
+        count
+    }
+    if (totalItemCount > 0 && listState.firstVisibleItemIndex >= totalItemCount) {
+        listState.requestScrollToItem(totalItemCount - 1)
+    }
     val walkthroughController = me.avinas.tempo.ui.components.LocalWalkthroughController.current
 
     // Pagination Logic - simplified for better scroll performance
@@ -196,12 +212,12 @@ fun StatsScreen(
                     // Remaining Items
                     itemsIndexed(
                         items = remainingItems,
-                        key = { _, item -> 
+                        key = { index, item -> 
                             when (item) {
-                                is TopTrack -> "track_${item.trackId}"
-                                is TopArtist -> "artist_${item.artistId ?: item.artist}"
-                                is TopAlbum -> "album_${item.album}_${item.artist}"
-                                else -> "item_${item.hashCode()}"
+                                is TopTrack -> "track_${index}_${item.trackId}"
+                                is TopArtist -> "artist_${index}_${item.artistId ?: item.artist}"
+                                is TopAlbum -> "album_${index}_${item.album}_${item.artist}"
+                                else -> "item_${index}_${item.hashCode()}"
                             }
                         },
                         contentType = { _, item ->
@@ -361,12 +377,26 @@ fun HeroStatItem(item: Any, onNavigate: () -> Unit) {
             
             Spacer(modifier = Modifier.width(20.dp))
             
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(label, style = MaterialTheme.typography.labelMedium, color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1)
                 Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
             }
+
+            val timeMs = when (item) {
+                is TopTrack -> item.totalTimeMs
+                is TopArtist -> item.totalTimeMs
+                is TopAlbum -> item.totalTimeMs
+                else -> 0L
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(
+                text = formatListeningTime(timeMs),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White.copy(alpha = 0.6f)
+            )
         }
     }
 }

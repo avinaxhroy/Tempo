@@ -142,7 +142,7 @@ fun AlbumDetailsContent(
             // Track List
             itemsIndexed(
                 items = albumDetails.tracks,
-                key = { _, track -> track.track.id }
+                key = { index, track -> "${index}_${track.track.id}" }
             ) { index, track ->
                 AlbumTrackItem(
                     track = track,

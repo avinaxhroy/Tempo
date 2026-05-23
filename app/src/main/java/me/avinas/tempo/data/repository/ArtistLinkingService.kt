@@ -67,17 +67,42 @@ class ArtistLinkingService @Inject constructor(
         // Determine the primary artist (first one)
         val primaryArtist = primaryArtists.firstOrNull()
         
-        // Update track with primary artist ID if needed
-        val updatedTrack = if (primaryArtist != null && track.primaryArtistId != primaryArtist.id) {
-            trackDao.updatePrimaryArtistId(track.id, primaryArtist.id)
-            track.copy(primaryArtistId = primaryArtist.id)
+        // Reconstruct the artist string based on resolved canonical artists
+        val primaryNames = primaryArtists.map { it.name }
+        val featuredNames = featuredArtists.map { it.name }
+        var updatedArtistString = track.artist
+        var artistStringChanged = false
+        if (primaryNames.isNotEmpty()) {
+            val reconstructed = if (featuredNames.isNotEmpty()) {
+                "${primaryNames.joinToString(", ")} feat. ${featuredNames.joinToString(", ")}"
+            } else {
+                primaryNames.joinToString(", ")
+            }
+            if (reconstructed != track.artist) {
+                updatedArtistString = reconstructed
+                artistStringChanged = true
+            }
+        }
+        
+        // Update track with primary artist ID and artist name if needed
+        var updatedTrack = track
+        if (primaryArtist != null && (track.primaryArtistId != primaryArtist.id || artistStringChanged)) {
+            updatedTrack = track.copy(
+                primaryArtistId = primaryArtist.id,
+                artist = updatedArtistString
+            )
+            trackDao.update(updatedTrack)
         } else if (primaryArtist == null && track.primaryArtistId == null) {
             // No valid artist found - use "Unknown Artist" placeholder to prevent infinite loop
             val unknownArtist = getOrCreateUnknownArtist()
-            trackDao.updatePrimaryArtistId(track.id, unknownArtist.id)
-            track.copy(primaryArtistId = unknownArtist.id)
-        } else {
-            track
+            updatedTrack = track.copy(
+                primaryArtistId = unknownArtist.id,
+                artist = updatedArtistString
+            )
+            trackDao.update(updatedTrack)
+        } else if (artistStringChanged) {
+            updatedTrack = track.copy(artist = updatedArtistString)
+            trackDao.update(updatedTrack)
         }
         
         // Clear existing relationships and create new ones
@@ -169,6 +194,42 @@ class ArtistLinkingService @Inject constructor(
         genres: List<String> = emptyList()
     ): Artist {
         val normalizedName = Artist.normalizeName(name)
+        
+        // Check if this name has an alias (was merged into another artist)
+        artistAliasDao.findAlias(normalizedName)?.let { alias ->
+            artistDao.getArtistById(alias.targetArtistId)?.let { targetArtist ->
+                // Alias resolved silently - update its metadata and return it
+                var needsUpdate = false
+                var updated = targetArtist
+                
+                if (imageUrl != null && targetArtist.imageUrl.isNullOrBlank()) {
+                    updated = updated.copy(imageUrl = imageUrl)
+                    needsUpdate = true
+                }
+                if (spotifyId != null && targetArtist.spotifyId == null) {
+                    updated = updated.copy(spotifyId = spotifyId)
+                    needsUpdate = true
+                }
+                if (musicbrainzId != null && targetArtist.musicbrainzId == null) {
+                    updated = updated.copy(musicbrainzId = musicbrainzId)
+                    needsUpdate = true
+                }
+                if (country != null && targetArtist.country == null) {
+                    updated = updated.copy(country = country)
+                    needsUpdate = true
+                }
+                if (genres.isNotEmpty() && targetArtist.genres.isEmpty()) {
+                    updated = updated.copy(genres = genres)
+                    needsUpdate = true
+                }
+                
+                if (needsUpdate) {
+                    artistDao.update(updated)
+                    Log.d(TAG, "Updated alias target artist '${targetArtist.name}' with new metadata")
+                }
+                return updated
+            }
+        }
         
         // Try to find existing artist
         var existingArtist = artistDao.getArtistByNormalizedName(normalizedName)

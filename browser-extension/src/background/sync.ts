@@ -17,6 +17,8 @@ const INITIAL_RETRY_DELAY_MS = 1_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_BATCH_SIZE = 50;
 const MAX_PLAYS_PER_BATCH = 100;
+const DISCOVERY_PING_TIMEOUT_MS = 900;
+const SUBNET_SCAN_BATCH_SIZE = 48;
 
 const SYNC_ALARM_NAME = 'tempo-stats-auto-sync';
 const RETRY_ALARM_NAME = 'tempo-stats-retry-sync';
@@ -95,10 +97,10 @@ export async function requestHostPermission(_origin: string): Promise<boolean> {
 
 // ---- Phone discovery helpers -----------------------------------------------
 
-async function pingPhone(ip: string, port: number, authToken?: string): Promise<boolean> {
+async function pingPhone(ip: string, port: number, authToken?: string, timeoutMs = 3_000): Promise<boolean> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const headers: Record<string, string> = authToken
       ? await signRequest(authToken)
       : {};
@@ -111,6 +113,50 @@ async function pingPhone(ip: string, port: number, authToken?: string): Promise<
   } catch {
     return false;
   }
+}
+
+function getPrivateIpv4Subnet(ip: string): string | null {
+  const parts = ip.split('.').map(Number);
+  if (
+    parts.length !== 4 ||
+    parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)
+  ) {
+    return null;
+  }
+
+  const isPrivate =
+    parts[0] === 10 ||
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+    (parts[0] === 192 && parts[1] === 168);
+
+  return isPrivate ? `${parts[0]}.${parts[1]}.${parts[2]}` : null;
+}
+
+async function findPhoneOnStoredSubnet(pairing: PairingInfo): Promise<string | null> {
+  const subnet = getPrivateIpv4Subnet(pairing.phoneIp);
+  if (!subnet) return null;
+
+  const candidates: string[] = [];
+  for (let i = 1; i <= 254; i++) {
+    const ip = `${subnet}.${i}`;
+    if (ip !== pairing.phoneIp) candidates.push(ip);
+  }
+
+  console.log(`[Tempo] Scanning ${subnet}.x for phone after stored IP failed`);
+
+  for (let start = 0; start < candidates.length; start += SUBNET_SCAN_BATCH_SIZE) {
+    const batch = candidates.slice(start, start + SUBNET_SCAN_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async ip => ({
+        ip,
+        reachable: await pingPhone(ip, pairing.phonePort, pairing.authToken, DISCOVERY_PING_TIMEOUT_MS),
+      }))
+    );
+    const found = results.find(result => result.reachable);
+    if (found) return found.ip;
+  }
+
+  return null;
 }
 
 async function checkPhoneBattery(ip: string, port: number, authToken?: string): Promise<boolean> {
@@ -147,16 +193,14 @@ const HOTSPOT_GATEWAY_IPS = [
 ];
 
 /**
- * mDNS hostname the Android app advertises via NsdManager (_tempo._tcp.).
- * Chrome resolves .local names natively on all platforms, so this works even
- * when DHCP assigns the phone a new IP — the hostname stays stable.
+ * Best-effort .local hostname. Android advertises a DNS-SD service; some
+ * networks/OSes also make a stable host name reachable, but many do not.
  */
 const MDNS_HOSTNAME = 'tempo-phone.local';
 
 /**
- * Try to reach the phone via its mDNS hostname.
- * Returns the resolved IP (extracted from the successful ping's URL) if
- * reachable, so we can persist it for direct future connects.
+ * Try to reach the phone via its best-effort mDNS hostname.
+ * Returns the hostname if reachable.
  */
 async function pingPhoneViaMdns(port: number, authToken?: string): Promise<string | null> {
   try {
@@ -189,20 +233,10 @@ async function resolvePhoneAddress(pairing: PairingInfo): Promise<{ ip: string; 
     if (reachable) {
       return { ip: pairing.phoneIp, port: pairing.phonePort };
     }
-    console.log(`[Tempo] Stored address ${pairing.phoneIp} unreachable, trying mDNS...`);
+    console.log(`[Tempo] Stored address ${pairing.phoneIp} unreachable, trying recovery paths...`);
   }
 
-  // Strategy 2: mDNS hostname — works when DHCP assigned the phone a new IP.
-  //   Chrome resolves "tempo-phone.local" natively using the OS mDNS stack.
-  //   The Android app advertises _tempo._tcp. via NsdManager while the server runs.
-  const mdnsResult = await pingPhoneViaMdns(pairing.phonePort, pairing.authToken);
-  if (mdnsResult) {
-    console.log(`[Tempo] Found phone via mDNS (${MDNS_HOSTNAME}) — updating stored address`);
-    await storage.savePairing({ ...pairing, phoneIp: MDNS_HOSTNAME });
-    return { ip: MDNS_HOSTNAME, port: pairing.phonePort };
-  }
-
-  // Strategy 3: Hotspot seeds — works when phone IS the WiFi gateway
+  // Strategy 2: Hotspot seeds — works when phone IS the WiFi gateway
   for (const gatewayIp of HOTSPOT_GATEWAY_IPS) {
     if (gatewayIp === pairing.phoneIp) continue;
     const reachable = await pingPhone(gatewayIp, pairing.phonePort, pairing.authToken);
@@ -213,10 +247,27 @@ async function resolvePhoneAddress(pairing: PairingInfo): Promise<{ ip: string; 
     }
   }
 
-  // Strategy 4: Cannot do subnet scan from a service worker (no WebRTC).
-  // If all fast paths fail, the user should open the popup — it runs a full
-  // WebRTC-assisted subnet scan and updates the stored address on success.
-  console.warn('[Tempo] Phone not reachable via stored IP, mDNS, or hotspot seeds. Open popup to re-discover.');
+  // Strategy 3: Same-subnet repair — handles the common DHCP case where the
+  // phone IP changed but both devices are still on the same WiFi.
+  const sameSubnetIp = await findPhoneOnStoredSubnet(pairing);
+  if (sameSubnetIp) {
+    console.log(`[Tempo] Found phone at new same-subnet address ${sameSubnetIp}`);
+    await storage.savePairing({ ...pairing, phoneIp: sameSubnetIp });
+    return { ip: sameSubnetIp, port: pairing.phonePort };
+  }
+
+  // Strategy 4: Best-effort hostname — useful on networks that expose it, but
+  // not reliable enough to be the only IP-change recovery path.
+  const mdnsResult = await pingPhoneViaMdns(pairing.phonePort, pairing.authToken);
+  if (mdnsResult) {
+    console.log(`[Tempo] Found phone via mDNS (${MDNS_HOSTNAME}) — updating stored address`);
+    await storage.savePairing({ ...pairing, phoneIp: MDNS_HOSTNAME });
+    return { ip: MDNS_HOSTNAME, port: pairing.phonePort };
+  }
+
+  // Strategy 5: Different network/subnet. A service worker has no WebRTC local
+  // adapter discovery, so the popup must run the full current-subnet scan.
+  console.warn('[Tempo] Phone not reachable via stored IP, mDNS, hotspot seeds, or stored subnet scan. Open popup to re-discover.');
   return null;
 }
 

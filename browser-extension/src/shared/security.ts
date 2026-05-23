@@ -12,7 +12,7 @@
 //   3. HMAC matches recomputed value
 // ============================================================================
 
-export interface TempoHeaders {
+export interface TempoHeaders extends Record<string, string> {
   'Authorization': string;
   'X-Tempo-Signature': string;
   'X-Tempo-Timestamp': string;
