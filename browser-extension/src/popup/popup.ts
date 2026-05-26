@@ -10,7 +10,7 @@
 // ============================================================================
 
 import { MessageType } from '../shared/types';
-import type { NowPlaying, Play, Settings, PairingInfo } from '../shared/types';
+import type { NowPlaying, Play, Settings, PairingInfo, YoutubeChannelSuggestion } from '../shared/types';
 import { generateQrDataUrl } from './qr';
 import { signRequest, validatePingResponse, pairingAgeDays } from '../shared/security';
 
@@ -129,9 +129,11 @@ async function discoveryPing(ip: string, token: string): Promise<string | null> 
 type DiscoveryState = 'qr' | 'scanning' | 'manual' | 'success';
 
 let currentNowPlaying: NowPlaying | null = null;
+let currentYoutubeSuggestion: YoutubeChannelSuggestion | null = null;
 let currentPairing: PairingInfo | null = null;
 let currentQueueCount = 0;
 let currentPairingToken: string | null = null;
+const dismissedPopupYoutubeChannels = new Set<string>();
 
 // Tracks the current discovery UI screen so tab switches don't reset it.
 // Only reset to 'qr' when explicitly starting fresh (unpair / refresh QR).
@@ -212,10 +214,12 @@ function refreshHomeState() {
   const emTitle = document.getElementById('np-empty-title')!;
   const emCopy  = document.getElementById('np-empty-copy')!;
   const banner  = document.getElementById('queue-banner')!;
+  const heroCard = document.getElementById('home-hero-card')!;
 
   banner.style.display = currentPairing ? 'none' : '';
 
   if (!currentPairing) {
+    heroCard.style.display = '';
     pill.textContent  = 'Setup required';
     title.textContent = 'Connect your Tempo app';
     copy.textContent  = 'Pair your phone — just scan the QR code in the Pair tab.';
@@ -227,6 +231,7 @@ function refreshHomeState() {
   }
 
   if (currentNowPlaying?.title) {
+    heroCard.style.display = 'none';
     pill.textContent  = 'Live tracking';
     title.textContent = 'Now tracking this session';
     copy.textContent  = `${currentNowPlaying.title} is being monitored.`;
@@ -237,6 +242,19 @@ function refreshHomeState() {
     return;
   }
 
+  if (currentYoutubeSuggestion) {
+    heroCard.style.display = 'none';
+    pill.textContent  = 'YouTube channel found';
+    title.textContent = `Allow ${currentYoutubeSuggestion.channel}?`;
+    copy.textContent  = 'This YouTube.com channel can be added for automatic music tracking.';
+    primary.textContent = 'Allow channel';
+    second.textContent  = 'Never allow';
+    emTitle.textContent = 'YouTube channel detected';
+    emCopy.textContent  = 'Use the allow button to start tracking this channel.';
+    return;
+  }
+
+  heroCard.style.display = '';
   pill.textContent  = 'Ready to track';
   title.textContent = currentQueueCount > 0
     ? `${currentQueueCount} play${currentQueueCount === 1 ? '' : 's'} waiting to sync`
@@ -254,34 +272,89 @@ function refreshHomeState() {
 
 async function refreshNowPlaying() {
   try {
-    const resp = await send(MessageType.GetNowPlaying);
+    const [resp, youtubeResp] = await Promise.all([
+      send(MessageType.GetNowPlaying),
+      send(MessageType.GetYoutubeChannelSuggestion),
+    ]);
     const np: NowPlaying | null = resp?.nowPlaying ?? null;
     currentNowPlaying = np;
+    const suggestion: YoutubeChannelSuggestion | null = youtubeResp?.suggestion ?? null;
+    currentYoutubeSuggestion = suggestion &&
+      !dismissedPopupYoutubeChannels.has(suggestion.channel.toLowerCase().trim())
+        ? suggestion
+        : null;
 
     const emptyEl   = document.getElementById('np-empty')!;
     const contentEl = document.getElementById('np-content')!;
+    const youtubeEl = document.getElementById('youtube-suggestion')!;
 
     if (!np?.title) {
-      emptyEl.style.display   = '';
+      if (currentYoutubeSuggestion) {
+        emptyEl.style.display = 'none';
+        youtubeEl.style.display = '';
+        document.getElementById('youtube-suggestion-channel')!.textContent = currentYoutubeSuggestion.channel;
+        document.getElementById('youtube-suggestion-track')!.textContent = currentYoutubeSuggestion.title
+          ? currentYoutubeSuggestion.title
+          : 'Allow this channel to track YouTube.com plays.';
+      } else {
+        emptyEl.style.display = currentPairing ? '' : 'none';
+        youtubeEl.style.display = 'none';
+      }
       contentEl.style.display = 'none';
       refreshHomeState();
       return;
     }
 
     emptyEl.style.display   = 'none';
+    youtubeEl.style.display = 'none';
     contentEl.style.display = '';
+
+    const sourceName = np.site ?? np.sourceApp ?? '';
+    const sourceClass = sourceName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    contentEl.className = `np-card src-${sourceClass}`;
 
     document.getElementById('np-title')!.textContent       = np.title;
     document.getElementById('np-artist')!.textContent      = np.artist || 'Unknown Artist';
     document.getElementById('np-album')!.textContent       = np.album || '';
     document.getElementById('np-listened')!.textContent    = formatDuration(np.listenedMs);
     document.getElementById('np-completion')!.textContent  = `${Math.round(np.completionPercentage)}%`;
-    document.getElementById('np-source')!.textContent      = np.site ?? np.sourceApp;
+    document.getElementById('np-source')!.textContent      = sourceName;
     (document.getElementById('np-progress') as HTMLElement).style.width = `${Math.min(np.completionPercentage, 100)}%`;
-    document.getElementById('np-pause-count')!.textContent  = `⏸ ${np.pauseCount}`;
-    document.getElementById('np-seek-count')!.textContent   = `⏭ ${np.seekCount}`;
-    document.getElementById('np-replay-count')!.textContent = `🔁 ${np.replayCount}`;
+    
+    const pauseSpan = document.querySelector('#np-pause-count span');
+    const seekSpan = document.querySelector('#np-seek-count span');
+    const replaySpan = document.querySelector('#np-replay-count span');
+    if (pauseSpan) pauseSpan.textContent = String(np.pauseCount);
+    if (seekSpan) seekSpan.textContent = String(np.seekCount);
+    if (replaySpan) replaySpan.textContent = String(np.replayCount);
+
     document.getElementById('np-mute-badge')!.style.display  = np.isMuted ? '' : 'none';
+
+    // Toggle disk rotation & audio visualizer bar bouncing based on playback state
+    const diskEl = document.getElementById('np-disk');
+    const visualizerEl = document.getElementById('np-visualizer');
+    const artistEl = document.getElementById('np-artist');
+    if (diskEl) {
+      if (np.isPlaying) {
+        diskEl.classList.add('playing');
+      } else {
+        diskEl.classList.remove('playing');
+      }
+    }
+    if (visualizerEl) {
+      if (np.isPlaying) {
+        visualizerEl.classList.add('animating');
+      } else {
+        visualizerEl.classList.remove('animating');
+      }
+    }
+    if (artistEl) {
+      if (np.isPlaying) {
+        artistEl.classList.add('np-artist-glowing');
+      } else {
+        artistEl.classList.remove('np-artist-glowing');
+      }
+    }
 
     refreshHomeState();
   } catch (err) {
@@ -533,16 +606,21 @@ document.getElementById('btn-refresh-qr')?.addEventListener('click', async () =>
 
 function setDiscoveryState(state: DiscoveryState, _detail?: string) {
   discoveryUIState = state;
-  // In WhatsApp style we only toggle manual section; QR is always visible
   const manSection = document.getElementById('manual-section');
   if (manSection) {
     manSection.style.display = state === 'manual' ? '' : 'none';
+  }
+  const manWrapper = document.getElementById('manual-section-wrapper') as HTMLDetailsElement | null;
+  if (manWrapper) {
+    manWrapper.open = (state === 'manual');
   }
 }
 
 function hideManualSection() {
   const manSection = document.getElementById('manual-section');
   if (manSection) manSection.style.display = 'none';
+  const manWrapper = document.getElementById('manual-section-wrapper') as HTMLDetailsElement | null;
+  if (manWrapper) manWrapper.open = false;
 }
 
 // ---- Auto-discovery --------------------------------------------------------
@@ -553,7 +631,9 @@ async function tryPing(ip: string, token: string): Promise<string | null> {
     const result = await send(MessageType.PingPhone, { ip, port: SERVER_PORT, token });
 
     // Service worker signals missing permission — request from here (popup = valid user gesture context)
-    if (result?.needsPermission && result?.origin) {
+    // Note: Firefox doesn't support optional_host_permissions, so skip permission request there
+    const isFirefox = typeof browser !== 'undefined';
+    if (result?.needsPermission && result?.origin && !isFirefox) {
       try {
         const granted = await chrome.permissions.request({ origins: [result.origin] });
         if (!granted) return null;
@@ -1088,21 +1168,56 @@ document.getElementById('btn-unpair')?.addEventListener('click', async () => {
 // ---- Nav helpers -----------------------------------------------------------
 
 document.getElementById('home-primary-action')?.addEventListener('click', () => {
+  if (currentYoutubeSuggestion) { allowCurrentYoutubeChannel(); return; }
   if (!currentPairing) { switchTab('pairing'); return; }
   switchTab(currentQueueCount > 0 || currentNowPlaying?.title ? 'queue' : 'pairing');
 });
 document.getElementById('home-secondary-action')?.addEventListener('click', () => {
+  if (currentYoutubeSuggestion) { blockCurrentYoutubeChannel(); return; }
   if (!currentPairing) { switchTab('queue'); return; }
   switchTab(currentQueueCount > 0 || currentNowPlaying?.title ? 'pairing' : 'queue');
 });
 document.getElementById('queue-open-pairing')?.addEventListener('click', () => switchTab('pairing'));
+
+async function allowCurrentYoutubeChannel() {
+  if (!currentYoutubeSuggestion) return;
+  const channel = currentYoutubeSuggestion.channel;
+  await send(MessageType.AddYoutubeChannel, { channel });
+  currentYoutubeSuggestion = null;
+  await refreshNowPlaying();
+  await refreshArtists();
+}
+
+function dismissCurrentYoutubeSuggestion() {
+  if (currentYoutubeSuggestion) {
+    dismissedPopupYoutubeChannels.add(currentYoutubeSuggestion.channel.toLowerCase().trim());
+  }
+  currentYoutubeSuggestion = null;
+  const youtubeEl = document.getElementById('youtube-suggestion');
+  if (youtubeEl) youtubeEl.style.display = 'none';
+  refreshHomeState();
+}
+
+async function blockCurrentYoutubeChannel() {
+  if (!currentYoutubeSuggestion) return;
+  const channel = currentYoutubeSuggestion.channel;
+  dismissedPopupYoutubeChannels.add(channel.toLowerCase().trim());
+  await send(MessageType.BlockYoutubeChannel, { channel });
+  currentYoutubeSuggestion = null;
+  await refreshNowPlaying();
+  await refreshArtists();
+}
+
+document.getElementById('btn-youtube-allow')?.addEventListener('click', allowCurrentYoutubeChannel);
+document.getElementById('btn-youtube-not-now')?.addEventListener('click', dismissCurrentYoutubeSuggestion);
+document.getElementById('btn-youtube-never')?.addEventListener('click', blockCurrentYoutubeChannel);
 
 // ---- Known Artists ---------------------------------------------------------
 
 async function refreshArtists() {
   try {
     const resp     = await send(MessageType.GetSettings);
-    const settings: Settings = resp?.settings ?? { knownArtists: [], youtubeChannels: [] };
+    const settings: Settings = resp?.settings ?? { ...DEFAULT_SETTINGS };
     renderTagList('artist-list', settings.knownArtists, async removed => {
       settings.knownArtists = settings.knownArtists.filter(a => a !== removed);
       await send(MessageType.SetSettings, { settings });
@@ -1110,6 +1225,11 @@ async function refreshArtists() {
     });
     renderTagList('channel-list', settings.youtubeChannels, async removed => {
       settings.youtubeChannels = settings.youtubeChannels.filter(c => c !== removed);
+      await send(MessageType.SetSettings, { settings });
+      refreshArtists();
+    });
+    renderTagList('blocked-channel-list', settings.blockedYoutubeChannels, async removed => {
+      settings.blockedYoutubeChannels = settings.blockedYoutubeChannels.filter(c => c !== removed);
       await send(MessageType.SetSettings, { settings });
       refreshArtists();
     });
@@ -1137,7 +1257,7 @@ function renderTagList(cid: string, items: string[], onRemove: (item: string) =>
     const name     = input.value.trim().slice(0, MAX_INPUT_LEN);
     if (!name) return;
     const resp     = await send(MessageType.GetSettings);
-    const settings: Settings = resp?.settings ?? { knownArtists: [], youtubeChannels: [] };
+    const settings: Settings = resp?.settings ?? { ...DEFAULT_SETTINGS };
     const list     = isArtist ? settings.knownArtists : settings.youtubeChannels;
     if (!list.includes(name)) {
       list.push(name);
@@ -1166,6 +1286,7 @@ const DEFAULT_SETTINGS: Settings = {
   pollingIntervalSeconds: 2,
   knownArtists: [],
   youtubeChannels: [],
+  blockedYoutubeChannels: [],
 };
 
 async function refreshSettings() {

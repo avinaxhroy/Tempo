@@ -20,14 +20,22 @@ enum class TimeRange {
      * Get the start timestamp for this time range.
      * Uses system default timezone for correct local date boundaries.
      */
-    fun getStartTimestamp(): Long {
-        val zone = ZoneId.systemDefault()
-        val now = LocalDateTime.now()
+    fun getStartTimestamp(
+        now: LocalDateTime = LocalDateTime.now(),
+        zone: ZoneId = ZoneId.systemDefault()
+    ): Long {
         val startOfDay = now.toLocalDate().atStartOfDay()
 
         return when (this) {
             TODAY -> startOfDay
-            THIS_WEEK -> startOfDay.minusDays(now.dayOfWeek.value.toLong() - 1)
+            THIS_WEEK -> {
+                val dayOfWeek = now.dayOfWeek.value
+                if (dayOfWeek <= 3) {
+                    startOfDay.minusDays(dayOfWeek.toLong() - 1 + 7)
+                } else {
+                    startOfDay.minusDays(dayOfWeek.toLong() - 1)
+                }
+            }
             THIS_MONTH -> {
                 if (now.dayOfMonth <= 3) {
                     now.toLocalDate().minusMonths(1).withDayOfMonth(1).atStartOfDay()
@@ -41,10 +49,34 @@ enum class TimeRange {
     }
 
     /**
-     * Get the end timestamp for this time range (now).
+     * Get the end timestamp for this time range.
      */
-    fun getEndTimestamp(): Long {
-        return System.currentTimeMillis()
+    fun getEndTimestamp(
+        now: LocalDateTime = LocalDateTime.now(),
+        zone: ZoneId = ZoneId.systemDefault()
+    ): Long {
+        val startOfDay = now.toLocalDate().atStartOfDay()
+
+        return when (this) {
+            THIS_WEEK -> {
+                val dayOfWeek = now.dayOfWeek.value
+                if (dayOfWeek <= 3) {
+                    val startOfCurrentWeek = startOfDay.minusDays(dayOfWeek.toLong() - 1)
+                    startOfCurrentWeek.atZone(zone).toInstant().toEpochMilli() - 1
+                } else {
+                    now.atZone(zone).toInstant().toEpochMilli()
+                }
+            }
+            THIS_MONTH -> {
+                if (now.dayOfMonth <= 3) {
+                    val startOfCurrentMonth = now.toLocalDate().withDayOfMonth(1).atStartOfDay()
+                    startOfCurrentMonth.atZone(zone).toInstant().toEpochMilli() - 1
+                } else {
+                    now.atZone(zone).toInstant().toEpochMilli()
+                }
+            }
+            else -> now.atZone(zone).toInstant().toEpochMilli()
+        }
     }
 }
 

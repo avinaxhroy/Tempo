@@ -3,6 +3,9 @@ package me.avinas.tempo.data.spotify
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import me.avinas.tempo.data.local.dao.ArtistDao
@@ -103,6 +106,9 @@ class SpotifyHistoryReconstructionService @Inject constructor(
     private val enrichedMetadataDao: EnrichedMetadataDao,
     private val listeningEventDao: ListeningEventDao
 ) {
+    private val _isReconstructing = MutableStateFlow(false)
+    val isReconstructing: StateFlow<Boolean> = _isReconstructing.asStateFlow()
+
     companion object {
         private const val TAG = "SpotifyHistoryRecon"
         
@@ -226,8 +232,11 @@ class SpotifyHistoryReconstructionService @Inject constructor(
      */
     suspend fun reconstructHistory(
         progressCallback: ProgressCallback? = null
-    ): ReconstructionResult = withContext(Dispatchers.IO) {
-        Log.i(TAG, "Starting listening history reconstruction")
+    ): ReconstructionResult {
+        _isReconstructing.value = true
+        try {
+            return withContext(Dispatchers.IO) {
+                Log.i(TAG, "Starting listening history reconstruction")
         
         if (authManager.authState.value !is SpotifyAuthManager.AuthState.Connected) {
             Log.w(TAG, "Cannot reconstruct: Spotify not connected")
@@ -671,17 +680,21 @@ class SpotifyHistoryReconstructionService @Inject constructor(
             Errors: ${errors.size}
         """.trimIndent())
         
-        ReconstructionResult(
-            tracksCreated = tracksCreated,
-            artistsCreated = artistsCreated,
-            listeningEventsCreated = eventsCreated,
-            recentlyPlayedFound = recentlyPlayedFound,
-            likedTracksFound = likedTracksFound,
-            yearlyPlaylistsFound = yearlyPlaylistsFound,
-            topTracksUsed = topTracksUsed,
-            pendingYearlyPlaylists = pendingYearlyPlaylists,
-            errors = errors
-        )
+                ReconstructionResult(
+                    tracksCreated = tracksCreated,
+                    artistsCreated = artistsCreated,
+                    listeningEventsCreated = eventsCreated,
+                    recentlyPlayedFound = recentlyPlayedFound,
+                    likedTracksFound = likedTracksFound,
+                    yearlyPlaylistsFound = yearlyPlaylistsFound,
+                    topTracksUsed = topTracksUsed,
+                    pendingYearlyPlaylists = pendingYearlyPlaylists,
+                    errors = errors
+                )
+            }
+        } finally {
+            _isReconstructing.value = false
+        }
     }
     
     // =====================================================

@@ -176,37 +176,75 @@ const UNKNOWN_ARTIST_STRINGS: Set<string> = new Set([
 export function shouldTrack(
   raw: RawMediaState,
   youtubeChannels: string[],
-  knownArtists: string[]
+  knownArtists: string[],
+  blockedYoutubeChannels: string[] = []
 ): boolean {
-  const classification = classifySite(raw.url);
+  try {
+    const classification = classifySite(raw.url);
 
-  if (classification.isBlocked) return false;
-  if (classification.isMusicSite) return true;
+    if (classification.isBlocked) return false;
+    if (classification.isMusicSite) return true;
 
-  if (isPlainYouTube(raw.url)) {
-    if (raw.artist && youtubeChannels.length > 0) {
-      const lowerArtist = raw.artist.toLowerCase().trim();
-      const isKnownChannel = youtubeChannels.some(
-        ch => ch.toLowerCase().trim() === lowerArtist
-      );
-      if (isKnownChannel) return true;
+    const ytChannels = Array.isArray(youtubeChannels)
+      ? youtubeChannels.filter((x): x is string => typeof x === 'string')
+      : [];
+    const ktArtists = Array.isArray(knownArtists)
+      ? knownArtists.filter((x): x is string => typeof x === 'string')
+      : [];
+    const blockedChannels = Array.isArray(blockedYoutubeChannels)
+      ? blockedYoutubeChannels.filter((x): x is string => typeof x === 'string')
+      : [];
+
+    if (isPlainYouTube(raw.url)) {
+      const channel = (raw as any).channelName || raw.artist;
+      if (channel && typeof channel === 'string') {
+        const lowerChannel = channel.toLowerCase().trim();
+        const isBlockedChannel = blockedChannels.some(
+          ch => ch.toLowerCase().trim() === lowerChannel
+        );
+        if (isBlockedChannel) return false;
+
+        const isKnownChannel = ytChannels.some(
+          ch => ch.toLowerCase().trim() === lowerChannel
+        );
+        if (isKnownChannel) return true;
+      }
+
+      // Auto-track if the parsed artist is in the known artists list
+      if (raw.artist && typeof raw.artist === 'string') {
+        const lowerArtist = raw.artist.toLowerCase().trim();
+        const isKnownArtist = ktArtists.some(
+          art => art.toLowerCase().trim() === lowerArtist
+        );
+        if (isKnownArtist) return true;
+      }
+
+      return false;
     }
+
+    if (raw.artist && typeof raw.artist === 'string') {
+      const lowerArtist = raw.artist.toLowerCase().trim();
+      const isKnownArtist = ktArtists.some(
+        artist => artist.toLowerCase().trim() === lowerArtist
+      );
+      if (isKnownArtist && raw.title && typeof raw.title === 'string' && raw.title.trim()) return true;
+    }
+
+    if (
+      raw.artist &&
+      typeof raw.artist === 'string' &&
+      !UNKNOWN_ARTIST_STRINGS.has(raw.artist.toLowerCase().trim()) &&
+      raw.title &&
+      typeof raw.title === 'string'
+    ) {
+      return true;
+    }
+
+    return false;
+  } catch (err) {
+    console.error('[Tempo] Error in shouldTrack:', err);
     return false;
   }
-
-  if (raw.artist) {
-    const lowerArtist = raw.artist.toLowerCase().trim();
-    const isKnownArtist = knownArtists.some(
-      artist => artist.toLowerCase().trim() === lowerArtist
-    );
-    if (isKnownArtist && raw.title.trim()) return true;
-  }
-
-  if (raw.artist && !UNKNOWN_ARTIST_STRINGS.has(raw.artist.toLowerCase().trim()) && raw.title) {
-    return true;
-  }
-
-  return false;
 }
 
 export function getSourceApp(url: string): string {

@@ -1,0 +1,1 @@
+"use strict";(()=>{window.addEventListener("tempo-request-yt-metadata",()=>{try{let a={playerResponse:window.ytInitialPlayerResponse||null,initialData:window.ytInitialData||null};window.dispatchEvent(new CustomEvent("tempo-response-yt-metadata",{detail:a}))}catch(a){console.warn("[Tempo] Error dispatching YouTube main-world metadata:",a)}});})();

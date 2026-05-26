@@ -45,23 +45,48 @@ const YTM_AD_PATTERNS: readonly string[] = [
 
 // Pre-lowercased title strip patterns (sorted longest-first for greedy matching).
 // Each entry: [lowercasePattern, patternLength] — avoids repeated .length lookups.
-const TITLE_STRIP_PATTERNS: readonly [string, number][] = [
-  ['(official music video)', 21], ['(official video)', 16], ['(official audio)', 16],
-  ['(official lyric video)', 22], ['(official lyrics video)', 24], ['(official hd video)', 19],
-  ['(official visualizer)', 21], ['(music video)', 13], ['(lyric video)', 13], ['(lyrics video)', 14],
-  ['(lyrics)', 8], ['(audio)', 7], ['(visualizer)', 12], ['(live)', 6], ['(acoustic)', 10],
-  ['[official music video]', 21], ['[official video]', 16], ['[official audio]', 16],
-  ['[official lyric video]', 22], ['[official lyrics video]', 24], ['[official visualizer]', 21],
-  ['[music video]', 13], ['[lyric video]', 13], ['[lyrics video]', 14], ['[lyrics]', 8],
-  ['[audio]', 7], ['[visualizer]', 12], ['[live]', 6], ['[acoustic]', 10], ['[mv]', 4], ['[m/v]', 5],
-  ['(mv)', 4], ['(m/v)', 5],
-  ['| official music video', 22], ['| official video', 17], ['| official audio', 17],
-  ['// official music video', 23], ['// official video', 18],
-  ['(slowed + reverb)', 17], ['(slowed)', 8], ['(sped up)', 9], ['(nightcore)', 11],
-  ['[slowed + reverb]', 17], ['[slowed]', 8], ['[sped up]', 9], ['[nightcore]', 11],
-  ['(clean)', 7], ['(explicit)', 10], ['[clean]', 7], ['[explicit]', 10],
-  ['(hq)', 4], ['[hq]', 4], ['(hd)', 4], ['[hd]', 4],
+const TITLE_STRIP_PATTERNS: readonly string[] = [
+  '(official music video)', '(official video)', '(official audio)',
+  '(official lyric video)', '(official lyrics video)', '(official hd video)',
+  '(official visualizer)', '(official visualiser)', '(music video)', '(lyric video)', '(lyrics video)',
+  '(lyrics)', '(audio)', '(visualizer)', '(visualiser)', '(live)', '(acoustic)',
+  '[official music video]', '[official video]', '[official audio]',
+  '[official lyric video]', '[official lyrics video]', '[official visualizer]', '[official visualiser]',
+  '[music video]', '[lyric video]', '[lyrics video]', '[lyrics]',
+  '[audio]', '[visualizer]', '[visualiser]', '[live]', '[acoustic]', '[mv]', '[m/v]',
+  '(mv)', '(m/v)',
+  '| official music video', '| official video', '| official audio',
+  '// official music video', '// official video',
+  '(slowed + reverb)', '(slowed)', '(sped up)', '(nightcore)',
+  '[slowed + reverb]', '[slowed]', '[sped up]', '[nightcore]',
+  '(clean)', '(explicit)', '[clean]', '[explicit]',
+  '(hq)', '[hq]', '(hd)', '[hd]',
+  '(world premiere)', '(premiere)', '[world premiere]', '[premiere]',
+  '(exclusive)', '[exclusive]',
 ];
+
+// Record label patterns to strip from titles (appear after separators)
+const LABEL_NOISE_PATTERNS: readonly string[] = [
+  'def jam', 'sony music', 'universal music', 'warner music', 'emi',
+  'columbia records', 'atlantic records', 'republic records', 'interscope',
+  'capitol records', 'island records', 'virgin records', 'epic records',
+  'rca records', 'warner bros', 'warner brothers', 'polygram', 'motown',
+  't-series', 'zee music', 'sony music india', 'universal music india',
+  'tips music', 'saregama', 'venus music', 'speed records', 'white hill music',
+  'records', 'recordings', 'entertainment', 'music group', 'music company',
+  'label', 'distributed by', 'released by', 'under exclusive license',
+];
+
+/**
+ * Check if a name is likely a record label rather than an artist.
+ */
+function isLikelyLabel(name: string): boolean {
+  const lower = name.toLowerCase();
+  for (const pattern of LABEL_NOISE_PATTERNS) {
+    if (lower.includes(pattern)) return true;
+  }
+  return false;
+}
 
 // Podcast/audiobook source apps (pre-lowercased)
 const PODCAST_SOURCES: readonly string[] = ['podcast', 'overcast', 'pocket casts', 'castbox', 'stitcher'];
@@ -80,6 +105,37 @@ export function normalize(np: NowPlaying): NowPlaying | null {
 
   const siteIsYTMusic = copy.site?.toLowerCase().includes('youtube music') ?? false;
   if (!siteIsYTMusic && isNonMusicContent(copy.title)) return null;
+
+  // 1. Extract featuring from title
+  const titleFeat = extractFeaturingFromTitle(copy.title);
+  if (titleFeat.feat) {
+    const cleanFeat = cleanFeatArtists(titleFeat.feat);
+    if (cleanFeat) {
+      copy.artist = copy.artist ? `${copy.artist}, ${cleanFeat}` : cleanFeat;
+    }
+    copy.title = titleFeat.title;
+  }
+
+  // 2. Extract featuring from artist
+  const artistFeat = extractFeaturingFromArtist(copy.artist);
+  if (artistFeat.feat) {
+    const cleanFeat = cleanFeatArtists(artistFeat.feat);
+    const mainArtClean = cleanArtist(artistFeat.artist);
+    if (cleanFeat) {
+      copy.artist = mainArtClean ? `${mainArtClean}, ${cleanFeat}` : cleanFeat;
+    } else {
+      copy.artist = mainArtClean;
+    }
+  }
+
+  // 3. Extract album from title if not already present
+  if (!copy.album) {
+    const titleAlbum = extractAlbumFromTitle(copy.title);
+    if (titleAlbum.album) {
+      copy.title = titleAlbum.title;
+      copy.album = titleAlbum.album;
+    }
+  }
 
   copy.title = cleanTitle(copy.title);
   copy.artist = cleanArtist(copy.artist);
@@ -150,12 +206,111 @@ function isNonMusicContent(title: string): boolean {
   return false;
 }
 
+function extractFeaturingFromTitle(title: string): { title: string; feat: string | null } {
+  const featRegex = /\s*[\(\[]?\s*\b(ft\.?|feat\.?|featuring)\s+([^()\[\]\-\–\—\|~:]+)\s*[\)\]]?/i;
+  const match = title.match(featRegex);
+  if (match) {
+    const featArtist = match[2].trim();
+    const cleanTitlePart = title.replace(featRegex, '').trim();
+    return {
+      title: cleanTitlePart,
+      feat: featArtist
+    };
+  }
+  return {
+    title: title,
+    feat: null
+  };
+}
+
+function cleanFeatArtists(featStr: string): string {
+  const cleanFeatStr = cleanTitle(featStr);
+  const cleaned = cleanFeatStr
+    .replace(/(?:\b(and|x)\b|\s*&\s*)/gi, ', ')
+    .replace(/\s*\|\s*/g, ', ');
+  const parts = cleaned.split(',').map(p => cleanArtist(p)).filter(Boolean);
+  return parts.join(', ');
+}
+
+function extractAlbumFromTitle(title: string): { title: string; album: string | null } {
+  // 1. Matches trailing parenthesized text at the end of the title
+  const albumRegex = /\s*[\(\[]([^()\[\]]+)[\)\]]\s*$/;
+  const match = title.match(albumRegex);
+  if (match) {
+    const potentialAlbum = match[1].trim();
+    // Verify it is not a year or other common title strip patterns (e.g. slowed, clean, sped up, live, acoustic)
+    const lower = potentialAlbum.toLowerCase();
+    const commonNonAlbumPatterns = [
+      'slowed', 'reverb', 'sped up', 'nightcore', 'clean', 'explicit', 'live', 'acoustic',
+      'hq', 'hd', 'remix', 'cover', 'instrumental', 'visualizer', 'audio', 'video'
+    ];
+    const isNoise = /^\d{4}$/.test(lower) || commonNonAlbumPatterns.some(pat => lower.includes(pat));
+    if (!isNoise) {
+      const cleanTitlePart = title.replace(albumRegex, '').trim();
+      const cleanedAlbum = potentialAlbum
+        .replace(/^[\-\–\—\|~:\s,by]+/, '')
+        .replace(/[\-\–\—\|~:\s,\.]+$/, '')
+        .trim();
+      return {
+        title: cleanTitlePart,
+        album: cleanedAlbum
+      };
+    }
+  }
+
+  // 2. Matches trailing text separated by a separator (excluding pipe | to prevent co-artist extraction as album)
+  const separatorRegex = /\s+([\-\–\—~:])\s+([^–—|~:\-]+)$/;
+  const sepMatch = title.match(separatorRegex);
+  if (sepMatch) {
+    const potentialAlbum = sepMatch[2].trim();
+    const lower = potentialAlbum.toLowerCase();
+    const commonNonAlbumPatterns = [
+      'slowed', 'reverb', 'sped up', 'nightcore', 'clean', 'explicit', 'live', 'acoustic',
+      'hq', 'hd', 'remix', 'cover', 'instrumental', 'visualizer', 'audio', 'video'
+    ];
+    const isNoise = /^\d{4}$/.test(lower) || commonNonAlbumPatterns.some(pat => lower.includes(pat));
+    if (!isNoise) {
+      const cleanTitlePart = title.substring(0, sepMatch.index).trim();
+      const cleanedAlbum = potentialAlbum
+        .replace(/^[\-\–\—\|~:\s,by]+/, '')
+        .replace(/[\-\–\—\|~:\s,\.]+$/, '')
+        .trim();
+      return {
+        title: cleanTitlePart,
+        album: cleanedAlbum
+      };
+    }
+  }
+
+  return {
+    title,
+    album: null
+  };
+}
+
+function extractFeaturingFromArtist(artist: string): { artist: string; feat: string | null } {
+  const ftMatch = artist.match(/\s+(ft\.?|feat\.?|featuring)\s+(.*)$/i);
+  if (ftMatch) {
+    const mainArtist = artist.substring(0, ftMatch.index).trim();
+    const featArtist = ftMatch[2].trim();
+    return {
+      artist: mainArtist,
+      feat: featArtist
+    };
+  }
+  return {
+    artist,
+    feat: null
+  };
+}
+
 /**
- * Clean a track title by removing video-related suffixes.
+ * Clean a track title by removing video-related suffixes and label noise.
  * Single-pass approach: lowercases once, then scans for all patterns.
  */
 export function cleanTitle(title: string): string {
   let cleaned = title;
+
   let changed = true;
 
   while (changed) {
@@ -163,24 +318,38 @@ export function cleanTitle(title: string): string {
     const lower = cleaned.toLowerCase();
 
     for (let i = 0; i < TITLE_STRIP_PATTERNS.length; i++) {
-      const [pattern, patLen] = TITLE_STRIP_PATTERNS[i];
+      const pattern = TITLE_STRIP_PATTERNS[i];
       const idx = lower.indexOf(pattern);
       if (idx !== -1) {
-        cleaned = cleaned.substring(0, idx) + cleaned.substring(idx + patLen);
+        cleaned = cleaned.substring(0, idx) + cleaned.substring(idx + pattern.length);
         changed = true;
         break;
       }
     }
   }
 
-  // Remove trailing "(prod. XYZ)" or "(prod by XYZ)" patterns
-  const prodLower = cleaned.toLowerCase();
-  const prodIdx = prodLower.indexOf('(prod');
-  if (prodIdx !== -1) {
-    const endIdx = cleaned.indexOf(')', prodIdx);
-    if (endIdx !== -1) {
-      cleaned = cleaned.substring(0, prodIdx) + cleaned.substring(endIdx + 1);
-    }
+  // Remove trailing plain video noise suffixes
+  const trailingNoiseRegex = /\s*[-\–\—\|~:\s\/]*\b(official music video|official video|official audio|lyric video|lyrics video|music video|official visualizer|official visualiser|visualizer|visualiser)\b\s*$/i;
+  cleaned = cleaned.replace(trailingNoiseRegex, '').trim();
+
+  // Remove producer credits (e.g. "prod. by XYZ", "(prod. XYZ)", "| prod. XYZ", etc.)
+  const prodRegex = /\s*[\(\[\|\-\–\—~:\/]?\s*\b(prod\.?|produced\s+by)\b[^()\[\]\-\–\—\|~:]+[\)\]]?/i;
+  cleaned = cleaned.replace(prodRegex, '').trim();
+
+  // Remove record label noise at the end of titles
+  for (const labelPattern of LABEL_NOISE_PATTERNS) {
+    const labelRegex = new RegExp(
+      `\\s*[\\(\\[\\|\\-\\–\\—~:\\/]\\s*${escapeRegExp(labelPattern)}\\b[\\)\\]]?\\s*$`,
+      'i'
+    );
+    cleaned = cleaned.replace(labelRegex, '').trim();
+    
+    // Also check for label in parentheses/brackets anywhere in the title
+    const labelParensRegex = new RegExp(
+      `[\\(\\[]\\s*${escapeRegExp(labelPattern)}\\s*[\\)\\]]`,
+      'gi'
+    );
+    cleaned = cleaned.replace(labelParensRegex, '').trim();
   }
 
   // Remove year patterns like "(2024)" at the end
@@ -192,7 +361,11 @@ export function cleanTitle(title: string): string {
     }
   }
 
-  return cleaned.trim();
+  // Clean up duplicate/consecutive separators
+  cleaned = cleaned.replace(/\s*[\-\–\—\|~:]\s*([\-\–\—\|~:]\s*)+/g, ' - ');
+
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  return cleaned;
 }
 
 /**
@@ -232,5 +405,398 @@ export function cleanArtist(artist: string): string {
     return '';
   }
 
+  // Reject if it looks like a record label
+  if (isLikelyLabel(trimmedLower)) {
+    return '';
+  }
+
   return cleaned.trim();
+}
+
+/**
+ * Clean common noise suffixes and symbols from a YouTube channel name.
+ * Normalizes leet speak and special characters for better matching.
+ */
+export function cleanChannelName(channelName: string): string {
+  if (!channelName) return '';
+  
+  // First normalize leet speak and special characters
+  let cleaned = channelName
+    .replace(/\$/g, 's')
+    .replace(/@/g, 'a')
+    .replace(/0/g, 'o')
+    .replace(/1/g, 'i')
+    .replace(/3/g, 'e')
+    .replace(/7/g, 't')
+    .replace(/9/g, 'g')
+    .replace(/2/g, 'z');
+  
+  const noiseWords = [
+    'music', 'official', 'records', 'vevo', 'topic', 'channel', 'yt', 'tv',
+    'vlog', 'vlogs', 'studio', 'studios', 'media', 'entertainment',
+    'productions', 'films', 'hq', 'hd', 'audio', 'video'
+  ];
+  cleaned = cleaned.toLowerCase();
+  for (const word of noiseWords) {
+    const regex = new RegExp(`\\b${word}\\b`, 'g');
+    cleaned = cleaned.replace(regex, ' ');
+  }
+  // Clean up symbols and extra whitespace
+  cleaned = cleaned.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned;
+}
+
+/**
+ * Extract featuring artist and move it to the song title (formatted).
+ */
+export function extractFeaturing(artistPart: string, titlePart: string): { artist: string; title: string; album?: string } {
+  const ftMatch = artistPart.match(/\s+(ft\.?|feat\.?|featuring)\s+(.*)$/i);
+  if (ftMatch) {
+    const mainArtist = artistPart.substring(0, ftMatch.index).trim();
+    const featArtist = ftMatch[2].trim();
+    
+    // Split by first parenthesis to separate featuring artist from producer/album/extra info
+    const parenIdx = featArtist.search(/[\(\[]/);
+    let actualFeat = featArtist;
+    let albumPart = '';
+    if (parenIdx !== -1) {
+      actualFeat = featArtist.substring(0, parenIdx).trim();
+      const extra = featArtist.substring(parenIdx).trim();
+      const closeIdx = extra.indexOf(extra[0] === '(' ? ')' : ']');
+      if (closeIdx !== -1) {
+        albumPart = extra.substring(closeIdx + 1).trim();
+        albumPart = cleanTitle(albumPart);
+        albumPart = albumPart
+          .replace(/^[\-\–\—\|~:\s,by]+/, '')
+          .replace(/[\-\–\—\|~:\s,\.]+$/, '')
+          .trim();
+      }
+    }
+
+    const cleanMain = cleanArtist(mainArtist);
+    const cleanFeat = cleanFeatArtists(actualFeat);
+    
+    if (cleanMain) {
+      const combinedArtist = cleanFeat ? `${cleanMain}, ${cleanFeat}` : cleanMain;
+      return {
+        artist: combinedArtist,
+        title: cleanTitle(titlePart),
+        album: albumPart || undefined
+      };
+    }
+  }
+  
+  return {
+    artist: cleanFeatArtists(artistPart),
+    title: cleanTitle(titlePart)
+  };
+}
+
+function scoreArtistLikelihood(part: string, cleanedChannel: string, knownArtists: string[]): number {
+  let score = 0;
+  const lower = typeof part === 'string' ? part.toLowerCase() : '';
+
+  // 0. Label penalty — if the part looks like a record label, heavily penalize
+  if (isLikelyLabel(lower)) score -= 30;
+
+  // 1. Collaboration / Artist indicators
+  const artistKeywords = [
+    'ft.', 'feat.', 'featuring', 'prod.', 'prod by', 'produced by',
+    'vocals by', 'vocalist', 'singing by', 'singer'
+  ];
+  for (const kw of artistKeywords) {
+    if (lower.includes(kw)) score += 10;
+  }
+
+  // 2. Title indicators (penalize artist score)
+  const titleKeywords = [
+    'remix', 'cover', 'live', 'acoustic', 'unplugged', 'instrumental',
+    'karaoke', 'lyric', 'lyrics', 'video', 'audio', 'visualizer', 'visualiser',
+    'official', 'theme', 'ost', 'soundtrack', 'mix', 'mashup',
+    'version', 'edit', 'slowed', 'reverb', 'sped up', 'nightcore',
+    'performance', 'session'
+  ];
+  for (const kw of titleKeywords) {
+    if (lower.includes(kw)) score -= 10;
+  }
+
+  // 3. Channel Name similarity
+  if (cleanedChannel) {
+    const cleanChanLower = cleanedChannel.toLowerCase();
+    if (lower.includes(cleanChanLower)) {
+      score += 15;
+    }
+    const chanWords = cleanChanLower.split(/\s+/).filter(w => w.length >= 3);
+    for (const word of chanWords) {
+      if (lower.includes(word)) {
+        score += 5;
+      }
+    }
+  }
+
+  // 4. Known Artists match
+  const artistsList = Array.isArray(knownArtists) ? knownArtists : [];
+  for (const artist of artistsList) {
+    if (typeof artist !== 'string') continue;
+    const artLower = artist.toLowerCase().trim();
+    if (artLower && (lower === artLower || lower.includes(artLower))) {
+      score += 20;
+    }
+  }
+
+  return score;
+}
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildArtistRegex(artistName: string): RegExp {
+  const cleanName = artistName.replace(/\s+/g, ' ').trim();
+  let pattern = '';
+  for (let i = 0; i < cleanName.length; i++) {
+    const char = cleanName[i].toLowerCase();
+    if (char === ' ') {
+      pattern += '[\\s\\-_\\+]*';
+    } else {
+      const escaped = escapeRegExp(char);
+      if (char === 's') {
+        pattern += '[sS\\$]';
+      } else if (char === 'a') {
+        pattern += '[aA@\\u0040]';
+      } else if (char === 'o') {
+        pattern += '[oO0]';
+      } else if (char === 'i') {
+        pattern += '[iI1\\!]';
+      } else if (char === 'e') {
+        pattern += '[eE3]';
+      } else if (char === 't') {
+        pattern += '[tT7]';
+      } else if (char === 'g') {
+        pattern += '[gG9]';
+      } else if (char === 'z') {
+        pattern += '[zZ2]';
+      } else {
+        pattern += `[${char.toLowerCase()}${char.toUpperCase()}]`;
+      }
+    }
+  }
+  return new RegExp(`(?:^|[^a-zA-Z0-9])(${pattern})(?:$|[^a-zA-Z0-9])`);
+}
+
+/**
+ * Parse a YouTube video title and channel name into an artist and song title.
+ */
+export function parseYoutubeVideo(
+  videoTitle: string,
+  channelName: string,
+  knownArtists: string[] = [],
+  ytMusicTagMetadata?: { title?: string; artist?: string; album?: string; label?: string },
+  ytDescriptionMetadata?: { title?: string; artist?: string; album?: string; label?: string }
+): { title: string; artist: string; album?: string; label?: string } {
+  try {
+    const rawTitle = typeof videoTitle === 'string' ? videoTitle.trim() : '';
+    const rawChannel = typeof channelName === 'string' ? channelName.trim() : '';
+    const cleanedChannel = cleanChannelName(rawChannel);
+
+    // ---- Precedence 1: YouTube Music Tag ----
+    if (ytMusicTagMetadata && (ytMusicTagMetadata.title || ytMusicTagMetadata.artist)) {
+      const tagTitle = ytMusicTagMetadata.title ? cleanTitle(ytMusicTagMetadata.title) : cleanTitle(rawTitle);
+      const tagArtist = ytMusicTagMetadata.artist ? cleanFeatArtists(ytMusicTagMetadata.artist) : cleanArtist(rawChannel);
+      const tagAlbum = ytMusicTagMetadata.album ? cleanTitle(ytMusicTagMetadata.album) : undefined;
+      const tagLabel = ytMusicTagMetadata.label ? cleanTitle(ytMusicTagMetadata.label) : undefined;
+      if (tagTitle) {
+        return {
+          title: tagTitle,
+          artist: tagArtist || cleanArtist(rawChannel),
+          album: tagAlbum || undefined,
+          label: tagLabel
+        };
+      }
+    }
+
+    // ---- Precedence 2: Structured Description Metadata ----
+    if (ytDescriptionMetadata && (ytDescriptionMetadata.title || ytDescriptionMetadata.artist)) {
+      const descTitle = ytDescriptionMetadata.title ? cleanTitle(ytDescriptionMetadata.title) : cleanTitle(rawTitle);
+      const descArtist = ytDescriptionMetadata.artist ? cleanFeatArtists(ytDescriptionMetadata.artist) : cleanArtist(rawChannel);
+      const descAlbum = ytDescriptionMetadata.album ? cleanTitle(ytDescriptionMetadata.album) : undefined;
+      const descLabel = ytDescriptionMetadata.label ? cleanTitle(ytDescriptionMetadata.label) : undefined;
+      if (descTitle) {
+        return {
+          title: descTitle,
+          artist: descArtist || cleanArtist(rawChannel),
+          album: descAlbum || undefined,
+          label: descLabel
+        };
+      }
+    }
+
+    // ---- Precedence 3: Fallback Title/Channel parsing ----
+    
+    // Step 1: Split by pipe (|) to separate main title from label/metadata noise
+    // YouTube titles often follow "Artist - Song | Label" pattern
+    const pipeParts = rawTitle.split(/\s*\|\s*/).map(p => p.trim()).filter(Boolean);
+    let mainTitle = pipeParts[0];
+    // Additional pipe-separated segments are usually labels/companies, not part of the song
+    // We'll use them as hints but not include in the main title
+    
+    let workingTitle = mainTitle;
+    let rawArtistPart = '';
+    let titlePart = '';
+    
+    const artistsList = Array.isArray(knownArtists)
+      ? knownArtists.filter((x): x is string => typeof x === 'string')
+      : [];
+    
+    // Step 2: Split main title by dash separators
+    const titleParts = mainTitle.split(/\s+[\-\–\—]\s+/).map(p => p.trim()).filter(Boolean);
+    
+    // Step 3: Check if first or last dash-separated part matches channel name — if so, it's the artist
+    if (titleParts.length >= 2 && cleanedChannel) {
+      const firstCleaned = cleanChannelName(titleParts[0]);
+      const lastCleaned = cleanChannelName(titleParts[titleParts.length - 1]);
+
+      if (firstCleaned === cleanedChannel && firstCleaned.length >= 2) {
+        rawArtistPart = titleParts.shift()!;
+        workingTitle = titleParts.join(' - ');
+        titlePart = workingTitle;
+      } else if (lastCleaned === cleanedChannel && lastCleaned.length >= 2) {
+        rawArtistPart = titleParts.pop()!;
+        workingTitle = titleParts.join(' - ');
+        titlePart = workingTitle;
+      }
+    }
+    
+    // Step 4: Check if any pipe-separated segment matches channel name
+    // Skip if the segment is likely a record label (not an artist)
+    if (!rawArtistPart && cleanedChannel && pipeParts.length > 1) {
+      for (let i = 1; i < pipeParts.length; i++) {
+        const pipeCleaned = cleanChannelName(pipeParts[i]);
+        if (pipeCleaned === cleanedChannel && pipeCleaned.length >= 2) {
+          // Check if this is a label, not an artist
+          if (!isLikelyLabel(pipeParts[i]) && !isLikelyLabel(pipeCleaned)) {
+            rawArtistPart = pipeParts[i];
+            titlePart = mainTitle;
+          }
+          break;
+        }
+      }
+    }
+
+    // Step 5: Try fuzzy matching against channel name and known artists
+    // This handles leet speak (KR$NA vs KRSNA) and case variations
+    if (!rawArtistPart) {
+      let searchTargets = [...artistsList];
+      // Only use channel as artist reference if it's not likely a label
+      if (cleanedChannel && cleanedChannel.length >= 3 && !isLikelyLabel(cleanedChannel)) {
+        searchTargets.push(cleanedChannel);
+      }
+
+      // Sort targets by length descending to match the longest name first
+      searchTargets = searchTargets
+        .map(t => t.trim())
+        .filter(t => t.length >= 2)
+        .sort((a, b) => b.length - a.length);
+
+      // Search in the full raw title (including pipe-separated parts)
+      const searchInTitle = rawTitle;
+
+      for (const target of searchTargets) {
+        const regex = buildArtistRegex(target);
+        const match = searchInTitle.match(regex);
+
+        if (match) {
+          const matchedArtist = match[1];
+          // Skip if the matched text is likely a label
+          if (isLikelyLabel(matchedArtist)) continue;
+          
+          const matchIdx = match.index! + match[0].indexOf(matchedArtist);
+          let artistEndIdx = matchIdx + matchedArtist.length;
+          const remainingText = searchInTitle.substring(artistEndIdx);
+          
+          const isArtistAtStart = matchIdx === 0;
+          const ftRegex = isArtistAtStart
+            ? /^\s*(ft\.?|feat\.?|featuring|x|&)\s+([^–—|~:\-]+)/i
+            : /^\s*(ft\.?|feat\.?|featuring|x|&|\||,)\s+([^–—|~:\-]+)/i;
+          const ftMatch = remainingText.match(ftRegex);
+          if (ftMatch) {
+            artistEndIdx += ftMatch[0].length;
+          }
+
+          rawArtistPart = searchInTitle.substring(matchIdx, artistEndIdx).trim();
+          titlePart = (searchInTitle.substring(0, matchIdx) + ' ' + searchInTitle.substring(artistEndIdx)).trim();
+          
+          titlePart = titlePart
+            .replace(/^[\-\–\—\|~:\s,by]+/, '')
+            .replace(/[\-\–\—\|~:\s,by]+$/, '')
+            .trim();
+          break;
+        }
+      }
+    }
+
+    // Step 6: If no match yet, split by common separators and score
+    if (!rawArtistPart) {
+      const separatorRegex = /\s+([\-\–\—\|~:])\s+/;
+      const match = separatorRegex.exec(workingTitle);
+
+      if (match) {
+        const separatorIndex = match.index;
+        const separatorLength = match[0].length;
+
+        const part1 = workingTitle.substring(0, separatorIndex).trim();
+        const part2 = workingTitle.substring(separatorIndex + separatorLength).trim();
+
+        const score1 = scoreArtistLikelihood(part1, cleanedChannel, artistsList);
+        const score2 = scoreArtistLikelihood(part2, cleanedChannel, artistsList);
+
+        if (score2 > score1) {
+          rawArtistPart = part2;
+          titlePart = part1;
+        } else {
+          rawArtistPart = part1;
+          titlePart = part2;
+        }
+      }
+    }
+
+    let finalResult: { artist: string; title: string; album?: string };
+    if (rawArtistPart) {
+      finalResult = extractFeaturing(rawArtistPart, titlePart);
+    } else {
+      finalResult = {
+        artist: cleanArtist(rawChannel),
+        title: cleanTitle(workingTitle)
+      };
+    }
+
+    // Extract featuring from the remaining title part
+    const titleFeat = extractFeaturingFromTitle(finalResult.title);
+    if (titleFeat.feat) {
+      const cleanFeat = cleanFeatArtists(titleFeat.feat);
+      if (cleanFeat) {
+        finalResult.artist = finalResult.artist ? `${finalResult.artist}, ${cleanFeat}` : cleanFeat;
+      }
+      finalResult.title = cleanTitle(titleFeat.title);
+    }
+
+    // If album is not set, try to extract it from the final title
+    if (!finalResult.album) {
+      const titleAlbum = extractAlbumFromTitle(finalResult.title);
+      if (titleAlbum.album) {
+        finalResult.title = titleAlbum.title;
+        finalResult.album = titleAlbum.album;
+      }
+    }
+
+    finalResult.title = cleanTitle(finalResult.title);
+
+    return finalResult;
+  } catch (err) {
+    console.error('[Tempo] Error parsing YouTube video:', err);
+    return {
+      artist: cleanArtist(channelName),
+      title: cleanTitle(videoTitle)
+    };
+  }
 }

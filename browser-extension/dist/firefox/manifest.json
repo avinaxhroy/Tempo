@@ -4,22 +4,24 @@
   "version": "1.0.0",
   "description": "Track music on YouTube Music, Spotify, SoundCloud & more. Sync your listening history to Tempo app.",
   "icons": {
-    "16": "dist/icons/icon16.png",
-    "32": "dist/icons/icon32.png",
-    "48": "dist/icons/icon48.png",
-    "128": "dist/icons/icon128.png"
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "action": {
-    "default_popup": "dist/popup/popup.html",
+    "default_popup": "popup/popup.html",
     "default_icon": {
-      "16": "dist/icons/icon16.png",
-      "32": "dist/icons/icon32.png"
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
     },
     "default_title": "Tempo Stats"
   },
   "background": {
-    "service_worker": "dist/background/service-worker.js",
-    "type": "module"
+    "service_worker": "background/service-worker.js",
+    "scripts": [
+      "background/service-worker.js"
+    ]
   },
   "permissions": [
     "storage",
@@ -28,9 +30,6 @@
   ],
   "host_permissions": [
     "http://*:8765/*"
-  ],
-  "optional_host_permissions": [
-    "http://*:*/*"
   ],
   "content_scripts": [
     {
@@ -68,7 +67,7 @@
         "*://qobuz.com/*"
       ],
       "js": [
-        "dist/content/media-probe.js"
+        "content/media-probe.js"
       ],
       "run_at": "document_idle"
     },
@@ -81,7 +80,7 @@
         "*://youtu.be/*"
       ],
       "js": [
-        "dist/content/yt-main-world-helper.js"
+        "content/yt-main-world-helper.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
@@ -90,5 +89,18 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   },
-  "minimum_chrome_version": "110"
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "tempo-stats@extension",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
+    }
+  }
 }

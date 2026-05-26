@@ -504,9 +504,20 @@ export async function getSettings(): Promise<Settings> {
   return new Promise<Settings>((resolve) => {
     chrome.storage.local.get('settings', (result) => {
       const storageResult = result as SettingsStorageResult;
-      _settingsCache = storageResult.settings ?? { ...DEFAULT_SETTINGS };
+      const raw = (storageResult.settings ?? {}) as any;
+      const sanitizeArray = (val: any): string[] => {
+        if (!Array.isArray(val)) return [];
+        return val.filter((item): item is string => typeof item === 'string');
+      };
+      _settingsCache = {
+        ...DEFAULT_SETTINGS,
+        ...raw,
+        knownArtists: sanitizeArray(raw.knownArtists),
+        youtubeChannels: sanitizeArray(raw.youtubeChannels),
+        blockedYoutubeChannels: sanitizeArray(raw.blockedYoutubeChannels),
+      };
       _settingsCacheTime = Date.now();
-      resolve(_settingsCache);
+      resolve(_settingsCache as Settings);
     });
   });
 }

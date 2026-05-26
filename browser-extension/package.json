@@ -5,7 +5,12 @@
   "private": true,
   "scripts": {
     "build": "node build.mjs",
+    "build:chrome": "node build.mjs --target=chrome",
+    "build:firefox": "node build.mjs --target=firefox",
+    "build:all": "./build-all.sh",
     "watch": "node build.mjs --watch",
+    "watch:chrome": "node build.mjs --target=chrome --watch",
+    "watch:firefox": "node build.mjs --target=firefox --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit"
   },

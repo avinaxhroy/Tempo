@@ -8,6 +8,9 @@ import coil3.ImageLoader
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import me.avinas.tempo.data.repository.StatsRepository
+import me.avinas.tempo.data.repository.PreferencesRepository
+import me.avinas.tempo.data.spotify.SpotifyHistoryReconstructionService
+import me.avinas.tempo.data.lastfm.LastFmImportService
 import me.avinas.tempo.data.stats.TimeRange
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -17,6 +20,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -27,6 +32,9 @@ class SpotlightViewModel @Inject constructor(
     private val cardGenerator: InsightCardGenerator,
     private val statsRepository: StatsRepository,
     private val imageLoader: ImageLoader,
+    private val preferencesRepository: PreferencesRepository,
+    private val spotifyReconstructionService: SpotifyHistoryReconstructionService,
+    private val lastFmImportService: LastFmImportService,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -35,10 +43,43 @@ class SpotlightViewModel @Inject constructor(
     private var cardsJob: Job? = null
     private var storyJob: Job? = null
 
+    private val isSyncActive = combine(
+        spotifyReconstructionService.isReconstructing,
+        lastFmImportService.progress,
+        preferencesRepository.preferences()
+    ) { spotifyReconstructing, lastFmProgress, prefs ->
+        val spotifyLinked = prefs?.spotifyLinked ?: false
+        val spotifyImportCompleted = prefs?.lastSpotifyImportTimestamp != null
+        val spotifyInitialImportPending = spotifyLinked && !spotifyImportCompleted
+        
+        val lastFmImportActive = lastFmProgress !is LastFmImportService.ImportProgress.Idle &&
+                                 lastFmProgress !is LastFmImportService.ImportProgress.Completed &&
+                                 lastFmProgress !is LastFmImportService.ImportProgress.Failed
+                                 
+        spotifyReconstructing || lastFmImportActive || spotifyInitialImportPending
+    }.distinctUntilChanged()
+
     init {
         checkIfStoryLocked(TimeRange.THIS_MONTH)
         loadCards(TimeRange.THIS_MONTH)
         observeDataChanges()
+        observeSyncStatus()
+    }
+
+    private fun observeSyncStatus() {
+        viewModelScope.launch {
+            isSyncActive.collect { active ->
+                if (active) {
+                    if (_uiState.value.cards.isEmpty()) {
+                        _uiState.value = _uiState.value.copy(isLoading = true)
+                    }
+                } else {
+                    val range = _uiState.value.selectedTimeRange
+                    val hasCards = _uiState.value.cards.isNotEmpty()
+                    loadCards(range, silent = hasCards)
+                }
+            }
+        }
     }
 
     
@@ -98,15 +139,20 @@ class SpotlightViewModel @Inject constructor(
                 // Pre-warm image cache in background (non-blocking)
                 prefetchCardImages(cards)
                 
+                val syncActive = isSyncActive.first()
                 _uiState.value = _uiState.value.copy(
                     cards = cards,
-                    isLoading = false
+                    isLoading = syncActive && cards.isEmpty()
                 )
                 
                 // Story loads in background - doesn't block card display
                 loadStory(timeRange)
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isLoading = false, storyLoading = false)
+                val syncActive = isSyncActive.first()
+                _uiState.value = _uiState.value.copy(
+                    isLoading = syncActive && _uiState.value.cards.isEmpty(),
+                    storyLoading = false
+                )
             }
         }
     }

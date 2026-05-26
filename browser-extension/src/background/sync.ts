@@ -19,6 +19,7 @@ const MAX_BATCH_SIZE = 50;
 const MAX_PLAYS_PER_BATCH = 100;
 const DISCOVERY_PING_TIMEOUT_MS = 900;
 const SUBNET_SCAN_BATCH_SIZE = 48;
+const SUBNET_RESCAN_COOLDOWN_MS = 30 * 60 * 1000;
 
 const SYNC_ALARM_NAME = 'tempo-stats-auto-sync';
 const RETRY_ALARM_NAME = 'tempo-stats-retry-sync';
@@ -36,6 +37,11 @@ export interface SyncStatus {
 let _isSyncing = false;
 let _lastSyncTime: string | null = null;
 let _lastSyncResult: string | null = null;
+let _lastSubnetScanAt = 0;
+
+export interface SyncOptions {
+  forceDiscovery?: boolean;
+}
 
 export function getSyncStatus(queueCount: number): SyncStatus {
   return {
@@ -132,9 +138,16 @@ function getPrivateIpv4Subnet(ip: string): string | null {
   return isPrivate ? `${parts[0]}.${parts[1]}.${parts[2]}` : null;
 }
 
-async function findPhoneOnStoredSubnet(pairing: PairingInfo): Promise<string | null> {
+async function findPhoneOnStoredSubnet(pairing: PairingInfo, forceDiscovery = false): Promise<string | null> {
   const subnet = getPrivateIpv4Subnet(pairing.phoneIp);
   if (!subnet) return null;
+
+  const now = Date.now();
+  if (!forceDiscovery && now - _lastSubnetScanAt < SUBNET_RESCAN_COOLDOWN_MS) {
+    console.log('[Tempo] Skipping same-subnet phone scan; recent recovery scan already ran');
+    return null;
+  }
+  _lastSubnetScanAt = now;
 
   const candidates: string[] = [];
   for (let i = 1; i <= 254; i++) {
@@ -226,7 +239,7 @@ async function pingPhoneViaMdns(port: number, authToken?: string): Promise<strin
   }
 }
 
-async function resolvePhoneAddress(pairing: PairingInfo): Promise<{ ip: string; port: number } | null> {
+async function resolvePhoneAddress(pairing: PairingInfo, options: SyncOptions = {}): Promise<{ ip: string; port: number } | null> {
   // Strategy 1: Stored IP (or hostname) — fastest path, works when IP is stable
   if (pairing.phoneIp) {
     const reachable = await pingPhone(pairing.phoneIp, pairing.phonePort, pairing.authToken);
@@ -249,7 +262,7 @@ async function resolvePhoneAddress(pairing: PairingInfo): Promise<{ ip: string; 
 
   // Strategy 3: Same-subnet repair — handles the common DHCP case where the
   // phone IP changed but both devices are still on the same WiFi.
-  const sameSubnetIp = await findPhoneOnStoredSubnet(pairing);
+  const sameSubnetIp = await findPhoneOnStoredSubnet(pairing, options.forceDiscovery === true);
   if (sameSubnetIp) {
     console.log(`[Tempo] Found phone at new same-subnet address ${sameSubnetIp}`);
     await storage.savePairing({ ...pairing, phoneIp: sameSubnetIp });
@@ -279,7 +292,7 @@ async function resolvePhoneAddress(pairing: PairingInfo): Promise<{ ip: string; 
  * Also retries previously failed plays.
  * Returns the number of plays synced, or throws on error.
  */
-export async function syncToPhone(): Promise<number> {
+export async function syncToPhone(options: SyncOptions = {}): Promise<number> {
   if (_isSyncing) {
     console.log('[Tempo] Sync already in progress, skipping');
     return 0;
@@ -313,7 +326,7 @@ export async function syncToPhone(): Promise<number> {
     }
 
     // 4. Resolve phone address
-    const address = await resolvePhoneAddress(pairing);
+    const address = await resolvePhoneAddress(pairing, options);
     if (!address) {
       throw new Error(`Cannot reach phone at ${pairing.phoneIp}:${pairing.phonePort}`);
     }

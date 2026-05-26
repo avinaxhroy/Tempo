@@ -5,11 +5,11 @@
 // popup messages. Persists state to survive service worker hibernation.
 // ============================================================================
 
-import type { RawMediaState, NowPlaying, Play } from '../shared/types';
+import type { RawMediaState, NowPlaying, Play, Settings, TabTrackState, YoutubeChannelSuggestion } from '../shared/types';
 import { MessageType, TrackEventType, DEFAULT_SETTINGS } from '../shared/types';
 import { PlaybackTracker } from './tracker';
-import { shouldTrack, extractSite, getSourceApp } from './site-detect';
-import { normalize, cleanTitle, cleanArtist } from './normalize';
+import { shouldTrack, extractSite, getSourceApp, isPlainYouTube } from './site-detect';
+import { normalize, cleanTitle, cleanArtist, parseYoutubeVideo } from './normalize';
 import * as storage from './storage';
 import { syncToPhone, getSyncStatus, initAutoSync, SYNC_ALARM_NAME, RETRY_ALARM_NAME, removeHostPermission } from './sync';
 import { signRequest, validatePingResponse } from '../shared/security';
@@ -20,6 +20,7 @@ const tracker = new PlaybackTracker();
 
 // Per-tab now-playing snapshots for popup display
 const tabNowPlaying = new Map<number, NowPlaying>();
+const tabYoutubeSuggestions = new Map<number, YoutubeChannelSuggestion>();
 
 // Dedup: recent play keys (title|artist → timestamp_utc)
 const recentPlayKeys = new Map<string, number>();
@@ -27,6 +28,13 @@ const DEDUP_WINDOW_MS = 60_000;
 
 // Cached tracking-enabled flag — avoids reading chrome.storage on every poll
 let _trackingEnabled = true;
+
+// Cached policy settings for the hot media-update path. The service worker may
+// be woken for every position tick, so avoid a storage read unless settings
+// actually change.
+let _settings: Settings = { ...DEFAULT_SETTINGS };
+let _settingsLoaded = false;
+let _settingsLoadPromise: Promise<void> | null = null;
 
 // Badge debounce timer
 let _badgeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -37,6 +45,7 @@ const VALID_MESSAGE_TYPES = new Set<string>([
   MessageType.MediaStateUpdate,
   MessageType.MediaStopped,
   MessageType.GetNowPlaying,
+  MessageType.GetYoutubeChannelSuggestion,
   MessageType.GetQueueCount,
   MessageType.GetQueueItems,
   MessageType.SyncNow,
@@ -46,6 +55,8 @@ const VALID_MESSAGE_TYPES = new Set<string>([
   MessageType.RemovePairing,
   MessageType.GetSettings,
   MessageType.SetSettings,
+  MessageType.AddYoutubeChannel,
+  MessageType.BlockYoutubeChannel,
   MessageType.GetStats,
   MessageType.ClearQueue,
   MessageType.DeletePlay,
@@ -74,11 +85,8 @@ async function initServiceWorker() {
     console.warn('[Tempo] Could not restore tracker state:', err);
   }
 
-  // Cache the tracking-enabled flag
-  try {
-    const settings = await storage.getSettings();
-    _trackingEnabled = settings.trackingEnabled;
-  } catch { /* Use default */ }
+  // Cache settings used by the hot media-update path.
+  await ensureSettingsLoaded();
 
   // Set up auto-sync alarm
   await initAutoSync();
@@ -101,12 +109,33 @@ async function initServiceWorker() {
   } catch { /* Non-critical */ }
 }
 
+async function ensureSettingsLoaded(): Promise<void> {
+  if (_settingsLoaded) return;
+  if (_settingsLoadPromise) return _settingsLoadPromise;
+
+  _settingsLoadPromise = storage.getSettings().then(settings => {
+    _settings = settings;
+    _trackingEnabled = settings.trackingEnabled;
+    _settingsLoaded = true;
+  }).catch(() => {
+    _settings = { ...DEFAULT_SETTINGS };
+    _trackingEnabled = _settings.trackingEnabled;
+    _settingsLoaded = true;
+  }).finally(() => {
+    _settingsLoadPromise = null;
+  });
+
+  return _settingsLoadPromise;
+}
+
 // ---- First Install / Update ------------------------------------------------
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') {
     console.log('[Tempo] First install — setting defaults');
     await storage.saveSettings({ ...DEFAULT_SETTINGS });
+    _settings = { ...DEFAULT_SETTINGS };
+    _settingsLoaded = true;
     _trackingEnabled = true;
 
     try {
@@ -118,9 +147,29 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   } else if (details.reason === 'update') {
     console.log(`[Tempo] Updated from ${details.previousVersion}`);
     const existing = await storage.getSettings();
-    await storage.saveSettings({ ...DEFAULT_SETTINGS, ...existing });
-    _trackingEnabled = existing.trackingEnabled ?? true;
+    _settings = { ...DEFAULT_SETTINGS, ...existing };
+    await storage.saveSettings(_settings);
+    _trackingEnabled = _settings.trackingEnabled;
+    _settingsLoaded = true;
   }
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local' || !changes.settings?.newValue) return;
+  const raw = changes.settings.newValue as any;
+  const sanitizeArray = (val: any): string[] => {
+    if (!Array.isArray(val)) return [];
+    return val.filter((item): item is string => typeof item === 'string');
+  };
+  _settings = {
+    ...DEFAULT_SETTINGS,
+    ...raw,
+    knownArtists: sanitizeArray(raw.knownArtists),
+    youtubeChannels: sanitizeArray(raw.youtubeChannels),
+    blockedYoutubeChannels: sanitizeArray(raw.blockedYoutubeChannels),
+  };
+  _trackingEnabled = _settings.trackingEnabled;
+  _settingsLoaded = true;
 });
 
 // ---- Message Handling ------------------------------------------------------
@@ -182,6 +231,20 @@ function validateMessage(message: any): { valid: boolean; error?: string } {
         if (typeof c !== 'string' || c.length > 100) return { valid: false, error: 'Invalid channel name' };
       }
     }
+    if (s.blockedYoutubeChannels !== undefined) {
+      if (!Array.isArray(s.blockedYoutubeChannels)) return { valid: false, error: 'Invalid blocked YouTube channels' };
+      if (s.blockedYoutubeChannels.length > 200) return { valid: false, error: 'Too many blocked channels' };
+      for (const c of s.blockedYoutubeChannels) {
+        if (typeof c !== 'string' || c.length > 100) return { valid: false, error: 'Invalid blocked channel name' };
+      }
+    }
+  }
+
+  if (message.type === MessageType.AddYoutubeChannel || message.type === MessageType.BlockYoutubeChannel) {
+    const channel = message.channel;
+    if (typeof channel !== 'string') return { valid: false, error: 'Invalid channel name' };
+    const cleaned = channel.replace(/\s+/g, ' ').trim();
+    if (!cleaned || cleaned.length > 100) return { valid: false, error: 'Invalid channel name' };
   }
 
   return { valid: true };
@@ -207,6 +270,9 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       }
       return { nowPlaying: null };
     }
+
+    case MessageType.GetYoutubeChannelSuggestion:
+      return { suggestion: getBestYoutubeSuggestion() };
 
     case MessageType.GetNowPlayingForTab: {
       const tabId = message.tabId;
@@ -259,11 +325,85 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
     case MessageType.GetSettings:
       return { settings: await storage.getSettings() };
 
-    case MessageType.SetSettings:
-      await storage.saveSettings(message.settings);
-      _trackingEnabled = message.settings.trackingEnabled ?? _trackingEnabled;
+    case MessageType.SetSettings: {
+      const raw = (message.settings ?? {}) as any;
+      const sanitizeArray = (val: any): string[] => {
+        if (!Array.isArray(val)) return [];
+        return val.filter((item): item is string => typeof item === 'string');
+      };
+      _settings = {
+        ...DEFAULT_SETTINGS,
+        ...raw,
+        knownArtists: sanitizeArray(raw.knownArtists),
+        youtubeChannels: sanitizeArray(raw.youtubeChannels),
+        blockedYoutubeChannels: sanitizeArray(raw.blockedYoutubeChannels),
+      };
+      await storage.saveSettings(_settings);
+      _trackingEnabled = _settings.trackingEnabled;
+      _settingsLoaded = true;
       await initAutoSync();
       return { ok: true };
+    }
+
+    case MessageType.AddYoutubeChannel: {
+      await ensureSettingsLoaded();
+      const channel = String(message.channel ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
+      if (!channel) return { ok: false, error: 'Invalid channel name' };
+
+      const exists = _settings.youtubeChannels.some(
+        c => c.toLowerCase().trim() === channel.toLowerCase()
+      );
+      if (!exists) {
+        if (_settings.youtubeChannels.length >= 200) {
+          return { ok: false, error: 'Too many channels' };
+        }
+        _settings = {
+          ..._settings,
+          youtubeChannels: [..._settings.youtubeChannels, channel],
+          blockedYoutubeChannels: _settings.blockedYoutubeChannels.filter(
+            c => c.toLowerCase().trim() !== channel.toLowerCase()
+          ),
+        };
+        _trackingEnabled = _settings.trackingEnabled;
+        await storage.saveSettings(_settings);
+      }
+      for (const [tabId, suggestion] of tabYoutubeSuggestions) {
+        if (suggestion.channel.toLowerCase().trim() === channel.toLowerCase()) {
+          tabYoutubeSuggestions.delete(tabId);
+        }
+      }
+      return { ok: true, channel };
+    }
+
+    case MessageType.BlockYoutubeChannel: {
+      await ensureSettingsLoaded();
+      const channel = String(message.channel ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
+      if (!channel) return { ok: false, error: 'Invalid channel name' };
+
+      const exists = _settings.blockedYoutubeChannels.some(
+        c => c.toLowerCase().trim() === channel.toLowerCase()
+      );
+      if (!exists) {
+        if (_settings.blockedYoutubeChannels.length >= 200) {
+          return { ok: false, error: 'Too many blocked channels' };
+        }
+        _settings = {
+          ..._settings,
+          youtubeChannels: _settings.youtubeChannels.filter(
+            c => c.toLowerCase().trim() !== channel.toLowerCase()
+          ),
+          blockedYoutubeChannels: [..._settings.blockedYoutubeChannels, channel],
+        };
+        _trackingEnabled = _settings.trackingEnabled;
+        await storage.saveSettings(_settings);
+      }
+      for (const [tabId, suggestion] of tabYoutubeSuggestions) {
+        if (suggestion.channel.toLowerCase().trim() === channel.toLowerCase()) {
+          tabYoutubeSuggestions.delete(tabId);
+        }
+      }
+      return { ok: true, channel };
+    }
 
     case MessageType.GetStats:
       return { stats: await storage.getStats() };
@@ -344,6 +484,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
 
 async function handleMediaUpdate(data: any, sender: chrome.runtime.MessageSender): Promise<any> {
   const tabId = sender.tab?.id ?? -1;
+  await ensureSettingsLoaded();
 
   // Fast path: check cached tracking flag before hitting storage
   if (!_trackingEnabled) {
@@ -363,14 +504,67 @@ async function handleMediaUpdate(data: any, sender: chrome.runtime.MessageSender
     playbackRate: typeof data?.playbackRate === 'number' ? data.playbackRate : 1.0,
     tabId,
     timestamp: typeof data?.timestamp === 'number' ? data.timestamp : Date.now(),
+    ytDescriptionMetadata: data?.ytDescriptionMetadata,
+    ytMusicTagMetadata: data?.ytMusicTagMetadata,
   };
 
-  // Load full settings only when we need youtubeChannels/knownArtists
-  const settings = await storage.getSettings();
+  if (isPlainYouTube(raw.url)) {
+    // Cache the original channel name for authorization checks and suggestions
+    (raw as any).channelName = raw.artist;
 
-  if (!shouldTrack(raw, settings.youtubeChannels, settings.knownArtists)) {
+    try {
+      const parsed = parseYoutubeVideo(
+        raw.title,
+        raw.artist,
+        _settings.knownArtists,
+        raw.ytMusicTagMetadata,
+        raw.ytDescriptionMetadata
+      );
+      raw.title = parsed.title;
+      raw.artist = parsed.artist;
+      if (parsed.album) {
+        raw.album = parsed.album;
+      }
+    } catch (e) {
+      console.warn('[Tempo] Error parsing YouTube video title/artist:', e);
+      // Fallback: use raw/original metadata as-is so tracking is not blocked
+    }
+  }
+
+  if (!shouldTrack(raw, _settings.youtubeChannels, _settings.knownArtists, _settings.blockedYoutubeChannels)) {
+    if (isPlainYouTube(raw.url) && raw.isPlaying) {
+      const channel = (raw as any).channelName || raw.artist;
+      if (channel && typeof channel === 'string' && channel.trim()) {
+        const cleanChan = channel.trim();
+        const blockedChannels = Array.isArray(_settings.blockedYoutubeChannels)
+          ? _settings.blockedYoutubeChannels.filter((x): x is string => typeof x === 'string')
+          : [];
+        const isBlockedChannel = blockedChannels.some(
+          c => c.toLowerCase().trim() === cleanChan.toLowerCase().trim()
+        );
+        if (isBlockedChannel) {
+          tabYoutubeSuggestions.delete(tabId);
+          return { tracked: false, reason: 'youtube_channel_blocked' };
+        }
+        tabYoutubeSuggestions.set(tabId, {
+          channel: cleanChan,
+          title: raw.title.trim(),
+          url: raw.url,
+          tabId,
+          timestamp: Date.now(),
+        });
+        return {
+          tracked: false,
+          reason: 'youtube_channel_not_allowed',
+          channel: cleanChan,
+          title: raw.title.trim(),
+        };
+      }
+    }
     return { tracked: false, reason: 'site_blocked' };
   }
+
+  tabYoutubeSuggestions.delete(tabId);
 
   const site = extractSite(raw.url);
   const event = tracker.process(raw, site);
@@ -432,6 +626,7 @@ async function handleMediaStopped(sender: chrome.runtime.MessageSender): Promise
   }
 
   tabNowPlaying.delete(tabId);
+  tabYoutubeSuggestions.delete(tabId);
   persistTrackerState();
 
   return { ok: true };
@@ -449,7 +644,7 @@ async function handleManualSync(): Promise<{ ok: boolean; synced?: number; error
       return { ok: false, error: 'Pair with the Tempo app first' };
     }
 
-    const synced = await syncToPhone();
+    const synced = await syncToPhone({ forceDiscovery: true });
     scheduleBadgeUpdate();
     return { ok: true, synced };
   } catch (error) {
@@ -458,6 +653,16 @@ async function handleManualSync(): Promise<{ ok: boolean; synced?: number; error
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+function getBestYoutubeSuggestion(): YoutubeChannelSuggestion | null {
+  let best: YoutubeChannelSuggestion | null = null;
+  for (const suggestion of tabYoutubeSuggestions.values()) {
+    if (!best || suggestion.timestamp > best.timestamp) {
+      best = suggestion;
+    }
+  }
+  return best;
 }
 
 // ---- Queue a play ----------------------------------------------------------
@@ -533,16 +738,41 @@ async function removePreviousPairingPermission(nextPairing: { phoneIp?: string; 
 // ---- Persist tracker state (debounced) ------------------------------------
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let lastPersistSignature = '';
+let lastPersistAt = 0;
+const TRACKER_PERSIST_DEBOUNCE_MS = 2_000;
+const TRACKER_PERSIST_MAX_DELAY_MS = 8_000;
+
+function buildPersistSignature(states: TabTrackState[]): string {
+  return states.map(state => [
+    state.tabId,
+    state.trackKey,
+    Math.floor(state.accumulatedListenMs / 5_000),
+    Math.floor(state.lastPositionMs / 5_000),
+    state.wasPlaying ? 1 : 0,
+    state.isMuted ? 1 : 0,
+    state.eligible ? 1 : 0,
+    state.pauseCount,
+    state.seekCount,
+    state.replayCount,
+  ].join(':')).join('|');
+}
 
 function persistTrackerState(): void {
   if (persistTimer) return; // Already scheduled — coalesce writes
   persistTimer = setTimeout(() => {
     persistTimer = null;
     const states = tracker.serializeAll();
+    const signature = buildPersistSignature(states);
+    if (signature === lastPersistSignature && (Date.now() - lastPersistAt) < TRACKER_PERSIST_MAX_DELAY_MS) {
+      return;
+    }
+    lastPersistSignature = signature;
+    lastPersistAt = Date.now();
     storage.saveSessionState(states).catch(err => {
       console.warn('[Tempo] Failed to persist tracker state:', err);
     });
-  }, 2000);
+  }, TRACKER_PERSIST_DEBOUNCE_MS);
 }
 
 // ---- Clean up dedup map ----------------------------------------------------
@@ -609,6 +839,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     }
   }
   tabNowPlaying.delete(tabId);
+  tabYoutubeSuggestions.delete(tabId);
   persistTrackerState();
 });
 

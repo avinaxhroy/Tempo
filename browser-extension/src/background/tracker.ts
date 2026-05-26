@@ -42,10 +42,16 @@ const WALL_CLOCK_DURATION_MULTIPLIER = 1.1;
 
 /**
  * Minimum completion fraction to qualify for logging (when duration is known).
- * Tracks listened to less than this fraction are considered skipped and not logged.
- * Matches Android's SKIP_COMPLETION_THRESHOLD (30%).
+ * Tracks listened to less than half are considered skipped too early and not logged.
  */
-const MIN_COMPLETION_FRACTION = 0.30;
+const MIN_COMPLETION_FRACTION = 0.50;
+
+/**
+ * When a user skips between content-script samples, the previous track's final
+ * seconds are otherwise invisible. Credit a small capped tail before finalizing
+ * so "skipped after half" is not lost due to polling granularity.
+ */
+const FINALIZE_WALL_CLOCK_GRACE_MS = 15_000;
 
 // ---- Helper ----------------------------------------------------------------
 
@@ -255,6 +261,7 @@ export class PlaybackTracker {
 
     // --- Track change detection ---
     if (tracker.currentTrackKey !== trackKey) {
+      this.accruePendingListenTime(tracker, now);
       const prevEvent = this.finalizeTab(tracker);
 
       // Start tracking new track
@@ -393,6 +400,7 @@ export class PlaybackTracker {
   /** Called when playback stops in a specific tab or tab closes. */
   onPlaybackStopped(tabId: number): TrackEvent {
     const tracker = this.getTracker(tabId);
+    this.accruePendingListenTime(tracker, Date.now());
     const event = this.finalizeTab(tracker);
     this.trackers.delete(tabId);
     return event;
@@ -403,6 +411,7 @@ export class PlaybackTracker {
     const events: TrackEvent[] = [];
     for (const [tabId, tracker] of this.trackers) {
       if (tracker.currentTrackKey !== null) {
+        this.accruePendingListenTime(tracker, Date.now());
         const event = this.finalizeTab(tracker);
         if (event.type !== TrackEventType.NoAction) {
           events.push(event);
@@ -443,6 +452,22 @@ export class PlaybackTracker {
     }
 
     return increment;
+  }
+
+  private accruePendingListenTime(tracker: TabTracker, now: number): void {
+    if (!tracker.currentTrackKey || !tracker.lastRaw || tracker.logged) return;
+    if (!tracker.wasPlaying || tracker._isMuted) return;
+
+    const rate = tracker.lastRaw.playbackRate;
+    const rateOk = rate < 0 || (rate >= 0.5 && rate <= 2.0);
+    if (!rateOk) return;
+
+    const wallDelta = Math.max(now - tracker.lastPollTime, 0);
+    const pendingMs = Math.min(wallDelta, FINALIZE_WALL_CLOCK_GRACE_MS);
+    if (pendingMs <= 0) return;
+
+    tracker.accumulatedListenMs += this.applyDurationCap(tracker, pendingMs);
+    tracker.lastPollTime = now;
   }
 
   private computeCompletionPercentage(tracker: TabTracker): number {
@@ -533,10 +558,9 @@ export class PlaybackTracker {
       const skipped = this.isTrackSkipped(tracker);
       const completion = this.computeCompletionPercentage(tracker);
 
-      // Qualification: must meet minimum listen time AND minimum completion fraction.
-      // When duration is known, the user must have listened to at least 30% of the track
-      // (matching Android's SKIP_COMPLETION_THRESHOLD). When duration is unknown,
-      // just meeting the 15s minimum is sufficient.
+      // Qualification: must meet minimum listen time AND the half-play threshold.
+      // When duration is known, the user must have listened to at least 50% of
+      // the track. When duration is unknown, the listen-time minimum is used.
       const meetsMinListen = tracker.accumulatedListenMs >= MIN_LISTEN_TIME_MS;
       const meetsMinCompletion = tracker.trackDurationMs <= 0 ||
         (tracker.accumulatedListenMs / tracker.trackDurationMs) >= MIN_COMPLETION_FRACTION;

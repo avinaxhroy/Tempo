@@ -29,6 +29,10 @@ export interface RawMediaState {
   tabId: number;
   /** Timestamp when this sample was taken (Date.now()). */
   timestamp: number;
+  /** Extracted structured YouTube description metadata (optional). */
+  ytDescriptionMetadata?: { title?: string; artist?: string; album?: string; label?: string };
+  /** Extracted official YouTube Music tag metadata (optional). */
+  ytMusicTagMetadata?: { title?: string; artist?: string; album?: string; label?: string };
 }
 
 /** Classified now-playing info after normalization. */
@@ -54,6 +58,15 @@ export interface NowPlaying {
   anomalies: string[];
   totalPauseDurationMs: number;
   positionUpdatesCount: number;
+}
+
+/** A YouTube.com channel that can be opted into tracking from the popup. */
+export interface YoutubeChannelSuggestion {
+  channel: string;
+  title: string;
+  url: string;
+  tabId: number;
+  timestamp: number;
 }
 
 /** A queued play (stored in IndexedDB, synced to phone). */
@@ -138,6 +151,8 @@ export interface Settings {
   knownArtists: string[];
   /** User-defined YouTube channel names to opt-in YouTube.com tracking. */
   youtubeChannels: string[];
+  /** User-defined YouTube channel names to never prompt or track. */
+  blockedYoutubeChannels: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -147,6 +162,7 @@ export const DEFAULT_SETTINGS: Settings = {
   offlineMode: false,
   knownArtists: [],
   youtubeChannels: [],
+  blockedYoutubeChannels: [],
 };
 
 /** Pairing info for connecting to the Tempo Android app. */
@@ -217,6 +233,8 @@ export enum MessageType {
   MediaStopped = 'MEDIA_STOPPED',
   /** Popup → Background: request current now-playing. */
   GetNowPlaying = 'GET_NOW_PLAYING',
+  /** Popup → Background: request current blocked YouTube channel suggestion. */
+  GetYoutubeChannelSuggestion = 'GET_YOUTUBE_CHANNEL_SUGGESTION',
   /** Popup → Background: request queue count. */
   GetQueueCount = 'GET_QUEUE_COUNT',
   /** Popup → Background: request queue items. */
@@ -232,6 +250,10 @@ export enum MessageType {
   /** Popup → Background: get/set settings. */
   GetSettings = 'GET_SETTINGS',
   SetSettings = 'SET_SETTINGS',
+  /** Content script → Background: opt in a YouTube channel while playing. */
+  AddYoutubeChannel = 'ADD_YOUTUBE_CHANNEL',
+  /** Content script / Popup → Background: permanently reject a YouTube channel. */
+  BlockYoutubeChannel = 'BLOCK_YOUTUBE_CHANNEL',
   /** Popup → Background: get stats. */
   GetStats = 'GET_STATS',
   /** Popup → Background: clear queue. */
