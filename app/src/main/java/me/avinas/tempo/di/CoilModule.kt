@@ -55,7 +55,7 @@ annotation class ImageCache
  * 
  * Key optimizations:
  * - Ignores server cache headers to force aggressive caching
- * - Uses INEXACT precision to reuse cached images across different sizes
+ * - EXACT precision on all requests prevents unbounded bitmap decoding
  * - Custom OkHttp interceptor to add long cache lifetime to responses
  * - Strong references in memory cache to prevent premature eviction
  * - **Smart low-RAM detection**: Uses RGB_565 (half memory) on constrained devices

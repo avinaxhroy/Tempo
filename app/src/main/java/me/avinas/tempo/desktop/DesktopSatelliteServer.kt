@@ -167,7 +167,8 @@ class DesktopSatelliteServer @Inject constructor(
             return response
         }
 
-        private fun authenticateRequest(session: IHTTPSession, body: String): String? {
+        private fun authenticateRequest(session: IHTTPSession, bodyBytes: ByteArray): String? {
+            val body = String(bodyBytes, Charsets.UTF_8)
             val headerToken = extractBearerToken(session)
             val json = try { JSONObject(body) } catch (_: Exception) { null }
             val bodyToken = json?.optString("auth_token")?.takeIf { it.isNotBlank() }
@@ -177,7 +178,7 @@ class DesktopSatelliteServer @Inject constructor(
 
             val signature = session.headers[SIGNATURE_HEADER].orEmpty()
             if (signature.isNotBlank()) {
-                if (!isValidSignature(token, body, signature)) return null
+                if (!isValidSignature(token, bodyBytes, signature)) return null
             } else {
                 return null
             }
@@ -185,7 +186,7 @@ class DesktopSatelliteServer @Inject constructor(
         }
 
         private fun handlePing(session: IHTTPSession): Response {
-            val token = authenticateRequest(session, "{}")
+            val token = authenticateRequest(session, "{}".toByteArray(Charsets.UTF_8))
             val activeSession = pairingManager.getActiveSessionBlocking()
             if (activeSession != null) {
                 // A pairing session exists: the token must match the stored session
@@ -204,7 +205,7 @@ class DesktopSatelliteServer @Inject constructor(
         }
 
         private fun handleBattery(session: IHTTPSession): Response {
-            val token = authenticateRequest(session, "{}")
+            val token = authenticateRequest(session, "{}".toByteArray(Charsets.UTF_8))
             val activeSession = pairingManager.getActiveSessionBlocking()
             if (activeSession != null) {
                 // A pairing session exists: the token must match the stored session
@@ -237,23 +238,16 @@ class DesktopSatelliteServer @Inject constructor(
                 return errorResponse(Response.Status.TOO_MANY_REQUESTS, "rate_limited")
             }
 
-            val declaredLength = session.headers["content-length"]?.toIntOrNull() ?: 0
-            if (declaredLength > MAX_BODY_BYTES) {
-                return errorResponse(Response.Status.BAD_REQUEST, "payload_too_large")
-            }
-
-            val body = try {
-                val buf = HashMap<String, String>()
-                session.parseBody(buf)
-                val raw = buf["postData"] ?: return errorResponse(Response.Status.BAD_REQUEST, "empty_body")
-                if (raw.toByteArray(Charsets.UTF_8).size > MAX_BODY_BYTES) {
-                    return errorResponse(Response.Status.BAD_REQUEST, "payload_too_large")
-                }
-                raw
+            val rawBytes = try {
+                readRawBody(session)
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to parse pair-confirm body", e)
+                Log.w(TAG, "Failed to read pair-confirm body", e)
                 return errorResponse(Response.Status.BAD_REQUEST, "parse_error")
             }
+            if (rawBytes.isEmpty()) {
+                return errorResponse(Response.Status.BAD_REQUEST, "empty_body")
+            }
+            val body = String(rawBytes, Charsets.UTF_8)
 
             val json = try {
                 JSONObject(body)
@@ -271,7 +265,7 @@ class DesktopSatelliteServer @Inject constructor(
             }
 
             val signature = session.headers[SIGNATURE_HEADER].orEmpty()
-            if (!signature.isNotBlank() || !isValidSignature(token, body, signature)) {
+            if (!signature.isNotBlank() || !isValidSignature(token, rawBytes, signature)) {
                 return errorResponse(Response.Status.UNAUTHORIZED, "invalid_signature")
             }
 
@@ -300,22 +294,16 @@ class DesktopSatelliteServer @Inject constructor(
                 return errorResponse(Response.Status.TOO_MANY_REQUESTS, "rate_limited")
             }
 
-            val declaredLength = session.headers["content-length"]?.toIntOrNull() ?: 0
-            if (declaredLength > MAX_BODY_BYTES) {
-                return errorResponse(Response.Status.BAD_REQUEST, "payload_too_large")
-            }
-            val body = try {
-                val buf = HashMap<String, String>()
-                session.parseBody(buf)
-                val raw = buf["postData"] ?: return errorResponse(Response.Status.BAD_REQUEST, "empty_body")
-                if (raw.toByteArray(Charsets.UTF_8).size > MAX_BODY_BYTES) {
-                    return errorResponse(Response.Status.BAD_REQUEST, "payload_too_large")
-                }
-                raw
+            val rawBytes = try {
+                readRawBody(session)
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to parse play batch body", e)
+                Log.w(TAG, "Failed to read play batch body", e)
                 return errorResponse(Response.Status.BAD_REQUEST, "parse_error")
             }
+            if (rawBytes.isEmpty()) {
+                return errorResponse(Response.Status.BAD_REQUEST, "empty_body")
+            }
+            val body = String(rawBytes, Charsets.UTF_8)
 
             val json = try {
                 JSONObject(body)
@@ -333,7 +321,7 @@ class DesktopSatelliteServer @Inject constructor(
             }
 
             val signature = session.headers[SIGNATURE_HEADER].orEmpty()
-            if (!signature.isNotBlank() || !isValidSignature(token, body, signature)) {
+            if (!signature.isNotBlank() || !isValidSignature(token, rawBytes, signature)) {
                 return errorResponse(Response.Status.UNAUTHORIZED, "invalid_signature")
             }
 
@@ -440,14 +428,38 @@ class DesktopSatelliteServer @Inject constructor(
             getActiveSession()
         }
 
-        private fun isValidSignature(token: String, body: String, signature: String): Boolean {
+        /**
+         * Read raw body bytes directly from the session input stream.
+         *
+         * Avoids NanoHTTPD's parseBody() which may decode bytes using ISO-8859-1
+         * when Content-Type lacks an explicit charset. Re-encoding such a garbled
+         * String to UTF-8 produces different bytes than the original wire bytes,
+         * breaking HMAC verification for any non-ASCII content (e.g. song titles).
+         */
+        private fun readRawBody(session: IHTTPSession): ByteArray {
+            val contentLength = session.headers["content-length"]?.toIntOrNull() ?: 0
+            if (contentLength <= 0) return ByteArray(0)
+            if (contentLength > MAX_BODY_BYTES) throw IllegalStateException("payload_too_large")
+
+            val bytes = ByteArray(contentLength)
+            var offset = 0
+            val inputStream = session.inputStream
+            while (offset < contentLength) {
+                val read = inputStream.read(bytes, offset, contentLength - offset)
+                if (read == -1) break
+                offset += read
+            }
+            return bytes.copyOf(offset)
+        }
+
+        private fun isValidSignature(token: String, bodyBytes: ByteArray, signature: String): Boolean {
             if (signature.length != 64 || !signature.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
                 return false
             }
 
             val mac = Mac.getInstance(HMAC_SHA256)
             mac.init(SecretKeySpec(token.toByteArray(Charsets.UTF_8), HMAC_SHA256))
-            val expected = mac.doFinal(body.toByteArray(Charsets.UTF_8))
+            val expected = mac.doFinal(bodyBytes)
                 .joinToString("") { "%02x".format(it.toInt() and 0xff) }
             return MessageDigest.isEqual(
                 expected.toByteArray(Charsets.US_ASCII),

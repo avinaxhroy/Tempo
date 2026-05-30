@@ -19,21 +19,34 @@
   let mediaElementsDirty = true;
   let cachedUrl = location.href;
   let cachedSanitizedUrl = '';
-  let cachedIsYouTube = false;
+  let cachedIsYouTube = location.href.includes('youtube.com') || location.href.includes('youtu.be');
   let cachedYouTubeChannel = '';
   let cachedYtMusicTagMetadata: { title?: string; artist?: string; album?: string; label?: string } | null = null;
   let cachedYtDescriptionMetadata: { title?: string; artist?: string; album?: string; label?: string } | null = null;
   let youTubeChannelDirty = true;
-  let ytMetadataAttempts = 0;
   let ytMetadataDirty = true;
-  let ytMusicTagRetried = false;
+  let ytMusicTagRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  let ytMusicTagRetryCount = 0;
+  let cachedMusicSectionEl: HTMLElement | null = null;
+  let musicSectionDirty = true;
+  let ytMusicTagObserver: MutationObserver | null = null;
+  let forceMetadataUpdate = false;
 
   function resetYtMetadataCache(): void {
     cachedYtDescriptionMetadata = null;
     cachedYtMusicTagMetadata = null;
-    ytMetadataAttempts = 0;
     ytMetadataDirty = true;
-    ytMusicTagRetried = false;
+    musicSectionDirty = true;
+    cachedMusicSectionEl = null;
+    ytMusicTagRetryCount = 0;
+    if (ytMusicTagRetryTimer) {
+      clearTimeout(ytMusicTagRetryTimer);
+      ytMusicTagRetryTimer = null;
+    }
+    if (ytMusicTagObserver) {
+      ytMusicTagObserver.disconnect();
+      ytMusicTagObserver = null;
+    }
   }
 
   let youtubePromptEl: HTMLElement | null = null;
@@ -594,6 +607,7 @@
     const artistRegex = /^\s*(singer|singers|artist|artists|performed\s+by|vocals|vocals\s+by|music\s+by|composed\s+by|written\s+by|created\s+by|sung\s+by|vocalist)\s*[\-–—:|~]\s*(.+)$/i;
     const albumRegex = /^\s*(album|mixtape|ep|lp|single)\s*[\-–—:|~]\s*(.+)$/i;
     const labelRegex = /^\s*(label|record\s*label|distributed\s*by|released\s*by|under)\s*[\-–—:|~]\s*(.+)$/i;
+    const audioOnRegex = /^\s*audio\s+on\s+(.+)$/i;
 
     let label: string | undefined;
 
@@ -633,6 +647,11 @@
         const match = trimmed.match(labelRegex);
         if (match) {
           label = sanitize(match[2]);
+        } else {
+          const audioOnMatch = trimmed.match(audioOnRegex);
+          if (audioOnMatch) {
+            label = sanitize(audioOnMatch[1]);
+          }
         }
       }
     }
@@ -643,8 +662,104 @@
     return null;
   }
 
+  function findMusicSectionEl(): HTMLElement | null {
+    if (!musicSectionDirty && cachedMusicSectionEl) {
+      if (cachedMusicSectionEl.isConnected) return cachedMusicSectionEl;
+      cachedMusicSectionEl = null;
+    }
+    
+    // Try to find music section by looking for "Music" header
+    const candidates = document.querySelectorAll('ytd-horizontal-card-list-renderer');
+    for (const el of Array.from(candidates)) {
+      // Check if this card list has a "Music" header - try multiple selectors
+      const titleEl = el.querySelector('#title') ||
+                      el.querySelector('ytd-rich-list-header-renderer #title') ||
+                      el.querySelector('yt-formatted-string#title');
+      if (titleEl) {
+        const titleText = (titleEl.textContent || '').trim().toLowerCase();
+        if (titleText === 'music') {
+          cachedMusicSectionEl = el as HTMLElement;
+          musicSectionDirty = false;
+          return cachedMusicSectionEl;
+        }
+      }
+    }
+    
+    // Fallback: look for any ytd-horizontal-card-list-renderer that contains yt-video-attribute-view-model
+    for (const el of Array.from(candidates)) {
+      if (el.querySelector('yt-video-attribute-view-model')) {
+        cachedMusicSectionEl = el as HTMLElement;
+        musicSectionDirty = false;
+        return cachedMusicSectionEl;
+      }
+    }
+    
+    // Final fallback: look for yt-video-attribute-view-model anywhere in the document
+    const viewModel = document.querySelector('yt-video-attribute-view-model');
+    if (viewModel) {
+      const parent = viewModel.closest('ytd-horizontal-card-list-renderer') || viewModel.parentElement;
+      if (parent) {
+        cachedMusicSectionEl = parent as HTMLElement;
+        musicSectionDirty = false;
+        return cachedMusicSectionEl;
+      }
+    }
+    
+    musicSectionDirty = false;
+    return null;
+  }
+
+  function setupYtMusicTagObserver(): void {
+    if (ytMusicTagObserver) return;
+
+    const descContainer = document.querySelector('#description-inline-expander') ||
+                          document.querySelector('#description') ||
+                          document.querySelector('ytd-text-inline-expander') ||
+                          document.querySelector('ytd-structured-description-content-renderer');
+    if (!descContainer) return;
+
+    ytMusicTagObserver = new MutationObserver(() => {
+      musicSectionDirty = true;
+      const metadata = extractYoutubeMusicTag();
+      if (metadata) {
+        cachedYtMusicTagMetadata = metadata;
+        forceMetadataUpdate = true;
+        ytMusicTagObserver?.disconnect();
+        ytMusicTagObserver = null;
+        schedulePollSoon(100);
+      }
+    });
+
+    ytMusicTagObserver.observe(descContainer, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
   function extractYoutubeMusicTag(): { title?: string; artist?: string; album?: string; label?: string } | null {
-    const rows = document.querySelectorAll('ytd-metadata-row-renderer');
+    const musicSection = findMusicSectionEl();
+    const scope = musicSection || document;
+
+    const viewModel = scope.querySelector('yt-video-attribute-view-model');
+    if (viewModel) {
+      const titleEl = viewModel.querySelector('.ytVideoAttributeViewModelTitle');
+      const artistEl = viewModel.querySelector('.ytVideoAttributeViewModelSubtitle');
+      const albumEl = viewModel.querySelector('.ytVideoAttributeViewModelSecondarySubtitle');
+
+      const title = titleEl?.textContent?.trim();
+      const artist = artistEl?.textContent?.trim();
+      const album = albumEl?.textContent?.trim();
+
+      if (title || artist) {
+        return {
+          title: title ? sanitize(title) : undefined,
+          artist: artist ? sanitize(artist) : undefined,
+          album: album ? sanitize(album) : undefined,
+        };
+      }
+    }
+
+    const rows = scope.querySelectorAll('ytd-metadata-row-renderer');
     if (!rows.length) return null;
 
     let title: string | undefined;
@@ -657,17 +772,17 @@
       const contentEl = row.querySelector('#content') || row.querySelector('.content');
       if (!labelEl || !contentEl) continue;
 
-      const label_text = (labelEl.textContent || '').trim().toLowerCase();
+      const labelText = (labelEl.textContent || '').trim().toLowerCase();
       const content = (contentEl.textContent || '').trim();
       if (!content) continue;
 
-      if (label_text.includes('song') || label_text.includes('track')) {
+      if (labelText.includes('song') || labelText.includes('track')) {
         title = sanitize(content);
-      } else if (label_text.includes('artist') || label_text.includes('singer')) {
+      } else if (labelText.includes('artist') || labelText.includes('singer')) {
         artist = sanitize(content);
-      } else if (label_text.includes('album')) {
+      } else if (labelText.includes('album')) {
         album = sanitize(content);
-      } else if (label_text.includes('label') || label_text.includes('record label') || label_text.includes('licensed to')) {
+      } else if (labelText.includes('label') || labelText.includes('record label') || labelText.includes('licensed to')) {
         label = sanitize(content);
       }
     }
@@ -771,28 +886,35 @@
     lastObservedActive = state.isPlaying;
     updatePollingCadence();
 
-    // If YouTube tab, fetch description and music tag metadata if dirty and attempts < 5
-    if (cachedIsYouTube && ytMetadataDirty && ytMetadataAttempts < 5) {
+    // If YouTube tab and metadata is dirty, attempt extraction once.
+    // JSON-based extraction (carouselLockup, metadataRow) runs only when videoId matches.
+    // DOM-based extraction (ytd-metadata-row-renderer) runs immediately and is scheduled
+    // for retries at increasing intervals since YouTube lazy-loads these elements.
+    if (cachedIsYouTube && ytMetadataDirty) {
+      // Set up observer early to catch lazy-loaded music tag
+      if (!ytMusicTagObserver && !cachedYtMusicTagMetadata) {
+        setupYtMusicTagObserver();
+      }
+      
       const currentVideoId = getYoutubeVideoId(location.href);
       const mainWorldData = queryMainWorldYtMetadata();
 
       const playerResponse = mainWorldData?.playerResponse;
       const initialData = mainWorldData?.initialData;
+      const videoIdMatches = currentVideoId && playerResponse?.videoDetails?.videoId === currentVideoId;
 
-      if (currentVideoId && playerResponse?.videoDetails?.videoId === currentVideoId) {
-        // Correct/fresh metadata matching the current video ID
-        const descText = playerResponse.videoDetails.shortDescription || '';
-        const descMetadata = parseYoutubeDescription(descText);
+      let tagMetadata: { title?: string; artist?: string; album?: string } | null = null;
 
-        let tagMetadata: { title?: string; artist?: string; album?: string } | null = null;
-        // Search in playerResponse first
+      if (videoIdMatches) {
+        // Extract description and try all JSON methods
+        const descText = playerResponse!.videoDetails.shortDescription || '';
+        cachedYtDescriptionMetadata = parseYoutubeDescription(descText) || null;
+
+        // Search carouselLockupRenderers in playerResponse first
         const carouselsInPlayer = findCarouselLockupRenderers(playerResponse);
         for (const c of carouselsInPlayer) {
           const meta = parseCarouselLockup(c);
-          if (meta && meta.title) {
-            tagMetadata = meta;
-            break;
-          }
+          if (meta && meta.title) { tagMetadata = meta; break; }
         }
 
         // If not in playerResponse, search in initialData
@@ -800,71 +922,76 @@
           const carouselsInInitial = findCarouselLockupRenderers(initialData);
           for (const c of carouselsInInitial) {
             const meta = parseCarouselLockup(c);
-            if (meta && meta.title) {
-              tagMetadata = meta;
-              break;
-            }
+            if (meta && meta.title) { tagMetadata = meta; break; }
           }
         }
 
         // If still not found, check flat metadataRowRenderers
         if (!tagMetadata) {
-          const rows = findMetadataRowRenderers(playerResponse).concat(initialData ? findMetadataRowRenderers(initialData) : []);
+          const rows = findMetadataRowRenderers(playerResponse)
+            .concat(initialData ? findMetadataRowRenderers(initialData) : []);
           tagMetadata = parseMetadataRows(rows);
         }
+      }
 
-        // Also fall back to DOM-based music tag just in case
-        if (!tagMetadata) {
-          tagMetadata = extractYoutubeMusicTag();
-        }
+      // DOM-based extraction — YouTube lazy-loads these elements
+      if (!tagMetadata) {
+        tagMetadata = extractYoutubeMusicTag();
+      }
 
-        cachedYtDescriptionMetadata = descMetadata || null;
-        cachedYtMusicTagMetadata = tagMetadata || null;
+      if (tagMetadata) {
+        cachedYtMusicTagMetadata = tagMetadata;
         ytMetadataDirty = false;
-
-        // If music tag extraction failed and we haven't retried yet, schedule a retry
-        if (!tagMetadata && !ytMusicTagRetried) {
-          ytMusicTagRetried = true;
-          setTimeout(() => {
-            const retryTagMetadata = extractYoutubeMusicTag();
-            if (retryTagMetadata) {
-              cachedYtMusicTagMetadata = retryTagMetadata;
-              // Force a state update to send the new metadata
-              lastSentKey = '';
-            }
-          }, 2000);
-        }
       } else {
-        // Player response is either not loaded yet or stale. Retry next cycle.
-        ytMetadataAttempts++;
-        if (ytMetadataAttempts >= 5) {
-          ytMetadataDirty = false;
-        }
+        // Tag not found — set up observer and schedule retry with exponential backoff
+        ytMetadataDirty = false;
+        setupYtMusicTagObserver();
+        const scheduleRetry = (delay: number, attempt: number) => {
+          if (ytMusicTagRetryTimer) clearTimeout(ytMusicTagRetryTimer);
+          ytMusicTagRetryTimer = setTimeout(() => {
+            musicSectionDirty = true;
+            const retryMetadata = extractYoutubeMusicTag();
+            if (retryMetadata) {
+              cachedYtMusicTagMetadata = retryMetadata;
+              forceMetadataUpdate = true;
+              ytMusicTagObserver?.disconnect();
+              ytMusicTagObserver = null;
+              // Trigger a poll to send the updated metadata
+              schedulePollSoon(50);
+            } else if (attempt < 3) {
+              scheduleRetry(delay * 2, attempt + 1);
+            }
+          }, delay);
+        };
+        scheduleRetry(5000, 1);
       }
     }
 
-    // Dedup: skip sending if the meaningful state hasn't changed
+    // Dedup: skip sending if the meaningful state hasn't changed (unless forced)
     const stateKey = buildStateKey(state);
-    if (stateKey === lastSentKey) return;
+    if (stateKey === lastSentKey && !forceMetadataUpdate) return;
     lastSentKey = stateKey;
+    forceMetadataUpdate = false;
+
+    const messageData = {
+      url: sanitizeUrl(location.href),
+      title: state.title,
+      artist: state.artist,
+      album: state.album,
+      duration: state.duration,
+      position: state.position,
+      isPlaying: state.isPlaying,
+      volume: state.volume,
+      isMuted: state.isMuted,
+      playbackRate: state.playbackRate,
+      timestamp: Date.now(),
+      ytDescriptionMetadata: cachedYtDescriptionMetadata || undefined,
+      ytMusicTagMetadata: cachedYtMusicTagMetadata || undefined,
+    };
 
     sendMessageSafely({
       type: 'MEDIA_STATE_UPDATE',
-      data: {
-        url: sanitizeUrl(location.href),
-        title: state.title,
-        artist: state.artist,
-        album: state.album,
-        duration: state.duration,
-        position: state.position,
-        isPlaying: state.isPlaying,
-        volume: state.volume,
-        isMuted: state.isMuted,
-        playbackRate: state.playbackRate,
-        timestamp: Date.now(),
-        ytDescriptionMetadata: cachedYtDescriptionMetadata || undefined,
-        ytMusicTagMetadata: cachedYtMusicTagMetadata || undefined,
-      }
+      data: messageData
     }).then(handleTrackingResponse);
   }
 
@@ -916,6 +1043,8 @@
       // Invalidate YouTube channel cache on return (SPA may have changed)
       youTubeChannelDirty = true;
       mediaElementsDirty = true;
+      musicSectionDirty = true;
+      cachedMusicSectionEl = null;
       lastSentKey = ''; // Force re-send on return
       stopPolling();
       startPolling();

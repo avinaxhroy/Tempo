@@ -12,6 +12,8 @@ import androidx.work.*
 import coil3.ImageLoader
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
+import coil3.size.Precision
+import coil3.size.Size
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
@@ -129,6 +131,8 @@ class PostRestoreCacheWorker @AssistedInject constructor(
                     try {
                         val request = ImageRequest.Builder(applicationContext)
                             .data(url)
+                            .size(Size(1024, 1024))
+                            .precision(Precision.EXACT)
                             .memoryCachePolicy(CachePolicy.DISABLED) // Only disk cache
                             .diskCachePolicy(CachePolicy.ENABLED)
                             .build()

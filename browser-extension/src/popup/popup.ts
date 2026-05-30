@@ -760,7 +760,7 @@ async function startAutoDiscovery(token: string) {
       manualShown = true;
       setDiscoveryState('manual');
       setQrStatus('error',
-        'Still searching. Enter IP from Tempo > Desktop Link, or keep waiting.',
+        'Still searching. Enter IP from Tempo > Settings > Sync with Desktop, or keep waiting.',
         `${secondsEl}s`
       );
     }

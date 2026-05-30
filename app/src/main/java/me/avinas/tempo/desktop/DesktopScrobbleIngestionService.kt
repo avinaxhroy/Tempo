@@ -264,7 +264,7 @@ class DesktopPlayIngestionService @Inject constructor(
         //        the full list ("Farhan Khan, Mujtaba Aziz Naza, Mr. Doss").
         //      - Different separators: "A & B" vs "A, B", "A feat. B" vs "A ft. B", etc.
         val candidates = trackRepository.findCandidatesByTitle(title)
-        candidates.firstOrNull { artistsOverlap(it.artist, artist) }?.let {
+        candidates.firstOrNull { ArtistParser.hasAnyMatchingArtist(it.artist, artist) }?.let {
             return TrackResolution(id = it.id, isNew = false)
         }
         // 4. No match found — create a new track record

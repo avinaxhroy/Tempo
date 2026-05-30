@@ -224,11 +224,12 @@ function extractFeaturingFromTitle(title: string): { title: string; feat: string
 }
 
 function cleanFeatArtists(featStr: string): string {
-  const cleanFeatStr = cleanTitle(featStr);
-  const cleaned = cleanFeatStr
+  // Don't call cleanTitle on artist strings - it's designed for video titles
+  // and may strip legitimate artist names
+  const cleaned = featStr
     .replace(/(?:\b(and|x)\b|\s*&\s*)/gi, ', ')
     .replace(/\s*\|\s*/g, ', ');
-  const parts = cleaned.split(',').map(p => cleanArtist(p)).filter(Boolean);
+  const parts = cleaned.split(',').map(p => cleanArtist(p.trim())).filter(Boolean);
   return parts.join(', ');
 }
 
@@ -431,6 +432,10 @@ export function cleanChannelName(channelName: string): string {
     .replace(/9/g, 'g')
     .replace(/2/g, 'z');
   
+  // Split camelCase words by inserting spaces before capital letters
+  // This handles compound names like "EminemMusic" → "Eminem Music"
+  cleaned = cleaned.replace(/([a-z])([A-Z])/g, '$1 $2');
+  
   const noiseWords = [
     'music', 'official', 'records', 'vevo', 'topic', 'channel', 'yt', 'tv',
     'vlog', 'vlogs', 'studio', 'studios', 'media', 'entertainment',
@@ -438,6 +443,7 @@ export function cleanChannelName(channelName: string): string {
   ];
   cleaned = cleaned.toLowerCase();
   for (const word of noiseWords) {
+    // Remove with word boundaries (for spaced words)
     const regex = new RegExp(`\\b${word}\\b`, 'g');
     cleaned = cleaned.replace(regex, ' ');
   }
@@ -514,7 +520,8 @@ function scoreArtistLikelihood(part: string, cleanedChannel: string, knownArtist
     'karaoke', 'lyric', 'lyrics', 'video', 'audio', 'visualizer', 'visualiser',
     'official', 'theme', 'ost', 'soundtrack', 'mix', 'mashup',
     'version', 'edit', 'slowed', 'reverb', 'sped up', 'nightcore',
-    'performance', 'session'
+    'performance', 'session', 'producer', 'prod', 'composed by', 'music by',
+    'directed by', 'video by', 'arranged by', 'mixed by', 'mastered by'
   ];
   for (const kw of titleKeywords) {
     if (lower.includes(kw)) score -= 10;
@@ -542,6 +549,22 @@ function scoreArtistLikelihood(part: string, cleanedChannel: string, knownArtist
     if (artLower && (lower === artLower || lower.includes(artLower))) {
       score += 20;
     }
+  }
+
+  // 5. Word count heuristic: artist names are typically shorter (1-3 words)
+  // Song titles often have more words (3-6+)
+  const wordCount = lower.split(/\s+/).filter(w => w.length > 0).length;
+  if (wordCount <= 2) {
+    score += 5;  // Short = likely artist
+  } else if (wordCount >= 5) {
+    score -= 5;  // Long = likely song title
+  }
+
+  // 6. Length heuristic: very long strings are more likely song titles
+  if (lower.length > 30) {
+    score -= 3;
+  } else if (lower.length < 15 && lower.length > 3) {
+    score += 2;
   }
 
   return score;
@@ -690,6 +713,11 @@ export function parseYoutubeVideo(
       // Only use channel as artist reference if it's not likely a label
       if (cleanedChannel && cleanedChannel.length >= 3 && !isLikelyLabel(cleanedChannel)) {
         searchTargets.push(cleanedChannel);
+        
+        // Also add individual words from channel name (for compound names like "EminemVivo")
+        // Only add words >= 4 chars to avoid false positives
+        const channelWords = cleanedChannel.split(/\s+/).filter(w => w.length >= 4);
+        searchTargets.push(...channelWords);
       }
 
       // Sort targets by length descending to match the longest name first
@@ -737,7 +765,8 @@ export function parseYoutubeVideo(
 
     // Step 6: If no match yet, split by common separators and score
     if (!rawArtistPart) {
-      const separatorRegex = /\s+([\-\–\—\|~:])\s+/;
+      // Include "l" (lowercase L) as it's often used as a pipe substitute
+      const separatorRegex = /\s+([\-\–\—\|~:]|l)\s+/i;
       const match = separatorRegex.exec(workingTitle);
 
       if (match) {
@@ -790,7 +819,7 @@ export function parseYoutubeVideo(
     }
 
     finalResult.title = cleanTitle(finalResult.title);
-
+    
     return finalResult;
   } catch (err) {
     console.error('[Tempo] Error parsing YouTube video:', err);

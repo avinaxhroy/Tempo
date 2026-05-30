@@ -117,20 +117,15 @@ fun CachedAsyncImage(
             // Include hardware flag in memory cache key so software/hardware bitmaps are cached separately
             .memoryCacheKey(if (effectiveAllowHardware) cacheKey else "${cacheKey}_sw")
             .diskCacheKey(cacheKey)
-            // INEXACT precision allows cached images of any size to be reused
-            .precision(Precision.INEXACT)
             .scale(Scale.FILL)
-            // Apply target size for memory optimization (if provided)
-            // Always cap at 1024px to prevent OOM from extremely large bitmaps.
-            // Use EXACT precision for the fallback cap to guarantee the bitmap never exceeds it.
             .apply {
                 if (targetSizePx != null) {
-                    size(targetSizePx)
-                    precision(Precision.INEXACT)
+                    val capped = minOf(targetSizePx, 2048)
+                    size(Size(capped, capped))
                 } else {
                     size(Size(1024, 1024))
-                    precision(Precision.EXACT)
                 }
+                precision(Precision.EXACT)
             }
             // Disable hardware bitmaps when inside CaptureWrapper (software rendering)
             .allowHardware(effectiveAllowHardware)

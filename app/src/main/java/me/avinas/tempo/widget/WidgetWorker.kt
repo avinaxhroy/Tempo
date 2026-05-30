@@ -18,6 +18,8 @@ import androidx.work.WorkerParameters
 import coil3.ImageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
+import coil3.size.Precision
+import coil3.size.Size
 import coil3.toBitmap
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -297,6 +299,8 @@ class WidgetWorker @AssistedInject constructor(
         val loader = ImageLoader(context)
         val request = ImageRequest.Builder(context)
             .data(url)
+            .size(Size(512, 512))
+            .precision(Precision.EXACT)
             .build()
 
         val result = (loader.execute(request) as? SuccessResult)?.image

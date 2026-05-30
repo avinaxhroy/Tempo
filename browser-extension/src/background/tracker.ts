@@ -261,6 +261,28 @@ export class PlaybackTracker {
 
     // --- Track change detection ---
     if (tracker.currentTrackKey !== trackKey) {
+      // Detect metadata updates vs real track changes.
+      // When a YouTube music tag is found on a retry, the parsed title/artist
+      // changes mid-playback, producing a different trackKey for the same video.
+      // Real track changes always reset position to ~0, so if position is well
+      // past the start and duration is similar, it's a metadata update.
+      const positionWellPastStart = positionMs > 3000;
+      const positionNotReset = tracker.lastPositionMs >= 0 && positionMs >= tracker.lastPositionMs - 1000;
+      const durationSimilar = tracker.trackDurationMs <= 0
+        || durationMs <= 0
+        || Math.abs(durationMs - tracker.trackDurationMs) < 5000;
+
+      if (positionWellPastStart && positionNotReset && durationSimilar && !tracker.logged) {
+        // Metadata update — keep accumulated state, just update key and raw data
+        tracker.currentTrackKey = trackKey;
+        tracker.lastRaw = raw;
+        tracker.detectedSite = site;
+        if (durationMs > 0 && tracker.trackDurationMs === 0) {
+          tracker.trackDurationMs = durationMs;
+        }
+        return { type: TrackEventType.StillPlaying };
+      }
+
       this.accruePendingListenTime(tracker, now);
       const prevEvent = this.finalizeTab(tracker);
 
