@@ -35,9 +35,10 @@ Because it is built with a local-first architecture, all your data is stored sec
   <img src="https://play-lh.googleusercontent.com/pSiGJMJs0g_tUOoPp3PwDhsYK3cgLfx7MY4yf0dQdgcwIzWezMOS0KKNhJl81QWBybnjpPc5So-na78JFZhe2HU=w1052-h592-rw" width="23%" alt="Stats Screen" />
 </p>
 <p align="center">
-  <img src="Screenshots/S5.png" width="23%" alt="Song Details" />
-  <img src="Screenshots/S6.png" width="23%" alt="Artist Details" />
-  <img src="Screenshots/S7.png" width="23%" alt="Widgets Preview" />
+  <img src="https://play-lh.googleusercontent.com/gSgUEoht6IUOj4zOyc3E1dxjlKDK51yiOComMfzrhfl0QSxy55Qr6zFESQFj3st15k4sbwM9lFWjH015M_2-yQ=w1052-h592-rw" width="23%" alt="Artist Details" />
+  <img src="https://play-lh.googleusercontent.com/-iOrEIw60JbDRM9j31XU95KR4KpYPzp62QMLTDuybjSQM1Zo6bGuONalMDNLgGtYUWPWFImwQmxeEFIIIQcmtFg=w1052-h592-rw" width="23%" alt="Widget" />
+  <img src="https://play-lh.googleusercontent.com/bymaDuX5iUlA6Ls52_YpBleJpybTEedmQjR8ch-TE81yXix7NI7yXQd5tgvNAr4zVzc2Sp6bP3RFVrAzSsSRcg=w1052-h592-rw" width="23%" alt="Challenges" />
+  <img src="https://play-lh.googleusercontent.com/tmo65W63qon96XPpjddoysaHw2fwzal-_mE-Uh-MTcHqsTal0pIEfzM0Fx1UXJ9R2MQFenBPNlDf7druHTS_Ow=w1052-h592-rw" width="23%" alt="Widgets Preview" />
 </p>
 
 ---
