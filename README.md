@@ -29,8 +29,8 @@ Because it is built with a local-first architecture, all your data is stored sec
 ## 📱 Screenshots
 
 <p align="center">
-  <img src="Screenshots/S1.png" width="23%" alt="Home Screen" />
-  <img src="Screenshots/S2.png" width="23%" alt="Stats Screen" />
+  <img src="https://play-lh.googleusercontent.com/3zlapa0nBvp_Dk13V_Pme5UIH0YCMEq79CVxmjCdGfrZS4yvwUACLNWBIdEGGJXXULeeHdpL4EOhD5b8cc1r8xY=w1052-h592-rw" width="23%" >
+  <img src="https://play-lh.googleusercontent.com/Jjet6lUeoeJeUX3i_p9Ni79_chhz9_v953MIL2gHUQbYH759hgcWc2R8ntBUgoc1aYVO64j0p6SrREPiuzC5fA=w1052-h592-rw)" width="23%" />
   <img src="Screenshots/S3.png" width="23%" alt="History Screen" />
   <img src="Screenshots/S4.png" width="23%" alt="Spotlight Story" />
 </p>
