@@ -20,9 +20,9 @@
 
 </div>
 
-**Tempo** is a local-first music journal and scrobbler for Android. It runs in the background, tracks your listening history across your favorite media players, and generates beautiful visualizations of your listening habits directly on your device.
+**Tempo** is an advanced music journal and scrobbler for Android, providing the most detailed, beautiful listening statistics and data visualizations available. It runs in the background, tracks your playback across your favorite media players, and turns your history into rich, interactive charts and shareable spotlight cards.
 
-Unlike cloud-dependent tracking tools, Tempo prioritizes user privacy. All your data is stored locally and stays on your device.
+Because it is built with a local-first architecture, all your data is stored securely on your device—keeping your personal music habits entirely private by design.
 
 ---
 
@@ -44,15 +44,10 @@ Unlike cloud-dependent tracking tools, Tempo prioritizes user privacy. All your 
 
 ## ✨ Features
 
-### 🎧 Universal Background Tracking
-- Automatically tracks playback from Spotify, YouTube Music, Apple Music, Poweramp, and 50+ other Android audio players.
-- Uses Android's `NotificationListenerService` to detect media events.
-- Automatically filters out system alerts, podcasts, and audiobooks to keep your music stats accurate.
-
-### 🔄 Data Import & Integration
-- **Two-Tier Last.fm Import**: Imports legacy listening history without bloat. Your recent history is stored in the active set for analytics, while older history is compressed in an archive for lookup.
-- **Spotify API Integration**: Connects to the Spotify API to fetch audio characteristics (energy, valence, danceability) for your tracks.
-- **API-Only Mode**: Save battery by disabling the background listener and polling Spotify's API directly.
+### 📊 Advanced Music Statistics & Detail Views
+- **Deep-Dive Analytics**: Access highly detailed stats, heatmaps, and listening timelines for every Song, Artist, and Album in your collection.
+- **Listening Quality Score (LQS)**: A custom metric that measures your actual engagement with songs based on play progress, seek/replay behaviors, and skips.
+- **Vibe Tracking**: Captures valence, energy, and danceability metadata to map the mood of your listening habits.
 
 ### 🎨 Spotlight Visualizations
 Generates beautiful, shareable statistic cards using Jetpack Compose Canvas:
@@ -62,11 +57,24 @@ Generates beautiful, shareable statistic cards using Jetpack Compose Canvas:
 - **Sonic Immersion**: An optical art-inspired tunnel visualizing deep listening sessions.
 - **Seasonal Poetry**: Dynamic, hemisphere-aware text summarizing your monthly listening mood.
 
+### 🎧 Universal Background Tracking
+- Automatically tracks playback from Spotify, YouTube Music, Apple Music, Poweramp, and 50+ other Android audio players.
+- Uses Android's `NotificationListenerService` to detect media events.
+- Automatically filters out system alerts, podcasts, and audiobooks to keep your music stats accurate.
+
 ### 💻 Desktop & Browser Sync
 Sync music played on your PC, Mac, Linux machine, or browser to your phone over your local network:
 - **Tauri Desktop Satellite**: Runs in the system tray and captures system now-playing audio events on macOS, Windows, and Linux.
 - **Browser Extension**: An advanced companion extension that uses direct audio-element timing and tab URLs to track music on web players.
 - **Secure Pairing**: Scan a QR code on your phone to pair instantly via mDNS. Payloads are signed with HMAC-SHA256 signatures for security over WiFi.
+
+### 📱 Home Screen Widgets
+- **Glance Widgets**: 7 distinct Android home screen widgets including heatmaps, now-playing, progress milestones, and recommendations.
+
+### 🔄 Data Import & Integration
+- **Two-Tier Last.fm Import**: Imports legacy listening history without bloat. Your recent history is stored in the active set for analytics, while older history is compressed in an archive for lookup.
+- **Spotify API Integration**: Connects to the Spotify API to fetch audio characteristics (energy, valence, danceability) for your tracks.
+- **API-Only Mode**: Save battery by disabling the background listener and polling Spotify's API directly.
 
 ### 🏆 Profiles & Listening Milestones
 - **XP & Levels**: Earn XP based on your listening duration and engagement level.
@@ -79,13 +87,9 @@ Sync music played on your PC, Mac, Linux machine, or browser to your phone over 
 - **Mute Detection**: Pauses tracking and XP accumulation when the device media volume is set to zero.
 - **Keep-Alive Protection**: Includes self-healing background workers and instructions for aggressive OEM battery savers (Xiaomi/HyperOS, etc.).
 
-### 📱 Home Screen Widgets & Detailed Views
-- **Glance Widgets**: 7 distinct Android home screen widgets including heatmaps, now-playing, progress milestones, and recommendations.
-- **Deep-Dive Screens**: Detailed statistics, listening history, and metadata editor tools for every Song, Artist, and Album.
-
-### 🔒 Privacy & Architecture
-- **Local-First**: All data is stored in a local SQLite database (via Room) on your device.
-- **No Cloud Trackers**: The application has no tracking servers. Auth tokens for integrations are kept in Android's `EncryptedSharedPreferences`.
+### 🔒 Local-First Architecture
+- **Offline & Private**: Built on a local SQLite database (via Room). No third-party servers needed.
+- **Secure Credentials**: Auth tokens for integrations are kept in Android's `EncryptedSharedPreferences`.
 - **Local Backups**: Encrypted backups to your personal Google Drive with automated conflict resolution.
 
 ---
