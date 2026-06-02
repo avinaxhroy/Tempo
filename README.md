@@ -14,7 +14,7 @@
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org) 
 [![Android](https://img.shields.io/badge/Android-16-green.svg?style=flat&logo=android)](https://developer.android.com) 
-[![Version](https://img.shields.io/badge/Version-4.4.7-orange.svg?style=flat)]()
+[![Version](https://img.shields.io/badge/Version-4.6.8-orange.svg?style=flat)]()
 [![License](https://img.shields.io/badge/License-AGPLv3%20Custom-blue.svg)](LICENSE) 
 [![Status](https://img.shields.io/badge/Status-Active_Development-success.svg)]()
 
@@ -62,11 +62,10 @@ Generates beautiful, shareable statistic cards using Jetpack Compose Canvas:
 - Uses Android's `NotificationListenerService` to detect media events.
 - Automatically filters out system alerts, podcasts, and audiobooks to keep your music stats accurate.
 
-### 💻 Desktop & Browser Sync
-Sync music played on your PC, Mac, Linux machine, or browser to your phone over your local network:
-- **Tauri Desktop Satellite**: Runs in the system tray and captures system now-playing audio events on macOS, Windows, and Linux.
-- **Browser Extension**: An advanced companion extension that uses direct audio-element timing and tab URLs to track music on web players.
-- **Secure Pairing**: Scan a QR code on your phone to pair instantly via mDNS. Payloads are signed with HMAC-SHA256 signatures for security over WiFi.
+### 💻 Browser Sync
+Sync music played on your web browser directly to your phone over your local network:
+- **Browser Extension**: An advanced companion extension that uses direct audio-element timing and tab URLs to track music on web players (YouTube Music, Spotify, SoundCloud, etc.).
+- **Local Pairing**: Easily pair the extension with your phone over WiFi. Payloads are signed with HMAC-SHA256 signatures to ensure security and data integrity.
 
 ### 📱 Home Screen Widgets
 - **Glance Widgets**: 7 distinct Android home screen widgets including heatmaps, now-playing, progress milestones, and recommendations.
@@ -105,7 +104,7 @@ Sync music played on your PC, Mac, Linux machine, or browser to your phone over 
 | **Background Tasks** | WorkManager, Foreground Services |
 | **UI & Charts** | Jetpack Glance (Widgets), Vico, MPAndroidChart |
 | **Image Loading** | Coil |
-| **Desktop Client** | Tauri (Rust + HTML/JS) |
+| **Browser Extension** | TypeScript (Chrome / Firefox Manifest V3) |
 | **SDK Targets** | Min SDK 26 (Android 8) / Target SDK 36 (Android 16) |
 
 ---
