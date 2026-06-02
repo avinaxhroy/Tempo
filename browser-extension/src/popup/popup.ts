@@ -9,6 +9,8 @@
 // Fallback: if auto-discovery fails within 30s, show a one-field IP input.
 // ============================================================================
 
+declare const browser: unknown;
+
 import { MessageType } from '../shared/types';
 import type { NowPlaying, Play, Settings, PairingInfo, YoutubeChannelSuggestion } from '../shared/types';
 import { generateQrDataUrl } from './qr';
@@ -56,7 +58,9 @@ async function getLocalIPsViaWebRTC(): Promise<string[]> {
     };
 
     try {
-      const pc = new RTCPeerConnection({ iceServers: [] });
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
       const timer = setTimeout(() => finish(pc), 2000);
 
       pc.createDataChannel('');
@@ -66,13 +70,10 @@ async function getLocalIPsViaWebRTC(): Promise<string[]> {
 
       pc.onicecandidate = ({ candidate }) => {
         if (!candidate) {
-          // null candidate means gathering is complete
           clearTimeout(timer);
           finish(pc);
           return;
         }
-        // ICE candidate strings look like:
-        //   "candidate:... 1 udp 2122260223 192.168.1.50 PORT typ host ..."
         const m = /(?:^|\s)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?:\s|$)/.exec(
           candidate.candidate
         );
@@ -148,6 +149,10 @@ let discoveryAborted = false;
 
 const tabBtns   = document.querySelectorAll<HTMLButtonElement>('.tab-btn');
 const tabPanels = document.querySelectorAll<HTMLElement>('.tab-panel');
+
+function isPairingTabActive(): boolean {
+  return document.querySelector('.tab-btn[data-tab="pairing"]')?.classList.contains('active') ?? false;
+}
 
 function switchTab(tabId: string) {
   tabBtns.forEach(b  => b.classList.remove('active'));
@@ -548,9 +553,7 @@ async function renderQr() {
 
     startQrCountdown();
 
-    // Auto-start discovery — no button needed
     setQrStatus('idle', 'Scan the QR with Tempo on your phone…');
-    startAutoDiscovery(token);
 
   } catch (err) {
     console.warn('[Tempo] QR generation failed:', err);
@@ -602,6 +605,19 @@ document.getElementById('btn-refresh-qr')?.addEventListener('click', async () =>
   await renderQr();
 });
 
+// "Start Scan" — manually trigger network discovery
+document.getElementById('btn-start-scan')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-start-scan') as HTMLButtonElement;
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = 'Scanning…';
+  
+  const token = currentPairingToken;
+  if (token) {
+    startAutoDiscovery(token);
+  }
+});
+
 // ---- Discovery state helpers -----------------------------------------------
 
 function setDiscoveryState(state: DiscoveryState, _detail?: string) {
@@ -625,8 +641,8 @@ function hideManualSection() {
 
 // ---- Auto-discovery --------------------------------------------------------
 
-/** Try to authenticate-ping a single IP. Returns device name on success. */
-async function tryPing(ip: string, token: string): Promise<string | null> {
+/** Try to authenticate-ping a single IP. Returns { device, latencyMs } on success. */
+async function tryPing(ip: string, token: string): Promise<{ device: string; latencyMs: number } | null> {
   try {
     const result = await send(MessageType.PingPhone, { ip, port: SERVER_PORT, token });
 
@@ -638,11 +654,11 @@ async function tryPing(ip: string, token: string): Promise<string | null> {
         const granted = await chrome.permissions.request({ origins: [result.origin] });
         if (!granted) return null;
         const retry = await send(MessageType.PingPhone, { ip, port: SERVER_PORT, token });
-        return retry?.ok ? (retry.device ?? ip) : null;
+        return retry?.ok ? { device: retry.device ?? ip, latencyMs: retry.latencyMs ?? 0 } : null;
       } catch { return null; }
     }
 
-    return result?.ok ? (result.device ?? ip) : null;
+    return result?.ok ? { device: result.device ?? ip, latencyMs: result.latencyMs ?? 0 } : null;
   } catch { return null; }
 }
 
@@ -699,6 +715,25 @@ async function startAutoDiscovery(token: string) {
   setQrStatus('idle', 'Detecting local network…');
   const localIPs = await getLocalIPsViaWebRTC();
   console.log('[Tempo] Local IPs via WebRTC:', localIPs);
+
+  // Step 1b: Try connection history IPs first — instant reconnect on known networks
+  const historyResp = await send(MessageType.GetConnectionHistory);
+  const historyEntries: Array<{ ip: string; port: number; successCount: number }> =
+    historyResp?.history ?? [];
+
+  if (historyEntries.length > 0) {
+    setQrStatus('searching', 'Trying known addresses…', '0s');
+    for (const entry of historyEntries.slice(0, 5)) {
+      if (discoveryAborted) return;
+      const dev = await discoveryPing(entry.ip, token);
+      if (dev !== null) {
+        stopDiscovery();
+        setQrStatus('found', `Found ${dev} from history — connecting…`);
+        await completePairing(entry.ip, SERVER_PORT, token, dev);
+        return;
+      }
+    }
+  }
 
   // Step 2: Build IP candidate list (mDNS handled separately — see mdnsPing())
   //   • Hotspot seeds — fast path when phone IS the WiFi gateway
@@ -839,6 +874,20 @@ async function startAutoDiscovery(token: string) {
 }
 
 async function completePairing(ip: string, port: number, token: string, deviceName: string) {
+  const origin = `http://${ip}:${port}/`;
+  const isFirefox = typeof browser !== 'undefined';
+  
+  if (isFirefox) {
+    try {
+      const granted = await chrome.permissions.request({ origins: [origin] });
+      if (!granted) {
+        console.warn('[Tempo] Firefox permission request denied for', origin);
+      }
+    } catch (err) {
+      console.warn('[Tempo] Firefox permission request failed:', err);
+    }
+  }
+
   const pairing: PairingInfo = {
     phoneIp: ip,
     phonePort: port,
@@ -879,7 +928,7 @@ document.getElementById('manual-form')?.addEventListener('submit', async (e) => 
 
   const dev = await tryPing(ip, token);
   if (dev !== null) {
-    await completePairing(ip, SERVER_PORT, token!, dev);
+    await completePairing(ip, SERVER_PORT, token!, dev.device);
   } else {
     errEl.textContent = 'Could not reach your phone. Make sure both devices are on the same WiFi and Tempo is open.';
     btn.disabled = false;
@@ -935,17 +984,19 @@ async function refreshPairing() {
       connectedEl.style.display = 'none';
       setupEl.style.display     = '';
 
-      // Only reset to QR screen if we're not mid-flow (scanning or manual).
-      // Tab switches and home-screen "Pair" clicks must not interrupt discovery.
+      if (!isPairingTabActive()) {
+        return;
+      }
+
       if (discoveryUIState === 'qr' || discoveryUIState === 'success') {
         discoveryUIState = 'qr';
         await renderQr();
       } else {
-        // Re-apply current sub-state (scanning → QR still visible, manual → manual shown)
         setDiscoveryState(discoveryUIState);
       }
     }
     refreshHomeState();
+    refreshConnectionHealth();
   } catch (err) {
     console.warn('[Tempo] refreshPairing failed:', err);
   }
@@ -978,10 +1029,11 @@ document.getElementById('btn-test-connected')?.addEventListener('click', async (
 
   resultEl.style.display = '';
   if (dev !== null) {
+    const latencyColor = dev.latencyMs < 100 ? 'var(--success)' : dev.latencyMs < 500 ? 'var(--warning)' : 'var(--danger)';
     resultEl.className  = 'test-result success';
-    resultEl.textContent = `✓ Phone reachable${dev && dev !== currentPairing.phoneIp ? ` — ${dev}` : ''}`;
+    resultEl.textContent = `✓ Phone reachable${dev.device && dev.device !== currentPairing.phoneIp ? ` — ${dev.device}` : ''} (${dev.latencyMs}ms)`;
     statusEl.textContent = '✓ Reachable';
-    statusEl.style.color = 'var(--success)';
+    statusEl.style.color = latencyColor;
   } else {
     resultEl.className   = 'test-result error';
     resultEl.textContent = '✗ Cannot reach phone — is Tempo open and on the same WiFi?';
@@ -1341,8 +1393,91 @@ document.getElementById('btn-export')?.addEventListener('click', async () => {
   } catch { alert('Export failed.'); }
 });
 
+// ---- Background message listener ------------------------------------------
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === MessageType.PairingInvalidated) {
+    currentPairing = null;
+    discoveryUIState = 'qr';
+    refreshPairing();
+    switchTab('pairing');
+  }
+
+  if (message?.type === MessageType.SocketStateChanged) {
+    updateSocketIndicator(message.state);
+  }
+});
+
+function updateSocketIndicator(state: string): void {
+  const el = document.getElementById('socket-indicator');
+  if (!el) return;
+
+  const labels: Record<string, string> = {
+    connected: 'Live',
+    connecting: 'Connecting…',
+    reconnecting: 'Reconnecting…',
+    disconnected: 'Offline',
+  };
+
+  el.textContent = labels[state] ?? state;
+  el.className = `socket-indicator socket-${state}`;
+  el.style.display = state === 'disconnected' ? 'none' : '';
+}
+
+async function refreshConnectionHealth(): Promise<void> {
+  try {
+    const [healthResp, socketResp] = await Promise.all([
+      send(MessageType.GetConnectionHealth),
+      send(MessageType.GetSocketState),
+    ]);
+
+    const health = healthResp?.health;
+    const statusEl = document.getElementById('paired-status');
+    if (!statusEl || !currentPairing) return;
+
+    if (socketResp?.state === 'connected') {
+      statusEl.textContent = '✓ Live connection';
+      statusEl.style.color = 'var(--success)';
+    } else if (health?.healthy) {
+      statusEl.textContent = '✓ Reachable';
+      statusEl.style.color = 'var(--success)';
+    } else if (health?.consecutiveFailures > 0) {
+      statusEl.textContent = `⚠ ${health.consecutiveFailures} failed pings`;
+      statusEl.style.color = 'var(--warning)';
+    }
+
+    updateSocketIndicator(socketResp?.state ?? 'disconnected');
+  } catch {}
+}
+
 // ---- Init ------------------------------------------------------------------
+
+let _autoConnectRunning = false;
+
+async function autoConnectIfPaired() {
+  if (_autoConnectRunning) return;
+  _autoConnectRunning = true;
+
+  try {
+    const resp = await send(MessageType.GetPairing);
+    const pairing: PairingInfo | null = resp?.pairing ?? null;
+    if (!pairing || !pairing.phoneIp || !pairing.authToken) return;
+
+    const dev = await discoveryPing(pairing.phoneIp, pairing.authToken);
+    if (dev !== null) {
+      console.log('[Tempo] Auto-connect: phone found at', pairing.phoneIp);
+    } else {
+      console.log('[Tempo] Auto-connect: phone not found at', pairing.phoneIp);
+    }
+  } catch (err) {
+    console.warn('[Tempo] Auto-connect failed:', err);
+  } finally {
+    _autoConnectRunning = false;
+  }
+}
 
 startNpPolling();
 refreshPairing();
 refreshQueue();
+refreshConnectionHealth();
+autoConnectIfPaired();

@@ -272,6 +272,78 @@ export enum MessageType {
   RequestHostPermission = 'REQUEST_HOST_PERMISSION',
   /** Popup → Background: test phone connectivity (ping). */
   PingPhone = 'PING_PHONE',
+  /** Popup → Background: get connection health info. */
+  GetConnectionHealth = 'GET_CONNECTION_HEALTH',
+  /** Popup → Background: get connection history entries. */
+  GetConnectionHistory = 'GET_CONNECTION_HISTORY',
+  /** Background → Popup: pairing was invalidated due to repeated auth failures. */
+  PairingInvalidated = 'PAIRING_INVALIDATED',
+  /** Background → Popup: WebSocket state changed. */
+  SocketStateChanged = 'SOCKET_STATE_CHANGED',
+  /** Popup → Background: get current WebSocket state. */
+  GetSocketState = 'GET_SOCKET_STATE',
+}
+
+/** Connection history entry — remembers successful IPs across networks. */
+export interface ConnectionHistoryEntry {
+  ip: string;
+  port: number;
+  lastSeen: number;
+  successCount: number;
+  failCount: number;
+  networkFingerprint: string;
+}
+
+/** Connection health tracking — lightweight heartbeat independent of sync. */
+export interface ConnectionHealth {
+  lastPing: number;
+  healthy: boolean;
+  consecutiveFailures: number;
+  consecutiveAuthFailures: number;
+  lastSuccessAt: number | null;
+}
+
+/** Sync checkpoint — survives service worker hibernation. */
+export interface SyncCheckpoint {
+  batchIds: number[];
+  batchIndex: number;
+  totalBatches: number;
+  lastAttempt: number;
+  retryCount: number;
+}
+
+/** WebSocket message types for phone ↔ extension communication. */
+export type PhoneSocketMessage =
+  | { type: 'ping'; ts: number }
+  | { type: 'pong'; ts: number }
+  | { type: 'sync_now' }
+  | { type: 'ip_changed'; newIp: string }
+  | { type: 'now_playing'; data: NowPlaying }
+  | { type: 'token_refresh'; next_token: string }
+  | { type: 'pairing_invalidated' };
+
+/** Signed WebSocket message envelope — wraps any message with HMAC + timestamp. */
+export interface SignedWsMessage {
+  payload: PhoneSocketMessage;
+  sig: string;
+  ts: number;
+}
+
+/** WebSocket auth message sent immediately after connection (token not in URL). */
+export interface WsAuthMessage {
+  type: 'auth';
+  token: string;
+  device_id: string;
+  sig: string;
+  ts: number;
+}
+
+/** WebSocket connection state. */
+export enum SocketState {
+  Disconnected = 'disconnected',
+  Connecting = 'connecting',
+  Connected = 'connected',
+  Reconnecting = 'reconnecting',
 }
 
 /** Per-tab tracking state persisted to session storage to survive hibernation. */

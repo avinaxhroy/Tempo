@@ -4,11 +4,15 @@ import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.net.Inet4Address
 import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.Socket
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
@@ -20,11 +24,17 @@ class DesktopPairingCallbackClient @Inject constructor(
 ) {
     companion object {
         private const val TAG = "DesktopPairingCallback"
-        private const val CONNECT_TIMEOUT_MS = 5_000
-        private const val READ_TIMEOUT_MS = 5_000
         private const val HMAC_SHA256 = "HmacSHA256"
         private val IPV4_LITERAL = Regex("""\d{1,3}(\.\d{1,3}){3}""")
+        private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
+
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .writeTimeout(5, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .build()
 
     suspend fun confirmDesktopPairing(
         qrData: DesktopQrData,
@@ -37,7 +47,6 @@ class DesktopPairingCallbackClient @Inject constructor(
         val desktopAddress = resolveLocalIpv4(desktopIp) ?: return@withContext false
 
         val body = JSONObject().apply {
-            put("auth_token", authToken)
             put("phone_ip", phoneIp)
             put("phone_port", phonePort)
             put("device_name", Build.MODEL)
@@ -46,10 +55,13 @@ class DesktopPairingCallbackClient @Inject constructor(
             }
         }.toString()
 
-        val signature = computeHmac(authToken, body)
+        val timestamp = (System.currentTimeMillis() / 1000).toString()
+        val nonce = UUID.randomUUID().toString().replace("-", "")
+        val signedMessage = body + "\n" + timestamp + "\n" + nonce
+        val signature = computeHmac(authToken, signedMessage)
 
         runCatching {
-            postPairingConfirmation(desktopAddress, desktopPort, body, signature)
+            postPairingConfirmation(desktopAddress, desktopPort, authToken, body, signature, timestamp, nonce)
         }.onFailure {
             Log.w(TAG, "Direct desktop pairing callback failed", it)
         }.getOrDefault(false)
@@ -62,31 +74,28 @@ class DesktopPairingCallbackClient @Inject constructor(
             .joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
-    private fun postPairingConfirmation(address: InetAddress, port: Int, body: String, signature: String): Boolean {
-        val bodyBytes = body.toByteArray(Charsets.UTF_8)
-        val requestHead = buildString {
-            append("POST /api/pair/confirm HTTP/1.1\r\n")
-            append("Host: ${address.hostAddress}:$port\r\n")
-            append("Content-Type: application/json; charset=utf-8\r\n")
-            append("Content-Length: ${bodyBytes.size}\r\n")
-            append("X-Tempo-Signature: $signature\r\n")
-            append("Connection: close\r\n")
-            append("\r\n")
-        }.toByteArray(Charsets.US_ASCII)
+    private fun postPairingConfirmation(
+        address: InetAddress,
+        port: Int,
+        authToken: String,
+        body: String,
+        signature: String,
+        timestamp: String,
+        nonce: String
+    ): Boolean {
+        val url = "http://${address.hostAddress}:$port/api/pair/confirm"
 
-        Socket().use { socket ->
-            socket.connect(InetSocketAddress(address, port), CONNECT_TIMEOUT_MS)
-            socket.soTimeout = READ_TIMEOUT_MS
-            val output = socket.getOutputStream()
-            output.write(requestHead)
-            output.write(bodyBytes)
-            output.flush()
+        val request = Request.Builder()
+            .url(url)
+            .post(body.toRequestBody(JSON_MEDIA_TYPE))
+            .header("Authorization", "Bearer $authToken")
+            .header("X-Tempo-Signature", signature)
+            .header("X-Tempo-Timestamp", timestamp)
+            .header("X-Tempo-Nonce", nonce)
+            .build()
 
-            val statusLine = socket.getInputStream()
-                .bufferedReader(Charsets.US_ASCII)
-                .readLine()
-            return statusLine?.contains(" 200 ") == true
-        }
+        val response = httpClient.newCall(request).execute()
+        return response.isSuccessful
     }
 
     private fun resolveLocalIpv4(ip: String): Inet4Address? {

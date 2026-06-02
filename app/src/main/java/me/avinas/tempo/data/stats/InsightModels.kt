@@ -51,6 +51,44 @@ sealed class InsightPayload {
         val nextBadge: Badge?,
         val recentBadges: List<Badge> = emptyList()
     ) : InsightPayload()
+
+    data class MoodData(
+        val valence: Float,
+        val energy: Float
+    ) : InsightPayload()
+
+    data class PeakTimeData(
+        val peakHour: Int,
+        val hourlyDistribution: List<HourlyDistribution>
+    ) : InsightPayload()
+
+    data class BingeData(
+        val artist: String,
+        val playCount: Int,
+        val durationMs: Long
+    ) : InsightPayload()
+
+    data class DiscoveryData(
+        val newArtistsCount: Int,
+        val trends: List<DiscoveryTrend>
+    ) : InsightPayload()
+
+    data class StreakData(
+        val days: Int
+    ) : InsightPayload()
+
+    data class GenreData(
+        val genre: String
+    ) : InsightPayload()
+
+    data class FeatureValue(
+        val type: InsightType,
+        val value: Float
+    ) : InsightPayload()
+
+    data class TempoValue(
+        val bpm: Float
+    ) : InsightPayload()
 }
 
 enum class InsightType {

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import me.avinas.tempo.data.stats.TimeRange
 import me.avinas.tempo.ui.theme.TempoRed
+import me.avinas.tempo.ui.theme.premiumClickable
 
 @Composable
 fun TimePeriodSelector(
@@ -70,7 +71,10 @@ fun TimePeriodSelector(
                         .height(36.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .background(if (isSelected) backgroundColor else Color.Transparent)
-                        .clickable { onRangeSelected(range) },
+                        .premiumClickable(
+                            onClick = { onRangeSelected(range) },
+                            pressedScale = 0.97f
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

@@ -5,7 +5,7 @@
 // Uses a cached DB connection to avoid expensive open/close per operation.
 // ============================================================================
 
-import type { Play, PairingInfo, Settings, SyncRecord, TabTrackState } from '../shared/types';
+import type { Play, PairingInfo, Settings, SyncRecord, TabTrackState, ConnectionHistoryEntry, ConnectionHealth, SyncCheckpoint } from '../shared/types';
 import { DEFAULT_SETTINGS } from '../shared/types';
 
 const DB_NAME = 'TempoStatsDB';
@@ -133,6 +133,27 @@ export async function insertPlay(play: Omit<Play, 'id'>): Promise<number> {
       resolve(request.result as number);
     };
     request.onerror = () => reject(request.error);
+  });
+}
+
+export async function insertPlaysBatch(plays: Array<Omit<Play, 'id'>>): Promise<number[]> {
+  if (plays.length === 0) return [];
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readwrite');
+    const store = tx.objectStore(PLAYS_STORE);
+    const ids: number[] = [];
+    for (const play of plays) {
+      const request = store.add(play);
+      request.onsuccess = () => {
+        ids.push(request.result as number);
+      };
+    }
+    tx.oncomplete = () => {
+      invalidateQueueCountCache();
+      resolve(ids);
+    };
+    tx.onerror = () => reject(tx.error);
   });
 }
 
@@ -592,6 +613,151 @@ export async function loadSessionState(): Promise<TabTrackState[]> {
       const storageResult = result as TrackerStateStorageResult;
       resolve(storageResult.trackerStates ?? []);
     });
+  });
+}
+
+// ---- Connection History (chrome.storage.local) -----------------------------
+
+interface ConnectionHistoryStorageResult {
+  connectionHistory?: ConnectionHistoryEntry[];
+}
+
+interface ConnectionHealthStorageResult {
+  connectionHealth?: ConnectionHealth;
+}
+
+interface SyncCheckpointStorageResult {
+  syncCheckpoint?: SyncCheckpoint;
+}
+
+const MAX_CONNECTION_HISTORY = 20;
+
+export async function getConnectionHistory(): Promise<ConnectionHistoryEntry[]> {
+  return new Promise<ConnectionHistoryEntry[]>((resolve) => {
+    chrome.storage.local.get('connectionHistory', (result) => {
+      const entries = (result as ConnectionHistoryStorageResult).connectionHistory;
+      resolve(Array.isArray(entries) ? entries : []);
+    });
+  });
+}
+
+export async function recordConnectionSuccess(ip: string, port: number, networkFingerprint: string): Promise<void> {
+  const entries = await getConnectionHistory();
+  const now = Date.now();
+
+  const existing = entries.find(e => e.ip === ip && e.port === port);
+  if (existing) {
+    existing.lastSeen = now;
+    existing.successCount++;
+    existing.failCount = 0;
+    existing.networkFingerprint = networkFingerprint;
+  } else {
+    entries.push({ ip, port, lastSeen: now, successCount: 1, failCount: 0, networkFingerprint });
+  }
+
+  entries.sort((a, b) => b.successCount - a.successCount || b.lastSeen - a.lastSeen);
+  if (entries.length > MAX_CONNECTION_HISTORY) entries.length = MAX_CONNECTION_HISTORY;
+
+  return new Promise<void>((resolve) => {
+    chrome.storage.local.set({ connectionHistory: entries }, resolve);
+  });
+}
+
+export async function recordConnectionFailure(ip: string, port: number): Promise<void> {
+  const entries = await getConnectionHistory();
+  const existing = entries.find(e => e.ip === ip && e.port === port);
+  if (existing) {
+    existing.failCount++;
+    if (existing.failCount > 10 && existing.successCount === 0) {
+      const idx = entries.indexOf(existing);
+      entries.splice(idx, 1);
+    }
+  }
+
+  return new Promise<void>((resolve) => {
+    chrome.storage.local.set({ connectionHistory: entries }, resolve);
+  });
+}
+
+export async function clearConnectionHistory(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    chrome.storage.local.remove('connectionHistory', resolve);
+  });
+}
+
+// ---- Connection Health (chrome.storage.local) ------------------------------
+
+const DEFAULT_CONNECTION_HEALTH: ConnectionHealth = {
+  lastPing: 0,
+  healthy: false,
+  consecutiveFailures: 0,
+  consecutiveAuthFailures: 0,
+  lastSuccessAt: null,
+};
+
+export async function getConnectionHealth(): Promise<ConnectionHealth> {
+  return new Promise<ConnectionHealth>((resolve) => {
+    chrome.storage.local.get('connectionHealth', (result) => {
+      const health = (result as ConnectionHealthStorageResult).connectionHealth;
+      resolve(health ? { ...DEFAULT_CONNECTION_HEALTH, ...health } : { ...DEFAULT_CONNECTION_HEALTH });
+    });
+  });
+}
+
+export async function saveConnectionHealth(health: ConnectionHealth): Promise<void> {
+  return new Promise<void>((resolve) => {
+    chrome.storage.local.set({ connectionHealth: health }, resolve);
+  });
+}
+
+export async function recordHealthPing(success: boolean): Promise<ConnectionHealth> {
+  const health = await getConnectionHealth();
+  const now = Date.now();
+  health.lastPing = now;
+
+  if (success) {
+    health.healthy = true;
+    health.consecutiveFailures = 0;
+    health.consecutiveAuthFailures = 0;
+    health.lastSuccessAt = now;
+  } else {
+    health.consecutiveFailures++;
+    if (health.consecutiveFailures >= 3) {
+      health.healthy = false;
+    }
+  }
+
+  await saveConnectionHealth(health);
+  return health;
+}
+
+export async function recordAuthFailure(): Promise<ConnectionHealth> {
+  const health = await getConnectionHealth();
+  health.consecutiveAuthFailures++;
+  await saveConnectionHealth(health);
+  return health;
+}
+
+// ---- Sync Checkpoint (chrome.storage.session — survives hibernation) --------
+
+export async function getSyncCheckpoint(): Promise<SyncCheckpoint | null> {
+  return new Promise<SyncCheckpoint | null>((resolve) => {
+    chrome.storage.session.get('syncCheckpoint', (result) => {
+      const checkpoint = (result as SyncCheckpointStorageResult).syncCheckpoint;
+      resolve(checkpoint ?? null);
+    });
+  });
+}
+
+export async function saveSyncCheckpoint(checkpoint: SyncCheckpoint): Promise<void> {
+  return new Promise<void>((resolve) => {
+    chrome.storage.session.set({ syncCheckpoint: checkpoint }, resolve);
+  });
+}
+
+export async function clearSyncCheckpoint(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    chrome.storage.session.remove('syncCheckpoint', resolve);
   });
 }
 

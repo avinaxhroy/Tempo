@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tempo Stats",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "Track music on YouTube Music, Spotify, SoundCloud & more. Sync your listening history to Tempo app.",
   "icons": {
     "16": "dist/icons/icon16.png",
@@ -27,7 +27,8 @@
     "tabs"
   ],
   "host_permissions": [
-    "http://*:8765/*"
+    "http://*:8765/*",
+    "<all_urls>"
   ],
   "optional_host_permissions": [
     "http://*:*/*"

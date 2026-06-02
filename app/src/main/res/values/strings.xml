@@ -999,4 +999,32 @@
     <string name="ui_offline">You\'re currently offline.</string>
     <string name="ui_search_hint">Search…</string>
     <string name="ui_no_results">No results.</string>
+
+    <!-- Constellation / InsightFeed -->
+    <string name="constellation_hint">TAP OR DRAG STARS TO ORBIT &amp; DETAIL</string>
+    <string name="constellation_active">ACTIVE DYNAMICS // %1$s</string>
+    <string name="vibe_constellation_title">Vibe Constellation</string>
+    <string name="vibe_constellation_desc">Your music signals are mapped as stars in the constellation. Drag them to stretch the connections, or tap a star to reveal details about your listening patterns.</string>
+    <string name="insight_category_mood">LISTENING DYNAMICS // MOOD</string>
+    <string name="insight_category_peak_time">LISTENING DYNAMICS // PEAK TIME</string>
+    <string name="insight_category_binge">LISTENING DYNAMICS // BINGE SESSION</string>
+    <string name="insight_category_discovery">LISTENING DYNAMICS // DISCOVERY</string>
+    <string name="insight_category_energy">AUDIO ATTRIBUTES // ENERGY</string>
+    <string name="insight_category_danceability">AUDIO ATTRIBUTES // DANCEABILITY</string>
+    <string name="insight_category_tempo">AUDIO ATTRIBUTES // TEMPO</string>
+    <string name="insight_category_acousticness">AUDIO ATTRIBUTES // ACOUSTICNESS</string>
+    <string name="insight_category_streak">LISTENING HABITS // STREAK</string>
+    <string name="insight_category_genre">LISTENING HABITS // GENRE</string>
+    <string name="insight_category_engagement">LISTENING HABITS // ENGAGEMENT</string>
+    <string name="insight_category_default">INSIGHT // DETAIL</string>
+    <string name="insight_close">Close</string>
+    <string name="streak_hint">Keep listening daily to grow the fire!</string>
+    <string name="tempo_bpm_hint">Pulsing in sync with average tempo</string>
+    <string name="period_today">today</string>
+    <string name="period_this_week">this week</string>
+    <string name="period_this_month">this month</string>
+    <string name="period_this_year">this year</string>
+    <string name="period_all_time">all time</string>
+    <string name="quick_stats_artist_placeholder">Artist</string>
+    <string name="quick_stats_track_placeholder">Track</string>
 </resources>

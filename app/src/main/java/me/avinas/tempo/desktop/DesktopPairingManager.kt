@@ -9,6 +9,7 @@ import me.avinas.tempo.data.local.entities.DesktopPairingSession
 import org.json.JSONException
 import org.json.JSONObject
 import java.security.KeyPair
+import java.security.MessageDigest
 import java.security.PrivateKey
 import java.util.UUID
 import javax.inject.Inject
@@ -44,6 +45,7 @@ class DesktopPairingManager @Inject constructor(
         const val SERVER_PORT = 8765
         private const val MIN_TOKEN_LENGTH = 16
         private const val MAX_TOKEN_LENGTH = 128
+        private const val MAX_BACKWARD_ROTATION_STEPS = 5
     }
 
     private var phoneKeyPair: KeyPair? = null
@@ -72,6 +74,7 @@ class DesktopPairingManager @Inject constructor(
                     )
                 }
                 else -> {
+                    Log.w(TAG, "v${version} QR pairing is deprecated — upgrade desktop app to use v3 (ECDH)")
                     val token = obj.optString("token").trim().ifBlank { null }
                     val ip = obj.optString("ip").trim().ifBlank { null }
                     val port = obj.optInt("port", 0).takeIf { it > 0 }
@@ -149,24 +152,20 @@ class DesktopPairingManager @Inject constructor(
     suspend fun validateToken(token: String): DesktopPairingSession? {
         val session = desktopPairingDao.getActiveSession() ?: return null
         val storedToken = TokenEncryptor.decrypt(session.authToken) ?: session.authToken
-        // Direct match (current token)
         if (constantTimeEquals(storedToken, token)) return session
-        // One-step backward: client sends previous token, stored is already rotated
-        val prevToken = EcdhKeyExchange.rotateAuthToken(token)
-        if (constantTimeEquals(storedToken, prevToken)) return session
-        // Two-step backward: client missed two rotation responses
-        val prevToken2 = EcdhKeyExchange.rotateAuthToken(prevToken)
-        if (constantTimeEquals(storedToken, prevToken2)) return session
+        var candidate = token
+        for (step in 1..MAX_BACKWARD_ROTATION_STEPS) {
+            candidate = EcdhKeyExchange.rotateAuthToken(candidate)
+            if (constantTimeEquals(storedToken, candidate)) return session
+        }
         return null
     }
 
     private fun constantTimeEquals(a: String, b: String): Boolean {
-        if (a.length != b.length) return false
-        var result = 0
-        for (i in a.indices) {
-            result = result or (a[i].code xor b[i].code)
-        }
-        return result == 0
+        val maxLen = maxOf(a.length, b.length)
+        val aBytes = a.toByteArray(Charsets.UTF_8).copyOf(maxLen)
+        val bBytes = b.toByteArray(Charsets.UTF_8).copyOf(maxLen)
+        return MessageDigest.isEqual(aBytes, bBytes)
     }
 
     suspend fun recordSuccessfulSync(token: String, deviceName: String) {
@@ -178,7 +177,6 @@ class DesktopPairingManager @Inject constructor(
         val session = desktopPairingDao.getActiveSession() ?: return null
         val storedToken = TokenEncryptor.decrypt(session.authToken) ?: session.authToken
 
-        // Direct match: client token equals stored token — rotate normally
         if (constantTimeEquals(storedToken, clientToken)) {
             val newToken = EcdhKeyExchange.rotateAuthToken(clientToken)
             val encryptedNew = TokenEncryptor.encrypt(newToken) ?: return null
@@ -186,18 +184,7 @@ class DesktopPairingManager @Inject constructor(
             return newToken
         }
 
-        // One-step behind: client sent previous token, stored is already rotated
-        // In this case, rotate from the stored token (not the client token) to advance
-        val prevToken = EcdhKeyExchange.rotateAuthToken(clientToken)
-        if (constantTimeEquals(storedToken, prevToken)) {
-            val newToken = EcdhKeyExchange.rotateAuthToken(storedToken)
-            val encryptedNew = TokenEncryptor.encrypt(newToken) ?: return null
-            desktopPairingDao.updateToken(session.id, encryptedNew)
-            return newToken
-        }
-
-        // Token doesn't match at all
-        return null
+        return storedToken
     }
 
     suspend fun deactivate() {

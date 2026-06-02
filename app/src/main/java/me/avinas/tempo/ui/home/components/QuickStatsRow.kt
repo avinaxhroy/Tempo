@@ -3,6 +3,7 @@ package me.avinas.tempo.ui.home.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.GlassCardVariant
+import me.avinas.tempo.ui.theme.premiumClickable
 import me.avinas.tempo.utils.TempoCopyEngine
 
 @Composable
@@ -27,6 +29,8 @@ fun QuickStatsRow(
     topArtistImage: String?,
     topTrackName: String?,
     topTrackImage: String?,
+    onArtistClick: (() -> Unit)? = null,
+    onTrackClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -35,7 +39,13 @@ fun QuickStatsRow(
     ) {
         // Top Artist Item
         GlassCard(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    if (onArtistClick != null && topArtistName != null) {
+                        Modifier.premiumClickable(onClick = onArtistClick, pressedScale = 0.96f)
+                    } else Modifier
+                ),
             backgroundColor = me.avinas.tempo.ui.theme.NeonRed.copy(alpha = 0.1f),
             variant = GlassCardVariant.LowProminence,
             contentPadding = PaddingValues(12.dp)
@@ -74,7 +84,13 @@ fun QuickStatsRow(
 
         // Top Track Item
         GlassCard(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    if (onTrackClick != null && topTrackName != null) {
+                        Modifier.premiumClickable(onClick = onTrackClick, pressedScale = 0.96f)
+                    } else Modifier
+                ),
             backgroundColor = me.avinas.tempo.ui.theme.ElectricBlue.copy(alpha = 0.1f),
             variant = GlassCardVariant.LowProminence,
             contentPadding = PaddingValues(12.dp)
@@ -89,7 +105,7 @@ fun QuickStatsRow(
                     contentDescription = null,
                     modifier = Modifier
                         .size(64.dp)
-                        .clip(CircleShape)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(Color.White.copy(alpha = 0.05f)),
                     contentScale = ContentScale.Crop
                 )

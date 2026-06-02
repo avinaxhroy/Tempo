@@ -3,9 +3,15 @@ package me.avinas.tempo.desktop
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Build
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.security.MessageDigest
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -18,11 +24,15 @@ class DesktopMdnsManager @Inject constructor(
         private const val TAG = "DesktopMdnsManager"
         private const val SERVICE_TYPE = "_tempo._tcp."
         private const val SERVICE_NAME = "Tempo-Phone"
+        private const val RE_REGISTER_INTERVAL_MS = 120_000L
     }
 
     private val nsdManager: NsdManager by lazy {
         context.getSystemService(Context.NSD_SERVICE) as NsdManager
     }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var reRegisterJob: Job? = null
 
     @Volatile
     private var isRegistered = false
@@ -50,7 +60,6 @@ class DesktopMdnsManager @Inject constructor(
 
     fun register(port: Int = DesktopPairingManager.SERVER_PORT) {
         if (isRegistered) {
-            // Must unregister first so TXT records (tsha) update on re-registration
             try {
                 nsdManager.unregisterService(registrationListener)
             } catch (_: Exception) { /* wasn't registered */ }
@@ -61,25 +70,28 @@ class DesktopMdnsManager @Inject constructor(
             serviceName = SERVICE_NAME
             serviceType = SERVICE_TYPE
             setPort(port)
-            val session = try {
-                kotlinx.coroutines.runBlocking { pairingManager.getActiveSession() }
-            } catch (_: Exception) { null }
-            session?.let {
-                val decrypted = TokenEncryptor.decrypt(it.authToken) ?: it.authToken
-                val hash = sha256Truncate(decrypted, 8)
-                setAttribute("tsha", hash)
+
+            val phoneIp = pairingManager.getLocalIpAddress()
+            if (phoneIp.isNotBlank() && phoneIp != "0.0.0.0") {
+                setAttribute("ip", phoneIp)
             }
+            setAttribute("device", Build.MODEL)
         }
 
         try {
             nsdManager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
-            Log.i(TAG, "Registering mDNS service on port $port")
+            Log.i(TAG, "Registering mDNS service on port $port with IP ${pairingManager.getLocalIpAddress()}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to register mDNS service", e)
         }
+
+        startPeriodicReRegistration(port)
     }
 
     fun unregister() {
+        reRegisterJob?.cancel()
+        reRegisterJob = null
+
         if (!isRegistered) return
 
         try {
@@ -90,8 +102,16 @@ class DesktopMdnsManager @Inject constructor(
         }
     }
 
-    private fun sha256Truncate(input: String, length: Int): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
-        return digest.take(length).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    private fun startPeriodicReRegistration(port: Int) {
+        reRegisterJob?.cancel()
+        reRegisterJob = scope.launch {
+            while (true) {
+                delay(RE_REGISTER_INTERVAL_MS)
+                if (isRegistered) {
+                    Log.d(TAG, "Periodic mDNS re-registration")
+                    register(port)
+                }
+            }
+        }
     }
 }

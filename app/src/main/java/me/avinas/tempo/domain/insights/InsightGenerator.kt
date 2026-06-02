@@ -39,7 +39,8 @@ class InsightGenerator @Inject constructor() {
                 title = moodTitle,
                 description = description,
                 type = InsightType.MOOD,
-                score = 0.9
+                score = 0.9,
+                payload = InsightPayload.MoodData(valence, energy)
             ))
 
             // Extra Mood Insights
@@ -48,7 +49,8 @@ class InsightGenerator @Inject constructor() {
                     title = "High Energy Mode! ⚡",
                     description = "Average energy level: ${(energy * 100).toInt()}%$estimatedNote",
                     type = InsightType.ENERGY,
-                    score = 0.65
+                    score = 0.65,
+                    payload = InsightPayload.FeatureValue(InsightType.ENERGY, energy)
                 ))
             }
 
@@ -58,7 +60,8 @@ class InsightGenerator @Inject constructor() {
                     title = "Ready to Dance! 💃",
                     description = "Your playlist is ${(danceability * 100).toInt()}% danceable$estimatedNote",
                     type = InsightType.DANCEABILITY,
-                    score = 0.65
+                    score = 0.65,
+                    payload = InsightPayload.FeatureValue(InsightType.DANCEABILITY, danceability)
                 ))
             }
 
@@ -76,7 +79,8 @@ class InsightGenerator @Inject constructor() {
                     title = tempoTitle,
                     description = "Average tempo: ${tempo.toInt()} BPM",
                     type = InsightType.TEMPO,
-                    score = 0.6
+                    score = 0.6,
+                    payload = InsightPayload.TempoValue(tempo)
                 ))
             }
 
@@ -86,7 +90,8 @@ class InsightGenerator @Inject constructor() {
                     title = "Acoustic Soul 🎸",
                     description = "${(acousticness * 100).toInt()}% of your music is acoustic$estimatedNote",
                     type = InsightType.ACOUSTICNESS,
-                    score = 0.65
+                    score = 0.65,
+                    payload = InsightPayload.FeatureValue(InsightType.ACOUSTICNESS, acousticness)
                 ))
             }
         }
@@ -98,7 +103,8 @@ class InsightGenerator @Inject constructor() {
                 title = me.avinas.tempo.utils.TempoCopyEngine.getBingeTitle(topBinge.artist),
                 description = me.avinas.tempo.utils.TempoCopyEngine.getBingeDescription(topBinge.artist, topBinge.session_play_count),
                 type = InsightType.BINGE,
-                score = 0.85
+                score = 0.85,
+                payload = InsightPayload.BingeData(topBinge.artist, topBinge.session_play_count, topBinge.session_duration_ms)
             ))
         }
 
@@ -109,7 +115,8 @@ class InsightGenerator @Inject constructor() {
                 title = me.avinas.tempo.utils.TempoCopyEngine.getDiscoveryTitle(),
                 description = me.avinas.tempo.utils.TempoCopyEngine.getDiscoveryDescription(currentMonth.new_artists_count),
                 type = InsightType.DISCOVERY,
-                score = 0.7
+                score = 0.7,
+                payload = InsightPayload.DiscoveryData(currentMonth.new_artists_count, discoveryTrends)
             ))
         }
 
@@ -130,7 +137,8 @@ class InsightGenerator @Inject constructor() {
                 title = me.avinas.tempo.utils.TempoCopyEngine.getPeakTimeTitle(timeOfDay),
                 description = me.avinas.tempo.utils.TempoCopyEngine.getPeakTimeDescription(hourFormatted),
                 type = InsightType.PEAK_TIME,
-                score = 0.6
+                score = 0.6,
+                payload = InsightPayload.PeakTimeData(hour, hourlyDistribution)
             ))
         }
 
@@ -141,7 +149,8 @@ class InsightGenerator @Inject constructor() {
                     title = me.avinas.tempo.utils.TempoCopyEngine.getStreakTitle(streak.currentStreakDays),
                     description = me.avinas.tempo.utils.TempoCopyEngine.getStreakDescription(streak.currentStreakDays),
                     type = InsightType.STREAK,
-                    score = 0.8
+                    score = 0.8,
+                    payload = InsightPayload.StreakData(streak.currentStreakDays)
                 ))
             }
         }
@@ -153,7 +162,8 @@ class InsightGenerator @Inject constructor() {
                 title = me.avinas.tempo.utils.TempoCopyEngine.getGenreTitle(topGenre.genre),
                 description = me.avinas.tempo.utils.TempoCopyEngine.getGenreDescription(topGenre.genre),
                 type = InsightType.GENRE,
-                score = 0.75
+                score = 0.75,
+                payload = InsightPayload.GenreData(topGenre.genre)
             ))
         }
 
@@ -165,14 +175,16 @@ class InsightGenerator @Inject constructor() {
                     title = me.avinas.tempo.utils.TempoCopyEngine.getEngagementTitle("Completionist"),
                     description = me.avinas.tempo.utils.TempoCopyEngine.getEngagementDescription("Completionist", stats.averageCompletionRate.toInt()),
                     type = InsightType.ENGAGEMENT,
-                    score = 0.7
+                    score = 0.7,
+                    payload = InsightPayload.FeatureValue(InsightType.ENGAGEMENT, stats.averageCompletionRate.toFloat() / 100f)
                 ))
             } else if (stats.skipRate > 0.3) {
                  insights.add(InsightCardData(
                     title = me.avinas.tempo.utils.TempoCopyEngine.getEngagementTitle("Skipper"),
                     description = me.avinas.tempo.utils.TempoCopyEngine.getEngagementDescription("Skipper", (stats.skipRate * 100).toInt()),
                     type = InsightType.ENGAGEMENT,
-                    score = 0.7
+                    score = 0.7,
+                    payload = InsightPayload.FeatureValue(InsightType.ENGAGEMENT, -stats.skipRate.toFloat())
                 ))
             }
         }

@@ -1,6 +1,8 @@
 package me.avinas.tempo.desktop
 
 import android.content.Context
+import android.os.Environment
+import android.os.StatFs
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import me.avinas.tempo.data.repository.ArtistLinkingService
@@ -64,8 +66,8 @@ class DesktopPlayIngestionService @Inject constructor(
     companion object {
         private const val TAG = "DesktopIngestion"
 
-        /** Deduplication window: skip if same track exists within ±60 s. */
-        private const val DEDUP_WINDOW_MS = 60_000L
+        /** Deduplication window: skip if same track exists within ±5 min. */
+        private const val DEDUP_WINDOW_MS = 300_000L
 
         /** Minimum sensible play duration to accept (5 seconds). */
         private const val MIN_PLAY_DURATION_MS = 5_000L
@@ -91,6 +93,19 @@ class DesktopPlayIngestionService @Inject constructor(
         if (BatteryUtils.isCriticalBattery(context, forceRefresh = true)) {
             Log.w(TAG, "Rejecting play ingestion: battery level is critical (≤ 20%)")
             return IngestionResult.Error("battery_critical")
+        }
+
+        // 1.6 Storage check: reject if available storage is critically low (< 100MB)
+        val availableBytes = try {
+            val stat = StatFs(Environment.getDataDirectory().path)
+            stat.availableBlocksLong * stat.blockSizeLong
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not check available storage", e)
+            Long.MAX_VALUE // Assume enough space if we can't check
+        }
+        if (availableBytes < 100 * 1024 * 1024) { // < 100MB
+            Log.w(TAG, "Rejecting play ingestion: low storage (${availableBytes / (1024 * 1024)}MB available)")
+            return IngestionResult.Error("low_storage")
         }
 
         // 2. Parse metadata

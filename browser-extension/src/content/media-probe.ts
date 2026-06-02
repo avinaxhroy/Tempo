@@ -1,12 +1,13 @@
 // ============================================================================
 // Tempo Stats — Content Script: Media Probe
 // Injected into music site tabs. Extracts media state and sends to background.
-// Features: configurable polling interval, reconnection after context invalidation,
-// throttled MutationObserver, and proper lifecycle management.
+// Event-driven: media events (play/pause/seek) push state instantly.
+// Throttled timeupdate tracks position every 5s. Adaptive heartbeat (15s
+// playback / 30s idle / 60s hidden) is a safety net only.
 // ============================================================================
 
 (() => {
-  let pollIntervalMs = 2_000;
+  let pollIntervalMs = 15_000;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let activePollIntervalMs = 0;
   let lastSentKey = '';
@@ -54,7 +55,9 @@
   const dismissedYouTubeChannels = new Set<string>();
   const DISMISSED_CHANNELS_KEY = 'tempo_dismissed_youtube_channels';
   const DISMISS_TTL_MS = 24 * 60 * 60 * 1000;
-  const IDLE_POLL_INTERVAL_MS = 10_000;
+  const IDLE_POLL_INTERVAL_MS = 30_000;
+  const PLAYBACK_HEARTBEAT_MS = 15_000;
+  const HIDDEN_HEARTBEAT_MS = 60_000;
 
   // Pre-computed site suffixes for title cleaning (sorted longest-first)
   const TITLE_SUFFIXES = [
@@ -93,26 +96,42 @@
   // ---- Cached media element management ------------------------------------
 
   const observedMediaElements = new WeakSet<HTMLMediaElement>();
-  const MEDIA_WAKE_EVENTS = [
+  const MEDIA_IMMEDIATE_EVENTS = [
     'play',
     'playing',
     'pause',
     'ended',
     'seeked',
     'ratechange',
-    'volumechange',
     'loadedmetadata',
     'durationchange',
     'emptied',
   ];
+  const MEDIA_THROTTLED_EVENTS = [
+    'timeupdate',
+    'volumechange',
+  ];
+
+  let lastTimeupdatePoll = 0;
+  const TIMEUPDATE_THROTTLE_MS = 5_000;
+
+  function onTimeUpdate(): void {
+    const now = Date.now();
+    if (now - lastTimeupdatePoll < TIMEUPDATE_THROTTLE_MS) return;
+    lastTimeupdatePoll = now;
+    schedulePollSoon(0);
+  }
 
   function refreshMediaElements(): void {
     cachedMediaElements = Array.from(document.querySelectorAll<HTMLMediaElement>('audio, video'));
     for (const media of cachedMediaElements) {
       if (observedMediaElements.has(media)) continue;
       observedMediaElements.add(media);
-      for (const eventName of MEDIA_WAKE_EVENTS) {
-        media.addEventListener(eventName, () => schedulePollSoon(), { passive: true });
+      for (const eventName of MEDIA_IMMEDIATE_EVENTS) {
+        media.addEventListener(eventName, () => schedulePollSoon(0), { passive: true });
+      }
+      for (const eventName of MEDIA_THROTTLED_EVENTS) {
+        media.addEventListener(eventName, onTimeUpdate, { passive: true });
       }
     }
     mediaElementsDirty = false;
@@ -311,7 +330,7 @@
       await sendMessageSafely({ type: 'ADD_YOUTUBE_CHANNEL', channel: cleanedChannel });
       hideYouTubePrompt();
       lastSentKey = '';
-      setTimeout(poll, 100);
+      schedulePollSoon(0);
     });
 
     document.documentElement.appendChild(host);
@@ -359,7 +378,7 @@
     try {
       const response = await sendMessageSafely({ type: 'GET_POLLING_INTERVAL' });
       if (response && typeof response.pollingIntervalSeconds === 'number') {
-        const newInterval = Math.max(1, response.pollingIntervalSeconds) * 1000;
+        const newInterval = Math.max(5, response.pollingIntervalSeconds) * 1000;
         if (newInterval !== pollIntervalMs) {
           pollIntervalMs = newInterval;
           updatePollingCadence();
@@ -374,7 +393,7 @@
     const nextSeconds = nextSettings?.pollingIntervalSeconds;
     if (typeof nextSeconds !== 'number') return;
 
-    const newInterval = Math.max(1, nextSeconds) * 1000;
+    const newInterval = Math.max(5, nextSeconds) * 1000;
     if (newInterval !== pollIntervalMs) {
       pollIntervalMs = newInterval;
       updatePollingCadence();
@@ -726,7 +745,7 @@
         forceMetadataUpdate = true;
         ytMusicTagObserver?.disconnect();
         ytMusicTagObserver = null;
-        schedulePollSoon(100);
+        schedulePollSoon(0);
       }
     });
 
@@ -863,13 +882,13 @@
 
   function buildStateKey(state: ReturnType<typeof extractMediaState>): string {
     if (!state) return '';
-    // Include position rounded to nearest integer to avoid sending on sub-second changes
-    const posKey = Number.isFinite(state.position) ? Math.round(state.position) : -1;
+    const posKey = Number.isFinite(state.position) ? Math.round(state.position / 5) * 5 : -1;
     return `${state.title}|${state.artist}|${state.album}|${state.isPlaying ? 1 : 0}|${posKey}`;
   }
 
   function poll(): void {
     scheduledPollTimer = null;
+    scheduledPollDelay = Infinity;
     const state = extractMediaState();
 
     if (!state) {
@@ -956,8 +975,7 @@
               forceMetadataUpdate = true;
               ytMusicTagObserver?.disconnect();
               ytMusicTagObserver = null;
-              // Trigger a poll to send the updated metadata
-              schedulePollSoon(50);
+              schedulePollSoon(0);
             } else if (attempt < 3) {
               scheduleRetry(delay * 2, attempt + 1);
             }
@@ -996,8 +1014,9 @@
   }
 
   function getDesiredPollIntervalMs(): number {
-    if (document.hidden) return Math.max(pollIntervalMs * 5, IDLE_POLL_INTERVAL_MS);
-    return lastObservedActive ? pollIntervalMs : Math.max(pollIntervalMs * 5, IDLE_POLL_INTERVAL_MS);
+    if (document.hidden) return HIDDEN_HEARTBEAT_MS;
+    if (lastObservedActive) return Math.max(pollIntervalMs, PLAYBACK_HEARTBEAT_MS);
+    return Math.max(pollIntervalMs * 2, IDLE_POLL_INTERVAL_MS);
   }
 
   function updatePollingCadence(): void {
@@ -1008,9 +1027,17 @@
     startPolling(false);
   }
 
-  function schedulePollSoon(delayMs = 100): void {
-    if (scheduledPollTimer) return;
-    scheduledPollTimer = setTimeout(poll, delayMs);
+  let scheduledPollDelay = Infinity;
+
+  function schedulePollSoon(delayMs = 0): void {
+    if (scheduledPollTimer && delayMs >= scheduledPollDelay) return;
+    if (scheduledPollTimer) clearTimeout(scheduledPollTimer);
+    scheduledPollDelay = delayMs;
+    scheduledPollTimer = setTimeout(() => {
+      scheduledPollTimer = null;
+      scheduledPollDelay = Infinity;
+      poll();
+    }, delayMs);
   }
 
   function startPolling(runImmediately = true): void {
@@ -1035,17 +1062,16 @@
   ensureMediaElementObserver();
   chrome.storage.onChanged.addListener(handleSettingsChanged);
 
-  // Pause/resume polling when tab visibility changes
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       updatePollingCadence();
     } else {
-      // Invalidate YouTube channel cache on return (SPA may have changed)
       youTubeChannelDirty = true;
       mediaElementsDirty = true;
       musicSectionDirty = true;
       cachedMusicSectionEl = null;
-      lastSentKey = ''; // Force re-send on return
+      lastSentKey = '';
+      lastTimeupdatePoll = 0;
       stopPolling();
       startPolling();
     }
@@ -1083,8 +1109,9 @@
           youTubeChannelDirty = true;
           mediaElementsDirty = true;
           resetYtMetadataCache();
-          lastSentKey = ''; // Force re-send on URL change
-          schedulePollSoon(300);
+          lastSentKey = '';
+          lastTimeupdatePoll = 0;
+          schedulePollSoon(0);
         }
       }, 500);
     });
@@ -1107,7 +1134,8 @@
         mediaElementsDirty = true;
         resetYtMetadataCache();
         lastSentKey = '';
-        schedulePollSoon(300);
+        lastTimeupdatePoll = 0;
+        schedulePollSoon(0);
       }
     }, 500);
   }

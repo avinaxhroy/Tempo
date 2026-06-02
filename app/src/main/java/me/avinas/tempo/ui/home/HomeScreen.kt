@@ -57,6 +57,7 @@ fun HomeScreen(
     onNavigateToHistory: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToTrack: (Long) -> Unit,
+    onNavigateToArtist: (String) -> Unit,
     onNavigateToSpotlight: (TimeRange?) -> Unit,
     onNavigateToSupportedApps: () -> Unit,
     onNavigateToProfile: () -> Unit = {}
@@ -189,7 +190,23 @@ fun HomeScreen(
                                 topArtistName = uiState.topArtist?.artist,
                                 topArtistImage = uiState.topArtist?.imageUrl,
                                 topTrackName = uiState.topTrack?.title,
-                                topTrackImage = uiState.topTrack?.albumArtUrl
+                                topTrackImage = uiState.topTrack?.albumArtUrl,
+                                onArtistClick = {
+                                    val artist = uiState.topArtist
+                                    if (artist != null) {
+                                        val id = artist.artistId
+                                        if (id != null && id > 0) {
+                                            onNavigateToArtist("id:$id")
+                                        } else {
+                                            onNavigateToArtist(artist.artist)
+                                        }
+                                    }
+                                },
+                                onTrackClick = {
+                                    uiState.topTrack?.trackId?.let { trackId ->
+                                        onNavigateToTrack(trackId)
+                                    }
+                                }
                             )
                             
 
@@ -217,11 +234,10 @@ fun HomeScreen(
                                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                             )
                             
-                            val emptyNavigateToArtist: (String) -> Unit = remember { { /* Handle Artist Nav */ } }
-                    InsightFeed(
+                            InsightFeed(
                                 insights = uiState.insights,
                                 onNavigateToTrack = onNavigateToTrack,
-                                onNavigateToArtist = emptyNavigateToArtist
+                                onNavigateToArtist = onNavigateToArtist
                             )
                         }
                     }

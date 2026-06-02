@@ -6,9 +6,11 @@
 // to survive service worker hibernation.
 // ============================================================================
 
-import type { Play, SyncPayload, SyncPlay, SyncResponse, PairingInfo } from '../shared/types';
+import type { Play, SyncPayload, SyncPlay, SyncResponse, PairingInfo, ConnectionHistoryEntry } from '../shared/types';
 import * as storage from './storage';
-import { signRequest, buildJsonHeaders } from '../shared/security';
+import { signRequest, buildJsonHeaders, encryptBody, decryptBody } from '../shared/security';
+
+const IS_FIREFOX = typeof navigator !== 'undefined' && navigator.userAgent.includes('Firefox');
 
 // ---- Constants (match desktop/src-tauri/src/network/mod.rs) ----------------
 
@@ -16,14 +18,61 @@ const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_BATCH_SIZE = 50;
-const MAX_PLAYS_PER_BATCH = 100;
 const DISCOVERY_PING_TIMEOUT_MS = 900;
 const SUBNET_SCAN_BATCH_SIZE = 48;
 const SUBNET_RESCAN_COOLDOWN_MS = 30 * 60 * 1000;
 
 const SYNC_ALARM_NAME = 'tempo-stats-auto-sync';
 const RETRY_ALARM_NAME = 'tempo-stats-retry-sync';
+const HEARTBEAT_ALARM_NAME = 'tempo-pairing-heartbeat';
+const HEARTBEAT_INTERVAL_MINUTES = 5;
+const TOKEN_REFRESH_ALARM_NAME = 'tempo-token-refresh';
+const TOKEN_REFRESH_INTERVAL_MINUTES = 60;
+const AUTH_FAILURE_THRESHOLD = 3;
 
+// ---- Adaptive sync --------------------------------------------------------
+
+function getAdaptiveSyncInterval(queueSize: number, baseIntervalMinutes: number): number {
+  if (queueSize === 0) return baseIntervalMinutes;
+  if (queueSize < 5) return Math.max(5, Math.floor(baseIntervalMinutes / 2));
+  if (queueSize < 20) return Math.max(2, Math.floor(baseIntervalMinutes / 4));
+  return 2;
+}
+
+function getAdaptiveBatchSize(): number {
+  const conn = (navigator as any).connection;
+  if (!conn) return MAX_BATCH_SIZE;
+
+  if (conn.effectiveType === '4g' && conn.downlink > 5) return 100;
+  if (conn.effectiveType === '4g') return MAX_BATCH_SIZE;
+  if (conn.effectiveType === '3g') return 20;
+  return 10;
+}
+
+function getNetworkFingerprint(): string {
+  const conn = (navigator as any).connection;
+  if (!conn) return 'unknown';
+  return `${conn.effectiveType || 'unknown'}-${conn.type || 'unknown'}`;
+}
+
+
+// ---- Token lock (prevents concurrent token read/write races) ---------------
+
+let _tokenLockPromise: Promise<void> | null = null;
+
+async function withTokenLock<T>(fn: () => Promise<T>): Promise<T> {
+  while (_tokenLockPromise) {
+    await _tokenLockPromise;
+  }
+  let release!: () => void;
+  _tokenLockPromise = new Promise<void>(r => { release = r; });
+  try {
+    return await fn();
+  } finally {
+    _tokenLockPromise = null;
+    release();
+  }
+}
 
 // ---- Sync Status -----------------------------------------------------------
 
@@ -67,6 +116,11 @@ export function getSyncStatus(queueCount: number): SyncStatus {
  */
 export async function hasHostPermission(origin: string): Promise<boolean> {
   try {
+    // Firefox: <all_urls> grants access to all origins, but permissions.contains()
+    // doesn't recognize this. Skip the check on Firefox.
+    if (IS_FIREFOX) {
+      return true;
+    }
     return await chrome.permissions.contains({
       origins: [origin]
     });
@@ -103,7 +157,12 @@ export async function requestHostPermission(_origin: string): Promise<boolean> {
 
 // ---- Phone discovery helpers -----------------------------------------------
 
-async function pingPhone(ip: string, port: number, authToken?: string, timeoutMs = 3_000): Promise<boolean> {
+async function pingPhone(
+  ip: string,
+  port: number,
+  authToken?: string,
+  timeoutMs = 3_000,
+): Promise<{ ok: boolean; authFailed: boolean }> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -115,9 +174,9 @@ async function pingPhone(ip: string, port: number, authToken?: string, timeoutMs
       headers,
     });
     clearTimeout(timeout);
-    return response.ok;
+    return { ok: response.ok, authFailed: response.status === 401 || response.status === 403 };
   } catch {
-    return false;
+    return { ok: false, authFailed: false };
   }
 }
 
@@ -138,6 +197,29 @@ function getPrivateIpv4Subnet(ip: string): string | null {
   return isPrivate ? `${parts[0]}.${parts[1]}.${parts[2]}` : null;
 }
 
+function buildPriorityOrderedCandidates(subnet: string, excludeIp?: string): string[] {
+  const priorityRanges = [
+    [100, 200],
+    [2, 100],
+    [200, 255],
+  ];
+
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+
+  for (const [start, end] of priorityRanges) {
+    for (let i = start; i <= end; i++) {
+      const ip = `${subnet}.${i}`;
+      if (ip !== excludeIp && !seen.has(ip)) {
+        seen.add(ip);
+        candidates.push(ip);
+      }
+    }
+  }
+
+  return candidates;
+}
+
 async function findPhoneOnStoredSubnet(pairing: PairingInfo, forceDiscovery = false): Promise<string | null> {
   const subnet = getPrivateIpv4Subnet(pairing.phoneIp);
   if (!subnet) return null;
@@ -149,24 +231,41 @@ async function findPhoneOnStoredSubnet(pairing: PairingInfo, forceDiscovery = fa
   }
   _lastSubnetScanAt = now;
 
-  const candidates: string[] = [];
-  for (let i = 1; i <= 254; i++) {
-    const ip = `${subnet}.${i}`;
-    if (ip !== pairing.phoneIp) candidates.push(ip);
-  }
+  const candidates = buildPriorityOrderedCandidates(subnet, pairing.phoneIp);
 
-  console.log(`[Tempo] Scanning ${subnet}.x for phone after stored IP failed`);
+  console.log(`[Tempo] Scanning ${subnet}.x for phone after stored IP failed (priority-ordered)`);
 
   for (let start = 0; start < candidates.length; start += SUBNET_SCAN_BATCH_SIZE) {
     const batch = candidates.slice(start, start + SUBNET_SCAN_BATCH_SIZE);
     const results = await Promise.all(
       batch.map(async ip => ({
         ip,
-        reachable: await pingPhone(ip, pairing.phonePort, pairing.authToken, DISCOVERY_PING_TIMEOUT_MS),
+        reachable: (await pingPhone(ip, pairing.phonePort, pairing.authToken, DISCOVERY_PING_TIMEOUT_MS)).ok,
       }))
     );
     const found = results.find(result => result.reachable);
     if (found) return found.ip;
+  }
+
+  return null;
+}
+
+async function findPhoneViaConnectionHistory(pairing: PairingInfo): Promise<string | null> {
+  const history = await storage.getConnectionHistory();
+  if (history.length === 0) return null;
+
+  const sorted = [...history].sort((a, b) => b.successCount - a.successCount || b.lastSeen - a.lastSeen);
+
+  console.log(`[Tempo] Trying ${sorted.length} IPs from connection history`);
+
+  for (const entry of sorted.slice(0, 5)) {
+    if (entry.ip === pairing.phoneIp) continue;
+    const reachable = (await pingPhone(entry.ip, entry.port || pairing.phonePort, pairing.authToken, 2_000)).ok;
+    if (reachable) {
+      console.log(`[Tempo] Found phone via connection history: ${entry.ip}`);
+      return entry.ip;
+    }
+    await storage.recordConnectionFailure(entry.ip, entry.port || pairing.phonePort);
   }
 
   return null;
@@ -240,47 +339,53 @@ async function pingPhoneViaMdns(port: number, authToken?: string): Promise<strin
 }
 
 async function resolvePhoneAddress(pairing: PairingInfo, options: SyncOptions = {}): Promise<{ ip: string; port: number } | null> {
-  // Strategy 1: Stored IP (or hostname) — fastest path, works when IP is stable
+  const fingerprint = getNetworkFingerprint();
+
   if (pairing.phoneIp) {
-    const reachable = await pingPhone(pairing.phoneIp, pairing.phonePort, pairing.authToken);
+    const reachable = (await pingPhone(pairing.phoneIp, pairing.phonePort, pairing.authToken)).ok;
     if (reachable) {
+      await storage.recordConnectionSuccess(pairing.phoneIp, pairing.phonePort, fingerprint);
       return { ip: pairing.phoneIp, port: pairing.phonePort };
     }
+    await storage.recordConnectionFailure(pairing.phoneIp, pairing.phonePort);
     console.log(`[Tempo] Stored address ${pairing.phoneIp} unreachable, trying recovery paths...`);
   }
 
-  // Strategy 2: Hotspot seeds — works when phone IS the WiFi gateway
+  const historyIp = await findPhoneViaConnectionHistory(pairing);
+  if (historyIp) {
+    await storage.savePairing({ ...pairing, phoneIp: historyIp });
+    await storage.recordConnectionSuccess(historyIp, pairing.phonePort, fingerprint);
+    return { ip: historyIp, port: pairing.phonePort };
+  }
+
   for (const gatewayIp of HOTSPOT_GATEWAY_IPS) {
     if (gatewayIp === pairing.phoneIp) continue;
-    const reachable = await pingPhone(gatewayIp, pairing.phonePort, pairing.authToken);
+    const reachable = (await pingPhone(gatewayIp, pairing.phonePort, pairing.authToken)).ok;
     if (reachable) {
       console.log(`[Tempo] Found phone at hotspot gateway ${gatewayIp}`);
       await storage.savePairing({ ...pairing, phoneIp: gatewayIp });
+      await storage.recordConnectionSuccess(gatewayIp, pairing.phonePort, fingerprint);
       return { ip: gatewayIp, port: pairing.phonePort };
     }
   }
 
-  // Strategy 3: Same-subnet repair — handles the common DHCP case where the
-  // phone IP changed but both devices are still on the same WiFi.
   const sameSubnetIp = await findPhoneOnStoredSubnet(pairing, options.forceDiscovery === true);
   if (sameSubnetIp) {
     console.log(`[Tempo] Found phone at new same-subnet address ${sameSubnetIp}`);
     await storage.savePairing({ ...pairing, phoneIp: sameSubnetIp });
+    await storage.recordConnectionSuccess(sameSubnetIp, pairing.phonePort, fingerprint);
     return { ip: sameSubnetIp, port: pairing.phonePort };
   }
 
-  // Strategy 4: Best-effort hostname — useful on networks that expose it, but
-  // not reliable enough to be the only IP-change recovery path.
   const mdnsResult = await pingPhoneViaMdns(pairing.phonePort, pairing.authToken);
   if (mdnsResult) {
     console.log(`[Tempo] Found phone via mDNS (${MDNS_HOSTNAME}) — updating stored address`);
     await storage.savePairing({ ...pairing, phoneIp: MDNS_HOSTNAME });
+    await storage.recordConnectionSuccess(MDNS_HOSTNAME, pairing.phonePort, fingerprint);
     return { ip: MDNS_HOSTNAME, port: pairing.phonePort };
   }
 
-  // Strategy 5: Different network/subnet. A service worker has no WebRTC local
-  // adapter discovery, so the popup must run the full current-subnet scan.
-  console.warn('[Tempo] Phone not reachable via stored IP, mDNS, hotspot seeds, or stored subnet scan. Open popup to re-discover.');
+  console.warn('[Tempo] Phone not reachable via stored IP, connection history, mDNS, hotspot seeds, or stored subnet scan. Open popup to re-discover.');
   return null;
 }
 
@@ -351,12 +456,23 @@ export async function syncToPhone(options: SyncOptions = {}): Promise<number> {
       throw new Error('Phone battery is critically low, sync postponed');
     }
 
-    // 6. Batch sync — send in batches of MAX_BATCH_SIZE
+    // 6. Check for stale checkpoint from previous hibernation
+    const checkpoint = await storage.getSyncCheckpoint();
+    if (checkpoint && Date.now() - checkpoint.lastAttempt < 120_000) {
+      console.warn(
+        `[Tempo] Resuming from sync checkpoint (batch ${checkpoint.batchIndex + 1}/${checkpoint.totalBatches}). ` +
+        `${checkpoint.batchIds.length} plays from previous batch may duplicate — phone dedup handles this.`,
+      );
+      await storage.clearSyncCheckpoint();
+    }
+
+    // 7. Batch sync — adaptive batch size based on network conditions
+    const batchSize = getAdaptiveBatchSize();
     let totalSynced = 0;
-    const batches = Math.ceil(allPlays.length / MAX_BATCH_SIZE);
+    const batches = Math.ceil(allPlays.length / batchSize);
 
     for (let i = 0; i < batches; i++) {
-      const batch = allPlays.slice(i * MAX_BATCH_SIZE, (i + 1) * MAX_BATCH_SIZE);
+      const batch = allPlays.slice(i * batchSize, (i + 1) * batchSize);
 
       const deviceName = 'Tempo Stats (Browser)';
       const payload: SyncPayload = {
@@ -390,24 +506,40 @@ export async function syncToPhone(options: SyncOptions = {}): Promise<number> {
       const url = `http://${address.ip}:${address.port}/api/plays`;
       console.log(`[Tempo] Syncing batch ${i + 1}/${batches} (${batch.length} plays) to ${url}`);
 
+      const batchIds = batch.filter(p => p.id != null).map(p => p.id!);
+      await storage.saveSyncCheckpoint({
+        batchIds,
+        batchIndex: i,
+        totalBatches: batches,
+        lastAttempt: Date.now(),
+        retryCount: 0,
+      });
+
       const response = await sendWithRetry(url, payload, pairing.authToken);
 
       // Token rotation: if the phone sent a next_token, update stored pairing
-      if (response?.next_token) {
-        console.log('[Tempo] Auth token rotated by phone');
-        pairing = { ...pairing, authToken: response.next_token };
-        await storage.savePairing(pairing);
+      // Uses token lock to prevent race with concurrent refreshToken()
+      const nextToken = response?.next_token;
+      if (nextToken && pairing) {
+        const currentPairing = pairing;
+        await withTokenLock(async () => {
+          console.log('[Tempo] Auth token rotated by phone');
+          const updated = { ...currentPairing, authToken: nextToken };
+          await storage.savePairing(updated);
+        });
+        pairing = { ...pairing, authToken: nextToken };
       }
 
-      // Only mark as synced if the server confirmed success
       if (response && response.ok !== false) {
-        const ids = batch.filter(p => p.id != null).map(p => p.id!);
-        await storage.markPlaysSynced(ids);
+        await storage.clearSyncCheckpoint();
+        await storage.markPlaysSynced(batchIds);
         totalSynced += batch.length;
       } else {
         throw new Error(`Phone rejected batch ${i + 1}: server returned ok=false`);
       }
     }
+
+    await storage.clearSyncCheckpoint();
 
     // 7. Record success
     await storage.recordSync(totalSynced, 'success', null);
@@ -446,6 +578,7 @@ export async function syncToPhone(options: SyncOptions = {}): Promise<number> {
 
 async function sendWithRetry(url: string, payload: SyncPayload, authToken: string): Promise<SyncResponse | null> {
   const payloadJson = JSON.stringify(payload);
+  const encryptedBody = await encryptBody(payloadJson, authToken);
 
   let delayMs = INITIAL_RETRY_DELAY_MS;
   let lastError = '';
@@ -455,14 +588,19 @@ async function sendWithRetry(url: string, payload: SyncPayload, authToken: strin
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-      // buildJsonHeaders signs with timestamp + nonce — unique per attempt,
-      // so even retries have distinct signatures.
-      const headers = await buildJsonHeaders(authToken, payloadJson);
+      const signatureHeaders = await signRequest(authToken, encryptedBody);
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...signatureHeaders,
+        'X-Tempo-Encrypted': '1',
+        'X-Tempo-Compressed': '1',
+      };
 
       const response = await fetch(url, {
         method: 'POST',
         headers,
-        body: payloadJson,
+        body: encryptedBody,
         signal: controller.signal,
       });
 
@@ -470,22 +608,24 @@ async function sendWithRetry(url: string, payload: SyncPayload, authToken: strin
 
       if (response.ok) {
         try {
-          const data: SyncResponse = await response.json();
+          const isEncrypted = response.headers.get('X-Tempo-Encrypted') === '1';
+          const responseText = await response.text();
+          const decryptedText = isEncrypted
+            ? await decryptBody(responseText, authToken)
+            : responseText;
+          const data: SyncResponse = JSON.parse(decryptedText);
           return data;
         } catch {
-          // Response wasn't JSON, return success without next_token
           return { ok: true };
         }
       }
 
       const body = await response.text();
 
-      // Battery critical — don't retry
       if (body.includes('battery_critical')) {
         throw new Error('Phone battery is critically low');
       }
 
-      // Auth error — don't retry
       if (response.status >= 400 && response.status < 500) {
         throw new Error(`Phone rejected payload: HTTP ${response.status} - ${body}`);
       }
@@ -524,28 +664,142 @@ export async function scheduleRetryAlarm(delayMinutes: number): Promise<void> {
 }
 
 /**
- * Set up the auto-sync alarm.
+ * Set up the auto-sync alarm with adaptive interval.
  */
 export async function initAutoSync(): Promise<void> {
   const settings = await storage.getSettings();
 
-  // Clear existing alarms
   await chrome.alarms.clear(SYNC_ALARM_NAME);
 
-  // Don't set alarm if offline mode is on
   if (settings.offlineMode) {
     console.log('[Tempo] Offline mode enabled, auto-sync disabled');
     return;
   }
 
-  // Create periodic alarm
+  const queueCount = await storage.getQueueCount();
+  const interval = getAdaptiveSyncInterval(queueCount, settings.syncIntervalMinutes);
+
   chrome.alarms.create(SYNC_ALARM_NAME, {
-    periodInMinutes: settings.syncIntervalMinutes,
+    periodInMinutes: interval,
   });
 
-  console.log(`[Tempo] Auto-sync alarm set: every ${settings.syncIntervalMinutes} minutes`);
+  console.log(`[Tempo] Auto-sync alarm set: every ${interval} minutes (queue=${queueCount}, base=${settings.syncIntervalMinutes})`);
+}
+
+/**
+ * Re-adjust the sync alarm interval based on current queue size.
+ * Called after each sync to adapt to changing activity levels.
+ */
+export async function adjustSyncInterval(): Promise<void> {
+  const settings = await storage.getSettings();
+  if (settings.offlineMode) return;
+
+  const queueCount = await storage.getQueueCount();
+  const interval = getAdaptiveSyncInterval(queueCount, settings.syncIntervalMinutes);
+
+  await chrome.alarms.clear(SYNC_ALARM_NAME);
+  chrome.alarms.create(SYNC_ALARM_NAME, {
+    periodInMinutes: interval,
+  });
+}
+
+/**
+ * Set up the pairing heartbeat alarm.
+ */
+export async function initHeartbeat(): Promise<void> {
+  await chrome.alarms.clear(HEARTBEAT_ALARM_NAME);
+
+  const pairing = await storage.getPairing();
+  if (!pairing) return;
+
+  chrome.alarms.create(HEARTBEAT_ALARM_NAME, {
+    periodInMinutes: HEARTBEAT_INTERVAL_MINUTES,
+  });
+
+  console.log(`[Tempo] Pairing heartbeat alarm set: every ${HEARTBEAT_INTERVAL_MINUTES} minutes`);
+}
+
+/**
+ * Set up the token refresh alarm.
+ */
+export async function initTokenRefresh(): Promise<void> {
+  await chrome.alarms.clear(TOKEN_REFRESH_ALARM_NAME);
+
+  const pairing = await storage.getPairing();
+  if (!pairing) return;
+
+  chrome.alarms.create(TOKEN_REFRESH_ALARM_NAME, {
+    periodInMinutes: TOKEN_REFRESH_INTERVAL_MINUTES,
+  });
+
+  console.log(`[Tempo] Token refresh alarm set: every ${TOKEN_REFRESH_INTERVAL_MINUTES} minutes`);
+}
+
+/**
+ * Execute a pairing heartbeat — lightweight ping independent of sync.
+ */
+export async function executeHeartbeat(): Promise<{ invalidated: boolean }> {
+  const pairing = await storage.getPairing();
+  if (!pairing || !pairing.phoneIp) return { invalidated: false };
+
+  const result = await pingPhone(pairing.phoneIp, pairing.phonePort, pairing.authToken, 3_000);
+
+  if (result.authFailed) {
+    const health = await storage.recordAuthFailure();
+    console.warn(`[Tempo] Heartbeat auth failure (${health.consecutiveAuthFailures} consecutive)`);
+
+    if (health.consecutiveAuthFailures >= AUTH_FAILURE_THRESHOLD) {
+      console.error('[Tempo] Repeated auth failures — pairing invalidated');
+      await storage.removePairing();
+      await storage.clearConnectionHistory();
+      return { invalidated: true };
+    }
+    return { invalidated: false };
+  }
+
+  const health = await storage.recordHealthPing(result.ok);
+
+  if (!result.ok) {
+    console.warn(`[Tempo] Heartbeat failed (${health.consecutiveFailures} consecutive)`);
+  }
+
+  return { invalidated: false };
+}
+
+/**
+ * Refresh the auth token independent of sync.
+ * Uses token lock to prevent race with concurrent sync token rotation.
+ */
+export async function refreshToken(): Promise<void> {
+  return withTokenLock(async () => {
+    const pairing = await storage.getPairing();
+    if (!pairing || !pairing.phoneIp || !pairing.authToken) return;
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5_000);
+      const headers = await signRequest(pairing.authToken);
+
+      const response = await fetch(`http://${pairing.phoneIp}:${pairing.phonePort}/api/auth/refresh`, {
+        method: 'POST',
+        headers,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.next_token) {
+          console.log('[Tempo] Auth token refreshed via dedicated endpoint');
+          await storage.savePairing({ ...pairing, authToken: data.next_token });
+        }
+      }
+    } catch {
+      console.warn('[Tempo] Token refresh failed — will retry on next alarm');
+    }
+  });
 }
 
 // ---- Export alarm names for service worker listener setup -------------------
 
-export { SYNC_ALARM_NAME, RETRY_ALARM_NAME };
+export { SYNC_ALARM_NAME, RETRY_ALARM_NAME, HEARTBEAT_ALARM_NAME, TOKEN_REFRESH_ALARM_NAME };

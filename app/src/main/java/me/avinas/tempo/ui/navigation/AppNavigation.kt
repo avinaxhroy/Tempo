@@ -144,6 +144,16 @@ fun AppNavigation(
                             },
                             onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                             onNavigateToTrack = { trackId -> navController.safeNavigate(Screen.SongDetails.createRoute(trackId)) },
+                            onNavigateToArtist = { artistIdentifier ->
+                                if (artistIdentifier.startsWith("id:")) {
+                                    val artistId = artistIdentifier.removePrefix("id:").toLongOrNull()
+                                    if (artistId != null && artistId > 0) {
+                                        navController.safeNavigate(Screen.ArtistDetails.createRouteById(artistId))
+                                    }
+                                } else {
+                                    navController.safeNavigate(Screen.ArtistDetails.createRouteByName(artistIdentifier))
+                                }
+                            },
                             onNavigateToSpotlight = { timeRange ->
                                 val route = if (timeRange != null) {
                                     Screen.Spotlight.createRoute(timeRange.name)

@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
+
 import androidx.compose.ui.unit.dp
 
 enum class GlassCardVariant {
@@ -29,6 +30,10 @@ fun GlassCard(
     contentPadding: PaddingValues = PaddingValues(16.dp),
     variant: GlassCardVariant = GlassCardVariant.HighProminence,
     contentAlignment: androidx.compose.ui.Alignment = androidx.compose.ui.Alignment.CenterStart,
+    borderColor: Color? = null,
+    borderWidth: Dp? = null,
+    shadowElevation: Dp = 0.dp,
+    shadowSpotColor: Color = Color.Transparent,
     content: @Composable () -> Unit
 ) {
     // Hero (HighProminence): light-catching top edge gradient for depth
@@ -69,23 +74,25 @@ fun GlassCard(
         }
     }
 
+    val stroke = remember(variant, borderColor, borderWidth, borderBrush) {
+        val width = borderWidth ?: (if (variant == GlassCardVariant.HighProminence) 1.dp else 0.5.dp)
+        if (borderColor != null) {
+            BorderStroke(width, borderColor)
+        } else {
+            BorderStroke(width, borderBrush)
+        }
+    }
+
     Box(
         modifier = modifier
             .shadow(
-                elevation = 0.dp,
+                elevation = shadowElevation,
                 shape = shape,
                 ambientColor = Color.Transparent,
-                spotColor = Color.Transparent
+                spotColor = shadowSpotColor
             )
             .background(backgroundBrush, shape)
-            .border(
-                BorderStroke(
-                    width = if (variant == GlassCardVariant.HighProminence) 1.dp else 0.5.dp,
-                    brush = borderBrush
-                ),
-                shape = shape
-            )
-            .clip(shape),
+            .border(stroke, shape = shape),
         contentAlignment = contentAlignment
     ) {
         Box(

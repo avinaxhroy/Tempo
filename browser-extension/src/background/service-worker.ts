@@ -5,14 +5,15 @@
 // popup messages. Persists state to survive service worker hibernation.
 // ============================================================================
 
-import type { RawMediaState, NowPlaying, Play, Settings, TabTrackState, YoutubeChannelSuggestion } from '../shared/types';
-import { MessageType, TrackEventType, DEFAULT_SETTINGS } from '../shared/types';
+import type { RawMediaState, NowPlaying, Play, Settings, TabTrackState, YoutubeChannelSuggestion, PhoneSocketMessage } from '../shared/types';
+import { MessageType, TrackEventType, DEFAULT_SETTINGS, SocketState } from '../shared/types';
 import { PlaybackTracker } from './tracker';
 import { shouldTrack, extractSite, getSourceApp, isPlainYouTube } from './site-detect';
 import { normalize, cleanTitle, cleanArtist, parseYoutubeVideo } from './normalize';
 import * as storage from './storage';
-import { syncToPhone, getSyncStatus, initAutoSync, SYNC_ALARM_NAME, RETRY_ALARM_NAME, removeHostPermission } from './sync';
+import { syncToPhone, getSyncStatus, initAutoSync, adjustSyncInterval, initHeartbeat, initTokenRefresh, executeHeartbeat, refreshToken, SYNC_ALARM_NAME, RETRY_ALARM_NAME, HEARTBEAT_ALARM_NAME, TOKEN_REFRESH_ALARM_NAME, removeHostPermission } from './sync';
 import { signRequest, validatePingResponse } from '../shared/security';
+import { PhoneSocket, RECONNECT_ALARM_NAME, KEEPALIVE_ALARM_NAME } from './websocket';
 
 // ---- State -----------------------------------------------------------------
 
@@ -21,6 +22,15 @@ const tracker = new PlaybackTracker();
 // Per-tab now-playing snapshots for popup display
 const tabNowPlaying = new Map<number, NowPlaying>();
 const tabYoutubeSuggestions = new Map<number, YoutubeChannelSuggestion>();
+
+// WebSocket connection to paired phone
+const phoneSocket = new PhoneSocket(
+  () => storage.getPairing(),
+  (msg: PhoneSocketMessage) => handleSocketMessage(msg),
+  (state: SocketState) => {
+    chrome.runtime.sendMessage({ type: MessageType.SocketStateChanged, state }).catch(() => {});
+  },
+);
 
 // Dedup: recent play keys (title|artist → timestamp_utc)
 const recentPlayKeys = new Map<string, number>();
@@ -65,6 +75,9 @@ const VALID_MESSAGE_TYPES = new Set<string>([
   MessageType.ExportPlays,
   MessageType.GetPollingInterval,
   MessageType.PingPhone,
+  MessageType.GetConnectionHealth,
+  MessageType.GetConnectionHistory,
+  MessageType.GetSocketState,
 ]);
 
 // ---- Init ------------------------------------------------------------------
@@ -72,6 +85,48 @@ const VALID_MESSAGE_TYPES = new Set<string>([
 console.log('[Tempo Stats] Service worker starting...');
 
 initServiceWorker();
+
+async function handleSocketMessage(msg: PhoneSocketMessage): Promise<void> {
+  switch (msg.type) {
+    case 'sync_now':
+      try {
+        await syncToPhone();
+        scheduleBadgeUpdate();
+        await adjustSyncInterval();
+      } catch (err) {
+        console.warn('[Tempo] Socket-triggered sync failed:', err);
+      }
+      break;
+
+    case 'ip_changed':
+      if (msg.newIp) {
+        const pairing = await storage.getPairing();
+        if (pairing) {
+          await storage.savePairing({ ...pairing, phoneIp: msg.newIp });
+          console.log(`[Tempo] Phone reported IP change: ${msg.newIp}`);
+          await phoneSocket.reconnect();
+        }
+      }
+      break;
+
+    case 'token_refresh':
+      if (msg.next_token) {
+        const pairing = await storage.getPairing();
+        if (pairing) {
+          await storage.savePairing({ ...pairing, authToken: msg.next_token });
+          console.log('[Tempo] Token rotated via WebSocket');
+        }
+      }
+      break;
+
+    case 'pairing_invalidated':
+      await storage.removePairing();
+      await storage.clearConnectionHistory();
+      phoneSocket.disconnect();
+      chrome.runtime.sendMessage({ type: MessageType.PairingInvalidated }).catch(() => {});
+      break;
+  }
+}
 
 async function initServiceWorker() {
   // Restore tracker state from session storage
@@ -90,6 +145,20 @@ async function initServiceWorker() {
 
   // Set up auto-sync alarm
   await initAutoSync();
+
+  // Set up pairing heartbeat
+  await initHeartbeat();
+
+  // Set up token refresh
+  await initTokenRefresh();
+
+  // Connect WebSocket if paired
+  const pairing = await storage.getPairing();
+  if (pairing) {
+    phoneSocket.connect().catch(err => {
+      console.warn('[Tempo] WebSocket connect failed:', err);
+    });
+  }
 
   // Initial badge update
   scheduleBadgeUpdate();
@@ -308,13 +377,20 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       await removePreviousPairingPermission(message.pairing);
       await storage.savePairing(message.pairing);
       await chrome.alarms.clear(RETRY_ALARM_NAME);
+      await initHeartbeat();
+      await initTokenRefresh();
+      await phoneSocket.reconnect();
       return { ok: true };
 
     case MessageType.RemovePairing: {
       const pairing = await storage.getPairing();
+      phoneSocket.disconnect();
       await storage.removePairing();
+      await storage.clearConnectionHistory();
       await chrome.alarms.clear(RETRY_ALARM_NAME);
       await chrome.alarms.clear(SYNC_ALARM_NAME);
+      await chrome.alarms.clear(HEARTBEAT_ALARM_NAME);
+      await chrome.alarms.clear(TOKEN_REFRESH_ALARM_NAME);
       if (pairing) {
         const origin = `http://${pairing.phoneIp}:${pairing.phonePort}/`;
         await removeHostPermission(origin);
@@ -452,14 +528,16 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
+        const start = performance.now();
         const res = await fetch(`http://${ip}:${port}/api/ping`, { signal: controller.signal, headers });
+        const latencyMs = Math.round(performance.now() - start);
         clearTimeout(timeout);
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
           const device = validatePingResponse(data) ?? (data.device_name ?? '');
-          return { ok: true, device };
+          return { ok: true, device, latencyMs };
         }
-        return { ok: false, error: `HTTP ${res.status}` };
+        return { ok: false, error: `HTTP ${res.status}`, latencyMs };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         const isPermissionError =
@@ -474,6 +552,15 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender)
         return { ok: false, error: msg.includes('abort') ? 'Timed out' : 'Unreachable' };
       }
     }
+
+    case MessageType.GetConnectionHealth:
+      return { health: await storage.getConnectionHealth() };
+
+    case MessageType.GetConnectionHistory:
+      return { history: await storage.getConnectionHistory() };
+
+    case MessageType.GetSocketState:
+      return { state: phoneSocket.state };
 
     default:
       return { error: 'Unknown message type' };
@@ -574,6 +661,7 @@ async function handleMediaUpdate(data: any, sender: chrome.runtime.MessageSender
     snapshot.sourceApp = getSourceApp(raw.url);
     snapshot.site = site;
     tabNowPlaying.set(tabId, snapshot);
+    phoneSocket.sendNowPlaying(snapshot);
   }
 
   persistTrackerState();
@@ -646,6 +734,7 @@ async function handleManualSync(): Promise<{ ok: boolean; synced?: number; error
 
     const synced = await syncToPhone({ forceDiscovery: true });
     scheduleBadgeUpdate();
+    await adjustSyncInterval();
     return { ok: true, synced };
   } catch (error) {
     return {
@@ -801,6 +890,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
         await syncToPhone();
         scheduleBadgeUpdate();
+        await adjustSyncInterval();
       } catch (err) {
         console.warn('[Tempo] Auto-sync failed:', err);
       }
@@ -812,11 +902,32 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       try {
         await syncToPhone();
         scheduleBadgeUpdate();
+        await adjustSyncInterval();
       } catch (err) {
         console.warn('[Tempo] Retry sync failed:', err);
         const { scheduleRetryAlarm } = await import('./sync');
         await scheduleRetryAlarm(10);
       }
+      break;
+    }
+
+    case HEARTBEAT_ALARM_NAME: {
+      const result = await executeHeartbeat();
+      if (result.invalidated) {
+        phoneSocket.disconnect();
+        chrome.runtime.sendMessage({ type: MessageType.PairingInvalidated }).catch(() => {});
+      }
+      break;
+    }
+
+    case TOKEN_REFRESH_ALARM_NAME: {
+      await refreshToken();
+      break;
+    }
+
+    case RECONNECT_ALARM_NAME:
+    case KEEPALIVE_ALARM_NAME: {
+      phoneSocket.handleAlarm(alarm.name);
       break;
     }
 
