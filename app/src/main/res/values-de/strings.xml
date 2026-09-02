@@ -382,7 +382,7 @@
     <string name="backup_export">Auf Gerät exportieren</string>
     <string name="backup_import">Vom Gerät importieren</string>
     <string name="backup_tips">💡 Backup-Tipps</string>
-    <string name="backup_drive_auto">• Google-Drive-Backups erfolgen automatisch und verschlüsselt\n</string>
+    <string name="backup_drive_auto">• Google-Drive-Backups erfolgen automatisch und werden in Ihrem Drive-Konto gespeichert\n</string>
     <string name="backup_use_different">Ein anderes Konto verwenden</string>
     <string name="backup_last_backup">Letztes Backup: %1$s</string>
 

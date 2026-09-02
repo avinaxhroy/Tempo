@@ -4,33 +4,19 @@
 
 /** Raw media state extracted by the content script from a music tab. */
 export interface RawMediaState {
-  /** Tab URL (always available — major advantage over desktop app). */
   url: string;
-  /** Track title from MediaSession metadata or page title. */
   title: string;
-  /** Artist from MediaSession metadata or meta tags. */
   artist: string;
-  /** Album from MediaSession metadata. */
   album: string;
-  /** Track duration in seconds (from <audio>/<video>.duration). NaN/Infinity = unknown. */
   duration: number;
-  /** Current playback position in seconds (from <audio>/<video>.currentTime). */
   position: number;
-  /** Whether audio is currently playing (not paused/ended). */
   isPlaying: boolean;
-  /** Volume level 0.0–1.0 (from <audio>/<video>.volume). */
   volume: number;
-  /** Whether audio is muted (from <audio>/<video>.muted or volume==0). */
   isMuted: boolean;
-  /** Playback rate (1.0 = normal). */
   playbackRate: number;
-  /** Tab ID where this media is playing. */
   tabId: number;
-  /** Timestamp when this sample was taken (Date.now()). */
   timestamp: number;
-  /** Extracted structured YouTube description metadata (optional). */
   ytDescriptionMetadata?: { title?: string; artist?: string; album?: string; label?: string };
-  /** Extracted official YouTube Music tag metadata (optional). */
   ytMusicTagMetadata?: { title?: string; artist?: string; album?: string; label?: string };
 }
 
@@ -53,13 +39,11 @@ export interface NowPlaying {
   contentType: string;
   sessionId: string;
   volumeLevel: number;
-  // Anomaly detection fields
   anomalies: string[];
   totalPauseDurationMs: number;
   positionUpdatesCount: number;
 }
 
-/** A YouTube.com channel that can be opted into tracking from the popup. */
 export interface YoutubeChannelSuggestion {
   channel: string;
   title: string;
@@ -68,7 +52,7 @@ export interface YoutubeChannelSuggestion {
   timestamp: number;
 }
 
-/** A queued play (stored in IndexedDB, synced to phone). */
+/** A queued or historical play stored in IndexedDB. */
 export interface Play {
   id?: number;
   title: string;
@@ -89,20 +73,26 @@ export interface Play {
   site: string;
   contentType: string;
   volumeLevel: number;
-  // Anomaly detection data (stored locally, synced to phone)
   anomalies: string[];
   totalPauseDurationMs: number;
   positionUpdatesCount: number;
+
+  /** Cross-device Drive metadata. Imported events are never uploaded again. */
+  driveImported?: boolean;
+  /** Stable event id supplied by the originating device. */
+  originEventId?: string;
+  /** Stable random Tempo device id that originally created the play. */
+  originDeviceId?: string;
+  /** Epoch ms when this locally-owned play was safely uploaded to appDataFolder. */
+  driveUploadedAt?: number;
 }
 
-/** Payload sent to the phone's /api/plays endpoint. */
 export interface SyncPayload {
   auth_token: string;
   device_name: string;
   plays: SyncPlay[];
 }
 
-/** Response from the phone's /api/plays endpoint. */
 export interface SyncResponse {
   ok: boolean;
   accepted?: number;
@@ -111,7 +101,6 @@ export interface SyncResponse {
   error?: string;
 }
 
-/** Individual play within a sync payload (snake_case to match Rust/phone API). */
 export interface SyncPlay {
   title: string;
   artist: string;
@@ -130,28 +119,38 @@ export interface SyncPlay {
   site: string;
   content_type: string;
   volume_level: number;
-  // Anomaly detection fields (synced to phone)
   anomalies: string[];
   total_pause_duration_ms: number;
   position_updates_count: number;
 }
 
-/** Extension settings. */
+/** Optional Google Drive cross-device history sync state. */
+export interface DriveSyncStatus {
+  enabled: boolean;
+  configured: boolean;
+  connected: boolean;
+  accountEmail: string | null;
+  lastSyncTime: number | null;
+  lastError: string | null;
+  lastUploaded: number;
+  lastImported: number;
+  needsInteractiveAuth: boolean;
+}
+
 export interface Settings {
-  /** Sync interval in minutes (default 30). */
   syncIntervalMinutes: number;
-  /** How often content script polls media state (seconds, default 2). */
   pollingIntervalSeconds: number;
-  /** Whether tracking is enabled. */
   trackingEnabled: boolean;
-  /** Offline mode — disables auto-sync, queues plays locally. */
   offlineMode: boolean;
-  /** User-defined known artist names for better matching. */
   knownArtists: string[];
-  /** User-defined YouTube channel names to opt-in YouTube.com tracking. */
   youtubeChannels: string[];
-  /** User-defined YouTube channel names to never prompt or track. */
   blockedYoutubeChannels: string[];
+  /**
+   * Explicit Drive opt-in. Optional in the type so legacy settings objects and
+   * older popup fallbacks remain valid during extension upgrades; storage always
+   * overlays DEFAULT_SETTINGS and therefore exposes false when it is absent.
+   */
+  driveSyncEnabled?: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -162,9 +161,9 @@ export const DEFAULT_SETTINGS: Settings = {
   knownArtists: [],
   youtubeChannels: [],
   blockedYoutubeChannels: [],
+  driveSyncEnabled: false,
 };
 
-/** Pairing info for connecting to the Tempo Android app. */
 export interface PairingInfo {
   phoneIp: string;
   phonePort: number;
@@ -173,7 +172,6 @@ export interface PairingInfo {
   pairedAt: string | null;
 }
 
-/** Sync history record. */
 export interface SyncRecord {
   id?: number;
   syncedCount: number;
@@ -182,15 +180,10 @@ export interface SyncRecord {
   syncedAt: string;
 }
 
-/** Events emitted by the PlaybackTracker. */
 export enum TrackEventType {
-  /** Track accumulated enough listen time — ready to log as a play. */
   ReadyToLog = 'ReadyToLog',
-  /** Previous track ended/changed with its final stats. */
   TrackEnded = 'TrackEnded',
-  /** Same track still playing, not ready to log yet. */
   StillPlaying = 'StillPlaying',
-  /** No previous track / already logged — nothing to do. */
   NoAction = 'NoAction',
 }
 
@@ -210,13 +203,8 @@ export interface TrackEventEnded {
   sessionId: string;
 }
 
-export interface TrackEventStillPlaying {
-  type: TrackEventType.StillPlaying;
-}
-
-export interface TrackEventNoAction {
-  type: TrackEventType.NoAction;
-}
+export interface TrackEventStillPlaying { type: TrackEventType.StillPlaying; }
+export interface TrackEventNoAction { type: TrackEventType.NoAction; }
 
 export type TrackEvent =
   | TrackEventReadyToLog
@@ -224,68 +212,46 @@ export type TrackEvent =
   | TrackEventStillPlaying
   | TrackEventNoAction;
 
-/** Message types for communication between content script ↔ background. */
 export enum MessageType {
-  /** Content script → Background: media state update. */
   MediaStateUpdate = 'MEDIA_STATE_UPDATE',
-  /** Content script → Background: tab unloading / media stopped. */
   MediaStopped = 'MEDIA_STOPPED',
-  /** Popup → Background: request current now-playing. */
   GetNowPlaying = 'GET_NOW_PLAYING',
-  /** Popup → Background: request current blocked YouTube channel suggestion. */
   GetYoutubeChannelSuggestion = 'GET_YOUTUBE_CHANNEL_SUGGESTION',
-  /** Popup → Background: request queue count. */
   GetQueueCount = 'GET_QUEUE_COUNT',
-  /** Popup → Background: request queue items. */
   GetQueueItems = 'GET_QUEUE_ITEMS',
-  /** Popup → Background: trigger manual sync. */
   SyncNow = 'SYNC_NOW',
-  /** Popup → Background: get sync status. */
   GetSyncStatus = 'GET_SYNC_STATUS',
-  /** Popup → Background: get/set pairing info. */
   GetPairing = 'GET_PAIRING',
   SetPairing = 'SET_PAIRING',
   RemovePairing = 'REMOVE_PAIRING',
-  /** Popup → Background: get/set settings. */
   GetSettings = 'GET_SETTINGS',
   SetSettings = 'SET_SETTINGS',
-  /** Content script → Background: opt in a YouTube channel while playing. */
   AddYoutubeChannel = 'ADD_YOUTUBE_CHANNEL',
-  /** Content script / Popup → Background: permanently reject a YouTube channel. */
   BlockYoutubeChannel = 'BLOCK_YOUTUBE_CHANNEL',
-  /** Popup → Background: get stats. */
   GetStats = 'GET_STATS',
-  /** Popup → Background: clear queue. */
   ClearQueue = 'CLEAR_QUEUE',
-  /** Popup → Background: delete a single play by id. */
   DeletePlay = 'DELETE_PLAY',
-  /** Popup → Background: retry all failed plays (reset to queued). */
   RetryFailedPlays = 'RETRY_FAILED_PLAYS',
-  /** Popup → Background: get now-playing for a specific tab. */
   GetNowPlayingForTab = 'GET_NOW_PLAYING_FOR_TAB',
-  /** Popup → Background: single round-trip bootstrap state (pairing, now-playing, suggestion, queue count, sync status, connection health, socket state). */
   GetPopupState = 'GET_POPUP_STATE',
-  /** Popup → Background: export plays data. */
   ExportPlays = 'EXPORT_PLAYS',
-  /** Content script → Background: request polling interval setting. */
   GetPollingInterval = 'GET_POLLING_INTERVAL',
-  /** Popup → Background: request host permission for a pairing origin. */
   RequestHostPermission = 'REQUEST_HOST_PERMISSION',
-  /** Popup → Background: test phone connectivity (ping). */
   PingPhone = 'PING_PHONE',
-  /** Popup → Background: get connection health info. */
   GetConnectionHealth = 'GET_CONNECTION_HEALTH',
-  /** Popup → Background: get connection history entries. */
   GetConnectionHistory = 'GET_CONNECTION_HISTORY',
-  /** Background → Popup: pairing was invalidated due to repeated auth failures. */
   PairingInvalidated = 'PAIRING_INVALIDATED',
-  /** Background → Popup: WebSocket state changed. */
   SocketStateChanged = 'SOCKET_STATE_CHANGED',
-  /** Popup → Background: get current WebSocket state. */
   GetSocketState = 'GET_SOCKET_STATE',
+
+  /** Google Drive cross-device history sync. */
+  GetDriveSyncStatus = 'GET_DRIVE_SYNC_STATUS',
+  ConnectDrive = 'CONNECT_DRIVE',
+  DisconnectDrive = 'DISCONNECT_DRIVE',
+  DriveSyncNow = 'DRIVE_SYNC_NOW',
+  DeleteDriveHistory = 'DELETE_DRIVE_HISTORY',
 }
 
-/** Connection history entry — remembers successful IPs across networks. */
 export interface ConnectionHistoryEntry {
   ip: string;
   port: number;
@@ -295,7 +261,6 @@ export interface ConnectionHistoryEntry {
   networkFingerprint: string;
 }
 
-/** Connection health tracking — lightweight heartbeat independent of sync. */
 export interface ConnectionHealth {
   lastPing: number;
   healthy: boolean;
@@ -304,7 +269,6 @@ export interface ConnectionHealth {
   lastSuccessAt: number | null;
 }
 
-/** Sync checkpoint — survives service worker hibernation. */
 export interface SyncCheckpoint {
   batchIds: number[];
   batchIndex: number;
@@ -313,20 +277,16 @@ export interface SyncCheckpoint {
   retryCount: number;
 }
 
-/** Sync backoff state — survives service worker hibernation so rate-limit
- *  cooldowns and exponential backoff aren't reset by a worker restart. */
 export interface SyncBackoffState {
   lastErrorKind: string | null;
   lastErrorStatus: number | null;
   consecutiveFailures: number;
   rateLimitedUntil: number | null;
   nextRetryAt: number | null;
-  /** Last sync timestamp/result so the popup status line survives hibernation. */
   lastSyncTime: string | null;
   lastSyncResult: string | null;
 }
 
-/** WebSocket message types for phone ↔ extension communication. */
 export type PhoneSocketMessage =
   | { type: 'ping'; ts: number }
   | { type: 'pong'; ts: number }
@@ -336,14 +296,12 @@ export type PhoneSocketMessage =
   | { type: 'token_refresh'; next_token: string }
   | { type: 'pairing_invalidated' };
 
-/** Signed WebSocket message envelope — wraps any message with HMAC + timestamp. */
 export interface SignedWsMessage {
   payload: PhoneSocketMessage;
   sig: string;
   ts: number;
 }
 
-/** WebSocket auth message sent immediately after connection (token not in URL). */
 export interface WsAuthMessage {
   type: 'auth';
   token: string;
@@ -352,17 +310,14 @@ export interface WsAuthMessage {
   ts: number;
 }
 
-/** WebSocket connection state. */
 export enum SocketState {
   Disconnected = 'disconnected',
   Connecting = 'connecting',
   Connected = 'connected',
   Reconnecting = 'reconnecting',
-  /** Deliberately parked after inactivity — revived on the next media event. */
   IdleSuspended = 'idle',
 }
 
-/** Per-tab tracking state persisted to session storage to survive hibernation. */
 export interface TabTrackState {
   tabId: number;
   trackKey: string;
@@ -385,10 +340,8 @@ export interface TabTrackState {
   title: string;
   artist: string;
   album: string;
-  // Anomaly detection tracking
   totalPauseDurationMs: number;
   positionUpdatesCount: number;
   lastStateChangeTime: number;
-  /** Whether the track has accumulated enough listen time to be eligible for logging. */
   eligible: boolean;
 }

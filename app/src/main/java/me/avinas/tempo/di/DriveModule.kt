@@ -7,6 +7,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import me.avinas.tempo.data.drive.BackupSettingsManager
+import me.avinas.tempo.data.drive.DriveHistorySyncSettingsManager
 import me.avinas.tempo.data.drive.GoogleAuthManager
 import me.avinas.tempo.data.drive.GoogleDriveService
 import me.avinas.tempo.data.drive.GoogleDriveTokenStorage
@@ -32,8 +33,9 @@ object DriveModule {
     @Singleton
     fun provideGoogleAuthManager(
         @ApplicationContext context: Context,
-        tokenStorage: GoogleDriveTokenStorage
-    ): GoogleAuthManager = GoogleAuthManager(context, tokenStorage)
+        tokenStorage: GoogleDriveTokenStorage,
+        historySyncSettings: DriveHistorySyncSettingsManager
+    ): GoogleAuthManager = GoogleAuthManager(context, tokenStorage, historySyncSettings)
     
     @Provides
     @Singleton

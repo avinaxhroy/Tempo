@@ -9,20 +9,22 @@ import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import me.avinas.tempo.data.drive.BackupSettingsManager
 import me.avinas.tempo.data.drive.BackupStatus
+import me.avinas.tempo.data.drive.DriveHistorySyncSettingsManager
 import me.avinas.tempo.data.local.dao.UserKnownArtistDao
 import me.avinas.tempo.data.local.dao.UserPreferencesDao
 import me.avinas.tempo.utils.ArtistParser
+import me.avinas.tempo.worker.ChallengeWorker
+import me.avinas.tempo.worker.DriveHistorySyncWorker
 import me.avinas.tempo.worker.EnrichmentWorker
 import me.avinas.tempo.worker.ServiceHealthWorker
 import me.avinas.tempo.worker.SpotifyPollingWorker
 import me.avinas.tempo.worker.SpotlightUnlockWorker
-import me.avinas.tempo.worker.ChallengeWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import javax.inject.Inject
 
@@ -35,13 +37,13 @@ class TempoApplication : Application(), Configuration.Provider, SingletonImageLo
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
-    
+
     @Inject
     lateinit var imageLoader: ImageLoader
-    
+
     @Inject
     lateinit var userPreferencesDao: UserPreferencesDao
-    
+
     @Inject
     lateinit var userKnownArtistDao: UserKnownArtistDao
 
@@ -53,7 +55,10 @@ class TempoApplication : Application(), Configuration.Provider, SingletonImageLo
 
     @Inject
     lateinit var backupSettingsManager: BackupSettingsManager
-    
+
+    @Inject
+    lateinit var driveHistorySyncSettingsManager: DriveHistorySyncSettingsManager
+
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -61,32 +66,27 @@ class TempoApplication : Application(), Configuration.Provider, SingletonImageLo
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
-    
-    override fun newImageLoader(context: android.content.Context): ImageLoader {
-        return imageLoader
-    }
+
+    override fun newImageLoader(context: android.content.Context): ImageLoader = imageLoader
 
     override fun onCreate() {
         super.onCreate()
-        
         loadUserKnownArtists()
         scheduleBackgroundWorkDeferred()
     }
-    
+
     private fun loadUserKnownArtists() {
         applicationScope.launch {
             try {
                 val names = userKnownArtistDao.getAllNormalizedNames().toSet()
                 ArtistParser.loadUserKnownBands(names)
 
-                // One-time data repair; no-ops once applied (versioned flag).
                 try {
                     artistRepairService.runRepairIfNeeded()
                 } catch (e: Exception) {
                     android.util.Log.w("TempoApplication", "Artist repair invocation failed", e)
                 }
 
-                // One-time repair of legacy JSON-array values in list columns
                 try {
                     listColumnRepairService.runRepairIfNeeded()
                 } catch (e: Exception) {
@@ -97,45 +97,49 @@ class TempoApplication : Application(), Configuration.Provider, SingletonImageLo
             }
         }
     }
-    
+
     private fun scheduleBackgroundWorkDeferred() {
         backgroundExecutor.execute {
             Thread.sleep(500)
-            Handler(Looper.getMainLooper()).post {
-                scheduleBackgroundWork()
-            }
+            Handler(Looper.getMainLooper()).post { scheduleBackgroundWork() }
         }
     }
 
     private fun scheduleBackgroundWork() {
-        // Self-heal: if a previous listener-restart attempt left the tracking
-        // component DISABLED (process died mid-toggle), re-enable it now so
-        // tracking recovers without a reinstall.
         me.avinas.tempo.service.MusicTrackingService.ensureComponentEnabled(this)
 
         ServiceHealthWorker.schedule(this)
-        
         EnrichmentWorker.schedulePeriodic(this)
-        
         EnrichmentWorker.enqueueImmediate(this)
-        
         me.avinas.tempo.worker.GamificationWorker.enqueuePeriodicRefresh(this)
         me.avinas.tempo.worker.GamificationWorker.enqueueImmediateRefresh(this)
-        
         scheduleSpotifyPollingIfEnabled()
 
-        // A backup status of IN_PROGRESS can only mean the app was killed while
-        // a backup was running (crash, force-stop, OS kill). No worker survives
-        // that, so the status would stay stuck forever. Reset it to FAILED so
-        // the UI reflects reality and the user can retry.
         applicationScope.launch {
             try {
                 val settings = backupSettingsManager.settings.first()
                 if (settings.lastBackupStatus == BackupStatus.IN_PROGRESS) {
                     backupSettingsManager.updateLastBackup(BackupStatus.FAILED)
                 }
+            } catch (_: Exception) {
+                // Non-critical.
+            }
+        }
+
+        // Restore the user's cross-device sync schedule after process/device
+        // restart. The setting is opt-in and defaults to disabled.
+        applicationScope.launch {
+            try {
+                val settings = driveHistorySyncSettingsManager.settings.first()
+                Handler(Looper.getMainLooper()).post {
+                    if (settings.enabled) {
+                        DriveHistorySyncWorker.schedule(this@TempoApplication)
+                    } else {
+                        DriveHistorySyncWorker.cancel(this@TempoApplication)
+                    }
+                }
             } catch (e: Exception) {
-                // Non-critical — ignore
+                android.util.Log.w("TempoApplication", "Failed to restore Drive history sync schedule", e)
             }
         }
 
@@ -144,7 +148,7 @@ class TempoApplication : Application(), Configuration.Provider, SingletonImageLo
             ChallengeWorker.scheduleDaily(this)
         }, 30_000L)
     }
-    
+
     /**
      * Check if Spotify-API-Only mode is enabled and schedule polling if so.
      * This ensures the worker resumes after app restart.
@@ -158,15 +162,14 @@ class TempoApplication : Application(), Configuration.Provider, SingletonImageLo
                         SpotifyPollingWorker.schedule(this@TempoApplication)
                     }
                 }
-            } catch (e: Exception) {
-                // Ignore - worker will be scheduled when user enables mode
+            } catch (_: Exception) {
+                // Worker will be scheduled when the user enables the mode.
             }
         }
     }
-    
+
     override fun onTerminate() {
         super.onTerminate()
         backgroundExecutor.shutdown()
     }
 }
-

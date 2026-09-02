@@ -6,31 +6,46 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes('--watch');
-
-// Parse --target flag (chrome or firefox)
 const targetArg = process.argv.find(arg => arg.startsWith('--target='));
 const target = targetArg ? targetArg.split('=')[1] : 'chrome';
 
 if (target !== 'chrome' && target !== 'firefox') {
-  console.error('❌ Invalid target. Use: --target=chrome or --target=firefox');
+  console.error('❌ Invalid target. Use: --target=chrome or firefox');
   process.exit(1);
 }
 
-// esbuild target follows the build target (Firefox 140 is the manifest strict_min_version)
-const esbuildTarget = target === 'firefox' ? 'firefox140' : 'chrome110';
+const googleOAuthClientId = (
+  target === 'firefox'
+    ? process.env.TEMPO_GOOGLE_OAUTH_CLIENT_ID_FIREFOX
+    : process.env.TEMPO_GOOGLE_OAUTH_CLIENT_ID_CHROME
+)?.trim() ?? '';
 
-// Background service worker — IIFE for both browsers (Firefox doesn't fully support ESM in service workers)
+if (!googleOAuthClientId && !isWatch) {
+  console.warn(`⚠️  Google Drive sync OAuth is not configured for ${target}. ` +
+    `Set TEMPO_GOOGLE_OAUTH_CLIENT_ID_${target === 'firefox' ? 'FIREFOX' : 'CHROME'} to enable it.`);
+}
+
+const esbuildTarget = target === 'firefox' ? 'firefox140' : 'chrome110';
+const buildDefines = {
+  __TEMPO_GOOGLE_OAUTH_CLIENT_ID__: JSON.stringify(googleOAuthClientId),
+  __TEMPO_BROWSER_TARGET__: JSON.stringify(target),
+};
+
 const bgOptions = {
-  entryPoints: ['src/background/service-worker.ts'],
+  entryPoints: ['src/background/service-worker-entry.ts'],
+  // manifest.json has always referenced background/service-worker.js. Keep the
+  // wrapper entry point's output at that exact path so the packaged extension
+  // boots instead of compiling successfully with an unreachable worker file.
+  entryNames: 'service-worker',
   bundle: true,
   outdir: 'dist/background',
   target: esbuildTarget,
   minify: !isWatch,
   sourcemap: isWatch ? 'inline' : false,
   drop: isWatch ? [] : ['debugger'],
+  define: buildDefines,
 };
 
-// Content script — IIFE (content scripts don't support ESM)
 const contentOptions = {
   entryPoints: ['src/content/media-probe.ts', 'src/content/yt-main-world-helper.ts'],
   bundle: true,
@@ -41,9 +56,9 @@ const contentOptions = {
   drop: isWatch ? [] : ['debugger'],
 };
 
-// Popup — ESM (loaded via <script type="module">)
 const popupOptions = {
-  entryPoints: ['src/popup/popup.ts'],
+  entryPoints: ['src/popup/popup-entry.ts'],
+  entryNames: 'popup',
   bundle: true,
   outdir: 'dist/popup',
   target: esbuildTarget,
@@ -51,15 +66,12 @@ const popupOptions = {
   format: 'esm',
   splitting: true,
   drop: isWatch ? [] : ['debugger'],
+  define: buildDefines,
 };
 
 function stripDistPrefix(value) {
-  if (typeof value === 'string' && value.startsWith('dist/')) {
-    return value.slice(5);
-  }
-  if (Array.isArray(value)) {
-    return value.map(stripDistPrefix);
-  }
+  if (typeof value === 'string' && value.startsWith('dist/')) return value.slice(5);
+  if (Array.isArray(value)) return value.map(stripDistPrefix);
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, stripDistPrefix(item)]));
   }
@@ -68,25 +80,31 @@ function stripDistPrefix(value) {
 
 function buildChromeManifest(baseManifest) {
   const m = stripDistPrefix(baseManifest);
-  // Bundle uses IIFE, so remove module type
   if (m.background) delete m.background.type;
+
+  if (googleOAuthClientId) {
+    m.oauth2 = {
+      client_id: googleOAuthClientId,
+      scopes: [
+        'openid',
+        'email',
+        'https://www.googleapis.com/auth/drive.appdata',
+      ],
+    };
+  }
   return m;
 }
 
 function buildFirefoxManifest(baseManifest) {
   const m = stripDistPrefix(baseManifest);
-
   delete m.minimum_chrome_version;
-
   if (m.background) delete m.background.type;
 
-  // Firefox rejects manifests containing both service_worker and scripts
   if (m.background?.service_worker) {
     m.background.scripts = [m.background.service_worker];
     delete m.background.service_worker;
   }
 
-  // Firefox doesn't support wildcard ports in optional_host_permissions
   delete m.optional_host_permissions;
 
   m.browser_specific_settings = {
@@ -94,12 +112,17 @@ function buildFirefoxManifest(baseManifest) {
       id: 'tempo-stats@extension',
       strict_min_version: '140.0',
       data_collection_permissions: {
-        required: ['none']
-      }
+        required: ['none'],
+        optional: [
+          'personallyIdentifyingInfo',
+          'browsingActivity',
+          'websiteContent',
+        ],
+      },
     },
     gecko_android: {
-      strict_min_version: '142.0'
-    }
+      strict_min_version: '142.0',
+    },
   };
 
   return m;
@@ -110,7 +133,6 @@ async function copyStaticAssets(distDir) {
 
   const sourceManifestPath = resolve(__dirname, 'manifest.json');
   const baseManifest = JSON.parse(readFileSync(sourceManifestPath, 'utf8'));
-
   const manifest = target === 'firefox'
     ? buildFirefoxManifest(baseManifest)
     : buildChromeManifest(baseManifest);
@@ -118,17 +140,13 @@ async function copyStaticAssets(distDir) {
   writeFileSync(resolve(distDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
   const iconsDir = resolve(__dirname, 'icons');
-  if (existsSync(iconsDir)) {
-    cpSync(iconsDir, resolve(distDir, 'icons'), { recursive: true });
-  }
+  if (existsSync(iconsDir)) cpSync(iconsDir, resolve(distDir, 'icons'), { recursive: true });
 
   const popupDir = resolve(distDir, 'popup');
   if (!existsSync(popupDir)) mkdirSync(popupDir, { recursive: true });
 
   const popupHtml = resolve(__dirname, 'src/popup/popup.html');
   if (existsSync(popupHtml)) {
-    // Conservative whitespace collapse: strip leading indentation and blank lines only.
-    // Tags, attributes, and comments are preserved verbatim — no structural parsing.
     const html = readFileSync(popupHtml, 'utf8');
     const collapsed = html
       .split('\n')
@@ -151,9 +169,7 @@ async function copyStaticAssets(distDir) {
   }
 
   const fontsDir = resolve(__dirname, 'src/popup/fonts');
-  if (existsSync(fontsDir)) {
-    cpSync(fontsDir, resolve(popupDir, 'fonts'), { recursive: true });
-  }
+  if (existsSync(fontsDir)) cpSync(fontsDir, resolve(popupDir, 'fonts'), { recursive: true });
 }
 
 function packageZip(distDir) {

@@ -31,6 +31,7 @@ class GoogleDriveTokenStorage @Inject constructor(
         // Token keys
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_TOKEN_TIMESTAMP = "token_timestamp"
+        private const val KEY_GRANTED_SCOPES = "granted_scopes"
         
         // Account info keys
         private const val KEY_ACCOUNT_EMAIL = "account_email"
@@ -72,10 +73,12 @@ class GoogleDriveTokenStorage @Inject constructor(
      * Note: Google's OAuth for Drive only provides access tokens via the
      * Authorization API. Refresh tokens are managed internally by Google Play Services.
      */
-    fun saveAccessToken(accessToken: String) {
+    fun saveAccessToken(accessToken: String, grantedScopes: Collection<String> = emptyList()) {
+        require(accessToken.isNotBlank()) { "Google Drive access token cannot be blank" }
         encryptedPrefs.edit().apply {
             putString(KEY_ACCESS_TOKEN, accessToken)
             putLong(KEY_TOKEN_TIMESTAMP, System.currentTimeMillis())
+            putStringSet(KEY_GRANTED_SCOPES, grantedScopes.filter { it.isNotBlank() }.toSet())
             apply()
         }
         Log.d(TAG, "Access token saved")
@@ -87,6 +90,12 @@ class GoogleDriveTokenStorage @Inject constructor(
      */
     fun getAccessToken(): String? {
         return encryptedPrefs.getString(KEY_ACCESS_TOKEN, null)
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    fun hasGrantedScopes(requiredScopes: Set<String>): Boolean {
+        val persisted = encryptedPrefs.getStringSet(KEY_GRANTED_SCOPES, emptySet()).orEmpty()
+        return requiredScopes.all(persisted::contains)
     }
     
     /**
@@ -114,7 +123,7 @@ class GoogleDriveTokenStorage @Inject constructor(
         if (timestamp == 0L) return true
         
         val age = System.currentTimeMillis() - timestamp
-        return age > TOKEN_STALE_THRESHOLD_MS
+        return age < 0L || age > TOKEN_STALE_THRESHOLD_MS
     }
     
     /**
@@ -125,7 +134,7 @@ class GoogleDriveTokenStorage @Inject constructor(
         if (timestamp == 0L) return true
         
         val age = System.currentTimeMillis() - timestamp
-        return age > TOKEN_MAX_AGE_MS
+        return age < 0L || age > TOKEN_MAX_AGE_MS
     }
     
     /**
@@ -135,6 +144,7 @@ class GoogleDriveTokenStorage @Inject constructor(
         encryptedPrefs.edit().apply {
             remove(KEY_ACCESS_TOKEN)
             remove(KEY_TOKEN_TIMESTAMP)
+            remove(KEY_GRANTED_SCOPES)
             apply()
         }
         Log.d(TAG, "Access token cleared")
@@ -146,11 +156,19 @@ class GoogleDriveTokenStorage @Inject constructor(
     fun saveAccountInfo(email: String, displayName: String?, photoUrl: String?) {
         encryptedPrefs.edit().apply {
             putString(KEY_ACCOUNT_EMAIL, email)
-            displayName?.let { putString(KEY_ACCOUNT_DISPLAY_NAME, it) }
-            photoUrl?.let { putString(KEY_ACCOUNT_PHOTO_URL, it) }
+            if (displayName != null) {
+                putString(KEY_ACCOUNT_DISPLAY_NAME, displayName)
+            } else {
+                remove(KEY_ACCOUNT_DISPLAY_NAME)
+            }
+            if (photoUrl != null) {
+                putString(KEY_ACCOUNT_PHOTO_URL, photoUrl)
+            } else {
+                remove(KEY_ACCOUNT_PHOTO_URL)
+            }
             apply()
         }
-        Log.d(TAG, "Account info saved for: $email")
+        Log.d(TAG, "Google account info saved")
     }
     
     /**
@@ -246,7 +264,7 @@ class GoogleDriveTokenStorage @Inject constructor(
         override fun toString(): String {
             val ageStr = tokenAgeMs?.let { "${it / 1000 / 60}min" } ?: "N/A"
             return "StorageStatus(token=$hasToken, stale=$isTokenStale, expired=$isTokenExpired, " +
-                    "age=$ageStr, account=$accountEmail)"
+                    "age=$ageStr, accountPresent=${accountEmail != null})"
         }
     }
 }

@@ -222,6 +222,88 @@ export async function getAllPlays(limit = 100): Promise<Play[]> {
   });
 }
 
+/**
+ * Return locally-owned plays that still need their first Drive upload.
+ * Scan oldest-first across the whole store: when Drive has been unavailable
+ * for a long time the database may temporarily exceed the normal 5k cap,
+ * and those older pending rows must not become unreachable.
+ */
+export async function getDrivePendingPlays(limit = Number.MAX_SAFE_INTEGER): Promise<Play[]> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readonly');
+    const store = tx.objectStore(PLAYS_STORE);
+    const index = store.index('timestampUtc');
+    const plays: Play[] = [];
+    const request = index.openCursor();
+
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (cursor && plays.length < limit) {
+        const play = cursor.value as Play;
+        if (play.id != null && !play.driveImported && !play.driveUploadedAt) {
+          plays.push(play);
+        }
+        cursor.continue();
+      } else {
+        resolve(plays);
+      }
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/** Mark locally-owned play rows as safely uploaded to Drive. */
+export async function markDriveUploaded(ids: number[]): Promise<void> {
+  if (ids.length === 0) return;
+  const idSet = new Set(ids);
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readwrite');
+    const store = tx.objectStore(PLAYS_STORE);
+    const request = store.openCursor();
+    const uploadedAt = Date.now();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (cursor) {
+        if (idSet.has(cursor.key as number)) {
+          const play = cursor.value as Play;
+          play.driveUploadedAt = uploadedAt;
+          cursor.update(play);
+        }
+        cursor.continue();
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Drive upload flag transaction aborted'));
+  });
+}
+
+/** Clear Drive-upload bookkeeping while preserving all local listening history. */
+export async function clearDriveUploadedFlags(): Promise<void> {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readwrite');
+    const store = tx.objectStore(PLAYS_STORE);
+    const request = store.openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (cursor) {
+        const play = cursor.value as Play;
+        if (!play.driveImported && play.driveUploadedAt) {
+          delete play.driveUploadedAt;
+          cursor.update(play);
+        }
+        cursor.continue();
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Drive flag reset transaction aborted'));
+  });
+}
+
 export async function getQueueCount(): Promise<number> {
   // Return cached value if fresh
   if (_cachedQueueCount !== null && (Date.now() - _queueCountCacheTime) < QUEUE_COUNT_CACHE_TTL_MS) {
@@ -342,10 +424,17 @@ export async function deletePlay(id: number): Promise<void> {
 }
 
 /**
- * Check if a recent play exists with same title+artist within ±60s window.
- * Optimized: uses a bounded cursor range on the timestampUtc index.
+ * Check whether another capture origin already recorded the same title+artist
+ * within ±60s. Exact Drive event IDs are the idempotency key for the same
+ * originating device, so a different event from that same device must remain a
+ * distinct replay even when it happens inside this wider temporal window.
  */
-export async function hasRecentPlay(title: string, artist: string, timestampUtc: number): Promise<boolean> {
+export async function hasRecentPlay(
+  title: string,
+  artist: string,
+  timestampUtc: number,
+  incomingOriginDeviceId?: string,
+): Promise<boolean> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(PLAYS_STORE, 'readonly');
@@ -361,7 +450,12 @@ export async function hasRecentPlay(title: string, artist: string, timestampUtc:
       const cursor = request.result;
       if (cursor && !found) {
         const play = cursor.value as Play;
-        if (play.title === title && play.artist === artist) {
+        const sameOriginDevice = !!incomingOriginDeviceId &&
+          play.originDeviceId === incomingOriginDeviceId;
+        if (!sameOriginDevice &&
+          play.title.trim().toLowerCase() === title.trim().toLowerCase() &&
+          play.artist.trim().toLowerCase() === artist.trim().toLowerCase()
+        ) {
           found = true;
         } else {
           cursor.continue();
@@ -381,6 +475,7 @@ export async function hasRecentPlay(title: string, artist: string, timestampUtc:
  */
 export async function cleanupOldRecords(): Promise<number> {
   const cutoff = Date.now() - MAX_RECORD_AGE_MS;
+  const driveSyncEnabled = (await getSettings()).driveSyncEnabled;
   let deleted = 0;
 
   const db = await openDb();
@@ -396,7 +491,8 @@ export async function cleanupOldRecords(): Promise<number> {
       const cursor = request.result;
       if (cursor) {
         const play = cursor.value as Play;
-        if (play.status === 'synced' || play.status === 'failed') {
+        const driveSafe = !driveSyncEnabled || play.driveImported || !!play.driveUploadedAt;
+        if ((play.status === 'synced' || play.status === 'failed') && driveSafe) {
           cursor.delete();
           deleted++;
         }
@@ -431,6 +527,7 @@ export async function enforceMaxRecords(): Promise<void> {
   // collection is comfortably below the cap.
   if (_playCountEstimate < MAX_PLAY_RECORDS) return;
 
+  const driveSyncEnabled = (await getSettings()).driveSyncEnabled;
   const db = await openDb();
 
   // First, count total records
@@ -462,7 +559,8 @@ export async function enforceMaxRecords(): Promise<void> {
       const cursor = request.result;
       if (cursor && collected < excess) {
         const play = cursor.value as Play;
-        if (play.id != null) {
+        const driveSafe = !driveSyncEnabled || play.driveImported || !!play.driveUploadedAt;
+        if (play.id != null && driveSafe) {
           toDelete.push(play.id);
           collected++;
         }
@@ -474,7 +572,12 @@ export async function enforceMaxRecords(): Promise<void> {
     request.onerror = () => reject(request.error);
   });
 
-  if (toDelete.length === 0) return;
+  if (toDelete.length === 0) {
+    if (driveSyncEnabled) {
+      console.warn(`[Tempo] Keeping ${excess} excess play records until Drive upload completes`);
+    }
+    return;
+  }
 
   // Delete in a single transaction
   await new Promise<void>((resolve, reject) => {
@@ -490,6 +593,10 @@ export async function enforceMaxRecords(): Promise<void> {
   invalidateQueueCountCache();
   invalidateStatsCache();
   console.log(`[Tempo] Pruned ${toDelete.length} excess play records`);
+  const remaining = totalCount - toDelete.length;
+  if (driveSyncEnabled && remaining > MAX_PLAY_RECORDS) {
+    console.warn(`[Tempo] Keeping ${remaining - MAX_PLAY_RECORDS} excess play records until Drive upload completes`);
+  }
 }
 
 // Sync History
@@ -624,6 +731,9 @@ export async function getSettings(): Promise<Settings> {
       _settingsCache = {
         ...DEFAULT_SETTINGS,
         ...raw,
+        // Cloud transmission is opt-in: only the literal boolean true enables
+        // it. Corrupt/legacy/string values must fail closed.
+        driveSyncEnabled: raw.driveSyncEnabled === true,
         knownArtists: sanitizeArray(raw.knownArtists),
         youtubeChannels: sanitizeArray(raw.youtubeChannels),
         blockedYoutubeChannels: sanitizeArray(raw.blockedYoutubeChannels),

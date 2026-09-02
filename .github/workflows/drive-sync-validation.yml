@@ -1,0 +1,82 @@
+name: Drive Sync Validation
+
+on:
+  push:
+    paths:
+      - ".github/workflows/drive-sync-validation.yml"
+      - "PRIVACY.md"
+      - "app/build.gradle.kts"
+      - "app/src/main/java/me/avinas/tempo/TempoApplication.kt"
+      - "app/src/main/java/me/avinas/tempo/data/drive/**"
+      - "app/src/main/java/me/avinas/tempo/di/DriveModule.kt"
+      - "app/src/main/java/me/avinas/tempo/ui/settings/BackupRestoreScreen.kt"
+      - "app/src/main/java/me/avinas/tempo/ui/settings/BackupRestoreViewModel.kt"
+      - "app/src/main/java/me/avinas/tempo/ui/settings/DriveHistorySyncSection.kt"
+      - "app/src/main/java/me/avinas/tempo/worker/DriveHistorySyncWorker.kt"
+      - "app/src/test/java/me/avinas/tempo/data/drive/**"
+      - "browser-extension/**"
+      - "docs/DRIVE_HISTORY_SYNC_V1.md"
+  pull_request:
+    paths:
+      - ".github/workflows/drive-sync-validation.yml"
+      - "PRIVACY.md"
+      - "app/build.gradle.kts"
+      - "app/src/main/java/me/avinas/tempo/TempoApplication.kt"
+      - "app/src/main/java/me/avinas/tempo/data/drive/**"
+      - "app/src/main/java/me/avinas/tempo/di/DriveModule.kt"
+      - "app/src/main/java/me/avinas/tempo/ui/settings/BackupRestoreScreen.kt"
+      - "app/src/main/java/me/avinas/tempo/ui/settings/BackupRestoreViewModel.kt"
+      - "app/src/main/java/me/avinas/tempo/ui/settings/DriveHistorySyncSection.kt"
+      - "app/src/main/java/me/avinas/tempo/worker/DriveHistorySyncWorker.kt"
+      - "app/src/test/java/me/avinas/tempo/data/drive/**"
+      - "browser-extension/**"
+      - "docs/DRIVE_HISTORY_SYNC_V1.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: browser-extension/package-lock.json
+      - run: npm ci
+      - name: TypeScript typecheck
+        run: npm run typecheck
+      - name: Existing tracker and LAN sync smoke tests
+        run: npm run smoke
+      - name: Build Chrome
+        env:
+          TEMPO_GOOGLE_OAUTH_CLIENT_ID_CHROME: test-client.apps.googleusercontent.com
+        run: npm run build:chrome
+      - name: Build Firefox
+        env:
+          TEMPO_GOOGLE_OAUTH_CLIENT_ID_FIREFOX: test-client.apps.googleusercontent.com
+        run: npm run build:firefox
+
+  android:
+    runs-on: ubuntu-latest
+    env:
+      TEMPO_GOOGLE_WEB_CLIENT_ID: test-client.apps.googleusercontent.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - run: chmod +x gradlew
+      - name: Compile Android Kotlin
+        run: ./gradlew :app:compileDebugKotlin --stacktrace
+      - name: Android unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace

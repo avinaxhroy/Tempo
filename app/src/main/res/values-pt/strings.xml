@@ -383,7 +383,7 @@
     <string name="backup_export">Exportar para dispositivo</string>
     <string name="backup_import">Importar do dispositivo</string>
     <string name="backup_tips">💡 Dicas de backup</string>
-    <string name="backup_drive_auto">• Os backups do Google Drive são automáticos e criptografados\n</string>
+    <string name="backup_drive_auto">• Os backups do Google Drive são automáticos e armazenados na sua conta do Drive\n</string>
     <string name="backup_use_different">Use uma conta diferente</string>
     <string name="backup_last_backup">Último backup: %1$s</string>
 

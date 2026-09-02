@@ -414,7 +414,7 @@
     <string name="backup_export">Экспорт на устройство</string>
     <string name="backup_import">Импорт с устройства</string>
     <string name="backup_tips">💡 Советы по резервному копированию</string>
-    <string name="backup_drive_auto">• Копии на Google Диске автоматические и зашифрованные\n</string>
+    <string name="backup_drive_auto">• Копии на Google Диске создаются автоматически и хранятся в вашем аккаунте Drive\n</string>
     <string name="backup_use_different">Использовать другой аккаунт</string>
     <string name="backup_last_backup">Последняя копия: %1$s</string>
 

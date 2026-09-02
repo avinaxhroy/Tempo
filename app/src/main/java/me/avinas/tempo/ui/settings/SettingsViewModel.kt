@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import me.avinas.tempo.data.drive.DriveHistorySyncManager
 import me.avinas.tempo.data.importexport.ImportConflictStrategy
 import me.avinas.tempo.data.importexport.ImportExportManager
 import me.avinas.tempo.data.importexport.ImportExportProgress
@@ -33,6 +34,7 @@ class SettingsViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val database: AppDatabase,
     private val importExportManager: ImportExportManager,
+    private val driveHistorySyncManager: DriveHistorySyncManager,
     private val profileIdentityManager: ProfileIdentityManager,
     private val userPreferencesDao: me.avinas.tempo.data.local.dao.UserPreferencesDao
 ) : ViewModel() {
@@ -329,7 +331,9 @@ class SettingsViewModel @Inject constructor(
     fun importData(uri: Uri, strategy: ImportConflictStrategy) {
         _showConflictDialog.value = null
         viewModelScope.launch {
-            val result = importExportManager.importData(uri, strategy)
+            val result = driveHistorySyncManager.withLocalHistoryRestore {
+                importExportManager.importData(uri, strategy)
+            }
             _importExportResult.value = result
         }
     }

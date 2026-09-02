@@ -48,6 +48,7 @@ class BackupRestoreViewModel @Inject constructor(
     private val googleAuthManager: GoogleAuthManager,
     private val driveService: GoogleDriveService,
     private val backupSettingsManager: BackupSettingsManager,
+    private val driveHistorySyncManager: DriveHistorySyncManager,
     private val applicationScope: CoroutineScope
 ) : ViewModel() {
     
@@ -281,7 +282,9 @@ class BackupRestoreViewModel @Inject constructor(
     fun importData(uri: Uri, strategy: ImportConflictStrategy) {
         _showConflictDialog.value = null
         applicationScope.launch {
-            val result = importExportManager.importData(uri, strategy)
+            val result = driveHistorySyncManager.withLocalHistoryRestore {
+                importExportManager.importData(uri, strategy)
+            }
             _importExportResult.value = result
             // Refresh stats after import
             calculateStats()
@@ -528,16 +531,22 @@ class BackupRestoreViewModel @Inject constructor(
                 when (downloadResult) {
                     is DriveRestoreResult.Success -> {
                         _driveOperation.value = DriveOperationState.Restoring
-                        
-                        // Import using existing import mechanism
-                        val importResult = importExportManager.importData(
-                            Uri.fromFile(downloadResult.localFile),
-                            strategy
-                        )
-                        
-                        // Cleanup downloaded file
-                        downloadResult.localFile.delete()
-                        
+
+                        val downloadedFile = downloadResult.localFile
+                        // Import using the existing mechanism while excluding Drive
+                        // sync. Always remove the temporary plaintext backup, even
+                        // if import is cancelled or throws unexpectedly.
+                        val importResult = try {
+                            driveHistorySyncManager.withLocalHistoryRestore {
+                                importExportManager.importData(
+                                    Uri.fromFile(downloadedFile),
+                                    strategy
+                                )
+                            }
+                        } finally {
+                            downloadedFile.delete()
+                        }
+
                         when (importResult) {
                             is ImportExportResult.Success -> {
                                 calculateStats()

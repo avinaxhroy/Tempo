@@ -261,7 +261,14 @@ interface ListeningEventDao {
      * absorbs cross-source timestamp drift.
      */
     private fun isSamePlay(slot: Slot, incoming: ListeningEvent): Boolean {
-        val sameSource = slot.source == incoming.source
+        val slotDriveDevice = SourceAuthority.driveDeviceId(slot.source)
+        val incomingDriveDevice = SourceAuthority.driveDeviceId(incoming.source)
+        // Layer 1 already removed an exact Drive event id. Distinct ids from the
+        // same originating device are real rapid replays, not temporal dupes.
+        if (slotDriveDevice != null && slotDriveDevice == incomingDriveDevice) return false
+
+        val sameSource = slot.source == incoming.source &&
+            slotDriveDevice == null && incomingDriveDevice == null
         val window: Long = if (sameSource) {
             DUPLICATE_TOLERANCE_MS
         } else {

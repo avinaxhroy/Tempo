@@ -87,7 +87,7 @@ Tempo is a local-first music journal and scrobbler for Android. It monitors play
 ### Local storage and privacy
 - All listening events, track metadata, and aggregates remain in local SQLite databases via Room.
 - Auth credentials and API tokens reside in Android `EncryptedSharedPreferences`.
-- Optional Google Drive backup exports encrypted database snapshots with conflict resolution.
+- Optional Google Drive backup exports database snapshots with conflict resolution over HTTPS.
 
 ---
 

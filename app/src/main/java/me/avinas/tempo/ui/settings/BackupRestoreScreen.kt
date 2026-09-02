@@ -247,6 +247,11 @@ fun BackupRestoreScreen(
                     onSetInterval = viewModel::setBackupInterval,
                     onSetWifiOnly = viewModel::setWifiOnly
                 )
+
+                if (isSignedIn) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    DriveHistorySyncSection()
+                }
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
@@ -606,7 +611,7 @@ private fun GoogleDriveSection(
                             color = Color.White
                         )
                         Text(
-                            text = "Back up your data to Google Drive",
+                            text = "Back up data and optionally sync listening history",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.7f)
                         )
@@ -991,8 +996,9 @@ private fun BackupTipsCard() {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "• Google Drive backups are automatic and encrypted\n" +
-                       "• Only the 5 most recent backups are kept\n" +
+                text = "• Google Drive backups can run automatically and use HTTPS in transit\n" +
+                       "• Cross-device history sync is optional and uses Drive app data\n" +
+                       "• Only the 5 most recent full backups are kept\n" +
                        "• Album art from streaming services will be re-downloaded\n" +
                        "• Local album art is only included if toggled on",
                 style = MaterialTheme.typography.bodySmall,

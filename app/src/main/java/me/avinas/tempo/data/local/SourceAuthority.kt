@@ -22,15 +22,26 @@ package me.avinas.tempo.data.local
  */
 object SourceAuthority {
 
-    fun rank(source: String): Int = when {
-        source.startsWith("desktop:") -> 90
-        source.contains("import.reconstructed") -> 40
-        source.contains("fm.last.import") -> 50
-        source.contains("import.json") && source.contains("spotify") -> 70
-        source.contains("import.json") && source.contains("youtube") -> 65
-        source.contains("import.json") -> 60
-        source.contains(".import") -> 55
-        source.contains("import") -> 50
-        else -> 100
+    fun rank(source: String): Int {
+        val original = unwrapDriveSource(source)
+        return when {
+            original.startsWith("desktop:") -> 90
+            original.contains("import.reconstructed") -> 40
+            original.contains("fm.last.import") -> 50
+            original.contains("import.json") && original.contains("spotify") -> 70
+            original.contains("import.json") && original.contains("youtube") -> 65
+            original.contains("import.json") -> 60
+            original.contains(".import") -> 55
+            original.contains("import") -> 50
+            else -> 100
+        }
     }
+
+    fun driveDeviceId(source: String): String? {
+        if (!source.startsWith("drive:")) return null
+        return source.split(':', limit = 3).takeIf { it.size == 3 }?.get(1)?.takeIf { it.isNotBlank() }
+    }
+
+    private fun unwrapDriveSource(source: String): String =
+        source.split(':', limit = 3).takeIf { it.size == 3 && it[0] == "drive" }?.get(2) ?: source
 }

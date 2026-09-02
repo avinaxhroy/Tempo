@@ -13,7 +13,7 @@
     "watch:firefox": "node build.mjs --target=firefox --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "smoke": "node smoke-tracker.mjs && node smoke-sync.mjs"
+    "smoke": "node smoke-tracker.mjs && node smoke-sync.mjs && node smoke-drive.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.40",

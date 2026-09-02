@@ -431,7 +431,7 @@
     <string name="backup_export">Export to Device</string>
     <string name="backup_import">Import from Device</string>
     <string name="backup_tips">💡 Backup Tips</string>
-    <string name="backup_drive_auto">• Google Drive backups are automatic and encrypted\n</string>
+    <string name="backup_drive_auto">• Google Drive backups are automatic and stored in your Drive account\n</string>
     <string name="backup_use_different">Use a different account</string>
     <string name="backup_last_backup">Last backup: %1$s</string>
 

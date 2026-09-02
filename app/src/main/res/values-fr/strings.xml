@@ -382,7 +382,7 @@
     <string name="backup_export">Exporter sur l\'appareil</string>
     <string name="backup_import">Importer depuis l\'appareil</string>
     <string name="backup_tips">💡 Astuces de sauvegarde</string>
-    <string name="backup_drive_auto">• Les sauvegardes Google Drive sont automatiques et chiffrées\n</string>
+    <string name="backup_drive_auto">• Les sauvegardes Google Drive sont automatiques et stockées dans votre compte Drive\n</string>
     <string name="backup_use_different">Utiliser un autre compte</string>
     <string name="backup_last_backup">Dernière sauvegarde : %1$s</string>
 
