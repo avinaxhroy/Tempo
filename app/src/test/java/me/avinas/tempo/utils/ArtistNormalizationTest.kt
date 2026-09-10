@@ -17,6 +17,12 @@ import org.junit.Test
  */
 class ArtistNormalizationTest {
 
+    @Test
+    fun `bigflo et oli remains a single artist with either common spelling`() {
+        assertEquals(listOf("Bigflo et Oli"), ArtistParser.getAllArtists("Bigflo et Oli"))
+        assertEquals(listOf("Bigflo & Oli"), ArtistParser.getAllArtists("Bigflo & Oli"))
+    }
+
     // Artist.normalizeName
 
     @Test

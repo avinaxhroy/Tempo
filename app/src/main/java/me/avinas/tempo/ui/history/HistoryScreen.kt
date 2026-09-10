@@ -1603,6 +1603,29 @@ fun HistoryListItem(
             expanded = showMenu,
             onDismissRequest = { showMenu = false }
         ) {
+            TempoMenuKicker(text = stringResource(R.string.tracking_always_music))
+            TempoDropdownMenuItem(
+                title = stringResource(R.string.history_always_music_track),
+                leadingIcon = Icons.Rounded.MusicNote,
+                leadingIconTint = TempoPrimary,
+                onClick = {
+                    onMarkContent?.invoke("ALWAYS_MUSIC", false)
+                    showMenu = false
+                }
+            )
+            TempoDropdownMenuItem(
+                title = stringResource(R.string.history_always_music_artist, item.artist),
+                leadingIcon = Icons.Rounded.MusicNote,
+                leadingIconTint = TempoPrimary,
+                enabled = !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(item.artist),
+                onClick = {
+                    onMarkArtist?.invoke("ALWAYS_MUSIC", false)
+                    showMenu = false
+                }
+            )
+
+            TempoMenuDivider()
+
             TempoMenuKicker(text = stringResource(R.string.history_block_track))
             TempoDropdownMenuItem(
                 title = stringResource(R.string.history_its_a_podcast),
@@ -1621,6 +1644,17 @@ fun HistoryListItem(
                 leadingIconTint = GoldenAmber,
                 onClick = {
                     onMarkContent?.invoke("AUDIOBOOK", true)
+                    showMenu = false
+                }
+            )
+            TempoDropdownMenuItem(
+                title = stringResource(R.string.history_video_non_music_track),
+                subtitle = stringResource(R.string.history_video_non_music_track_description),
+                leadingIcon = Icons.Default.PlayCircle,
+                leadingIconTint = TempoError,
+                isDestructive = true,
+                onClick = {
+                    onMarkContent?.invoke("NON_MUSIC", true)
                     showMenu = false
                 }
             )
@@ -1653,6 +1687,18 @@ fun HistoryListItem(
                     showMenu = false
                 }
             )
+            TempoDropdownMenuItem(
+                title = stringResource(R.string.history_video_non_music_artist, item.artist),
+                subtitle = stringResource(R.string.history_video_non_music_artist_description),
+                leadingIcon = Icons.Default.Close,
+                leadingIconTint = TempoError,
+                isDestructive = true,
+                onClick = {
+                    onMarkArtist?.invoke("NON_MUSIC", true)
+                    showMenu = false
+                }
+            )
+
         }
     }
 }

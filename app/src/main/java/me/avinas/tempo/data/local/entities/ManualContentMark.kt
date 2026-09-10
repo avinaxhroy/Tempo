@@ -6,7 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * Manual content marks for user-defined podcast/audiobook filtering.
+ * Persistent user-defined content classifications for filtering and tracking overrides.
  * 
  * When a user manually marks content as podcast or audiobook,
  * we store a pattern (title/artist/album) that will be used to
@@ -36,14 +36,14 @@ data class ManualContentMark(
     
     /**
      * Reference to the original track that was marked.
-     * Used for deletion cascade.
+     * Zero is used for rules created directly from settings.
      */
     @ColumnInfo(name = "target_track_id")
     val targetTrackId: Long,
     
     /**
-     * Pattern type: TITLE, ARTIST, or ALBUM.
-     * Determines which field to match against.
+     * Pattern type: TITLE_ARTIST, TITLE, or ARTIST.
+     * Determines which fields are matched.
      */
     @ColumnInfo(name = "pattern_type")
     val patternType: String,
@@ -63,15 +63,14 @@ data class ManualContentMark(
     val originalArtist: String,
     
     /**
-     * Pattern value for matching similar content.
-     * May contain SQL wildcards (%) for flexible matching.
-     * Example: "Chapter % of Book Name" matches "Chapter 1 of Book Name", "Chapter 2 of Book Name", etc.
+     * Legacy value retained for database and archive compatibility.
+     * Current matching uses [originalTitle], [originalArtist], and [patternType].
      */
     @ColumnInfo(name = "pattern_value")
     val patternValue: String,
     
     /**
-     * Content type: PODCAST or AUDIOBOOK.
+     * Content type: PODCAST, AUDIOBOOK, ALWAYS_MUSIC, NON_MUSIC, or legacy VIDEO.
      */
     @ColumnInfo(name = "content_type")
     val contentType: String,

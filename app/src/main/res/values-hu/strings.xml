@@ -604,4 +604,54 @@
     <string name="ui_search_hint">Keresés…</string>
     <string name="ui_no_results">Nincs találat.</string>
     
+    <!-- Konfigurálható androidos követési szabályok -->
+    <string name="tracking_rules_section">Követési szabályok</string>
+    <string name="tracking_rules_help">Engedélyezd azokat az alkalmazásokat, amelyek zenehallgatását követni szeretnéd. Az időzítő gombbal alkalmazásonként külön maximális zenehosszt adhatsz meg. A blokkolt alkalmazások teljesen kimaradnak.</string>
+    <string name="tracking_count_listen_after">Lejátszás számítása ennyi idő után</string>
+    <string name="tracking_default_max_duration">Alapértelmezett maximális zenehossz</string>
+    <string name="tracking_no_limit">Nincs korlát</string>
+    <string name="tracking_content_exceptions">Tartalmi kivételek</string>
+    <string name="tracking_content_exception_types">Mindig zene / Videó és nem zene</string>
+    <plurals name="tracking_saved_rules">
+        <item quantity="one">%1$d mentett szabály</item>
+        <item quantity="other">%1$d mentett szabály</item>
+    </plurals>
+    <string name="tracking_duration_limit">Időtartamkorlát</string>
+    <string name="tracking_minimum_listening_time">Minimális hallgatási idő</string>
+    <string name="tracking_minimum_listening_description">Egy lejátszás csak ennyi tényleges hallgatás után kerül mentésre.</string>
+    <string name="tracking_seconds">Másodperc</string>
+    <string name="tracking_minutes">Perc</string>
+    <string name="tracking_minimum_range">1–600 másodperc • Alapértelmezett: 25</string>
+    <string name="tracking_save">Mentés</string>
+    <string name="tracking_cancel">Mégse</string>
+    <string name="tracking_default_max_description">Az ennél hosszabb média nem zeneként lesz kezelve. Az egyes alkalmazások felülírhatják ezt.</string>
+    <string name="tracking_no_maximum_duration">Nincs maximális időtartam</string>
+    <string name="tracking_default_twenty_minutes">Alapértelmezett: 20 perc 00 mp</string>
+    <string name="tracking_app_duration_limit">%1$s időtartamkorlátja</string>
+    <string name="tracking_use_global_limit">Globális korlát használata</string>
+    <string name="tracking_no_limit_app_description">Ne zárja ki az alkalmazás médiáját annak hossza miatt</string>
+    <string name="tracking_custom_limit">Egyéni korlát</string>
+    <string name="tracking_custom_limit_description">Pontos időtartam megadása ehhez az alkalmazáshoz</string>
+    <string name="tracking_content_exceptions_description">A megfelelő média mindig zenének számítson, vagy mindig legyen kizárva videóként vagy nem zeneként. Hagyd üresen az egyik mezőt, hogy minden címre vagy előadóra illeszkedjen.</string>
+    <string name="tracking_title_optional">Cím (nem kötelező)</string>
+    <string name="tracking_artist_optional">Előadó / csatorna (nem kötelező)</string>
+    <string name="tracking_always_music">Mindig zene</string>
+    <string name="tracking_always_music_description">Figyelmen kívül hagyja a maximális időtartamot és a tartalomszűrőket; a minimális hallgatási idő továbbra is érvényes</string>
+    <string name="tracking_video_non_music">Videó / nem zene</string>
+    <string name="tracking_video_non_music_description">Eltávolítja a meglévő egyezéseket, és kizárja a jövőbeli lejátszásokat az előzményekből és a statisztikákból</string>
+    <string name="tracking_add_rule">Szabály hozzáadása</string>
+    <string name="tracking_done">Kész</string>
+    <string name="tracking_any_title">Bármely cím</string>
+    <string name="tracking_any_artist">Bármely előadó</string>
+    <string name="tracking_delete_rule">Szabály törlése</string>
+    <string name="tracking_music_limit_global">Zenekorlát: Globális (%1$s)</string>
+    <string name="tracking_music_limit_no_limit">Zenekorlát: Nincs korlát</string>
+    <string name="tracking_music_limit_custom">Zenekorlát: %1$s</string>
+    <string name="tracking_global">Globális</string>
+    <string name="history_always_music_track">Mindig zene — ez a szám</string>
+    <string name="history_always_music_artist">Mindig zene — %1$s</string>
+    <string name="history_video_non_music_track">Ez videó / nem zene</string>
+    <string name="history_video_non_music_track_description">Meglévő lejátszások eltávolítása és jövőbeli egyezések blokkolása</string>
+    <string name="history_video_non_music_artist">%1$s kezelése videóként / nem zeneként</string>
+    <string name="history_video_non_music_artist_description">Minden egyező előzmény eltávolítása és a jövőbeli lejátszások blokkolása</string>
 </resources>

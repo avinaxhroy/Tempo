@@ -17,6 +17,13 @@ interface ListeningRepository {
     suspend fun deleteByArtist(artistName: String): Int
     suspend fun getEventsForTrack(trackId: Long): List<ListeningEvent>
     suspend fun getEventsInRange(startTime: Long, endTime: Long): List<ListeningEvent>
+
+    /**
+     * Final persistence guard for live-tracking events that may sit in an asynchronous
+     * batch/offline queue. Implementations that do not manage manual classifications
+     * (including test fakes) remain backward-compatible by accepting events by default.
+     */
+    suspend fun shouldPersist(event: ListeningEvent): Boolean = true
     
     // Enhanced engagement queries
     suspend fun getSkipCountForTrack(trackId: Long): Int

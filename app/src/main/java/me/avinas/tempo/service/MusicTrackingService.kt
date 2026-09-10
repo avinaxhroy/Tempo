@@ -26,7 +26,11 @@ import androidx.core.graphics.drawable.toBitmap
 import me.avinas.tempo.MainActivity
 import me.avinas.tempo.R
 import me.avinas.tempo.data.local.entities.ListeningEvent
+import me.avinas.tempo.data.local.entities.ManualContentMark
+import me.avinas.tempo.data.local.entities.ManualContentRuleResolver
 import me.avinas.tempo.data.local.entities.Track
+import me.avinas.tempo.data.preferences.TrackingRulesPreferences
+import me.avinas.tempo.data.preferences.TrackingRulesPreferences.ContentOverrideType
 import me.avinas.tempo.data.repository.ArtistLinkingService
 import me.avinas.tempo.data.repository.EnrichedMetadataRepository
 import me.avinas.tempo.data.repository.ListeningRepository
@@ -159,7 +163,7 @@ class MusicTrackingService : NotificationListenerService() {
             "com.kodarkooperativet.blackplayerex",     // BlackPlayer EX
             "nugs.net",                                // Nugs.net
             "net.nugs.multiband",                      // Nugs.net (Multiband)
-            
+
             // Open Source / GitHub Music Clients (Ad-free)
             "com.dd3boh.outertune",                    // OuterTune
             "com.zionhuang.music",                     // InnerTune
@@ -185,7 +189,7 @@ class MusicTrackingService : NotificationListenerService() {
             "com.kapp.youtube.final",                  // YMusic
             "org.schabi.newpipe",                      // NewPipe
             "org.polymorphicshade.newpipe",            // NewPipe (Fork)
-            
+
             // Popular Offline Players
             "com.rhmsoft.pulsar",                      // Pulsar
             "com.neutroncode.mp",                      // Neutron Player
@@ -202,7 +206,7 @@ class MusicTrackingService : NotificationListenerService() {
             // Open Source - Vivi Music & similar
             "com.vivi.vivimusic"                       // Vivi Music (open source)
         )
-        
+
         // Podcast apps - filtered by content filtering settings
         // Note: Spotify is NOT in this list because it has music, podcasts, AND audiobooks
         // We rely on metadata detection for Spotify
@@ -223,8 +227,8 @@ class MusicTrackingService : NotificationListenerService() {
             "com.podcasts.android",                 // Podcasts (generic)
             "fm.castbox.audiobook.radio.podcast"    // Castbox variant
         )
-        
-        // Audiobook apps - filtered by content filtering settings  
+
+        // Audiobook apps - filtered by content filtering settings
         private val AUDIOBOOK_APPS = setOf(
             "com.audible.application",              // Audible
             "com.google.android.apps.books",        // Google Play Books
@@ -237,7 +241,7 @@ class MusicTrackingService : NotificationListenerService() {
             "com.nook.app",                         // Nook Audiobooks
             "com.audiobooks.androidapp"             // Audiobooks (generic)
         )
-        
+
         // Video/non-music apps to explicitly BLOCK from tracking
         // These apps have MediaSessions but we don't want to track their content
         private val BLOCKED_APPS = setOf(
@@ -251,14 +255,14 @@ class MusicTrackingService : NotificationListenerService() {
             "in.startv.hotstar",                      // Hotstar (video)
             "com.hotstar.android",                    // Hotstar (alternative)
             "tv.twitch.android.app",                  // Twitch
-            
+
             // Social media (reels, shorts, videos)
             "com.zhiliaoapp.musically",               // TikTok
             "com.ss.android.ugc.trill",               // TikTok (alternative)
             "com.instagram.android",                  // Instagram (reels)
             "com.facebook.katana",                    // Facebook (videos)
             "com.snapchat.android",                   // Snapchat
-            
+
             // Video players & media
             "com.vimeo.android.videoapp",             // Vimeo
             "com.mxtech.videoplayer.ad",              // MX Player
@@ -268,7 +272,7 @@ class MusicTrackingService : NotificationListenerService() {
             "com.whatsapp",                           // WhatsApp (status videos)
             "org.telegram.messenger",                 // Telegram (videos)
             "com.google.android.gm",                  // Gmail (video attachments)
-            
+
             // Expanded Video Player Blocklist (User Request)
             "com.playit.videoplayer",
             "video.player.videoplayer",
@@ -380,10 +384,9 @@ class MusicTrackingService : NotificationListenerService() {
             "com.qwant.browser",                      // Qwant
             "org.chromium.webview_shell"              // Chrome WebView shell
         )
-        
+
         // Typical music duration range (used for music detection)
         private const val MIN_MUSIC_DURATION_MS = 30_000L      // 30 seconds
-        private const val MAX_MUSIC_DURATION_MS = 20 * 60 * 1000L  // 20 minutes (for long tracks/mixes)
         private const val TYPICAL_SONG_MIN_MS = 60_000L        // 1 minute
         private const val TYPICAL_SONG_MAX_MS = 10 * 60 * 1000L   // 10 minutes
 
@@ -393,13 +396,13 @@ class MusicTrackingService : NotificationListenerService() {
         private const val EXTRA_SUB_TEXT = Notification.EXTRA_SUB_TEXT
         private const val EXTRA_INFO_TEXT = Notification.EXTRA_INFO_TEXT
         private const val EXTRA_BIG_TEXT = Notification.EXTRA_BIG_TEXT
-        
+
         // Album art directory name
         private const val ALBUM_ART_DIR = "album_art"
-        
+
         // Replay detection: maximum time between plays to consider it a replay (5 minutes)
         private const val REPLAY_THRESHOLD_MS = 5 * 60 * 1000L
-        
+
         // Smart adaptive polling intervals for accurate duration tracking
         // These are dynamically adjusted based on song phase and duration
         private const val POLL_INTERVAL_SONG_START_MS = 3_000L     // First 30s: poll every 3s (skip detection)
@@ -407,21 +410,18 @@ class MusicTrackingService : NotificationListenerService() {
         private const val POLL_INTERVAL_SONG_END_MS = 4_000L       // Last 30s: poll every 4s (completion detection)
         private const val POLL_INTERVAL_SHORT_TRACK_MS = 5_000L    // Tracks <90s: always poll every 5s
         private const val POLL_INTERVAL_UNKNOWN_DURATION_MS = 6_000L // Unknown duration: balanced polling
-        
+
         // Song phase thresholds
         private const val SONG_START_PHASE_MS = 30_000L    // First 30 seconds
         private const val SONG_END_PHASE_MS = 30_000L      // Last 30 seconds
         private const val SHORT_TRACK_THRESHOLD_MS = 90_000L // Tracks under 90 seconds
-        
+
         // Minimum play duration to record (25 seconds)
-        private const val MIN_PLAY_DURATION_MS = 25_000L
-        
-        // Skip threshold: plays under 30% completion are considered skips
         private const val SKIP_COMPLETION_THRESHOLD = 30
-        
+
         // Full play threshold: plays over 80% completion are considered full plays
         private const val FULL_PLAY_COMPLETION_THRESHOLD = 80
-        
+
         // Session auto-save interval
         private const val SESSION_AUTOSAVE_INTERVAL_MS = 30_000L
 
@@ -432,33 +432,29 @@ class MusicTrackingService : NotificationListenerService() {
         // process goes away. If it does time out, the sessions were already persisted
         // to SharedPreferences at the top of the flush, so recovery picks them up.
         private const val SHUTDOWN_FLUSH_TIMEOUT_MS = 5_000L
-        
+
         // Track matching threshold for deduplication
         private const val TRACK_MATCH_THRESHOLD = 0.85
-        
+
         // Position tracking constants
-        private const val MAX_POSITION_JUMP_MS = 30_000L // 30 seconds - max seek to still count
-        private const val MAX_PLAY_DURATION_MS = 3_600_000L // 1 hour - max duration per session
-        
-        // Maximum reasonable position delta in one update (5 minutes worth of playback)
-        // This catches cases where polling was delayed for a long time (device sleep, service suspension)
+        private const val MAX_POSITION_JUMP_MS = 30_000L
         private const val MAX_REASONABLE_DELTA_MS = 5 * 60 * 1000L // 5 minutes
-        
+
         // Patterns for extracting artist from title (e.g., "Song - Artist", "Song (by Artist)")
         private val TITLE_ARTIST_PATTERNS = listOf(
             Regex("""^(.+?)\s*[-–—]\s*(.+)$"""),           // "Title - Artist" or "Title – Artist"
             Regex("""^(.+?)\s*\|\s*(.+)$"""),              // "Title | Artist"
             Regex("""^(.+?)\s+by\s+(.+)$""", RegexOption.IGNORE_CASE),  // "Title by Artist"
         )
-        
+
         // Placeholder and album detection patterns - pre-compiled for performance
         private val NUMERIC_ONLY_PATTERN = Regex("^\\d+$")
         private val YEAR_PATTERN = Regex(".*\\(\\d{4}\\).*")  // Contains year like "(2023)"
         private val REMASTER_PATTERN = Regex(".*\\d{4}.*remaster.*")  // Remaster with year
     }
-    
+
     // Metadata extraction helpers
-    
+
     /**
      * Extract artist from MediaMetadata using multiple fallback sources.
      * Tries: ARTIST -> ALBUM_ARTIST -> AUTHOR -> DISPLAY_SUBTITLE -> WRITER -> COMPOSER
@@ -468,40 +464,40 @@ class MusicTrackingService : NotificationListenerService() {
         metadata.getString(MediaMetadata.METADATA_KEY_ARTIST)
             ?.takeIf { it.isNotBlank() && !isPlaceholderArtist(it) }
             ?.let { return it.trim() }
-        
+
         // Fallback 1: ALBUM_ARTIST
         metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
             ?.takeIf { it.isNotBlank() && !isPlaceholderArtist(it) }
             ?.let { return it.trim() }
-        
+
         // Fallback 2: AUTHOR (some apps use this)
         metadata.getString(MediaMetadata.METADATA_KEY_AUTHOR)
             ?.takeIf { it.isNotBlank() && !isPlaceholderArtist(it) }
             ?.let { return it.trim() }
-        
+
         // Fallback 3: DISPLAY_SUBTITLE (often contains artist, but can be video descriptions)
         // Additional validation to filter out video descriptions/subtitles
         metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)
             ?.takeIf { it.isNotBlank() && !isPlaceholderArtist(it) && isLikelyArtistName(it) }
             ?.let { return it.trim() }
-        
+
         // Fallback 4: WRITER
         metadata.getString(MediaMetadata.METADATA_KEY_WRITER)
             ?.takeIf { it.isNotBlank() && !isPlaceholderArtist(it) }
             ?.let { return it.trim() }
-        
+
         // Fallback 5: COMPOSER (rare but some classical music apps)
         metadata.getString(MediaMetadata.METADATA_KEY_COMPOSER)
             ?.takeIf { it.isNotBlank() && !isPlaceholderArtist(it) }
             ?.let { return it.trim() }
-        
+
         // Fallback 6: Try to extract from title if it contains separator
         val title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
             ?: metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
         if (title != null) {
             extractArtistFromTitle(title)?.let { return it }
         }
-        
+
         // Debug log when falling back to Unknown Artist (debounced - only once per track)
         // Skip logging when title is empty - metadata hasn't fully arrived yet
         val logKey = title?.takeIf { it.isNotBlank() }
@@ -513,10 +509,10 @@ class MusicTrackingService : NotificationListenerService() {
                 "DISPLAY_SUBTITLE='${metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)}', " +
                 "TITLE='$title'")
         }
-        
+
         return "Unknown Artist"
     }
-    
+
     /**
      * Extract artist from notification extras using multiple fallback sources.
      */
@@ -525,21 +521,21 @@ class MusicTrackingService : NotificationListenerService() {
         extras.getCharSequence(EXTRA_TEXT)?.toString()
             ?.takeIf { it.isNotBlank() && !isPlaceholderArtist(it) }
             ?.let { return it.trim() }
-        
+
         // Fallback 1: EXTRA_SUB_TEXT (sometimes contains artist)
         extras.getCharSequence(EXTRA_SUB_TEXT)?.toString()
             ?.takeIf { it.isNotBlank() && !isPlaceholderArtist(it) }
-            ?.let { 
+            ?.let {
                 // SUB_TEXT might be album, check if it looks like an artist name
                 // (doesn't contain common album indicators)
                 if (!looksLikeAlbum(it)) return it.trim()
             }
-        
+
         // Fallback 2: EXTRA_INFO_TEXT
         extras.getCharSequence(EXTRA_INFO_TEXT)?.toString()
             ?.takeIf { it.isNotBlank() && !isPlaceholderArtist(it) }
             ?.let { return it.trim() }
-        
+
         // Fallback 3: BIG_TEXT might contain artist info
         extras.getCharSequence(EXTRA_BIG_TEXT)?.toString()
             ?.takeIf { it.isNotBlank() }
@@ -550,10 +546,10 @@ class MusicTrackingService : NotificationListenerService() {
                     return lines[1].takeIf { !isPlaceholderArtist(it) } ?: "Unknown Artist"
                 }
             }
-        
+
         // Fallback 4: Try to extract from title
         extractArtistFromTitle(title)?.let { return it }
-        
+
         // Debug log when falling back to Unknown Artist (debounced - only once per track)
         if (!loggedArtistExtractionFailures.containsKey(title)) {
             loggedArtistExtractionFailures[title] = true
@@ -563,10 +559,10 @@ class MusicTrackingService : NotificationListenerService() {
                 "INFO_TEXT='${extras.getCharSequence(EXTRA_INFO_TEXT)}', " +
                 "TITLE='$title'")
         }
-        
+
         return "Unknown Artist"
     }
-    
+
     /**
      * Try to extract artist from title string (e.g., "Song - Artist" format).
      */
@@ -576,7 +572,7 @@ class MusicTrackingService : NotificationListenerService() {
             if (match != null) {
                 val potentialArtist = match.groupValues[2].trim()
                 // Validate it looks like an artist name (not too long, not just numbers)
-                if (potentialArtist.length in 1..50 && 
+                if (potentialArtist.length in 1..50 &&
                     !potentialArtist.all { it.isDigit() } &&
                     !isPlaceholderArtist(potentialArtist)) {
                     return potentialArtist
@@ -585,7 +581,7 @@ class MusicTrackingService : NotificationListenerService() {
         }
         return null
     }
-    
+
     /**
      * Clean title by removing embedded artist if detected.
      */
@@ -594,14 +590,12 @@ class MusicTrackingService : NotificationListenerService() {
             val match = pattern.find(title)
             if (match != null) {
                 val cleanTitle = match.groupValues[1].trim()
-                if (cleanTitle.isNotBlank()) {
-                    return cleanTitle
-                }
+                if (cleanTitle.isNotBlank()) return cleanTitle
             }
         }
         return title
     }
-    
+
     /**
      * Check if artist string is a placeholder/unknown value.
      */
@@ -613,7 +607,7 @@ class MusicTrackingService : NotificationListenerService() {
             "artist", "track", "music", "audio", "media"
         ) || lower.startsWith("track ") || lower.matches(NUMERIC_ONLY_PATTERN)
     }
-    
+
     /**
      * Check if string looks like an album name rather than artist.
      */
@@ -629,13 +623,13 @@ class MusicTrackingService : NotificationListenerService() {
                lower.matches(YEAR_PATTERN) || // Contains year like "(2023)"
                lower.matches(REMASTER_PATTERN) // Remaster with year
     }
-    
+
     /**
      * Check if a string looks like an artist name rather than a video description/subtitle.
-     * 
+     *
      * YouTube Music and other apps sometimes put video descriptions in DISPLAY_SUBTITLE,
      * which we incorrectly captured as artist names. This function filters those out.
-     * 
+     *
      * Examples of what should be rejected:
      * - "Kaisa Mera Desh (Anti Corruption anthem)" - video description
      * - "Official Music Video - HD" - video descriptor
@@ -644,103 +638,68 @@ class MusicTrackingService : NotificationListenerService() {
     private fun isLikelyArtistName(text: String): Boolean {
         // Too long for a typical artist name (descriptions are often longer)
         if (text.length > 60) return false
-        
+
         val lowerText = text.lowercase()
-        
+
         // Video/audio quality suffixes in parentheses - very specific patterns
         // These are clearly metadata, not artist names
         val qualityPatterns = listOf("1080p", "720p", "480p", "4k", "hd video", "full hd")
-        if (qualityPatterns.any { lowerText.contains("($it") || lowerText.contains("[$it") }) {
-            return false
-        }
-        
-        // Clear video description patterns that indicate metadata, not artist
+        if (qualityPatterns.any { lowerText.contains("($it") || lowerText.contains("[$it") }) return false
         val videoPatterns = listOf(
             "official video", "official audio", "official music video",
             "lyric video", "lyrics video", "music video", "full video",
             "visualizer", "full album", "audio only"
         )
-        if (videoPatterns.any { lowerText.contains(it) }) {
-            return false
-        }
-        
-        // Specific parenthesized description patterns (more restrictive)
-        // Only reject if it's clearly a description suffix like "(Official Video)"
+        if (videoPatterns.any { lowerText.contains(it) }) return false
         val descriptionSuffixes = listOf(
             "(official)", "(audio)", "(video)", "(lyrics)", "(visualizer)",
             "(official video)", "(official audio)", "(lyric video)",
             "(theme song)", "(full video)", "(music video)", "(trailer)"
         )
-        if (descriptionSuffixes.any { lowerText.endsWith(it) }) {
-            return false
-        }
-        
-        // The original problematic case: "Kaisa Mera Desh (Anti Corruption anthem)"
-        // Detect anthem/theme in parentheses specifically
-        if (lowerText.contains("anthem)") || lowerText.contains("theme)")) {
-            return false
-        }
-        
-        // Very long text with separator + parentheses likely indicates description format
-        if (text.length > 50 && lowerText.contains(" - ") && lowerText.contains("(")) {
-            return false
-        }
-        
+        if (descriptionSuffixes.any { lowerText.endsWith(it) }) return false
+        if (lowerText.contains("anthem)") || lowerText.contains("theme)")) return false
+        if (text.length > 50 && lowerText.contains(" - ") && lowerText.contains("(")) return false
         return true
     }
-    
+
     /**
      * Check if notification content is likely an advertisement.
      * Uses heuristics similar to LocalMediaMetadata.isLikelyAdvertisement().
      */
     private fun isLikelyAdvertisementFromNotification(
-        title: String, 
-        artist: String, 
+        title: String,
+        artist: String,
         album: String?,
         packageName: String
     ): Boolean {
         val lowerTitle = title.lowercase()
         val lowerArtist = artist.lowercase()
-        
+
         // Common ad title patterns
         val adTitlePatterns = listOf(
             "advertisement", "sponsored", "ad break",
             "premium", "upgrade", "subscribe",
             "commercial", "promo", "promotion"
         )
-        
+
         // Check title for ad keywords
-        if (adTitlePatterns.any { lowerTitle.contains(it) }) {
-            return true
-        }
-        
-        // Spotify-specific ad detection
+        if (adTitlePatterns.any { lowerTitle.contains(it) }) return true
         if (packageName == "com.spotify.music") {
-            if (lowerArtist == "spotify" || lowerArtist.contains("spotify")) {
-                return true
-            }
-            if (album?.lowercase()?.contains("spotify") == true) {
-                return true
-            }
+            if (lowerArtist == "spotify" || lowerArtist.contains("spotify")) return true
+            if (album?.lowercase()?.contains("spotify") == true) return true
         }
-        
+
         // YouTube Music ad detection - YTM ads often have generic titles
         if (packageName == "com.google.android.apps.youtube.music") {
-            if (lowerArtist == "youtube" || lowerArtist.contains("youtube music")) {
-                return true
-            }
+            if (lowerArtist == "youtube" || lowerArtist.contains("youtube music")) return true
         }
-        
+
         // Artist name matches common ad sources
         val adArtists = listOf(
-            "advertisement", "ad", "spotify", "youtube", 
+            "advertisement", "ad", "spotify", "youtube",
             "google", "amazon", "apple", "commercial"
         )
-        if (adArtists.any { lowerArtist == it || lowerArtist.startsWith("$it ") }) {
-            return true
-        }
-        
-        return false
+        return adArtists.any { lowerArtist == it || lowerArtist.startsWith("$it ") }
     }
 
     // Dependencies - initialized in onCreate via Hilt EntryPoint
@@ -754,8 +713,8 @@ class MusicTrackingService : NotificationListenerService() {
     private lateinit var manualContentMarkDao: ManualContentMarkDao
     private lateinit var appPreferenceDao: me.avinas.tempo.data.local.dao.AppPreferenceDao
     private lateinit var refreshCoordinator: RefreshCoordinator
-    
-    // Dynamic app lists - cached from database, refreshed periodically
+    private lateinit var trackingRules: TrackingRulesPreferences
+
     @Volatile
     private var cachedEnabledApps: Set<String> = emptySet()
     @Volatile
@@ -763,22 +722,72 @@ class MusicTrackingService : NotificationListenerService() {
     @Volatile
     private var cachedAllKnownPackages: Set<String> = emptySet() // All packages in DB (enabled or not)
     @Volatile
-    private var isAppPreferenceCacheInitialized: Boolean = false // Flag to track if cache has been loaded from DB
+    private var isAppPreferenceCacheInitialized: Boolean = false
+    @Volatile private var cachedManualContentMarks: List<ManualContentMark> = emptyList()
     private var lastAppPreferenceFetch: Long = 0
-    private val APP_PREFERENCE_CACHE_TTL_MS = 30_000L // Refresh every 30 seconds
-    
-    /**
-     * Check if content should be filtered based on user preferences and detection.
-     * Three-layer approach:
-     * 1. App-level: Block dedicated podcast/audiobook apps (NOT Spotify)
-     * 2. Metadata-based: Detect content type from metadata (critical for Spotify)
-     * 3. Manual marks: User-defined patterns
-     * 
-     * @param packageName The source app package
-     * @param metadata Optional full metadata (may be null if MediaSession didn't provide enough)
-     * @param title Track title (required for manual marks check even without full metadata)
-     * @param artist Track artist (required for manual marks check even without full metadata)
-     */
+    private val APP_PREFERENCE_CACHE_TTL_MS = 30_000L
+
+    private fun minimumPlayDurationMs(): Long =
+        if (::trackingRules.isInitialized) trackingRules.minimumPlayDurationMs
+        else TrackingRulesPreferences.DEFAULT_MIN_PLAY_DURATION_MS
+
+    private fun findManualContentMark(title: String, artist: String): ManualContentMark? =
+        ManualContentRuleResolver.resolve(cachedManualContentMarks, title, artist)
+
+    private fun manualContentOverride(title: String, artist: String): ContentOverrideType? =
+        when (findManualContentMark(title, artist)?.contentType?.uppercase()) {
+            "ALWAYS_MUSIC" -> ContentOverrideType.MUSIC
+            "NON_MUSIC", "VIDEO" -> ContentOverrideType.VIDEO
+            else -> null
+        }
+
+    private fun shouldRejectByTrackingRules(
+        packageName: String,
+        title: String,
+        artist: String,
+        durationMs: Long
+    ): Boolean {
+        when (manualContentOverride(title, artist)) {
+            ContentOverrideType.VIDEO -> {
+                Log.d(TAG, "Rejecting manual video/non-music override: '$title' by '$artist'")
+                return true
+            }
+            ContentOverrideType.MUSIC -> return false
+            null -> Unit
+        }
+
+        if (durationMs > 0L && ::trackingRules.isInitialized) {
+            val maxDuration = trackingRules.getMaxMusicDurationMs(packageName)
+            if (maxDuration != null && durationMs > maxDuration) {
+                Log.d(
+                    TAG,
+                    "Rejecting content over configured music limit: '$title' by '$artist' " +
+                        "(${durationMs / 1000}s > ${maxDuration / 1000}s) from $packageName"
+                )
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun removeRejectedSession(
+        packageName: String,
+        title: String,
+        artist: String,
+        expectedSession: PlaybackSession? = null
+    ) {
+        val previous = expectedSession ?: playbackStates[packageName] ?: return
+        if (!playbackStates.remove(packageName, previous)) return
+        val sameRejectedMedia = previous.title.equals(title, ignoreCase = true) &&
+            (previous.artist.equals(artist, ignoreCase = true) ||
+                me.avinas.tempo.utils.ArtistParser.isUnknownArtist(previous.artist) ||
+                me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist))
+        previous.pause()
+        if (!sameRejectedMedia) {
+            saveListeningEvent(previous)
+        }
+    }
+
     private suspend fun shouldFilterContent(
         packageName: String,
         metadata: LocalMediaMetadata?,
@@ -801,53 +810,53 @@ class MusicTrackingService : NotificationListenerService() {
 
         val filterPodcasts = cachedFilterPodcasts
         val filterAudiobooks = cachedFilterAudiobooks
-        
+
+        // Manual classification wins before source-mode, duration/content heuristics and
+        // podcast/audiobook filtering. The duration rule itself is evaluated separately
+        // by shouldRejectByTrackingRules before this function is called.
+        when (manualContentOverride(title, artist)) {
+            ContentOverrideType.VIDEO -> {
+                Log.d(TAG, "Filtering manual video/non-music override: '$title' by '$artist'")
+                return true
+            }
+            ContentOverrideType.MUSIC -> {
+                Log.d(TAG, "Always-music override bypassed content filtering: '$title' by '$artist'")
+                return false
+            }
+            null -> Unit
+        }
+
         if (cachedSpotifyApiOnlyMode && packageName == "com.spotify.music") {
             Log.d(TAG, "Filtering Spotify notification (Spotify-API-Only mode enabled)")
             return true
         }
-        
-        if (filterPodcasts && packageName in PODCAST_APPS) {
-            Log.d(TAG, "Filtering podcast app: $packageName")
-            return true
-        }
-        if (filterAudiobooks && packageName in AUDIOBOOK_APPS) {
-            Log.d(TAG, "Filtering audiobook app: $packageName")
-            return true
-        }
-        
+
+        if (filterPodcasts && packageName in PODCAST_APPS) return true
+        if (filterAudiobooks && packageName in AUDIOBOOK_APPS) return true
         if (metadata != null) {
-            if (filterPodcasts && metadata.isPodcast()) {
-                Log.d(TAG, "Filtering podcast content: ${metadata.title} by ${metadata.artist}")
-                return true
-            }
-            if (filterAudiobooks && metadata.isAudiobook()) {
-                Log.d(TAG, "Filtering audiobook content: ${metadata.title} by ${metadata.artist}")
-                return true
-            }
+            if (filterPodcasts && metadata.isPodcast()) return true
+            if (filterAudiobooks && metadata.isAudiobook()) return true
         }
-        
-        val manualMark = manualContentMarkDao.findMatchingMark(title, artist)
+
+        val manualMark = findManualContentMark(title, artist)
         if (manualMark != null) {
-            val shouldFilter = when (manualMark.contentType) {
+            val shouldFilter = when (manualMark.contentType.uppercase()) {
                 "PODCAST" -> filterPodcasts
                 "AUDIOBOOK" -> filterAudiobooks
+                "NON_MUSIC", "VIDEO" -> true
+                "ALWAYS_MUSIC" -> false
                 else -> false
             }
-            if (shouldFilter) {
-                Log.d(TAG, "Filtering manually marked content: $title by $artist (type: ${manualMark.contentType}, pattern: ${manualMark.patternType})")
-                return true
-            } else {
-                Log.d(TAG, "Manual mark found for '$title' but filtering disabled for ${manualMark.contentType}")
-            }
+            if (shouldFilter) return true
         }
-        
+
         return false
     }
-    
+
     // Enhanced tracking components
     private lateinit var trackingManager: MusicTrackingManager
     private lateinit var sessionPersistence: SessionPersistence
+    private var needsSessionRecovery = false
     private lateinit var durationEstimator: SmartDurationEstimator
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -860,34 +869,34 @@ class MusicTrackingService : NotificationListenerService() {
 
     // Track current playback state per app - ConcurrentHashMap for thread-safe operations
     private val playbackStates = java.util.concurrent.ConcurrentHashMap<String, PlaybackSession>()
-    
+
     // Lock for complex session operations that span multiple map operations
     // Use this for operations that need to read, decide, and write atomically
     private val sessionOperationLock = Any()
-    
+
     // Track listener connection state to prevent duplicate processing
     @Volatile
     private var isListenerConnected = false
     private val connectionLock = Any()
-    
+
     // Session auto-save job
     private var autoSaveJob: Job? = null
 
     // Cheap liveness signal for ServiceHealthWorker. This avoids heavier polling
     // while still letting the app notice when OEM battery management kills the listener.
     private var heartbeatJob: Job? = null
-    
+
     // Service uptime tracking
     private val serviceStartTime = AtomicLong(0)
-    
+
     // Recent plays cache for replay detection (trackId -> lastPlayTimestamp)
     private val recentPlaysCache = java.util.concurrent.ConcurrentHashMap<Long, Long>()
-    
+
     // Estimated durations cache (title+artist hash -> duration) for when MediaSession doesn't provide duration.
     // LruCache is both thread-safe (read on the notification thread, written from IO
     // coroutines) and bounded, so a long-lived listener can't accumulate entries forever.
     private val durationEstimateCache = android.util.LruCache<String, Long>(512)
-    
+
     // Smart Metadata: Cached user preference for matching strictness
     // This avoids database call on every track match (preferences rarely change)
     @Volatile
@@ -901,11 +910,11 @@ class MusicTrackingService : NotificationListenerService() {
     private var lastPreferencesFetch: Long = 0
     private val PREFERENCES_CACHE_TTL_MS = 60_000L // Refresh every 60 seconds
 
-    
+
     // Notification debouncing - prevents excessive notification updates
     private var lastNotificationUpdate = 0L
     private var lastNotificationContent = ""
-    
+
     // Cache for local MediaSession metadata by trackId
     // Used as ultimate fallback for genre when external sources fail
     // Music players often send metadata in stages, so we keep updating this.
@@ -913,32 +922,32 @@ class MusicTrackingService : NotificationListenerService() {
     // map would retain one bitmap per unique track played for the service's lifetime
     // (the listener can stay alive for weeks).
     private val localMetadataCache = android.util.LruCache<Long, LocalMediaMetadata>(64)
-    
+
     // Dedup sets to prevent log spam
-    
+
     // LRU-style set of track titles for which we've already logged artist extraction failures
     // Uses LinkedHashMap with access order to limit memory (max 100 entries)
     private val loggedArtistExtractionFailures = object : LinkedHashMap<String, Boolean>(100, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>): Boolean = size > 100
     }
-    
+
     // LRU-style set of titles for which we've logged "Skipping likely advertisement"
     // Uses LinkedHashMap with access order to limit memory (max 50 entries)
     private val loggedAdvertisementSkips = object : LinkedHashMap<String, Boolean>(50, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>): Boolean = size > 50
     }
-    
+
     // Track restart log debouncing - only log once per track per 5 seconds
     private var lastTrackRestartLog: Pair<String, Long>? = null
     private val TRACK_RESTART_LOG_DEBOUNCE_MS = 5_000L
-    
+
     // Session change log debouncing - avoid spam when session count unchanged
     private var lastSessionChangeLog: Pair<Int, Long>? = null
     private val SESSION_CHANGE_LOG_DEBOUNCE_MS = 2_000L
 
     /**
      * Represents an active playback session with POSITION-BASED tracking.
-     * 
+     *
      * KEY CHANGE: We now track actual playback position from MediaSession
      * instead of wall-clock time. This fixes the issue where:
      * - Play at 9:00 AM, pause after 1 minute
@@ -989,43 +998,24 @@ class MusicTrackingService : NotificationListenerService() {
          * Calculate total play duration using ACTUAL POSITION DATA.
          * This is the key fix - we use position progress, not wall-clock time.
          */
-        fun calculateCurrentPlayDuration(): Long {
-            // Use accumulated position-based duration
-            // This represents actual audio playback time, not wall-clock time
-            // Cap at MAX_PLAY_DURATION_MS to prevent runaway values from bugs
-            return accumulatedPositionMs.coerceAtMost(MAX_PLAY_DURATION_MS)
-        }
-        
-        /**
-         * Update tracking with new position from MediaSession.
-         * Call this whenever we get a position update.
-         * 
-         * @param newPosition Current playback position in ms from MediaSession
-         * @param isCurrentlyPlaying Whether playback is currently active
-         */
+        fun calculateCurrentPlayDuration(): Long = accumulatedPositionMs.coerceAtLeast(0L)
+
         fun updatePosition(newPosition: Long, isCurrentlyPlaying: Boolean) {
             val now = System.currentTimeMillis()
             positionUpdatesCount++
-            
+
             // Validate position is reasonable
             // -1 is commonly sent during pause/stop - ignore silently (no warning needed)
-            if (newPosition < 0) {
-                return
-            }
-            
-            // CRITICAL FIX: On first position update, establish baseline without accumulating
-            // This prevents counting the initial playback position as played time
-            // e.g., if user starts at 1:30 into a song, we shouldn't count 1:30 as played
+            if (newPosition < 0) return
             if (!hasReceivedInitialPosition) {
                 lastRecordedPosition = newPosition
                 lastKnownPosition = newPosition
                 lastPositionUpdateTime = now
                 isPlaying = isCurrentlyPlaying
                 hasReceivedInitialPosition = true
-                Log.d("PlaybackSession", "Established initial position baseline: ${newPosition}ms for '$title'")
                 return
             }
-            
+
             // Check if position exceeds estimated duration by too much (likely error)
             estimatedDurationMs?.let { estimated ->
                 if (newPosition > estimated * 1.5) {
@@ -1033,24 +1023,21 @@ class MusicTrackingService : NotificationListenerService() {
                     // Continue but cap the accumulation
                 }
             }
-            
+
             if (isCurrentlyPlaying && newPosition > lastRecordedPosition) {
                 // Position advanced - accumulate the delta
                 val delta = newPosition - lastRecordedPosition
-                
+
                 // Enhanced sanity check for seek detection
                 val timeElapsed = now - lastPositionUpdateTime
                 val maxReasonableDelta = timeElapsed + 2000 // 2 second buffer
-                
+
                 // Detect different types of position changes
                 if (delta <= maxReasonableDelta) {
                     // Normal playback progression - but cap individual deltas as sanity check
                     val safeDelta = delta.coerceAtMost(MAX_REASONABLE_DELTA_MS)
-                    if (delta > MAX_REASONABLE_DELTA_MS) {
-                        Log.w("PlaybackSession", "ANOMALY: Large delta ${delta}ms capped to ${safeDelta}ms for '$title'")
-                    }
                     accumulatedPositionMs += safeDelta
-                    
+
                     // Cap total accumulation to prevent runaway values. Use the same
                     // 3x bound as the save-time sanity cap (insertListeningEvent) so the
                     // two limits agree. The old 1.5x cap truncated looped playback early:
@@ -1060,8 +1047,7 @@ class MusicTrackingService : NotificationListenerService() {
                     // matches what the save path would permit anyway.
                     estimatedDurationMs?.let { estimated ->
                         val maxAccumulation = estimated * 3
-                        if (accumulatedPositionMs > maxAccumulation && estimated > 60_000) { // Only for >1min tracks
-                            Log.w("PlaybackSession", "ANOMALY: Capping accumulated ${accumulatedPositionMs}ms to $maxAccumulation (3x duration) for '$title'")
+                        if (accumulatedPositionMs > maxAccumulation && estimated > 60_000) {
                             accumulatedPositionMs = maxAccumulation
                         }
                     }
@@ -1069,38 +1055,19 @@ class MusicTrackingService : NotificationListenerService() {
                     // Small seek forward (still count as seek, not playback)
                     seekCount++
                     lastSeekTimestamp = now
-                    Log.d("PlaybackSession", "Forward seek detected: +${delta}ms for '${title}'")
-                    // Don't accumulate seek distance
-                } else {
-                    // Large position jump - likely app error or major seek
-                    Log.w("PlaybackSession", "ANOMALY: Large position jump: $lastRecordedPosition -> $newPosition (delta: ${delta}ms, time: ${timeElapsed}ms)")
-                    // Don't accumulate to avoid inflating play time
                 }
             } else if (newPosition < lastRecordedPosition) {
                 // Position went backward - either seek backward or restart
                 val delta = lastRecordedPosition - newPosition
-                
-                if (newPosition < 5000) {
-                    // Reset to beginning - track restarted or looped
-                    // Use verbose logging since multiple restarts in quick succession are common
-                    Log.v("PlaybackSession", "Track restarted/looped for '${title}'")
-                    
-                    // CRITICAL FIX: Do NOT reset accumulatedPositionMs here.
-                    // If the track finished and restarted, we want to KEEP the accumulated time 
-                    // so that when the session eventually ends (track change), we save the FULL duration.
-                    // For example, if a 3min song plays twice on loop, we should record 6mins.
-                    
-                    // We simply act as if nothing happened to the accumulation.
-                    // The lastRecordedPosition update below handles the new baseline.
-                } else if (delta > 100) {
+
+                if (newPosition >= 5000 && delta > 100) {
                     // Seek backward - only count/log if delta > 100ms (ignore jitter)
                     seekCount++
                     lastSeekTimestamp = now
-                    Log.d("PlaybackSession", "Backward seek detected: -${delta}ms for '${title}'")
                 }
                 // Tiny backward movements (< 100ms) are position jitter, ignore silently
             }
-            
+
             lastRecordedPosition = newPosition
             lastKnownPosition = newPosition
             lastPositionUpdateTime = now
@@ -1115,7 +1082,6 @@ class MusicTrackingService : NotificationListenerService() {
                 isPlaying = false
                 pauseCount++
                 lastPauseTimestamp = System.currentTimeMillis()
-                Log.d("PlaybackSession", "Paused '${title}' (pause #$pauseCount)")
             }
         }
 
@@ -1125,21 +1091,17 @@ class MusicTrackingService : NotificationListenerService() {
         fun resume() {
             if (!isPlaying) {
                 val now = System.currentTimeMillis()
-                
+
                 // Calculate pause duration
-                lastPauseTimestamp?.let { pauseStart ->
-                    val pauseDuration = now - pauseStart
-                    totalPauseDurationMs += pauseDuration
-                    Log.d("PlaybackSession", "Resumed '${title}' after ${pauseDuration}ms pause (total pause: ${totalPauseDurationMs}ms)")
-                }
-                
+                lastPauseTimestamp?.let { totalPauseDurationMs += now - it }
+
                 isPlaying = true
                 // Reset position update time so we don't accumulate the pause gap
                 lastPositionUpdateTime = now
                 lastPauseTimestamp = null
             }
         }
-        
+
         /**
          * Check if this was a quick skip (< 30 seconds or < 30% completion).
          */
@@ -1149,31 +1111,27 @@ class MusicTrackingService : NotificationListenerService() {
             if (duration < 30_000) return true
             // Skip if less than 30% of estimated duration
             estimatedDurationMs?.let { estimated ->
-                if (estimated > 0 && (duration.toFloat() / estimated) < 0.3f) {
-                    return true
-                }
+                if (estimated > 0 && (duration.toFloat() / estimated) < 0.3f) return true
             }
             return false
         }
-        
+
         /**
          * Calculate completion percentage with fallback estimation.
          */
         fun calculateCompletionPercent(): Int {
             val duration = calculateCurrentPlayDuration()
-            
+
             // If we have estimated duration, use it
             estimatedDurationMs?.let { estimated ->
-                if (estimated > 0) {
-                    return ((duration.toDouble() / estimated) * 100).toInt().coerceIn(0, 100)
-                }
+                if (estimated > 0) return ((duration.toDouble() / estimated) * 100).toInt().coerceIn(0, 100)
             }
-            
+
             // Fallback: Estimate based on typical song duration (3.5 minutes average)
             // This gives a reasonable approximation when duration is unknown
             val typicalDurationMs = 210_000L // 3.5 minutes
             val estimatedCompletion = ((duration.toDouble() / typicalDurationMs) * 100).toInt()
-            
+
             // Cap at 100% but use 75% as "likely full play" threshold for unknown duration
             return when {
                 duration >= 240_000 -> 100 // 4+ minutes = definitely full play
@@ -1183,91 +1141,41 @@ class MusicTrackingService : NotificationListenerService() {
                 else -> estimatedCompletion.coerceIn(0, 40)
             }
         }
-        
+
         /**
          * Validate that play duration is reasonable.
          * Returns true if valid, false if suspicious.
          */
         fun validatePlayDuration(): Boolean {
             val duration = calculateCurrentPlayDuration()
-            
-            // Check for impossibly long duration (max 1 hour per session)
-            if (duration > MAX_PLAY_DURATION_MS) {
-                Log.w("PlaybackSession", "Validation failed: duration ${duration}ms exceeds max ${MAX_PLAY_DURATION_MS}ms for '${title}'")
-                return false
-            }
-            
-            // Check if duration exceeds estimated duration by unreasonable amount
             estimatedDurationMs?.let { estimated ->
-                if (estimated > 0 && duration > estimated * 3) {
-                    Log.w("PlaybackSession", "Validation failed: duration ${duration}ms is 3x estimated ${estimated}ms for '${title}'")
-                    return false
-                }
+                if (estimated > 0 && duration > estimated * 3) return false
             }
-            
-            // Check for minimum duration (at least 1 second of playback)
-            if (duration < 1000 && positionUpdatesCount > 5) {
-                Log.w("PlaybackSession", "Validation warning: only ${duration}ms recorded despite ${positionUpdatesCount} updates")
-                // Still return true - might be very short track or quick skip
-            }
-            
+
             return true
         }
-        
+
         /**
          * Validate completion percentage is accurate.
          */
-        fun validateCompletionPercentage(): Boolean {
-            val percent = calculateCompletionPercent()
-            
-            // Completion should be 0-100
-            if (percent < 0 || percent > 100) {
-                Log.w("PlaybackSession", "Invalid completion percentage: $percent for '${title}'")
-                return false
-            }
-            
-            return true
-        }
-        
-        /**
-         * Detect and report anomalies in the session data.
-         * Returns a list of anomaly descriptions.
-         */
+        fun validateCompletionPercentage(): Boolean = calculateCompletionPercent() in 0..100
+
         fun detectAnomalies(): List<String> {
             val anomalies = mutableListOf<String>()
-            
+
             val duration = calculateCurrentPlayDuration()
-            
+
             // Anomaly 1: Very high pause count relative to duration
-            if (pauseCount > 0 && duration > 0) {
-                val avgTimeBetweenPauses = duration / pauseCount
-                if (avgTimeBetweenPauses < 5000) { // Pause every 5 seconds
+            if (pauseCount > 0 && duration > 0 && duration / pauseCount < 5000) { // Pause every 5 seconds
                     anomalies.add("High pause frequency: $pauseCount pauses in ${duration}ms")
                 }
-            }
-            
-            // Anomaly 2: Pause duration exceeds play duration significantly
-            if (totalPauseDurationMs > duration * 5) {
-                anomalies.add("Pause time (${totalPauseDurationMs}ms) >> play time (${duration}ms)")
-            }
-            
-            // Anomaly 3: Many seeks in short time
-            if (seekCount > 10 && duration < 60000) {
-                anomalies.add("Excessive seeking: $seekCount seeks in ${duration}ms")
-            }
-            
-            // Anomaly 4: Very few position updates for long duration
-            if (duration > 60000 && positionUpdatesCount < 10) {
-                anomalies.add("Few position updates: $positionUpdatesCount updates for ${duration}ms")
-            }
-            
-            // Anomaly 5: Duration far exceeds estimated
+            if (totalPauseDurationMs > duration * 5) anomalies.add("Pause time (${totalPauseDurationMs}ms) >> play time (${duration}ms)")
+            if (seekCount > 10 && duration < 60000) anomalies.add("Excessive seeking: $seekCount seeks in ${duration}ms")
+            if (duration > 60000 && positionUpdatesCount < 10) anomalies.add("Few position updates: $positionUpdatesCount updates for ${duration}ms")
             estimatedDurationMs?.let { estimated ->
-                if (estimated > 0 && duration > estimated * 2) {
-                    anomalies.add("Duration ${duration}ms is 2x+ estimated ${estimated}ms")
-                }
+                if (estimated > 0 && duration > estimated * 2) anomalies.add("Duration ${duration}ms is 2x+ estimated ${estimated}ms")
             }
-            
+
             return anomalies
         }
     }
@@ -1281,18 +1189,16 @@ class MusicTrackingService : NotificationListenerService() {
         serviceStartTime.set(System.currentTimeMillis())
         TrackingServiceHeartbeat.markServiceCreated(this)
         startHeartbeat()
-        
-        // Initialize dependencies via Hilt EntryPoint
-        // This is necessary because NotificationListenerService is managed by the system
-        // and @AndroidEntryPoint doesn't work properly for it
+        trackingRules = TrackingRulesPreferences(applicationContext)
         initializeDependencies()
-        
+
         // Initialize enhanced tracking components
         initializeTrackingComponents()
-        
+        trackingRules.registerListener(durationRulesListener)
+
         // Recover any persisted sessions from previous runs
         recoverPersistedSessions()
-        
+
         createNotificationChannel()
         startForegroundServiceWithNotification()
         // Initialize MediaSessionManager
@@ -1319,7 +1225,6 @@ class MusicTrackingService : NotificationListenerService() {
         batteryStateReceiver = receiver
         // Signal receiver that the startup-sticky delivery has passed
         receiver.markReady()
-        Log.d(TAG, "BatteryStateReceiver registered")
 
         // Initial check for service lifecycle
         updateServiceLifecycle()
@@ -1342,25 +1247,35 @@ class MusicTrackingService : NotificationListenerService() {
             manualContentMarkDao = entryPoint.manualContentMarkDao()
             appPreferenceDao = entryPoint.appPreferenceDao()
             refreshCoordinator = entryPoint.refreshCoordinator()
-            
-            // Load initial preferences for caching
+
+            // Manual overrides participate in synchronous MediaSession decisions, so load the
+            // small Room table once before any session scan. A Flow keeps it fresh afterwards.
+            cachedManualContentMarks = runBlocking(Dispatchers.IO) {
+                try { manualContentMarkDao.getAllSync() } catch (_: Exception) { emptyList() }
+            }
+
+            // Preload app preferences before the first MediaSession/notification scan. Without
+            // this, a statically-known music app that the user explicitly disabled could be
+            // treated as enabled for a brief startup window while the async Room load runs.
+            try {
+                val initialApps = runBlocking(Dispatchers.IO) { appPreferenceDao.getAllSync() }
+                applyAppPreferenceCache(initialApps)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to preload app preferences; falling back to startup defaults", e)
+            }
+
             serviceScope.launch {
                 try {
                     val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
                     cachedMergeAlternateVersions = prefs.mergeAlternateVersions
+                    cachedFilterPodcasts = prefs.filterPodcasts
+                    cachedFilterAudiobooks = prefs.filterAudiobooks
+                    cachedSpotifyApiOnlyMode = prefs.spotifyApiOnlyMode
                     lastPreferencesFetch = System.currentTimeMillis()
-                    Log.d(TAG, "Loaded user preferences: mergeAlternateVersions=$cachedMergeAlternateVersions")
-                    
-                    // Load app preferences cache
                     refreshAppPreferenceCache()
-                    
-                    // Load all known packages for checking disabled vs unknown apps
-                    cachedAllKnownPackages = appPreferenceDao.getAllApps().first().map { it.packageName }.toSet()
-                    isAppPreferenceCacheInitialized = true
-                    Log.i(TAG, "App preference cache initialized with ${cachedEnabledApps.size} enabled, ${cachedBlockedApps.size} blocked, ${cachedAllKnownPackages.size} total known")
-                    
+
                     // Fix for tracking bug: now that cache is ready, scan active MediaSessions.
-                    // This resolves the race condition where initializeMediaSessionManager() 
+                    // This resolves the race condition where initializeMediaSessionManager()
                     // runs before the cache loads, causing all apps to be initially skipped.
                     withContext(Dispatchers.Main) {
                         rescanActiveMediaSessions()
@@ -1369,8 +1284,8 @@ class MusicTrackingService : NotificationListenerService() {
                     Log.w(TAG, "Failed to load initial preferences, using defaults", e)
                 }
             }
-            
-            Log.d(TAG, "Dependencies initialized successfully")
+            watchAppPreferences()
+            watchManualContentMarks()
 
             // Start watching the battery pause preference so the cached flag stays live
             watchBatteryPreference()
@@ -1392,32 +1307,149 @@ class MusicTrackingService : NotificationListenerService() {
             }
         }
     }
-    
+
     /**
      * Refresh the cached enabled/blocked app sets from database.
      * Called on init and periodically when checking apps.
      */
+    private fun applyAppPreferenceCache(apps: List<me.avinas.tempo.data.local.entities.AppPreference>) {
+        lastAppPreferenceFetch = System.currentTimeMillis()
+
+        // On a fresh install the current Room schema creates app_preferences empty; the
+        // Manage Apps screen seeds it later. Treat an empty table as "not initialized" so
+        // the original static music/block lists remain the safe startup fallback instead of
+        // accidentally interpreting zero rows as an explicit decision to disable every app.
+        if (apps.isEmpty()) {
+            cachedEnabledApps = emptySet()
+            cachedBlockedApps = emptySet()
+            cachedAllKnownPackages = emptySet()
+            isAppPreferenceCacheInitialized = false
+            return
+        }
+
+        cachedEnabledApps = apps.asSequence()
+            .filter { it.isEnabled && !it.isBlocked }
+            .map { it.packageName }
+            .toSet()
+        cachedBlockedApps = apps.asSequence()
+            .filter { it.isBlocked }
+            .map { it.packageName }
+            .toSet()
+        cachedAllKnownPackages = apps.map { it.packageName }.toSet()
+        isAppPreferenceCacheInitialized = true
+    }
+
     private suspend fun refreshAppPreferenceCache() {
         try {
-            cachedEnabledApps = appPreferenceDao.getEnabledPackageNames().toSet()
-            cachedBlockedApps = appPreferenceDao.getBlockedPackageNames().toSet()
-            lastAppPreferenceFetch = System.currentTimeMillis()
-            Log.d(TAG, "Refreshed app preferences: ${cachedEnabledApps.size} enabled, ${cachedBlockedApps.size} blocked")
+            applyAppPreferenceCache(appPreferenceDao.getAllSync())
         } catch (e: Exception) {
             Log.w(TAG, "Failed to refresh app preferences, using cached values", e)
         }
     }
-    
+
     /**
      * Check if app preference cache needs refresh and refresh if needed.
      */
     private suspend fun ensureAppPreferenceCacheValid() {
-        val now = System.currentTimeMillis()
-        if (now - lastAppPreferenceFetch > APP_PREFERENCE_CACHE_TTL_MS) {
+        if (System.currentTimeMillis() - lastAppPreferenceFetch > APP_PREFERENCE_CACHE_TTL_MS) {
             refreshAppPreferenceCache()
         }
     }
-    
+
+    private fun watchAppPreferences() {
+        serviceScope.launch {
+            appPreferenceDao.getAllApps().collect { apps ->
+                applyAppPreferenceCache(apps)
+
+                // Stop already-running sessions that the user just disabled or blocked.
+                // Conversely, an explicitly enabled app (including YouTube) immediately
+                // disappears from the static block fallback and can be picked up by rescan.
+                val packagesToStop = playbackStates.keys.filter { packageName ->
+                    packageName in cachedBlockedApps ||
+                        (packageName in cachedAllKnownPackages && packageName !in cachedEnabledApps)
+                }
+                packagesToStop.forEach(::cleanupSessionForPackage)
+                withContext(Dispatchers.Main) {
+                    rescanActiveMediaSessions()
+
+                    // Re-evaluate active notifications as well as MediaSessions. This makes an
+                    // explicit enable (including default-blocked YouTube) effective immediately
+                    // even when the player does not post a new notification after the toggle.
+                    try {
+                        activeNotifications?.forEach { sbn ->
+                            if (isMusicNotification(sbn)) processNotificationPosted(sbn)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to re-evaluate notifications after app preference change", e)
+                    }
+                    updateServiceLifecycle()
+                }
+            }
+        }
+    }
+
+    private val durationRulesListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        serviceScope.launch { reevaluateActiveContent() }
+    }
+
+    private fun watchManualContentMarks() {
+        serviceScope.launch {
+            manualContentMarkDao.getAllMarks().collect { marks ->
+                cachedManualContentMarks = marks
+
+                reevaluateActiveContent()
+            }
+        }
+    }
+
+    private suspend fun reevaluateActiveContent() {
+        if (::trackingManager.isInitialized) {
+            playbackStates.values.toList().forEach { session ->
+                val rejectedByTrackingRule = shouldRejectByTrackingRules(
+                    session.packageName,
+                    session.title,
+                    session.artist,
+                    session.estimatedDurationMs ?: 0L
+                )
+                val filteredByContent = if (rejectedByTrackingRule) {
+                    false
+                } else {
+                    shouldFilterContent(
+                        session.packageName,
+                        session.trackId?.let { localMetadataCache.get(it) },
+                        session.title,
+                        session.artist
+                    )
+                }
+                if (rejectedByTrackingRule || filteredByContent) {
+                    removeRejectedSession(session.packageName, session.title, session.artist, session)
+                }
+            }
+
+            // Re-evaluate active sources after a manual rule change so an ALWAYS_MUSIC
+            // correction can start tracking immediately, and removing an override also
+            // returns the current media to normal classification without another player event.
+            withContext(Dispatchers.Main) {
+                rescanActiveMediaSessions()
+                activeControllers.values.toList().forEach { controller ->
+                    try {
+                        processMediaControllerState(controller)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to re-evaluate MediaSession after manual rule change", e)
+                    }
+                }
+                try {
+                    activeNotifications?.forEach { sbn ->
+                        if (isMusicNotification(sbn)) processNotificationPosted(sbn)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to re-evaluate notifications after manual rule change", e)
+                }
+                updateServiceLifecycle()
+            }
+        }
+    }
+
     /**
      * Check if a package is in the enabled music apps list (dynamic from database).
      *
@@ -1430,23 +1462,17 @@ class MusicTrackingService : NotificationListenerService() {
         // already playing when the service starts are not silently dropped.
         // This fixes the race condition where initializeMediaSessionManager() fires before
         // refreshAppPreferenceCache() completes and all apps are skipped.
-        if (!isAppPreferenceCacheInitialized) {
-            val inStaticList = packageName in MUSIC_APPS
-            if (inStaticList) {
-                Log.d(TAG, "App preference cache not ready, using static whitelist for $packageName")
-            }
-            return inStaticList
-        }
+        if (!isAppPreferenceCacheInitialized) return packageName in MUSIC_APPS
         return packageName in cachedEnabledApps
     }
-    
+
     /**
      * Check if a package is in the blocked apps list.
-     * 
+     *
      * Uses a two-tier check:
      * 1. Static BLOCKED_APPS set (always blocked, never tracked)
      * 2. Database cache (user preferences)
-     * 
+     *
      * The static list is checked FIRST to ensure video apps like YouTube
      * are always blocked, even if they weren't properly seeded into the database.
      * This is a performance-safe check (just a set membership lookup).
@@ -1454,18 +1480,12 @@ class MusicTrackingService : NotificationListenerService() {
     private fun isInBlockedApps(packageName: String): Boolean {
         // FIRST: Always block apps in the static blocklist (guaranteed protection)
         // This catches video apps, browsers, social media that should NEVER be tracked
-        if (packageName in BLOCKED_APPS) {
-            return true
-        }
-        
-        // SECOND: Check database cache for user-defined blocked apps
-        // If cache not initialized yet, return false (will be filtered by isInEnabledApps anyway)
-        if (!isAppPreferenceCacheInitialized) {
-            return false
-        }
-        return packageName in cachedBlockedApps
+        if (!isAppPreferenceCacheInitialized) return packageName in BLOCKED_APPS
+        if (packageName in cachedBlockedApps) return true
+        if (packageName in cachedEnabledApps) return false
+        return packageName in BLOCKED_APPS
     }
-    
+
     /**
      * Clean up any active session for a package that was just disabled or blocked.
      * Saves any accumulated playtime and removes the session.
@@ -1473,29 +1493,23 @@ class MusicTrackingService : NotificationListenerService() {
      */
     private fun cleanupSessionForPackage(packageName: String) {
         val session = playbackStates[packageName] ?: return
-        
-        Log.i(TAG, "Cleaning up session for disabled/blocked app: $packageName (${session.title})")
-        
-        // Save any accumulated play time before removing
-        if (session.calculateCurrentPlayDuration() > MIN_PLAY_DURATION_MS) {
+        if (session.calculateCurrentPlayDuration() >= minimumPlayDurationMs()) {
             saveListeningEvent(session)
         }
-        
+
         // Remove the session
         playbackStates.remove(packageName)
-        
+
         // Unregister controller callback
         activeControllers[packageName]?.let { controller ->
             val callback = packageSpecificCallbacks[packageName] ?: sharedCallback
             try {
                 controller.unregisterCallback(callback)
-            } catch (e: Exception) {
-                Log.w(TAG, "Error unregistering callback for $packageName", e)
-            }
+            } catch (_: Exception) { }
         }
         activeControllers.remove(packageName)
         packageSpecificCallbacks.remove(packageName)
-        
+
         // Update service lifecycle (may go idle if no more sessions)
         updateServiceLifecycle()
     }
@@ -1505,70 +1519,51 @@ class MusicTrackingService : NotificationListenerService() {
         // OEM kills, crashes and reboots.
         val offlineStore = try {
             OfflineEventStore(applicationContext)
-        } catch (e: Exception) {
-            Log.w(TAG, "OfflineEventStore unavailable, events will not survive process death", e)
-            null
+        } catch (_: Exception) { null
         }
-
-        try {
-            // Initialize tracking manager for batched event saving
-            trackingManager = MusicTrackingManager(listeningRepository, serviceScope, offlineStore)
+        trackingManager = MusicTrackingManager(listeningRepository, serviceScope, offlineStore)
 
             // Initialize session persistence for recovery
             sessionPersistence = SessionPersistence(applicationContext)
-            sessionPersistence.markServiceActive()
+        needsSessionRecovery = sessionPersistence.wasUncleanShutdown()
+        sessionPersistence.markServiceActive()
 
             // Initialize smart duration estimator
             durationEstimator = SmartDurationEstimator()
-
-            Log.d(TAG, "Enhanced tracking components initialized")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize tracking components", e)
-            // Create fallback instances
-            trackingManager = MusicTrackingManager(listeningRepository, serviceScope, offlineStore)
-            sessionPersistence = SessionPersistence(applicationContext)
-            durationEstimator = SmartDurationEstimator()
-        }
     }
-    
+
     private fun recoverPersistedSessions() {
         serviceScope.launch {
             try {
-                if (sessionPersistence.wasUncleanShutdown()) {
-                    Log.i(TAG, "Detected unclean shutdown, attempting session recovery")
+                if (needsSessionRecovery) {
                     val recoveredSessions = sessionPersistence.loadSessions()
+                    for (state in recoveredSessions) {
+                        // Recovery must respect the CURRENT app preference, not the state that
+                        // existed before the process died. This direct Room read avoids a race
+                        // with the asynchronously populated in-memory app cache.
+                        val appPreference = try {
+                            appPreferenceDao.getAppPreference(state.packageName)
+                        } catch (_: Exception) { null }
+                        val disabledOrBlocked = appPreference?.let { !it.isEnabled || it.isBlocked } == true
+                        val staticallyBlockedWithoutExplicitEnable =
+                            appPreference == null && state.packageName in BLOCKED_APPS
+                        if (disabledOrBlocked || staticallyBlockedWithoutExplicitEnable) {
+                            Log.d(TAG, "Skipping recovered session from disabled/blocked app: ${state.packageName}")
+                            continue
+                        }
 
-                    if (recoveredSessions.isNotEmpty()) {
-                        Log.i(TAG, "Recovered ${recoveredSessions.size} sessions from persistence")
-
-                        // Process recovered sessions - they were interrupted
-                        for (state in recoveredSessions) {
-                            // Dedup guard: if an event with this sessionId already
-                            // reached the database (session ended normally but the
-                            // persisted copy was stale when we were killed), do NOT
-                            // re-queue it — that would double-count the play.
-                            val alreadySaved = try {
+                        val alreadySaved = try {
                                 listeningRepository.getEventsBySessionId(state.sessionId).isNotEmpty()
-                            } catch (e: Exception) {
+                            } catch (_: Exception) {
                                 false
                             }
-                            if (alreadySaved) {
-                                Log.i(TAG, "Skipping recovery of '${state.trackTitle}' — event already saved (session ${state.sessionId})")
-                                continue
-                            }
+                            if (alreadySaved) continue
 
-                            // FIX: Don't add time since last save - the session was interrupted
-                            // and we can't know if playback actually continued after last save.
-                            // Using only the persisted play time prevents inflation from device sleep.
-                            val estimatedPlayTime = state.totalPlayedMs
+                        val estimatedPlayTime = state.totalPlayedMs
 
                             // Cap recovered sessions at reasonable maximum
-                            val cappedPlayTime = estimatedPlayTime.coerceAtMost(MAX_PLAY_DURATION_MS)
-                            if (estimatedPlayTime != cappedPlayTime) {
-                                Log.w(TAG, "ANOMALY: Recovered session '${state.trackTitle}' had ${estimatedPlayTime}ms, capped to ${cappedPlayTime}ms")
-                            }
-
-                            if (cappedPlayTime <= MIN_PLAY_DURATION_MS) continue
+                            val cappedPlayTime = estimatedPlayTime.coerceAtLeast(0L)
+                            if (cappedPlayTime < minimumPlayDurationMs()) continue
 
                             // Resolve the track. Sessions persisted before their
                             // trackId was assigned (track insert still in flight when
@@ -1576,46 +1571,55 @@ class MusicTrackingService : NotificationListenerService() {
                             // entirely. Resolve by title/artist instead.
                             val trackId = state.trackId ?: try {
                                 getOrInsertTrack(state.trackTitle, state.trackArtist, state.trackAlbum).id
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Could not resolve track for recovered session '${state.trackTitle}'", e)
-                                null
+                            } catch (_: Exception) { null
                             }
-                            if (trackId == null) {
-                                Log.w(TAG, "Dropping unrecoverable session '${state.trackTitle}' (no trackId, resolution failed)")
+                            if (trackId == null) continue
+
+                        val reliableDuration = state.estimatedDurationMs?.takeIf { it > 0L } ?: try {
+                            trackRepository.getById(trackId).first()?.duration?.takeIf { it > 0L }
+                                ?: getTrackDurationFromMetadata(trackId)
+                        } catch (_: Exception) { null }
+
+                        if (shouldRejectByTrackingRules(
+                                state.packageName,
+                                state.trackTitle,
+                                state.trackArtist,
+                                reliableDuration ?: 0L
+                            ))
                                 continue
-                            }
 
-                            // Also cap at 3x estimated duration for sanity
-                            val finalPlayTime = if (state.estimatedDurationMs != null && state.estimatedDurationMs > 0) {
-                                val maxReasonable = state.estimatedDurationMs * 3
-                                cappedPlayTime.coerceAtMost(maxReasonable)
-                            } else {
-                                cappedPlayTime
-                            }
+                        val localMetadata = localMetadataCache.get(trackId)
+                        if (shouldFilterContent(
+                                state.packageName,
+                                localMetadata,
+                                state.trackTitle,
+                                state.trackArtist
+                            )) continue
 
-                            // Create a listening event for the recovered session
-                            val event = ListeningEvent(
+                        val finalPlayTime = if (reliableDuration != null && reliableDuration > 0) {
+                            cappedPlayTime.coerceAtMost(reliableDuration * 3)
+                            } else cappedPlayTime
+
+                        if (finalPlayTime < minimumPlayDurationMs()) continue
+                        val event = ListeningEvent(
                                 track_id = trackId,
                                 timestamp = state.startTimestamp,
                                 playDuration = finalPlayTime,
                                 completionPercentage = durationEstimator.calculateCompletionPercent(
-                                    finalPlayTime,
-                                    state.estimatedDurationMs,
+                                    finalPlayTime, reliableDuration,
                                     false
                                 ),
                                 source = state.packageName,
                                 wasSkipped = false,
                                 isReplay = false,
-                                estimatedDurationMs = state.estimatedDurationMs,
+                                estimatedDurationMs = reliableDuration,
                                 pauseCount = state.pauseCount,
                                 sessionId = state.sessionId,
                                 endTimestamp = System.currentTimeMillis(),
                                 wasInterrupted = true  // Mark as recovered/interrupted session
                             )
 
-                            trackingManager.queueEvent(event, state.sessionId)
-                            Log.i(TAG, "Queued recovered event for '${state.trackTitle}': ${finalPlayTime}ms (was ${estimatedPlayTime}ms)")
-                        }
+                        trackingManager.queueEvent(event, state.sessionId)
                     }
                 }
 
@@ -1626,37 +1630,27 @@ class MusicTrackingService : NotificationListenerService() {
             }
         }
     }
-    
+
     private fun startSessionAutoSave() {
         if (autoSaveJob?.isActive == true) return
-        
-        Log.d(TAG, "Starting session auto-save")
-        
         autoSaveJob = serviceScope.launch {
             while (isActive) {
                 delay(SESSION_AUTOSAVE_INTERVAL_MS)
-                if (!hasActivePlayback()) {
-                    Log.d(TAG, "No active playback, stopping auto-save")
-                    break
-                }
+                if (!hasActivePlayback()) break
                 saveSessionsToPersistence()
             }
         }
     }
-    
+
     /**
      * Check if there is any active music playback.
      * Used to optimize polling frequency and notification behavior.
      */
-    private fun hasActivePlayback(): Boolean {
-        return playbackStates.values.any { session ->
-            session.isPlaying && session.isLikelyMusic
-        }
-    }
-    
+    private fun hasActivePlayback(): Boolean = playbackStates.values.any { it.isPlaying && it.isLikelyMusic }
+
     // Position polling job for accurate duration tracking
     private var positionPollingJob: Job? = null
-    
+
     /**
      * Start polling MediaSession controllers for position updates.
      * Only runs when there is active playback.
@@ -1664,107 +1658,69 @@ class MusicTrackingService : NotificationListenerService() {
     private fun startPositionPolling() {
         // Only start if not already running
         if (positionPollingJob?.isActive == true) return
-        
-        Log.d(TAG, "Starting position polling (active playback detected)")
-        
         positionPollingJob = serviceScope.launch {
             while (isActive) {
-                if (!hasActivePlayback()) {
-                    Log.d(TAG, "No active playback, stopping position polling")
-                    break
-                }
-                
+                if (!hasActivePlayback()) break
                 pollMediaSessionPositions()
-                
-                // Use smart adaptive polling interval based on song phase
-                val interval = calculateSmartPollingInterval()
-                delay(interval)
+                delay(calculateSmartPollingInterval())
             }
         }
     }
-    
+
     /**
      * Calculate smart polling interval based on song phase and duration.
-     * 
+     *
      * Strategy:
      * - SHORT TRACKS (<90s): Poll every 5s - these need accuracy throughout
      * - SONG START (first 30s): Poll every 3s - critical for skip detection
      * - SONG END (last 30s): Poll every 4s - critical for completion detection
      * - SONG MIDDLE: Poll every 8s - battery efficient, callbacks handle state changes
      * - UNKNOWN DURATION: Poll every 6s - balanced approach
-     * 
+     *
      * Battery savings: ~50% fewer polls for 3-4 minute songs while maintaining
      * accuracy where it matters most (skip/completion detection).
      */
     private fun calculateSmartPollingInterval(): Long {
         val activeSession = playbackStates.values.firstOrNull { it.isPlaying && it.isLikelyMusic }
             ?: return POLL_INTERVAL_UNKNOWN_DURATION_MS
-        
+
         val estimatedDuration = activeSession.estimatedDurationMs
         val currentPosition = activeSession.lastRecordedPosition
-        
+
         // Case 1: Unknown duration - use balanced polling
-        if (estimatedDuration == null || estimatedDuration <= 0) {
-            return POLL_INTERVAL_UNKNOWN_DURATION_MS
-        }
-        
-        // Case 2: Short track - needs consistent accuracy throughout
-        if (estimatedDuration < SHORT_TRACK_THRESHOLD_MS) {
-            return POLL_INTERVAL_SHORT_TRACK_MS
-        }
-        
-        // Case 3: Determine song phase for longer tracks
+        if (estimatedDuration == null || estimatedDuration <= 0) return POLL_INTERVAL_UNKNOWN_DURATION_MS
+        if (estimatedDuration < SHORT_TRACK_THRESHOLD_MS) return POLL_INTERVAL_SHORT_TRACK_MS
         val remainingTime = estimatedDuration - currentPosition
-        
+
         return when {
             // Start phase: first 30 seconds - critical for skip detection
             currentPosition < SONG_START_PHASE_MS -> POLL_INTERVAL_SONG_START_MS
-            
+
             // End phase: last 30 seconds - critical for completion detection
             remainingTime > 0 && remainingTime < SONG_END_PHASE_MS -> POLL_INTERVAL_SONG_END_MS
-            
+
             // Middle phase: battery efficient polling
             else -> POLL_INTERVAL_SONG_MIDDLE_MS
         }
     }
-    
+
     /**
      * Update service lifecycle based on current state.
      * Starts/stops background jobs and manages foreground state.
      */
     private fun updateServiceLifecycle() {
-        val hasActive = hasActivePlayback()
-        
-        if (hasActive) {
+        if (hasActivePlayback()) {
             startPositionPolling()
             startSessionAutoSave()
         } else {
-            // Stop jobs if running
-            if (positionPollingJob?.isActive == true) {
-                Log.d(TAG, "Stopping position polling (no active playback)")
-                positionPollingJob?.cancel()
-                positionPollingJob = null
-            }
-            
-            if (autoSaveJob?.isActive == true) {
-                Log.d(TAG, "Stopping session auto-save (no active playback)")
-                autoSaveJob?.cancel()
-                autoSaveJob = null
-            }
-            
-            // FIX: Check if we still have a valid (paused) session
+            positionPollingJob?.cancel(); positionPollingJob = null
+            autoSaveJob?.cancel(); autoSaveJob = null
             val currentSession = playbackStates.values.firstOrNull()
-            if (currentSession != null) {
-                 // We have a session (likely paused), keep showing it
-                 // This resolves the user complaint "it stopped tracking on pause"
-                 updateTrackingNotification(currentSession.title, currentSession.artist)
-            } else {
-                 // No sessions at all -> Idle
-                 updateTrackingNotification(null, null)
-            }
+            if (currentSession != null) updateTrackingNotification(currentSession.title, currentSession.artist)
+            else updateTrackingNotification(null, null)
         }
     }
-    
+
     /**
      * Poll all active MediaSession controllers for position updates.
      * Updates the corresponding PlaybackSession with accurate position data.
@@ -1773,40 +1729,27 @@ class MusicTrackingService : NotificationListenerService() {
         // ConcurrentHashMap provides weakly consistent iteration that won't throw
         // ConcurrentModificationException. Create a copy to avoid issues with
         // entries being removed during iteration.
-        val controllerSnapshot: List<Pair<String, MediaController>>
-        synchronized(activeControllers) {
-            controllerSnapshot = activeControllers.toList()
+        val controllerSnapshot = synchronized(activeControllers) { activeControllers.toList()
         }
-        
+
         controllerSnapshot.forEach { (packageName, controller) ->
             try {
                 val playbackState = controller.playbackState ?: return@forEach
                 val session = playbackStates[packageName] ?: return@forEach
-                
-                val currentPosition = playbackState.position
-                val isPlaying = playbackState.state == PlaybackState.STATE_PLAYING
-                
-                // Update position tracking
-                session.updatePosition(currentPosition, isPlaying)
-                
-                // Log periodically for debugging (every ~30 seconds of accumulated play time)
-                if (isPlaying && session.accumulatedPositionMs > 0 && session.accumulatedPositionMs % 30000 < 10000) {
-                    Log.d(TAG, "Position poll: '${session.title}' - position: ${currentPosition}ms, accumulated: ${session.accumulatedPositionMs}ms")
-                }
+                session.updatePosition(
+                    playbackState.position,
+                    playbackState.state == PlaybackState.STATE_PLAYING
+                )
             } catch (e: Exception) {
                 Log.w(TAG, "Error polling position for $packageName", e)
             }
         }
     }
-    
+
     private suspend fun saveSessionsToPersistence() {
         try {
             // Create a snapshot to avoid ConcurrentModificationException
-            val statesSnapshot = playbackStates.toMap()
-            // Persist sessions even before their trackId is resolved — title/artist
-            // are enough to recover the play after a kill, and recovery resolves the
-            // track lazily. Dropping these sessions used to lose plays entirely.
-            val currentSessions = statesSnapshot.map { (_, session) ->
+            val currentSessions = playbackStates.toMap().map { (_, session) ->
                 SessionState(
                     sessionId = session.sessionId,
                     packageName = session.packageName,
@@ -1823,73 +1766,44 @@ class MusicTrackingService : NotificationListenerService() {
                 )
             }.associateBy { it.sessionId }
 
-            if (currentSessions.isNotEmpty()) {
-                sessionPersistence.saveSessions(currentSessions)
-            } else {
-                // No active sessions — clear any stale persisted sessions so a
-                // later kill cannot resurrect (and double-count) finished plays.
-                sessionPersistence.clearSessions()
-            }
+            if (currentSessions.isNotEmpty()) sessionPersistence.saveSessions(currentSessions)
+            else sessionPersistence.clearSessions()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to auto-save sessions", e)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.i(TAG, "onStartCommand: action=${intent?.action}")
-
-        // Always (re-)assert the foreground state here. If the system restarts the service
-        // to deliver an intent (e.g. ACTION_BATTERY_RECOVERED via startForegroundService) and
-        // onCreate's startForeground didn't land within the ANR/low-memory restart window,
-        // the system throws BadForegroundServiceNotificationException. Asserting here makes
-        // the foreground promotion idempotent and deadline-safe on Android 14+.
         startForegroundServiceWithNotification()
-
-        when (intent?.action) {
-            ACTION_BATTERY_RECOVERED -> {
-                Log.i(TAG, "Battery recovered — rescanning active notifications and media sessions")
-                // Invalidate battery cache so shouldPauseForBattery() reads fresh level
-                BatteryUtils.invalidateCache()
+        if (intent?.action == ACTION_BATTERY_RECOVERED) {
+            BatteryUtils.invalidateCache()
                 // Re-scan any notifications and media sessions that were missed while paused
                 serviceScope.launch {
-                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    withContext(Dispatchers.Main) {
                         try {
                             activeNotifications?.forEach { sbn ->
-                                if (isMusicNotification(sbn)) {
-                                    processNotificationPosted(sbn)
+                                if (isMusicNotification(sbn)) processNotificationPosted(sbn)
                                 }
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error rescanning notifications after battery recovery", e)
-                        }
+                            } catch (_: Exception) { }
                         rescanActiveMediaSessions()
                         updateServiceLifecycle()
-                    }
                 }
             }
         }
         return START_STICKY // Restart if killed
     }
 
-    override fun onBind(intent: Intent?): IBinder? {
-        Log.d(TAG, "onBind: ${intent?.action}")
-        return super.onBind(intent)
-    }
+    override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        
+
         synchronized(connectionLock) {
-            if (isListenerConnected) {
-                Log.e(TAG, "onListenerConnected called on an already connected service! This can result in duplicate events.")
-                return
-            }
+            if (isListenerConnected) return
             isListenerConnected = true
         }
         TrackingServiceHeartbeat.markListenerConnected(this)
-        
-        Log.i(TAG, "NotificationListener connected - scanning active notifications")
-        
+
         // Scan existing notifications for music that's already playing
         // Use a slight delay to ensure the binder is fully registered with the system
         serviceScope.launch {
@@ -1897,20 +1811,14 @@ class MusicTrackingService : NotificationListenerService() {
             withContext(Dispatchers.Main) {
                 try {
                     activeNotifications?.forEach { sbn ->
-                        if (isMusicNotification(sbn)) {
-                            processNotificationPosted(sbn)
+                        if (isMusicNotification(sbn)) processNotificationPosted(sbn)
                         }
-                    }
-                } catch (e: SecurityException) {
-                    Log.w(TAG, "SecurityException scanning notifications - listener may have been rebound", e)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error scanning active notifications", e)
-                }
-                
+                    } catch (_: Exception) { }
+
                 // Also rescan active MediaSessions in case they were missed
                 // during initial initialization
                 rescanActiveMediaSessions()
-                
+
                 // Update lifecycle after initial scan using the correct context
                 updateServiceLifecycle()
             }
@@ -1922,10 +1830,9 @@ class MusicTrackingService : NotificationListenerService() {
             isListenerConnected = false
         }
         TrackingServiceHeartbeat.markListenerDisconnected(this)
-        
+
         super.onListenerDisconnected()
-        Log.w(TAG, "NotificationListener disconnected - attempting reconnect")
-        
+
         // Request rebind
         requestRebind(ComponentName(this, MusicTrackingService::class.java))
     }
@@ -1934,8 +1841,6 @@ class MusicTrackingService : NotificationListenerService() {
         sbn ?: return
         if (!isMusicNotification(sbn)) return
         TrackingServiceHeartbeat.markNotificationCallback(this)
-        
-        Log.d(TAG, "Music notification posted: ${sbn.packageName}")
         processNotificationPosted(sbn)
         updateServiceLifecycle()
     }
@@ -1944,54 +1849,42 @@ class MusicTrackingService : NotificationListenerService() {
         sbn ?: return
         if (!isMusicNotification(sbn)) return
         TrackingServiceHeartbeat.markNotificationCallback(this)
-        
-        Log.d(TAG, "Music notification removed: ${sbn.packageName}")
         processNotificationRemoved(sbn)
         updateServiceLifecycle()
     }
 
     private fun isMusicNotification(sbn: StatusBarNotification): Boolean {
         val packageName = sbn.packageName
-        
+
         // FIRST: Explicitly block video/non-music apps
-        if (isInBlockedApps(packageName)) {
-            Log.d(TAG, "Blocking notification from video app: $packageName")
-            return false
-        }
-        
-        // Check if it's from a known music app (user-enabled)
+        if (isInBlockedApps(packageName)) return false
         if (isInEnabledApps(packageName)) return true
-        
-        // For unknown apps, check notification category
+        // A package already present in Room but neither enabled nor blocked is explicitly
+        // disabled by the user. Do not let notification heuristics opt it back in.
+        if (isAppPreferenceCacheInitialized && packageName in cachedAllKnownPackages) return false
         val notification = sbn.notification
         val category = notification.category
-        if (category == Notification.CATEGORY_TRANSPORT || 
+        if (category == Notification.CATEGORY_TRANSPORT ||
             category == Notification.CATEGORY_SERVICE) {
             // Check for media style - but still need to verify it's music
             val extras = notification.extras
             if (extras.containsKey(Notification.EXTRA_MEDIA_SESSION)) {
                 // Additional check: don't track if package name suggests video
                 val lowerPkg = packageName.lowercase()
-                if (lowerPkg.contains("video") || lowerPkg.contains("movie") || 
-                    lowerPkg.contains("tv") || lowerPkg.contains("stream")) {
-                    Log.d(TAG, "Blocking media notification from likely video app: $packageName")
-                    return false
-                }
+                if (lowerPkg.contains("video") || lowerPkg.contains("movie") ||
+                    lowerPkg.contains("tv") || lowerPkg.contains("stream")) return false
                 return true
             }
         }
-        
+
         return false
     }
 
     private fun processNotificationPosted(sbn: StatusBarNotification) {
         if (shouldPauseForBattery()) {
-            Log.d(TAG, "Tracking paused (low battery) — ignoring notification from ${sbn.packageName}")
-            // Save any in-progress session so no listening data is lost
             val session = playbackStates.remove(sbn.packageName)
             if (session != null) {
-                session.pause()
-                saveListeningEvent(session)
+                session.pause(); saveListeningEvent(session)
             }
             // Ensure the foreground notification reflects the paused-for-battery state
             updateTrackingNotification(null, null)
@@ -2004,117 +1897,90 @@ class MusicTrackingService : NotificationListenerService() {
 
         val rawTitle = extras.getCharSequence(EXTRA_TITLE)?.toString()?.trim()
         // Skip notifications with empty titles - metadata hasn't fully arrived yet
-        if (rawTitle.isNullOrBlank()) {
-            Log.d(TAG, "Ignoring notification with empty title from $packageName")
-            return
-        }
+        if (rawTitle.isNullOrBlank()) return
         val artist = extractArtistFromNotification(extras, rawTitle)
-        
+
         // Clean title if it contains embedded artist (e.g., "Song - Artist")
         val title = if (artist != "Unknown Artist" && artist != extractArtistFromTitle(rawTitle)) {
             rawTitle // Artist came from elsewhere, keep title as-is
         } else if (extractArtistFromTitle(rawTitle) != null) {
             cleanTitleIfNeeded(rawTitle) // Artist extracted from title, clean it
-        } else {
-            rawTitle
-        }
-        
+        } else rawTitle
         val album = extras.getCharSequence(EXTRA_SUB_TEXT)?.toString()?.trim()
             ?.takeIf { !it.equals(artist, ignoreCase = true) } // Don't use SUB_TEXT if it's the artist
             ?: extras.getCharSequence(EXTRA_INFO_TEXT)?.toString()?.trim()
-        
-        // Extract album art from notification (for fallback use)
-        val albumArtBitmap = extractAlbumArtFromNotification(notification)
 
-        Log.d(TAG, "Music notification: '$title' by '$artist' from $packageName (has art: ${albumArtBitmap != null})")
+        if (manualContentOverride(title, artist) == ContentOverrideType.VIDEO) {
+            removeRejectedSession(packageName, title, artist)
+            updateTrackingNotification(null, null)
+            updateServiceLifecycle()
+            return
+        }
+
+        val albumArtBitmap = extractAlbumArtFromNotification(notification)
 
         // CRITICAL: Use synchronized block to prevent race condition when
         // notification and MediaSession callbacks fire simultaneously for the same track.
         // Without this, both could see existingSession=null, create sessions, and one overwrites the other.
         val (sessionAction, existingSession) = synchronized(sessionOperationLock) {
             val existing = playbackStates[packageName]
-            
+
             // Check if this is the same track (handle artist updates from Unknown -> Real)
             val isSameTrackInfo = existing != null && existing.title == title && (
-                existing.artist == artist || 
+                existing.artist == artist ||
                 // If existing session has unknown artist but notification has real artist, update it
-                (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(existing.artist) && 
+                (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(existing.artist) &&
                  !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist))
             )
-            
+
             // Detect replay based on accumulated play time exceeding estimated duration
             val isReplayDetected = isSameTrackInfo && run {
                 val playedMs = existing!!.calculateCurrentPlayDuration()
                 val estimatedDuration = existing.estimatedDurationMs
-                val playedExceedsDuration = estimatedDuration != null && 
-                    estimatedDuration > 0 && 
+                estimatedDuration != null &&
+                    estimatedDuration > 0 &&
                     playedMs > estimatedDuration + 10_000L
-                if (playedExceedsDuration) {
-                    Log.d(TAG, "Notification: Replay detected for '${existing.title}': " +
-                        "played ${playedMs}ms exceeds estimated duration ${estimatedDuration}ms")
-                }
-                playedExceedsDuration
             }
-            
-            val isSameTrack = isSameTrackInfo && !isReplayDetected
-            
-            when {
-                isSameTrack -> Pair("UPDATE", existing)
-                else -> Pair("NEW", existing) // existing may be non-null (different track) or null
-            }
+            if (isSameTrackInfo && !isReplayDetected) Pair("UPDATE", existing)
+                else Pair("NEW", existing)
         }
 
         when (sessionAction) {
             "UPDATE" -> {
                 // Same track - update artist if we now have a better one
                 val session = existingSession!!
-                if (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(session.artist) && 
+                if (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(session.artist) &&
                     !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist)) {
-                    Log.d(TAG, "Notification: Updating session artist from '${session.artist}' to '$artist' for '$title'")
                     session.artist = artist
-                    
+
                     // Update the track in database if we have a trackId
                     session.trackId?.let { trackId ->
                         serviceScope.launch {
                             try {
                                 val track = trackRepository.getById(trackId).first()
                                 if (track != null && me.avinas.tempo.utils.ArtistParser.isUnknownArtist(track.artist)) {
-                                    Log.i(TAG, "Updating track $trackId artist from '${track.artist}' to '$artist' (via notification)")
                                     val updatedTrack = track.copy(artist = artist)
                                     trackRepository.update(updatedTrack)
-                                    
+
                                     // Re-link artists and trigger enrichment
                                     artistLinkingService.linkArtistsForTrack(updatedTrack)
                                     EnrichmentWorker.enqueueImmediate(applicationContext, trackId)
                                 }
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Failed to update track artist from notification", e)
-                            }
+                            } catch (_: Exception) { }
                         }
                     }
-                    
+
                     updateTrackingNotification(title, artist)
                 }
-                
+
                 // Might be a play/pause update
-                if (!session.isPlaying) {
-                    session.resume()
-                }
-                return
+                if (!session.isPlaying) session.resume()
             }
             "NEW" -> {
                 // Check if this is likely an advertisement - skip tracking ads
-                if (artist.isNotBlank() && 
+                if (artist.isNotBlank() &&
                     !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist) &&
-                    isLikelyAdvertisementFromNotification(title, artist, album, packageName)) {
-                    if (!loggedAdvertisementSkips.containsKey(title)) {
-                        loggedAdvertisementSkips[title] = true
-                        Log.d(TAG, "Skipping likely advertisement: '$title' from $packageName")
-                    }
-                    return
-                }
-
-                // New track or different track - save previous session first
+                    isLikelyAdvertisementFromNotification(title, artist, album, packageName)) return
                 if (existingSession != null) {
                     existingSession.pause()
                     saveListeningEvent(existingSession)
@@ -2123,11 +1989,14 @@ class MusicTrackingService : NotificationListenerService() {
                 // Try to get cached duration estimate for this track
                 val cachedDurationKey = generateHash("$title|$artist")
                 val cachedDuration = durationEstimateCache.get(cachedDurationKey)
-
-                // Clear log debounce caches for fresh logging on new track
+                if (cachedDuration != null && shouldRejectByTrackingRules(packageName, title, artist, cachedDuration)) {
+                    removeRejectedSession(packageName, title, artist)
+                    updateTrackingNotification(null, null)
+                    return
+                }
                 loggedArtistExtractionFailures.clear()
                 loggedAdvertisementSkips.clear()
-                
+
                 val newSession = PlaybackSession(
                     packageName = packageName,
                     title = title,
@@ -2139,32 +2008,39 @@ class MusicTrackingService : NotificationListenerService() {
                     lastRecordedPosition = 0,
                     isLikelyMusic = true
                 )
-                
+
                 // Atomic put - thread-safe even without the outer lock
                 playbackStates[packageName] = newSession
                 updateTrackingNotification(title, artist)
-                
+
                 // Save album art locally for fallback use (if extracted)
                 val localArtUrl = albumArtBitmap?.let { saveAlbumArtToStorage(it, title, artist) }
 
                 // Insert track asynchronously but ensure trackId is set before any save
                 serviceScope.launch {
                     try {
+                        if (shouldFilterContent(packageName, null, title, artist)) {
+                            removeRejectedSession(packageName, title, artist, newSession)
+                            updateTrackingNotification(null, null)
+                            updateServiceLifecycle()
+                            return@launch
+                        }
                         val track = getOrInsertTrack(title, artist, album)
                         newSession.trackId = track.id
-                        
+
                         // Try to get duration from track or enriched metadata
-                        val duration = track.duration ?: getTrackDurationFromMetadata(track.id)
+                        val duration = track.duration?.takeIf { it > 0L } ?: getTrackDurationFromMetadata(track.id)
                         if (duration != null && duration > 0) {
+                            if (shouldRejectByTrackingRules(packageName, title, artist, duration)) {
+                                removeRejectedSession(packageName, title, artist, newSession)
+                                updateTrackingNotification(null, null)
+                                updateServiceLifecycle()
+                                return@launch
+                            }
                             newSession.estimatedDurationMs = duration
                             // Also cache it for future use
                             durationEstimateCache.put(cachedDurationKey, duration)
                         }
-                        
-                        Log.d(TAG, "Track ID ${track.id} assigned for '${title}' (duration: ${newSession.estimatedDurationMs?.let { "${it/1000}s" } ?: "unknown"})")
-                        
-                        // If we have local album art, schedule a delayed update
-                        // This gives enrichment time to complete first (MusicBrainz is preferred)
                         if (localArtUrl != null) {
                             // Wait for enrichment to complete (give it 10 seconds)
                             delay(10_000)
@@ -2177,117 +2053,79 @@ class MusicTrackingService : NotificationListenerService() {
             }
         }
     }
-    
+
     /**
      * Try to get track duration from enriched metadata.
      */
-    private suspend fun getTrackDurationFromMetadata(trackId: Long): Long? {
-        return try {
+    private suspend fun getTrackDurationFromMetadata(trackId: Long): Long? = try {
             enrichedMetadataRepository.forTrackSync(trackId)?.trackDurationMs
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not get duration from metadata for track $trackId", e)
-            null
-        }
-    }
+        } catch (_: Exception) { null }
 
     private fun processNotificationRemoved(sbn: StatusBarNotification) {
-        val packageName = sbn.packageName
-        val session = playbackStates.remove(packageName) ?: return
+        val session = playbackStates.remove(sbn.packageName) ?: return
 
         session.pause()
         saveListeningEvent(session)
 
         // Update notification
-        if (playbackStates.isEmpty()) {
-            updateTrackingNotification(null, null)
-        } else {
-            // Show the next active session
-            val nextSession = playbackStates.values.firstOrNull()
-            updateTrackingNotification(nextSession?.title, nextSession?.artist)
+        if (playbackStates.isEmpty()) updateTrackingNotification(null, null)
+        else playbackStates.values.firstOrNull()?.let { updateTrackingNotification(it.title, it.artist)
         }
     }
 
     private suspend fun getOrInsertTrack(
-        title: String, 
-        artist: String, 
+        title: String,
+        artist: String,
         album: String?,
         metadata: LocalMediaMetadata? = null
     ): Track {
         val cleanTitle = me.avinas.tempo.utils.ArtistParser.cleanTrackTitle(title)
-        
+
         val exactMatch = trackRepository.findByTitleAndArtist(title, artist)
-        
-        if (exactMatch != null) {
-            Log.d(TAG, "Found exact match for track ${exactMatch.id}: '$title' by '$artist'")
-            return handleExistingTrack(exactMatch, artist, album)
-        }
-        
+
+        if (exactMatch != null) return handleExistingTrack(exactMatch, artist, album)
         val alias = trackAliasRepository.findAlias(title, artist)
         if (alias != null) {
             val targetTrack = trackRepository.getById(alias.targetTrackId).first()
-            if (targetTrack != null) {
-                Log.i(TAG, "Smart Alias found: '$title' -> mapped to '${targetTrack.title}' (ID: ${targetTrack.id})")
-                return handleExistingTrack(targetTrack, artist, album)
-            } else {
-                Log.w(TAG, "Orphaned alias found for '$title', ignoring")
-            }
+            if (targetTrack != null) return handleExistingTrack(targetTrack, artist, album)
         }
 
         val fuzzyArtistMatch = trackRepository.findByTitleAndArtistFuzzy(title, artist)
-        if (fuzzyArtistMatch != null) {
-            Log.d(TAG, "Found fuzzy artist match for track ${fuzzyArtistMatch.id}: '$title' by '$artist'")
-            return handleExistingTrack(fuzzyArtistMatch, artist, album)
-        }
-
+        if (fuzzyArtistMatch != null) return handleExistingTrack(fuzzyArtistMatch, artist, album)
         val titleCandidates = trackRepository.findCandidatesByTitle(title)
         val cleanTitleMatch = titleCandidates.find { track ->
-            track.title.equals(cleanTitle, ignoreCase = true) && 
+            track.title.equals(cleanTitle, ignoreCase = true) &&
             me.avinas.tempo.utils.ArtistParser.hasAnyMatchingArtist(track.artist, artist)
         }
-        
-        if (cleanTitleMatch != null) {
-            Log.d(TAG, "Found clean title match for track ${cleanTitleMatch.id}: '$title' by '$artist'")
-            return handleExistingTrack(cleanTitleMatch, artist, album)
-        }
 
+        if (cleanTitleMatch != null) return handleExistingTrack(cleanTitleMatch, artist, album)
         val now = System.currentTimeMillis()
         if (now - lastPreferencesFetch > PREFERENCES_CACHE_TTL_MS) {
             try {
                 val prefs = userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities.UserPreferences()
                 cachedMergeAlternateVersions = prefs.mergeAlternateVersions
                 lastPreferencesFetch = now
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to refresh preferences, using cached value", e)
-            }
+            } catch (_: Exception) { }
         }
-        
+
         val strictMatching = !cachedMergeAlternateVersions
-        
+
         val candidates = trackRepository.findFuzzyCandidates(title, artist).map { track ->
-            TrackCandidate(
-                id = track.id,
-                title = track.title,
-                artist = track.artist,
-                album = track.album
+            TrackCandidate(track.id, track.title, track.artist, track.album
             )
         }
-        
+
         val matchResult = TrackMatcher.findBestMatch(title, artist, candidates, strictMatching)
-        
+
         if (matchResult != null && matchResult.second.overallScore >= TRACK_MATCH_THRESHOLD) {
-            val (candidate, result) = matchResult
-            val existingTrack = trackRepository.getById(candidate.id).first()
-            
-            if (existingTrack != null) {
-                Log.d(TAG, "Found fuzzy match for track ${existingTrack.id}: '$title' by '$artist' " +
-                        "(score: ${String.format(java.util.Locale.US, "%.2f", result.overallScore)}, type: ${result.matchType})")
-                return handleExistingTrack(existingTrack, artist, album)
-            }
+            val existingTrack = trackRepository.getById(matchResult.first.id).first()
+
+            if (existingTrack != null) return handleExistingTrack(existingTrack, artist, album)
         }
-        
+
         return insertNewTrack(title, artist, album, metadata)
     }
-    
+
     /**
      * Handle an existing track - update if needed and ensure proper linking.
      */
@@ -2295,47 +2133,41 @@ class MusicTrackingService : NotificationListenerService() {
         // Update artist if the existing track has unknown artist but new one has real artist
         if (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(existingTrack.artist) &&
             !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(newArtist)) {
-            Log.i(TAG, "Updating track ${existingTrack.id} artist from '${existingTrack.artist}' to '$newArtist'")
             val updatedTrack = existingTrack.copy(artist = newArtist, album = newAlbum ?: existingTrack.album)
             trackRepository.update(updatedTrack)
-            
+
             // Re-link artists now that we have the real artist name
             artistLinkingService.linkArtistsForTrack(updatedTrack)
-            
+
             // Re-trigger enrichment now that we have the real artist
             EnrichmentWorker.enqueueImmediate(applicationContext, existingTrack.id)
-            
+
             return updatedTrack
         }
-        
+
         // Ensure artists are linked even for existing tracks (migration support)
         if (existingTrack.primaryArtistId == null && !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(existingTrack.artist)) {
             serviceScope.launch {
                 try {
                     artistLinkingService.linkArtistsForTrack(existingTrack)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to link artists for existing track ${existingTrack.id}", e)
-                }
+                } catch (_: Exception) { }
             }
         }
-        
+
         return existingTrack
     }
-    
+
     /**
      * Insert a new track into the database.
      */
     private suspend fun insertNewTrack(
-        title: String, 
-        artist: String, 
+        title: String,
+        artist: String,
         album: String?,
         metadata: LocalMediaMetadata? = null
     ): Track {
-        Log.d(TAG, "Inserting new track: '$title' by '$artist'")
-        
-        // Determine content type from metadata if available, otherwise default to MUSIC
         val contentType = metadata?.getContentType()?.toString() ?: "MUSIC"
-        
+
         val newTrack = Track(
             title = title,
             artist = artist,
@@ -2346,56 +2178,45 @@ class MusicTrackingService : NotificationListenerService() {
             musicbrainzId = null,
             contentType = contentType
         )
-        
+
         val id = trackRepository.insert(newTrack)
-        Log.i(TAG, "Inserted new track with ID $id: '$title' by '$artist'")
-        
-        if (id <= 0) {
-            Log.e(TAG, "Failed to insert track - got invalid ID: $id")
-        }
-        
         val insertedTrack = newTrack.copy(id = id)
-        
+
         // Link artists for the new track (creates Artist records and TrackArtist links)
         if (!me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist)) {
             try {
                 val linkedTrack = artistLinkingService.linkArtistsForTrack(insertedTrack)
-                
+
                 // Create pending enrichment entry for new track
                 enrichedMetadataRepository.createPendingIfNotExists(id)
-                
+
                 // Trigger background enrichment
                 EnrichmentWorker.enqueueImmediate(applicationContext, id)
-                
+
                 return linkedTrack
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to link artists for track $id", e)
-            }
+            } catch (_: Exception) { }
         } else {
-            Log.d(TAG, "Deferring artist linking for track $id - artist is unknown, waiting for metadata to settle")
-            
-            // Create pending enrichment entry for new track
             enrichedMetadataRepository.createPendingIfNotExists(id)
-            
+
             // DON'T trigger immediate enrichment for unknown artists - wait for metadata to settle
             // The artist often arrives shortly after via notification or MediaSession update
             // Enrichment will be triggered when the artist is discovered and the track is updated
             // This prevents wasted API calls searching for "Unknown Artist"
-            
+
             return insertedTrack
         }
-        
+
         // Fallback: this should only be reached if artistLinkingService.linkArtistsForTrack throws
         // Create pending enrichment entry for new track (enrichment will correct artist if needed)
         enrichedMetadataRepository.createPendingIfNotExists(id)
-        
+
         return insertedTrack
     }
-    
+
     /**
      * Save rich local metadata as a fallback for when external enrichment fails.
      * This is called after a delay to give MusicBrainz/Spotify a chance first.
-     * 
+     *
      * Key insight: Even if external enrichment succeeded, it might not have found genres.
      * In that case, we should still use local genre if available.
      */
@@ -2405,7 +2226,7 @@ class MusicTrackingService : NotificationListenerService() {
     private val loggedEnrichedTracks = object : LinkedHashMap<Long, Boolean>(128, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Boolean>): Boolean = size > 256
     }
-    
+
     private suspend fun saveLocalMetadataFallback(trackId: Long, localMetadata: LocalMediaMetadata) {
         try {
             // Always update the local metadata cache (music players send metadata in stages)
@@ -2420,29 +2241,27 @@ class MusicTrackingService : NotificationListenerService() {
                     albumArtBitmap = localMetadata.albumArtBitmap ?: cachedMetadata.albumArtBitmap,
                     albumArtUri = localMetadata.albumArtUri ?: cachedMetadata.albumArtUri
                 )
-            } else {
-                localMetadata
-            }
+            } else localMetadata
             localMetadataCache.put(trackId, updatedLocalMetadata)
-            
+
             // IMPORTANT: Always save local bitmap to storage immediately if we have one
             // This ensures we have a local backup even if enriched URL exists but fails to load
-            val savedLocalArtUrl = updatedLocalMetadata.albumArtBitmap?.let { 
-                saveAlbumArtToStorage(it, updatedLocalMetadata.title, updatedLocalMetadata.artist) 
+            val savedLocalArtUrl = updatedLocalMetadata.albumArtBitmap?.let {
+                saveAlbumArtToStorage(it, updatedLocalMetadata.title, updatedLocalMetadata.artist)
             }
-            
+
             // Check if track already has enriched metadata from external sources
             val existingMetadata = enrichedMetadataRepository.forTrackSync(trackId)
-            
+
             // Check if enriched art URL exists and is a remote URL
             val enrichedArtUrl = existingMetadata?.albumArtUrl
             val enrichedArtIsRemoteUrl = enrichedArtUrl?.startsWith("http") == true
-            
+
             // Strategy for album art:
             // - If we have enriched hotlink: Store enriched in EnrichedMetadata, local in Track (as backup)
             // - If no enriched hotlink: Store local in both
             // - UI will try enriched first, fall back to local if it fails, and delete local on success
-            
+
             // Determine what we should fill in from local metadata
             val hasLocalArt = savedLocalArtUrl != null || updatedLocalMetadata.albumArtUri != null
             val needsAlbumArt = enrichedArtUrl.isNullOrBlank() && hasLocalArt
@@ -2450,50 +2269,30 @@ class MusicTrackingService : NotificationListenerService() {
             val needsAlbum = existingMetadata?.albumTitle.isNullOrBlank() && updatedLocalMetadata.album != null
             val needsYear = existingMetadata?.releaseYear == null && updatedLocalMetadata.getReleaseYear() != null
             val needsDuration = existingMetadata?.trackDurationMs == null && updatedLocalMetadata.durationMs != null
-            
+
             val shouldUpdate = existingMetadata == null || needsAlbumArt || needsGenre || needsAlbum || needsYear || needsDuration
 
-            
+
             // CRITICAL FIX: Even if we don't need to update EnrichedMetadata (shouldUpdate=false),
             // we MUST ensure Track entity has album art for the UI.
             // Strategy: Store local as backup in Track table when enriched hotlink exists
             if (!shouldUpdate) {
                 val track = trackRepository.getById(trackId).first()
                 if (track != null && track.albumArtUrl.isNullOrBlank() && savedLocalArtUrl != null) {
-                    // Store local art in Track table as immediate backup
-                    Log.i(TAG, "Storing local art as backup in Track table while enriched hotlink exists")
                     trackRepository.update(track.copy(albumArtUrl = savedLocalArtUrl))
                 } else if (track != null && enrichedArtIsRemoteUrl && savedLocalArtUrl != null) {
                     // We have both enriched hotlink and local backup
                     // Keep current setup but log for tracking
-                    Log.d(TAG, "Track $trackId: Has enriched hotlink '${enrichedArtUrl?.take(30)}...' and local backup saved: $savedLocalArtUrl")
+                    Log.d(TAG, "Track $trackId has enriched and local art")
                 }
-                
-                // Only log once per track to reduce spam
-                val shouldLogEnriched = synchronized(loggedEnrichedTracks) {
-                    if (loggedEnrichedTracks.containsKey(trackId)) {
-                        false
-                    } else {
-                        loggedEnrichedTracks[trackId] = true
-                        true
-                    }
-                }
-                if (shouldLogEnriched) {
-                     val hasGenres = !existingMetadata?.genres.isNullOrEmpty()
-                     val localHasGenre = updatedLocalMetadata.genre != null
-                     if (!hasGenres && !localHasGenre) {
-                        Log.d(TAG, "Track $trackId: No genres from external sources or local metadata (local genre was null)")
-                     } else {
-                        Log.d(TAG, "Track $trackId: Already has enriched metadata. " +
-                            "Enriched art: '${enrichedArtUrl?.take(20)}...', Local backup saved: $savedLocalArtUrl")
-                     }
-                }
+                synchronized(loggedEnrichedTracks) {
+                        loggedEnrichedTracks[trackId] = true }
                 return
             }
-            
+
             // Use already-saved local art URL, or get from URI
             val localArtUrl = savedLocalArtUrl ?: updatedLocalMetadata.getBestAlbumArtSource()
-            
+
             // Update the enriched metadata with local data (only fill in missing fields)
             val updatedMetadata = (existingMetadata ?: me.avinas.tempo.data.local.entities.EnrichedMetadata(trackId = trackId)).copy(
                 albumTitle = existingMetadata?.albumTitle ?: updatedLocalMetadata.album,
@@ -2501,43 +2300,25 @@ class MusicTrackingService : NotificationListenerService() {
                 // Set source as LOCAL when using local album art - this allows API sources to replace it later
                 albumArtSource = if (needsAlbumArt && localArtUrl != null) {
                     me.avinas.tempo.data.local.entities.AlbumArtSource.LOCAL
-                } else {
-                    existingMetadata?.albumArtSource ?: me.avinas.tempo.data.local.entities.AlbumArtSource.NONE
-                },
+                } else existingMetadata?.albumArtSource ?: me.avinas.tempo.data.local.entities.AlbumArtSource.NONE,
                 releaseYear = existingMetadata?.releaseYear ?: updatedLocalMetadata.getReleaseYear(),
                 trackDurationMs = existingMetadata?.trackDurationMs ?: updatedLocalMetadata.durationMs,
                 genres = if (existingMetadata?.genres.isNullOrEmpty() && updatedLocalMetadata.genre != null) {
                     listOf(updatedLocalMetadata.genre)
-                } else {
-                    existingMetadata?.genres ?: emptyList()
-                },
+                } else existingMetadata?.genres ?: emptyList(),
                 // Mark as having local metadata if we filled in any fields
                 cacheTimestamp = System.currentTimeMillis()
             )
-            
+
             enrichedMetadataRepository.upsert(updatedMetadata)
-            
-            // Log what we filled in
-            val filledFields = mutableListOf<String>()
-            if (needsGenre) filledFields.add("genre='${updatedLocalMetadata.genre}'")
-            if (needsAlbumArt && localArtUrl != null) filledFields.add("albumArt")
-            if (needsAlbum) filledFields.add("album='${updatedLocalMetadata.album}'")
-            if (needsYear) filledFields.add("year=${updatedLocalMetadata.getReleaseYear()}")
-            
-            if (filledFields.isNotEmpty()) {
-                Log.i(TAG, "Local metadata fallback for track $trackId: ${filledFields.joinToString(", ")}")
-            }
-            
-            // Also update the Track table with album art for display
             if (localArtUrl != null) {
                 val track = trackRepository.getById(trackId).first()
                 if (track != null && track.albumArtUrl.isNullOrBlank()) {
-                    val updatedTrack = track.copy(
+                    trackRepository.update(track.copy(
                         albumArtUrl = localArtUrl,
                         album = track.album.takeUnless { it.isNullOrBlank() } ?: updatedLocalMetadata.album,
                         duration = track.duration ?: updatedLocalMetadata.durationMs
-                    )
-                    trackRepository.update(updatedTrack)
+                    ))
                 }
             }
         } catch (e: Exception) {
@@ -2550,15 +2331,15 @@ class MusicTrackingService : NotificationListenerService() {
      */
     /**
      * Helper to ensure Track entity has album art, preferring enriched source but falling back to local.
-     * 
+     *
      * @param trackId The track ID to check
      * @param enrichedArtUrl The enriched art URL (may be HTTP which could fail)
      * @param localMetadata Local metadata from MediaSession (contains bitmap in memory)
      * @param savedLocalArtUrl Pre-saved local art file URL (already persisted to disk)
      */
     private suspend fun checkAndBackfillTrackArt(
-        trackId: Long, 
-        enrichedArtUrl: String?, 
+        trackId: Long,
+        enrichedArtUrl: String?,
         localMetadata: LocalMediaMetadata,
         savedLocalArtUrl: String? = null
     ) {
@@ -2569,33 +2350,26 @@ class MusicTrackingService : NotificationListenerService() {
                 // Fix HTTP URLs to HTTPS for better reliability
                 val fixedEnrichedUrl = me.avinas.tempo.data.enrichment.MusicBrainzEnrichmentService.fixHttpUrl(enrichedArtUrl)
                 if (!fixedEnrichedUrl.isNullOrBlank()) {
-                    Log.i(TAG, "Backfilling Track $trackId with enriched art: $fixedEnrichedUrl")
                     trackRepository.update(track.copy(albumArtUrl = fixedEnrichedUrl))
-                } 
+                }
                 // Otherwise try pre-saved local art first (already on disk)
                 else if (savedLocalArtUrl != null) {
-                    Log.i(TAG, "Backfilling Track $trackId with pre-saved local art: $savedLocalArtUrl")
                     trackRepository.update(track.copy(albumArtUrl = savedLocalArtUrl))
                 }
                 // Finally try to save from bitmap or URI
                 else {
-                    val localArtUrl = localMetadata.albumArtBitmap?.let { 
-                        saveAlbumArtToStorage(it, localMetadata.title, localMetadata.artist) 
+                    val localArtUrl = localMetadata.albumArtBitmap?.let {
+                        saveAlbumArtToStorage(it, localMetadata.title, localMetadata.artist)
                     } ?: localMetadata.getBestAlbumArtSource()
-                    
-                    if (localArtUrl != null) {
-                        Log.i(TAG, "Backfilling Track $trackId with local art: $localArtUrl")
-                        trackRepository.update(track.copy(albumArtUrl = localArtUrl))
+
+                    if (localArtUrl != null) trackRepository.update(track.copy(albumArtUrl = localArtUrl))
                     }
                 }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error checking/backfilling track art", e)
-        }
+            } catch (_: Exception) { }
     }
-    
+
     // Album art extraction from notifications
-    
+
     /**
      * Extract album art bitmap from a notification.
      * Tries multiple sources: large icon, extras, etc.
@@ -2603,128 +2377,82 @@ class MusicTrackingService : NotificationListenerService() {
     private fun extractAlbumArtFromNotification(notification: Notification): Bitmap? {
         try {
             val extras = notification.extras
-            
+
             // Try EXTRA_LARGE_ICON first (most common for media notifications)
             @Suppress("DEPRECATION")
-            val largeIconBitmap = extras.getParcelable<Bitmap>(Notification.EXTRA_LARGE_ICON)
-            if (largeIconBitmap != null) {
-                Log.d(TAG, "Extracted album art from EXTRA_LARGE_ICON")
-                return largeIconBitmap
-            }
-            
+            extras.getParcelable<Bitmap>(Notification.EXTRA_LARGE_ICON)?.let { return it }
+
             // Try getLargeIcon() for API 23+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 notification.getLargeIcon()?.let { icon ->
-                    try {
-                        val drawable = icon.loadDrawable(applicationContext)
-                        drawable?.let {
-                            Log.d(TAG, "Extracted album art from getLargeIcon()")
-                            return it.toBitmap()
+                    try { icon.loadDrawable(applicationContext)?.let { return it.toBitmap()
                         }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to load large icon drawable", e)
-                    }
+                    } catch (_: Exception) { }
                 }
             }
-            
+
             // Try notification.largeIcon (deprecated but still works)
             @Suppress("DEPRECATION")
-            notification.largeIcon?.let {
-                Log.d(TAG, "Extracted album art from largeIcon")
-                return it
+            notification.largeIcon?.let { return it
             }
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error extracting album art from notification", e)
-        }
+
+        } catch (_: Exception) { }
         return null
     }
-    
+
     /**
      * Extract album art bitmap from MediaSession metadata.
      */
     private fun extractAlbumArtFromMetadata(metadata: MediaMetadata): Bitmap? {
-        try {
+        return try {
             // Try METADATA_KEY_ART first (generic art)
-            metadata.getBitmap(MediaMetadata.METADATA_KEY_ART)?.let {
-                Log.d(TAG, "Extracted album art from METADATA_KEY_ART")
-                return it
-            }
-            
-            // Try METADATA_KEY_ALBUM_ART
-            metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)?.let {
-                Log.d(TAG, "Extracted album art from METADATA_KEY_ALBUM_ART")
-                return it
-            }
-            
-            // Try METADATA_KEY_DISPLAY_ICON
-            metadata.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)?.let {
-                Log.d(TAG, "Extracted album art from METADATA_KEY_DISPLAY_ICON")
-                return it
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error extracting album art from metadata", e)
-        }
-        return null
+            metadata.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                ?: metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                ?: metadata.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+        } catch (_: Exception) { null }
     }
-    
+
     /**
      * Save album art bitmap to local storage and return the file URI.
      * Uses a hash of title+artist as filename for deduplication.
      */
     private fun saveAlbumArtToStorage(bitmap: Bitmap, title: String, artist: String): String? {
-        try {
+        return try {
             // Create album art directory
             val albumArtDir = File(applicationContext.filesDir, ALBUM_ART_DIR)
-            if (!albumArtDir.exists()) {
-                albumArtDir.mkdirs()
-            }
-            
-            // Generate unique filename based on title + artist hash
-            val hash = generateHash("$title|$artist")
-            val fileName = "art_$hash.jpg"
-            val file = File(albumArtDir, fileName)
-            
+            if (!albumArtDir.exists()) albumArtDir.mkdirs()
+            val file = File(albumArtDir, "art_${generateHash("$title|$artist")}.jpg")
+
             // If file already exists, just return the URI
-            if (file.exists()) {
-                Log.d(TAG, "Album art already saved: ${file.absolutePath}")
-                return "file://${file.absolutePath}"
-            }
-            
-            // Save bitmap to file (downsampled — huge cover art bitmaps previously
-            // caused OOM/TransactionTooLarge-style failures when saved + reloaded)
+            if (file.exists()) return "file://${file.absolutePath}"
             val toSave = downsampleBitmap(bitmap, 512)
             FileOutputStream(file).use { out ->
                 toSave.compress(Bitmap.CompressFormat.JPEG, 85, out)
             }
             if (toSave !== bitmap) toSave.recycle()
-            
-            Log.i(TAG, "Saved album art to: ${file.absolutePath}")
-            return "file://${file.absolutePath}"
-            
+            "file://${file.absolutePath}"
+
         } catch (e: Exception) {
             Log.e(TAG, "Error saving album art", e)
-            return null
+            null
         }
     }
 
     private fun downsampleBitmap(bitmap: Bitmap, maxDimension: Int): Bitmap {
-        val w = bitmap.width.toFloat()
-        val h = bitmap.height.toFloat()
+        val w = bitmap.width.toFloat(); val h = bitmap.height.toFloat()
         if (w <= maxDimension && h <= maxDimension) return bitmap
         val ratio = (maxDimension / maxOf(w, h)).coerceAtMost(1f)
         return Bitmap.createScaledBitmap(bitmap, (w * ratio).toInt(), (h * ratio).toInt(), true)
     }
-    
+
     /**
      * Generate MD5 hash for filename.
      */
     private fun generateHash(input: String): String {
-        val md = MessageDigest.getInstance("MD5")
-        val digest = md.digest(input.lowercase().toByteArray())
+        val digest = MessageDigest.getInstance("MD5").digest(input.lowercase().toByteArray())
         return digest.joinToString("") { "%02x".format(it) }.take(16)
     }
-    
+
     /**
      * Update track with album art URL if it doesn't have one and enrichment didn't find one.
      * This is used as a fallback after enrichment completes.
@@ -2732,18 +2460,10 @@ class MusicTrackingService : NotificationListenerService() {
     private suspend fun updateTrackAlbumArtIfNeeded(trackId: Long, localArtUrl: String) {
         try {
             val track = trackRepository.getById(trackId).first() ?: return
-            
+
             // Only update if track doesn't have album art URL
-            if (track.albumArtUrl.isNullOrBlank()) {
-                Log.i(TAG, "Updating track $trackId with local album art: $localArtUrl")
-                val updatedTrack = track.copy(albumArtUrl = localArtUrl)
-                trackRepository.update(updatedTrack)
-            } else {
-                Log.d(TAG, "Track $trackId already has album art, skipping local art update")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating track album art", e)
-        }
+            if (track.albumArtUrl.isNullOrBlank()) trackRepository.update(track.copy(albumArtUrl = localArtUrl))
+        } catch (_: Exception) { }
     }
 
     private fun saveListeningEvent(session: PlaybackSession) {
@@ -2760,38 +2480,62 @@ class MusicTrackingService : NotificationListenerService() {
     private suspend fun saveListeningEventSuspend(session: PlaybackSession) {
         val playDuration = session.calculateCurrentPlayDuration()
 
-        // Don't save very short plays (less than MIN_PLAY_DURATION_MS)
-        if (playDuration < MIN_PLAY_DURATION_MS) {
+        // Don't save plays shorter than the configured minimum.
+        if (playDuration < minimumPlayDurationMs()) {
             Log.d(TAG, "Skipping short play: ${playDuration}ms for '${session.title}'")
             return
         }
 
+        // Apply any rule that can already be decided before resolving the track row.
+        if (shouldRejectByTrackingRules(
+                session.packageName,
+                session.title,
+                session.artist,
+                session.estimatedDurationMs ?: 0L
+            )) return
+
         var trackId = session.trackId
         if (trackId == null) {
-            Log.w(TAG, "No trackId for session '${session.title}', deferring save for ${playDuration}ms play")
-            // Wait briefly for the async track insertion to resolve the ID
             var retries = 0
-            val maxRetries = 5
-            while (session.trackId == null && retries < maxRetries) {
-                delay(500) // Wait for track insertion
-                retries++
+            while (session.trackId == null && retries < 5) {
+                delay(500); retries++
             }
 
             trackId = session.trackId
             if (trackId == null) {
                 // Try to find the track by title/artist as a last resort
-                try {
-                    val track = getOrInsertTrack(session.title, session.artist, session.album)
-                    Log.d(TAG, "Found/created track ${track.id} for deferred save of '${session.title}'")
-                    trackId = track.id
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to save deferred listening event for '${session.title}'", e)
-                    return
+                try { trackId = getOrInsertTrack(session.title, session.artist, session.album).id
+                } catch (_: Exception) { return
                 }
-            } else {
-                Log.d(TAG, "TrackId resolved after ${retries * 500}ms, saving event for '${session.title}'")
             }
         }
+
+        // A notification-only session can start with an unknown duration. Resolve a reliable
+        // DB/enrichment duration at save time and re-apply the maximum then; never reject an
+        // unknown duration merely because it was unknown at session start.
+        if (session.estimatedDurationMs == null || session.estimatedDurationMs!! <= 0L) {
+            val reliableDuration = try {
+                trackRepository.getById(trackId).first()?.duration?.takeIf { it > 0L }
+                    ?: getTrackDurationFromMetadata(trackId)
+            } catch (_: Exception) { null }
+            if (reliableDuration != null && reliableDuration > 0L) {
+                session.estimatedDurationMs = reliableDuration
+            }
+        }
+
+        if (shouldRejectByTrackingRules(
+                session.packageName,
+                session.title,
+                session.artist,
+                session.estimatedDurationMs ?: 0L
+            )) return
+
+        if (shouldFilterContent(
+                session.packageName,
+                localMetadataCache.get(trackId),
+                session.title,
+                session.artist
+            )) return
 
         insertListeningEvent(trackId, session)
     }
@@ -2799,79 +2543,46 @@ class MusicTrackingService : NotificationListenerService() {
     private suspend fun insertListeningEvent(trackId: Long, session: PlaybackSession) {
         var playDuration = session.calculateCurrentPlayDuration()
         val currentTime = System.currentTimeMillis()
-        
+
         // Final check for play duration
-        if (playDuration < MIN_PLAY_DURATION_MS) {
-            Log.d(TAG, "Skipping short play in insert: ${playDuration}ms for '${session.title}'")
+        if (playDuration < minimumPlayDurationMs())
             return
-        }
-        
-        // CRITICAL FIX: Final validation to cap duration and prevent inflated values
-        // This is the last line of defense before saving to database
-        if (playDuration > MAX_PLAY_DURATION_MS) {
-            Log.w(TAG, "ANOMALY: Duration ${playDuration}ms exceeds 1 hour max, capping to ${MAX_PLAY_DURATION_MS}ms for '${session.title}'")
-            playDuration = MAX_PLAY_DURATION_MS
-        }
-        
-        // Also cap at 3x estimated duration (if available) as sanity check
         session.estimatedDurationMs?.let { estimated ->
-            if (estimated > 0) {
-                val maxReasonable = estimated * 3
-                if (playDuration > maxReasonable) {
-                    Log.w(TAG, "ANOMALY: Duration ${playDuration}ms is >3x estimated ${estimated}ms, capping to ${maxReasonable}ms for '${session.title}'")
-                    playDuration = maxReasonable
-                }
-            }
+            if (estimated > 0 && playDuration > estimated * 3) playDuration = estimated * 3
         }
-        
-        // Get duration from smart estimator if not available
-        val estimatedDuration = session.estimatedDurationMs ?: run {
-            val estimate = durationEstimator.estimateDuration(session.title, session.artist, session.album)
-            estimate.durationMs
-        }
-        
-        // Calculate completion percentage using smart estimator
+        if (playDuration < minimumPlayDurationMs()) return
+        val estimatedDuration = session.estimatedDurationMs ?: durationEstimator.estimateDuration(session.title, session.artist, session.album).durationMs
         val completionPct = durationEstimator.calculateCompletionPercent(
-            playDuration, 
-            estimatedDuration, 
-            isStillPlaying = false
+            playDuration,
+            estimatedDuration, false
         )
-        
+
         // Determine if this was a skip
         val wasSkipped = session.wasSkipped() || completionPct < SKIP_COMPLETION_THRESHOLD
-        
+
         // Check if this is a replay (same track played within 5 minutes)
-        val isReplay = recentPlaysCache[trackId]?.let { lastPlayTime ->
-            (currentTime - lastPlayTime) < REPLAY_THRESHOLD_MS
+        val isReplay = recentPlaysCache[trackId]?.let { currentTime - it < REPLAY_THRESHOLD_MS
         } ?: false
-        
+
         // Update recent plays cache
         recentPlaysCache[trackId] = currentTime
-        
+
         // Clean old entries from cache (older than replay threshold)
         val oldThreshold = currentTime - REPLAY_THRESHOLD_MS
         recentPlaysCache.entries.removeIf { it.value < oldThreshold }
-        
+
         // Record duration with smart estimator for future learning (only full plays are reliable)
         // Record duration with smart estimator for future learning (only full plays are reliable)
         val isFullPlay = completionPct >= FULL_PLAY_COMPLETION_THRESHOLD
-        val currentEstimatedDuration = session.estimatedDurationMs
-        if (isFullPlay && currentEstimatedDuration != null && currentEstimatedDuration > 0) {
+        if (isFullPlay && session.estimatedDurationMs != null && session.estimatedDurationMs!! > 0) {
             durationEstimator.recordObservedDuration(
-                title = session.title,
-                artist = session.artist,
-                durationMs = currentEstimatedDuration,
-                wasFullPlay = true,
-                album = session.album
+                session.title, session.artist, session.estimatedDurationMs!!, true, session.album
             )
         }
-        
+
         // Legacy duration cache update for backward compatibility
-        session.estimatedDurationMs?.let { duration ->
-            if (duration > 0) {
-                val key = generateHash("${session.title}|${session.artist}")
-                durationEstimateCache.put(key, duration)
-            }
+        session.estimatedDurationMs?.takeIf { it > 0 }?.let {
+            durationEstimateCache.put(generateHash("${session.title}|${session.artist}"), it)
         }
 
         val event = ListeningEvent(
@@ -2893,53 +2604,26 @@ class MusicTrackingService : NotificationListenerService() {
             wasInterrupted = session.wasInterrupted,
             volumeLevel = (getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager).getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
         )
-        
-        // VALIDATION: Validate event before saving
-        if (!session.validatePlayDuration()) {
-            Log.w(TAG, "Validation failed for '${session.title}': invalid play duration, capping to max")
-            // Still save but with capped duration
-        }
-        
-        if (!session.validateCompletionPercentage()) {
-            Log.w(TAG, "Validation failed for '${session.title}': invalid completion percentage")
-        }
-        
-        // ANOMALY DETECTION: Log any anomalies for debugging (don't block save)
         val anomalies = session.detectAnomalies()
-        if (anomalies.isNotEmpty()) {
-            Log.i(TAG, "Anomalies detected for '${session.title}': ${anomalies.joinToString("; ")}")
-        }
-
-
+        if (anomalies.isNotEmpty()) Log.i(TAG, "Anomalies detected for '${session.title}': ${anomalies.joinToString("; ")}")
         try {
-            // Use tracking manager for batched saving with retry logic
-            val queued = trackingManager.queueEvent(event, session.sessionId)
-            
-            if (queued) {
-                val eventDetails = buildString {
-                    append("'${session.title}' played for ${playDuration / 1000}s")
-                    append(" (${completionPct}%)")
-                    if (wasSkipped) append(" [SKIPPED]")
-                    if (isReplay) append(" [REPLAY]")
-                    if (session.pauseCount > 0) append(" [${session.pauseCount} pauses]")
-                }
-                Log.i(TAG, "Queued listening event: $eventDetails")
-                
-                // Invalidate stats cache to trigger real-time updates
+            if (trackingManager.queueEvent(event, session.sessionId)) {
                 (statsRepository as? RoomStatsRepository)?.onNewListeningEvent(event.timestamp)
-                
+
                 // Notify active ViewModels about the new event
                 refreshCoordinator.notifyNewTrackRecorded()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to queue listening event, falling back to direct insert", e)
-            // Fallback to direct insert
-            try {
-                listeningRepository.insert(event)
+            Log.w(TAG, "Queue failed; using guarded immediate persistence", e)
+            val immediateResult = trackingManager.saveEventImmediate(event)
+            val savedId = immediateResult.getOrNull() ?: 0L
+            if (savedId > 0L) {
                 (statsRepository as? RoomStatsRepository)?.onNewListeningEvent(event.timestamp)
                 refreshCoordinator.notifyNewTrackRecorded()
-            } catch (fallbackError: Exception) {
-                Log.e(TAG, "Direct insert also failed", fallbackError)
+            } else {
+                immediateResult.exceptionOrNull()?.let {
+                Log.e(TAG, "Guarded immediate persistence failed", it)
+                }
             }
         }
     }
@@ -2950,86 +2634,59 @@ class MusicTrackingService : NotificationListenerService() {
     private var isMediaSessionManagerInitialized = false
 
     private fun initializeMediaSessionManager() {
-        if (isMediaSessionManagerInitialized) {
-            Log.d(TAG, "MediaSessionManager already initialized, skipping")
-            return
-        }
-        
+        if (isMediaSessionManagerInitialized) return
         try {
             mediaSessionManager = getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
-            
+
             val componentName = ComponentName(this, MusicTrackingService::class.java)
             mediaSessionManager?.addOnActiveSessionsChangedListener(
                 { controllers -> onActiveSessionsChanged(controllers) },
                 componentName
             )
-            
+
             isMediaSessionManagerInitialized = true
-            
-            // Process currently active sessions
-            val activeSessions = mediaSessionManager?.getActiveSessions(componentName)
-            onActiveSessionsChanged(activeSessions)
-            
-            Log.i(TAG, "MediaSessionManager initialized with ${activeSessions?.size ?: 0} active sessions")
-        } catch (e: SecurityException) {
-            Log.w(TAG, "MediaSessionManager access denied - notification access may not be granted", e)
+            onActiveSessionsChanged(mediaSessionManager?.getActiveSessions(componentName))
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize MediaSessionManager", e)
+            Log.w(TAG, "Failed to initialize MediaSessionManager", e)
         }
     }
 
     private fun rescanActiveMediaSessions() {
-        if (!isMediaSessionManagerInitialized) {
-            Log.d(TAG, "MediaSessionManager not initialized, skipping rescan")
-            return
-        }
+        if (!isMediaSessionManagerInitialized) return
         try {
             val componentName = ComponentName(this, MusicTrackingService::class.java)
-            val activeSessions = mediaSessionManager?.getActiveSessions(componentName)
-            Log.i(TAG, "Rescanning active media sessions: ${activeSessions?.size ?: 0} sessions found")
-            onActiveSessionsChanged(activeSessions)
-        } catch (e: Exception) {
-            Log.w(TAG, "Error rescanning active media sessions", e)
-        }
+            onActiveSessionsChanged(mediaSessionManager?.getActiveSessions(componentName))
+        } catch (_: Exception) { }
     }
 
     private fun onActiveSessionsChanged(controllers: List<MediaController>?) {
         val currentControllers = controllers ?: emptyList()
-        
+
         // Debounce session change logs - avoid spam when count unchanged within 2 seconds
         val now = System.currentTimeMillis()
         val (lastCount, lastTime) = lastSessionChangeLog ?: (-1 to 0L)
-        if (currentControllers.size != lastCount || (now - lastTime) > SESSION_CHANGE_LOG_DEBOUNCE_MS) {
-            Log.d(TAG, "Active sessions changed: ${currentControllers.size} sessions")
+        if (currentControllers.size != lastCount || now - lastTime > SESSION_CHANGE_LOG_DEBOUNCE_MS) {
             lastSessionChangeLog = currentControllers.size to now
         }
-        
+
         // 1. Identify removed packages - synchronized to get consistent view of keys
         val newPackageNames = currentControllers.map { it.packageName }.toSet()
-        val removedPackages: Set<String>
-        synchronized(activeControllers) {
-            removedPackages = activeControllers.keys.toSet() - newPackageNames
+        val removedPackages = synchronized(activeControllers) { activeControllers.keys.toSet() - newPackageNames
         }
-        
+
         removedPackages.forEach { packageName ->
             // Unregister callback
             activeControllers[packageName]?.unregisterCallback(packageSpecificCallbacks[packageName] ?: sharedCallback)
             activeControllers.remove(packageName)
             packageSpecificCallbacks.remove(packageName)
-            
-            // Handle session end
-            val session = playbackStates.remove(packageName)
-            if (session != null) {
-                Log.d(TAG, "Session ended for '$packageName' (controller removed)")
-                session.pause()
-                saveListeningEvent(session)
+            playbackStates.remove(packageName)?.let { it.pause(); saveListeningEvent(it)
             }
         }
-        
+
         // 2. Identify and process new controllers
         currentControllers.forEach { controller ->
             val packageName = controller.packageName
-            
+
             // Skip if already tracked
             if (!activeControllers.containsKey(packageName)) {
                 // CRITICAL: Only track if the app is explicitly enabled in user preferences,
@@ -3038,39 +2695,32 @@ class MusicTrackingService : NotificationListenerService() {
                 val isEnabled = isInEnabledApps(packageName)
                 val isBlocked = isInBlockedApps(packageName)
                 val isKnownApp = packageName in cachedAllKnownPackages
-                
+
                 // App is explicitly disabled if: exists in DB AND not enabled AND not blocked
                 // (not blocked because blocked is handled separately with higher priority)
                 val isExplicitlyDisabled = isKnownApp && !isEnabled && !isBlocked
-                
+
                 // Track if:
                 // 1. Explicitly enabled by user, OR
                 // 2. Is music session AND is NOT a known disabled app (allows unknown apps)
                 val shouldTrack = isEnabled || (isMusicSession(controller) && !isExplicitlyDisabled)
-                
+
                 if (shouldTrack && !isBlocked) {
                     // Register specific callback
                     val callback = PackageSpecificCallback(packageName)
                     controller.registerCallback(callback)
-                    
+
                     activeControllers[packageName] = controller
                     packageSpecificCallbacks[packageName] = callback
-                    
+
                     // Process initial state
                     processMediaControllerState(controller)
-                } else if (isExplicitlyDisabled) {
-                    Log.d(TAG, "Skipping disabled app: $packageName (user disabled in preferences)")
-                } else if (isBlocked) {
-                    Log.d(TAG, "Skipping blocked app: $packageName")
                 }
             }
         }
-        
+
         // Update notification and lifecycle
-        if (playbackStates.isEmpty()) {
-            updateTrackingNotification(null, null)
-        }
-        
+        if (playbackStates.isEmpty()) updateTrackingNotification(null, null)
         updateServiceLifecycle()
     }
 
@@ -3081,7 +2731,7 @@ class MusicTrackingService : NotificationListenerService() {
 
     /**
      * Determine if a MediaController session represents MUSIC (not video).
-     * 
+     *
      * Uses multiple heuristics:
      * 1. Package name check (blocked apps, music apps)
      * 2. Duration check (music is typically 30s - 20min)
@@ -3089,75 +2739,48 @@ class MusicTrackingService : NotificationListenerService() {
      */
     private fun isMusicSession(controller: MediaController): Boolean {
         val packageName = controller.packageName
-        
+
         // FIRST: Block known video apps (user-blocked or default blocked)
-        if (isInBlockedApps(packageName)) {
-            Log.d(TAG, "Blocking MediaSession from video app: $packageName")
-            return false
-        }
-        
-        // Known music apps (user-enabled) are always music
-        if (isInEnabledApps(packageName)) {
-            return true
-        }
-        
-        // For unknown apps, use heuristics to detect music vs video
+        if (isInBlockedApps(packageName)) return false
+        val isEnabledApp = isInEnabledApps(packageName)
         val metadata = controller.metadata
         val playbackState = controller.playbackState
-        
+
         // Must have title at minimum
         val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
-        if (title == null) return false
-        
-        // Check duration - music typically 30s to 20 minutes
-        val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0
-        if (duration > 0) {
-            // Very short (< 30s) = probably notification sound, ad, etc.
-            if (duration < MIN_MUSIC_DURATION_MS) {
-                Log.d(TAG, "Rejecting short content ($duration ms): '$title' from $packageName")
-                return false
-            }
-            // Very long (> 20 min) = probably video, podcast, audiobook
-            if (duration > MAX_MUSIC_DURATION_MS) {
-                Log.d(TAG, "Rejecting long content ($duration ms, ${duration/60000} min): '$title' from $packageName")
-                return false
-            }
-        }
-        
-        // Check if metadata looks like music (has artist/album)
+        if (title.isNullOrBlank()) return isEnabledApp
         val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+            ?: "Unknown Artist"
+        when (manualContentOverride(title, artist)) {
+            ContentOverrideType.VIDEO -> return false
+            ContentOverrideType.MUSIC -> return true
+            null -> Unit
+        }
+        val duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+        if (shouldRejectByTrackingRules(packageName, title, artist, duration)) return false
+        if (isEnabledApp) return true
+        if (duration > 0 && duration < MIN_MUSIC_DURATION_MS) return false
         val album = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM)
-        
+
         // Having artist OR album is a strong indicator of music
-        val hasMusicMetadata = !artist.isNullOrBlank() || !album.isNullOrBlank()
-        
+        val hasMusicMetadata = !artist.isBlank() && !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist) || !album.isNullOrBlank()
+
         // Package name heuristics for unknown apps
         val lowerPkg = packageName.lowercase()
         val looksLikeVideoApp = lowerPkg.contains("video") || lowerPkg.contains("movie") ||
                                 lowerPkg.contains("tv") || lowerPkg.contains("stream") ||
-                                lowerPkg.contains("player") && !lowerPkg.contains("music")
-        
-        if (looksLikeVideoApp && !hasMusicMetadata) {
-            Log.d(TAG, "Rejecting likely video app without music metadata: $packageName")
-            return false
-        }
-        
-        // Accept if playing and has music-like metadata
-        val isPlaying = playbackState?.state == PlaybackState.STATE_PLAYING
-        return isPlaying || hasMusicMetadata
+            (lowerPkg.contains("player") && !lowerPkg.contains("music"))
+        if (looksLikeVideoApp && !hasMusicMetadata) return false
+        return playbackState?.state == PlaybackState.STATE_PLAYING || hasMusicMetadata
     }
 
     private fun processMediaControllerState(controller: MediaController) {
         val packageName = controller.packageName
 
         if (shouldPauseForBattery()) {
-            Log.d(TAG, "Tracking paused (low battery) — ignoring MediaController update from $packageName")
-            val session = playbackStates.remove(packageName)
-            if (session != null) {
-                session.pause()
-                saveListeningEvent(session)
+            playbackStates.remove(packageName)?.let { it.pause(); saveListeningEvent(it)
             }
             updateTrackingNotification(null, null)
             return
@@ -3165,114 +2788,78 @@ class MusicTrackingService : NotificationListenerService() {
 
         val metadata = controller.metadata
         val playbackState = controller.playbackState
-        
+
         val state = playbackState?.state
-        
+
         // Handle stopped/ended states - save the session and remove it
         if (state == PlaybackState.STATE_STOPPED || state == PlaybackState.STATE_NONE) {
-            val session = playbackStates.remove(packageName)
-            if (session != null) {
-                Log.d(TAG, "Playback stopped/ended for '$packageName', saving listening event for '${session.title}'")
-                session.pause()
-                saveListeningEvent(session)
-                
-                // Update notification if no active sessions
-                if (playbackStates.isEmpty()) {
-                    updateTrackingNotification(null, null)
-                }
-            }
+            playbackStates.remove(packageName)?.let { it.pause(); saveListeningEvent(it) }
+            if (playbackStates.isEmpty()) updateTrackingNotification(null, null)
             return
         }
-        
+
         // Need metadata to process further
         if (metadata == null) return
 
-        val rawTitle = metadata.getString(MediaMetadata.METADATA_KEY_TITLE) 
+        val rawTitle = metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
             ?: metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
         // Skip metadata with empty titles - metadata hasn't fully arrived yet
-        if (rawTitle.isNullOrBlank()) {
-            Log.d(TAG, "Ignoring MediaSession update with empty title from $packageName")
-            return
-        }
+        if (rawTitle.isNullOrBlank()) return
         val artist = extractArtistFromMetadata(metadata)
-        
+
         // Clean title if artist was extracted from it
-        val title = if (artist != "Unknown Artist" && extractArtistFromTitle(rawTitle) == artist) {
-            cleanTitleIfNeeded(rawTitle)
-        } else {
-            rawTitle
-        }
-        
+        val title = if (artist != "Unknown Artist" && extractArtistFromTitle(rawTitle) == artist) cleanTitleIfNeeded(rawTitle) else rawTitle
         val album = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)
         val duration = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)
-        
-        // Get current playback position for replay detection
+
+        if (shouldRejectByTrackingRules(packageName, title, artist, duration)) {
+            removeRejectedSession(packageName, title, artist)
+            updateTrackingNotification(null, null)
+            updateServiceLifecycle()
+            return
+        }
+
         val currentPosition = playbackState?.position ?: 0L
 
         val isPlaying = state == PlaybackState.STATE_PLAYING
 
         // CRITICAL: Use synchronized block to prevent race condition when
         // notification and MediaSession callbacks fire simultaneously for the same track.
-        val (sessionAction, session, isSameTrack) = synchronized(sessionOperationLock) {
+        val (sessionAction, session) = synchronized(sessionOperationLock) {
             val existing = playbackStates[packageName]
-            
+
             // Check if this is the same track (handle artist updates from Unknown -> Real)
             val isSameTrackInfo = existing != null && existing.title == title && (
-                existing.artist == artist || 
+                existing.artist == artist ||
                 // If existing session has unknown artist but new one has real artist, it's the same track
-                (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(existing.artist) && 
+                (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(existing.artist) &&
                  !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist)) ||
                 // If new metadata has unknown artist but session has real artist, keep session's artist
-                (!me.avinas.tempo.utils.ArtistParser.isUnknownArtist(existing.artist) && 
+                (!me.avinas.tempo.utils.ArtistParser.isUnknownArtist(existing.artist) &&
                  me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist))
             )
-            
+
             // Detect replay: same track info but position reset to near beginning
             val isReplayDetected = isSameTrackInfo && isPlaying && run {
                 val lastPosition = existing!!.lastKnownPosition
                 val playedMs = existing.calculateCurrentPlayDuration()
-                
-                val positionResetThresholdMs = 5_000L
-                val minPlayedForReplayMs = 30_000L
-                
-                val positionWentBack = lastPosition > positionResetThresholdMs && 
-                    currentPosition < positionResetThresholdMs
-                
+
                 val estimatedDuration = existing.estimatedDurationMs ?: duration.takeIf { it > 0 }
-                
-                val minCompletionForReplay = 0.5f
-                val completionPercent = if (estimatedDuration != null && estimatedDuration > 0) {
-                    playedMs.toFloat() / estimatedDuration
-                } else {
-                    0f
-                }
-                val hasMinCompletion = completionPercent >= minCompletionForReplay
-                
-                val playedExceedsDuration = estimatedDuration != null && 
-                    estimatedDuration > 0 && 
-                    playedMs > estimatedDuration + 10_000L
-                
-                val isReplay = (positionWentBack && playedMs >= minPlayedForReplayMs && hasMinCompletion) || 
-                               playedExceedsDuration
-                
-                if (isReplay) {
-                    Log.d(TAG, "Replay detected for '${existing.title}': " +
-                        "position reset from ${lastPosition}ms to ${currentPosition}ms, " +
-                        "played ${playedMs}ms (${(completionPercent * 100).toInt()}%), estimated duration ${estimatedDuration}ms")
-                }
-                
-                isReplay
+
+                val positionWentBack = lastPosition > 5_000L && currentPosition < 5_000L
+                val completion = if (estimatedDuration != null && estimatedDuration > 0) playedMs.toFloat() / estimatedDuration else 0f
+                (positionWentBack && playedMs >= 30_000L && completion >= 0.5f) ||
+                    (estimatedDuration != null &&
+                    estimatedDuration > 0 &&
+                    playedMs > estimatedDuration + 10_000L)
             }
-            
+
             // Update last known position for replay detection
-            existing?.let { it.lastKnownPosition = currentPosition }
-            
-            val isSameTrackResult = isSameTrackInfo && !isReplayDetected
-            
+            existing?.lastKnownPosition = currentPosition
             when {
-                isSameTrackResult -> Triple("UPDATE", existing, true)
-                isPlaying -> Triple("NEW", existing, false)
-                else -> Triple("IGNORE", existing, false)
+                isSameTrackInfo && !isReplayDetected -> Pair("UPDATE", existing)
+                isPlaying -> Pair("NEW", existing)
+                else -> Pair("IGNORE", existing)
             }
         }
 
@@ -3280,7 +2867,7 @@ class MusicTrackingService : NotificationListenerService() {
             "UPDATE" -> {
                 // Same track - update play state and potentially update artist
                 val currentSession = session!!
-            
+
             // Extract local metadata - music players often send metadata in stages
             // Genre, year, etc. might come in later updates
             val localMetadata = LocalMediaMetadata.fromMediaMetadata(metadata, packageName)
@@ -3288,36 +2875,17 @@ class MusicTrackingService : NotificationListenerService() {
                 val trackId = currentSession.trackId!!
                 // Update cache and check if we should apply local metadata fallback
                 serviceScope.launch {
-                    try {
-                        // Update cache with latest metadata
                         val cached = localMetadataCache.get(trackId)
-                        val hasNewData = cached == null || 
-                            (localMetadata.genre != null && cached.genre == null) ||
-                            (localMetadata.year != null && cached.year == null) ||
-                            (localMetadata.album != null && cached.album == null) ||
-                            (localMetadata.durationMs != null && cached.durationMs == null)
-                        
-                        if (hasNewData) {
-                            // Always update the cache with latest data
-                            localMetadataCache.put(trackId, if (cached != null) {
-                                cached.copy(
+                        localMetadataCache.put(trackId, if (cached != null) cached.copy(
                                     genre = localMetadata.genre ?: cached.genre,
                                     album = localMetadata.album ?: cached.album,
                                     year = localMetadata.year ?: cached.year,
                                     durationMs = localMetadata.durationMs ?: cached.durationMs,
                                     albumArtBitmap = localMetadata.albumArtBitmap ?: cached.albumArtBitmap,
                                     albumArtUri = localMetadata.albumArtUri ?: cached.albumArtUri
-                                )
-                            } else {
-                                localMetadata
-                            })
-                            Log.d(TAG, "Updated local metadata cache for track $trackId (genre: ${localMetadata.genre}, album: ${localMetadata.album})")
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Error updating local metadata cache", e)
+                                ) else localMetadata)
                     }
-                }
-                
+
                 // Schedule a delayed metadata retry after 1 minute if not already scheduled
                 // This catches metadata that streaming apps send late (after initial batch)
                 if (!currentSession.delayedMetadataRetryScheduled) {
@@ -3325,93 +2893,65 @@ class MusicTrackingService : NotificationListenerService() {
                     serviceScope.launch {
                         delay(60_000) // Wait 1 minute
                         // Only proceed if this track is still playing (same session)
-                        val stillSameSession = playbackStates[packageName]?.let {
+                        val stillSame = playbackStates[packageName]?.let {
                             it.trackId == trackId && it.sessionId == currentSession.sessionId
                         } ?: false
-                        
-                        if (stillSameSession) {
-                            Log.d(TAG, "Performing delayed metadata retry for track $trackId after 1 minute")
-                            val latestCachedMetadata = localMetadataCache.get(trackId)
-                            if (latestCachedMetadata != null) {
-                                saveLocalMetadataFallback(trackId, latestCachedMetadata)
-                            }
-                        }
+
+                        if (stillSame) localMetadataCache.get(trackId)?.let {
+                                saveLocalMetadataFallback(trackId, it) }
                     }
                 }
             }
-            
+
             // Update artist if we now have a better one
-            if (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(currentSession.artist) && 
+            if (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(currentSession.artist) &&
                 !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist)) {
-                Log.d(TAG, "Updating session artist from '${currentSession.artist}' to '$artist' for '$title'")
-                currentSession.artist = artist
-                
+                    currentSession.artist = artist
+
                 // Update the track in database if we have a trackId
                 currentSession.trackId?.let { trackId ->
                     serviceScope.launch {
-                        try {
                             val track = trackRepository.getById(trackId).first()
                             if (track != null && me.avinas.tempo.utils.ArtistParser.isUnknownArtist(track.artist)) {
-                                Log.i(TAG, "Updating track $trackId artist from '${track.artist}' to '$artist'")
-                                val updatedTrack = track.copy(artist = artist)
-                                trackRepository.update(updatedTrack)
-                                
+                                val updated = track.copy(artist = artist)
+                                trackRepository.update(updated)
+
                                 // Re-link artists and trigger enrichment
-                                artistLinkingService.linkArtistsForTrack(updatedTrack)
+                                artistLinkingService.linkArtistsForTrack(updated)
                                 EnrichmentWorker.enqueueImmediate(applicationContext, trackId)
-                            }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Failed to update track artist", e)
                         }
                     }
                 }
-                
+
                 updateTrackingNotification(title, artist)
             }
-            
+
             // KEY: Update position tracking with actual MediaSession position
             // This is the core of position-based tracking
             currentSession.updatePosition(currentPosition, isPlaying)
-            
-            if (isPlaying && !currentSession.isPlaying) {
-                currentSession.resume()
-                Log.d(TAG, "Resumed: '$title' at position ${currentPosition}ms")
-            } else if (!isPlaying && currentSession.isPlaying) {
-                currentSession.pause()
-                Log.d(TAG, "Paused: '$title' at position ${currentPosition}ms, accumulated: ${currentSession.accumulatedPositionMs}ms")
-            }
-            if (duration > 0) {
-                currentSession.estimatedDurationMs = duration
-            }
+
+            if (isPlaying && !currentSession.isPlaying) currentSession.resume()
+                else if (!isPlaying && currentSession.isPlaying) currentSession.pause()
+                if (duration > 0) currentSession.estimatedDurationMs = duration
             }
             "NEW" -> {
                 // New track started (or replay detected - same track restarted)
-                session?.let { 
-                    it.pause()
-                    saveListeningEvent(it) 
+                session?.let {
+                    it.pause(); saveListeningEvent(it)
                 }
-                
+
                 // Extract ALL available metadata from MediaSession (for fallback use)
                 val localMetadata = LocalMediaMetadata.fromMediaMetadata(metadata, packageName)
-                
+
                 // Check if this is likely an advertisement - skip tracking ads
-                if (artist.isNotBlank() && 
+                if (artist.isNotBlank() &&
                     !me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist) &&
-                    localMetadata?.isLikelyAdvertisement() == true) {
-                    if (!loggedAdvertisementSkips.containsKey(title)) {
-                        loggedAdvertisementSkips[title] = true
-                        Log.d(TAG, "Skipping likely advertisement: '$title' from $packageName")
-                    }
-                    return
-                }
-                
-                // Extract album art from metadata (for fallback use)
+                    localMetadata?.isLikelyAdvertisement() == true) return
                 val albumArtBitmap = localMetadata?.albumArtBitmap ?: extractAlbumArtFromMetadata(metadata)
                 val localArtUrl = albumArtBitmap?.let { saveAlbumArtToStorage(it, title, artist) }
 
                 // Clear log debounce caches for fresh logging on new track
-                loggedArtistExtractionFailures.clear()
-                loggedAdvertisementSkips.clear()
+                loggedArtistExtractionFailures.clear(); loggedAdvertisementSkips.clear()
 
                 val newSession = PlaybackSession(
                     packageName = packageName,
@@ -3438,39 +2978,26 @@ class MusicTrackingService : NotificationListenerService() {
                         // Must be done in coroutine since shouldFilterContent is suspend
                         // Note: We pass title/artist directly so manual marks work even without full metadata
                         if (shouldFilterContent(packageName, localMetadata, title, artist)) {
-                            val contentType = localMetadata?.getContentType()?.name ?: "MANUAL_MARK"
-                            Log.d(TAG, "Content filtered ($contentType): '$title' by '$artist' from $packageName")
-                            // Remove the session we just added
-                            playbackStates.remove(packageName)
-                            updateTrackingNotification(null, null)
+                            playbackStates.remove(packageName, newSession)
+                            updateServiceLifecycle()
                             return@launch
                         }
-                        
+
                         val track = getOrInsertTrack(title, artist, album, localMetadata)
                         newSession.trackId = track.id
-                        Log.d(TAG, "Track ID ${track.id} assigned for '${title}' (via MediaSession)")
-                        
-                        // Ensure locally extracted art URI is available to the fallback logic
                         if (localArtUrl != null) {
                             val currentCache = localMetadataCache.get(track.id) ?: localMetadata
-                            if (currentCache != null) {
-                                localMetadataCache.put(track.id, currentCache.copy(albumArtUri = localArtUrl))
-                                Log.d(TAG, "Updated local metadata cache with art URI: $localArtUrl")
-                            } else if (localMetadata == null) {
-                                localMetadataCache.put(track.id, LocalMediaMetadata(
+                            if (currentCache != null) localMetadataCache.put(track.id, currentCache.copy(albumArtUri = localArtUrl))
+                            else localMetadataCache.put(track.id, LocalMediaMetadata(
                                     title = title,
                                     artist = artist,
                                     album = album,
                                     albumArtUri = localArtUrl
                                 ))
                             }
-                        }
-                        
-                        // Save local metadata as fallback (delayed to let external enrichment run first)
                         if (localMetadata != null && localMetadata.hasRichMetadata()) {
                             delay(30_000)
-                            val latestMetadata = localMetadataCache.get(track.id) ?: localMetadata
-                            saveLocalMetadataFallback(track.id, latestMetadata)
+                            saveLocalMetadataFallback(track.id, localMetadataCache.get(track.id) ?: localMetadata)
                         } else if (localArtUrl != null) {
                             delay(20_000)
                             updateTrackAlbumArtIfNeeded(track.id, localArtUrl)
@@ -3480,9 +3007,6 @@ class MusicTrackingService : NotificationListenerService() {
                     }
                 }
             }
-            "IGNORE" -> {
-                // Not playing and not same track - nothing to do
-            }
         }
     }
 
@@ -3490,33 +3014,22 @@ class MusicTrackingService : NotificationListenerService() {
         override fun onPlaybackStateChanged(state: PlaybackState?) {
             TrackingServiceHeartbeat.markMediaSessionCallback(applicationContext)
             // fast lookup - we know exactly which controller triggered this
-            activeControllers[packageName]?.let { controller ->
-                processMediaControllerState(controller)
-                updateServiceLifecycle()
+            activeControllers[packageName]?.let { processMediaControllerState(it); updateServiceLifecycle()
             }
         }
 
         override fun onMetadataChanged(metadata: MediaMetadata?) {
             TrackingServiceHeartbeat.markMediaSessionCallback(applicationContext)
-            activeControllers[packageName]?.let { controller ->
-                processMediaControllerState(controller)
-                updateServiceLifecycle()
+            activeControllers[packageName]?.let { processMediaControllerState(it); updateServiceLifecycle()
             }
         }
-        
+
         override fun onSessionDestroyed() {
             super.onSessionDestroyed()
             TrackingServiceHeartbeat.markMediaSessionCallback(applicationContext)
-            Log.d(TAG, "Session destroyed for $packageName")
-            // Handle destruction same as removal
             activeControllers.remove(packageName)
             packageSpecificCallbacks.remove(packageName)
-            
-            val session = playbackStates.remove(packageName)
-            if (session != null) {
-                session.pause()
-                saveListeningEvent(session)
-                updateTrackingNotification(null, null) // Check remaining
+            playbackStates.remove(packageName)?.let { it.pause(); saveListeningEvent(it) // Check remaining
             }
             updateServiceLifecycle()
         }
@@ -3537,7 +3050,7 @@ class MusicTrackingService : NotificationListenerService() {
             setShowBadge(false)
             lockscreenVisibility = Notification.VISIBILITY_SECRET
         }
-        
+
         // Silent channel for background monitoring (minimal visibility)
         val silentChannel = NotificationChannel(
             CHANNEL_ID + "_silent",
@@ -3547,14 +3060,11 @@ class MusicTrackingService : NotificationListenerService() {
             description = "Silent notification when waiting for music"
             setShowBadge(false)
             lockscreenVisibility = Notification.VISIBILITY_SECRET
-            setSound(null, null)
-            enableVibration(false)
-            enableLights(false)
+            setSound(null, null); enableVibration(false); enableLights(false)
         }
-        
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(trackingChannel)
-        manager.createNotificationChannel(silentChannel)
+        getSystemService(NotificationManager::class.java).apply {
+            createNotificationChannel(trackingChannel); createNotificationChannel(silentChannel)
+        }
     }
 
     private fun startForegroundServiceWithNotification() {
@@ -3572,9 +3082,7 @@ class MusicTrackingService : NotificationListenerService() {
                     notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
                 )
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
-            }
+            } else startForeground(NOTIFICATION_ID, notification)
         } catch (e: Exception) {
             // A transient failure (e.g. foreground-start window lapsed, or the system
             // forbids the type) must not crash the service. Stop cleanly instead.
@@ -3613,28 +3121,23 @@ class MusicTrackingService : NotificationListenerService() {
         // Count music sessions being actively tracked
         val activeMusicSessions = playbackStates.count { it.value.isLikelyMusic && it.value.isPlaying }
         val isActivelyTracking = currentTrack != null || activeMusicSessions > 0
-        
+
         // Use silent channel when not actively tracking music
         val channelId = if (isActivelyTracking) CHANNEL_ID else CHANNEL_ID + "_silent"
-        
+
         return if (isActivelyTracking) {
             // ACTIVE TRACKING: Show meaningful notification
             val contentText = if (currentTrack != null && currentArtist != null) {
                 val session = playbackStates.values.find { it.title == currentTrack && it.artist == currentArtist }
-                val timeInfo = session?.let { 
-                    val secs = it.accumulatedPositionMs / 1000
-                    if (secs > 0) " (${secs}s)" else ""
+                val timeInfo = session?.let {
+                    val secs = it.accumulatedPositionMs / 1000; if (secs > 0) " (${secs}s)" else ""
                 } ?: ""
-                
+
                 // Anti-gaming warning: muted playback does not earn XP.
-                val volume = getCurrentMusicStreamVolume()
-                val mutedWarning = if (volume == 0) " [Muted playback detected - XP paused]" else ""
-                
+                val mutedWarning = if (getCurrentMusicStreamVolume() == 0) " [Muted playback detected - XP paused]" else ""
+
                 "🎵 $currentTrack - $currentArtist$timeInfo$mutedWarning"
-            } else {
-                "🎵 Tracking $activeMusicSessions music session(s)"
-            }
-            
+            } else "🎵 Tracking $activeMusicSessions music session(s)"
             NotificationCompat.Builder(this, channelId)
                 .setContentTitle("Tempo is tracking music")
                 .setContentText(contentText)
@@ -3665,78 +3168,53 @@ class MusicTrackingService : NotificationListenerService() {
         val now = System.currentTimeMillis()
         val currentVolume = getCurrentMusicStreamVolume()
         val isPausedForBattery = shouldPauseForBattery()
-        
+
         // Create notification content identifier for comparison.
         // Include isPausedForBattery so the "🪫" notification always appears immediately
         // when battery drops and disappears immediately when it recovers — the debounce
         // must not suppress a battery-state transition.
         val contentId = "$currentTrack|$currentArtist|${hasActivePlayback()}|$currentVolume|$isPausedForBattery"
-        
+
         // Debounce: skip update if content hasn't changed and updated within last 2 seconds
         // Increased from 1s to 2s to reduce notification spam during rapid MediaSession callbacks
-        if (contentId == lastNotificationContent && (now - lastNotificationUpdate) < 2000) {
-            // Silent skip - no logging needed for normal debounce behavior
-            return
-        }
-        
-        // Update notification
-        val notification = buildTrackingNotification(currentTrack, currentArtist)
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, notification)
-        
+        if (contentId == lastNotificationContent && now - lastNotificationUpdate < 2000) return
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID,
+            buildTrackingNotification(currentTrack, currentArtist)
+        )
+
         // Track last update
         lastNotificationUpdate = now
         lastNotificationContent = contentId
-        
-        Log.v(TAG, "Notification updated: ${if (hasActivePlayback()) "tracking" else "idle"}")
     }
 
-    private fun getCurrentMusicStreamVolume(): Int {
-        val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-        return audioManager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
-    }
-
-
+    private fun getCurrentMusicStreamVolume(): Int =
+        (getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager)
+            .getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
 
     override fun onDestroy() {
-        Log.i(TAG, "MusicTrackingService destroyed - saving active sessions")
+        if (::trackingRules.isInitialized) trackingRules.unregisterListener(durationRulesListener)
 
         // Cancel auto-save job and position polling so no further state changes arrive
-        autoSaveJob?.cancel()
-        positionPollingJob?.cancel()
+        autoSaveJob?.cancel(); positionPollingJob?.cancel()
 
         // Unregister battery state receiver
         batteryStateReceiver?.let {
             try {
-                unregisterReceiver(it)
-                Log.d(TAG, "BatteryStateReceiver unregistered")
-            } catch (e: Exception) {
-                Log.w(TAG, "Error unregistering BatteryStateReceiver", e)
-            }
+                unregisterReceiver(it) } catch (_: Exception) { } }
             batteryStateReceiver = null
-        }
-
-        // Reset connection state
         synchronized(connectionLock) {
             isListenerConnected = false
         }
         isMediaSessionManagerInitialized = false
 
         // Cleanup MediaSession callbacks so no new position updates land mid-flush
-        val controllerSnapshot: List<Pair<String, MediaController>>
-        synchronized(activeControllers) {
-            controllerSnapshot = activeControllers.toList()
+        val controllerSnapshot = synchronized(activeControllers) { activeControllers.toList()
         }
         controllerSnapshot.forEach { (packageName, controller) ->
-            val callback = packageSpecificCallbacks[packageName] ?: sharedCallback
-            try {
-                controller.unregisterCallback(callback)
-            } catch (e: Exception) {
-                Log.w(TAG, "Error unregistering callback for $packageName", e)
-            }
+            try { controller.unregisterCallback(packageSpecificCallbacks[packageName] ?: sharedCallback)
+            } catch (_: Exception) { }
         }
-        activeControllers.clear()
-        packageSpecificCallbacks.clear()
+        activeControllers.clear(); packageSpecificCallbacks.clear()
 
         // CRITICAL: flush everything synchronously BEFORE cancelling serviceScope.
         //
@@ -3753,17 +3231,13 @@ class MusicTrackingService : NotificationListenerService() {
                     // Persist the freshest session state first so an interrupted
                     // flush can still be recovered on the next start.
                     saveSessionsToPersistence()
-                    playbackSnapshot.forEach { session ->
-                        session.pause()
-                        saveListeningEventSuspend(session)
+                    playbackSnapshot.forEach { it.pause(); saveListeningEventSuspend(it)
                     }
                     trackingManager.flushAll()
                     true
                 } ?: false
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error during shutdown flush", e)
-            false
+        } catch (_: Exception) { false
         }
         playbackStates.clear()
 
@@ -3773,27 +3247,14 @@ class MusicTrackingService : NotificationListenerService() {
             // crash/timeout mid-flush still reports wasUncleanShutdown()==true, so
             // the next start recovers the sessions instead of dropping them.
             try {
-                sessionPersistence.clearSessions()
-                sessionPersistence.markServiceInactive()
-                Log.i(TAG, "Shutdown flush complete, metrics: ${trackingManager.getMetrics()}")
-            } catch (e: Exception) {
-                Log.w(TAG, "Error clearing persisted sessions on shutdown", e)
-            }
-        } else {
-            Log.w(TAG, "Shutdown flush incomplete — persisted sessions left for recovery")
+                sessionPersistence.clearSessions(); sessionPersistence.markServiceInactive() } catch (_: Exception) { }
         }
-
-        // Log service uptime
-        val uptime = System.currentTimeMillis() - serviceStartTime.get()
-        Log.i(TAG, "Service uptime: ${uptime / 1000}s, Duration estimator stats: ${durationEstimator.getStats()}")
-
-        heartbeatJob?.cancel()
-        heartbeatJob = null
+        heartbeatJob?.cancel(); heartbeatJob = null
         TrackingServiceHeartbeat.markListenerDisconnected(this)
         serviceScope.cancel()
         super.onDestroy()
     }
-    
+
     /**
      * Cached preference value — whether to pause tracking when battery is low.
      * Updated from the service's coroutine scope every time preferences change.
@@ -3829,8 +3290,7 @@ class MusicTrackingService : NotificationListenerService() {
     /**
      * Get service health information for debugging.
      */
-    fun getServiceHealth(): ServiceHealth {
-        return ServiceHealth(
+    fun getServiceHealth(): ServiceHealth = ServiceHealth(
             isListenerConnected = isListenerConnected,
             activeSessionCount = playbackStates.size,
             trackingMetrics = trackingManager.getMetrics(),
@@ -3838,11 +3298,7 @@ class MusicTrackingService : NotificationListenerService() {
             uptimeMs = System.currentTimeMillis() - serviceStartTime.get()
         )
     }
-}
 
-/**
- * Service health information for debugging and monitoring.
- */
 data class ServiceHealth(
     val isListenerConnected: Boolean,
     val activeSessionCount: Int,

@@ -6,7 +6,9 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import me.avinas.tempo.data.local.AppDatabase
+import me.avinas.tempo.data.local.DatabaseTransactionRunner
 import me.avinas.tempo.data.local.MigrationSafetyNet
+import me.avinas.tempo.data.local.RoomDatabaseTransactionRunner
 import me.avinas.tempo.data.local.dao.*
 import dagger.Module
 import dagger.Provides
@@ -164,6 +166,12 @@ object DatabaseModule {
             })
             .build()
     }
+
+    @Provides
+    @Singleton
+    fun provideDatabaseTransactionRunner(
+        runner: RoomDatabaseTransactionRunner
+    ): DatabaseTransactionRunner = runner
 
     @Provides
     fun provideTrackDao(db: AppDatabase) = db.trackDao()

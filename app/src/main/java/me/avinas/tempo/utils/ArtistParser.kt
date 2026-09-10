@@ -75,6 +75,8 @@ object ArtistParser {
     // Known bands that contain separators like &, and, +, etc.
     // This whitelist prevents them from being split into multiple artists.
     private val KNOWN_COMPLEX_BANDS = setOf(
+        "bigflo et oli",
+        "bigflo & oli",
         "dead & company",
         "derek & the dominos",
         "belle & sebastian",

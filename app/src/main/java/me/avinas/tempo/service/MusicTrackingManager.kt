@@ -83,9 +83,16 @@ class MusicTrackingManager(
     
     /**
      * Queues a listening event for batched saving.
-     * Returns true if the event was accepted, false if it was deduplicated.
+     * Returns true if the event was accepted, false if it was deduplicated or rejected.
      */
     suspend fun queueEvent(event: ListeningEvent, sessionId: String): Boolean {
+        // Fast rejection at queue time. The same rule is checked again at the actual
+        // persistence boundary because a manual classification can change while queued.
+        if (!shouldPersistEvent(event)) {
+            Log.d(TAG, "Event rejected by current persistence rules: trackId=${event.track_id}")
+            return false
+        }
+
         // Check for duplicates atomically using compute
         val eventHash = generateEventHash(event)
         val now = System.currentTimeMillis()
@@ -127,11 +134,25 @@ class MusicTrackingManager(
      * Use this for critical events that need immediate persistence.
      */
     suspend fun saveEventImmediate(event: ListeningEvent): Result<Long> {
-        return withRetry(MAX_RETRIES, INITIAL_RETRY_DELAY_MS) {
-            val id = listeningRepository.insert(event)
-            updateMetrics { it.copy(eventsSaved = it.eventsSaved + 1) }
-            id
+        if (!shouldPersistEvent(event)) return Result.success(0L)
+
+        val result = withRetry(MAX_RETRIES, INITIAL_RETRY_DELAY_MS) {
+            listeningRepository.insert(event)
         }
+        if (result.isFailure) return result
+
+        val id = result.getOrThrow()
+        if (id > 0L && !shouldPersistEvent(event)) {
+            // Covers a rule being committed while the insert itself was in flight.
+            listeningRepository.deleteById(id)
+            Log.d(TAG, "Removed event rejected immediately after persistence: trackId=${event.track_id}")
+            return Result.success(0L)
+        }
+
+        if (id > 0L) {
+            updateMetrics { it.copy(eventsSaved = it.eventsSaved + 1) }
+        }
+        return Result.success(id)
     }
     
     /**
@@ -205,8 +226,6 @@ class MusicTrackingManager(
         _metrics.value = TrackingMetrics()
     }
     
-
-    
     private fun startBatchProcessor() {
         batchJob = scope.launch {
             val batch = mutableListOf<PendingEvent>()
@@ -268,31 +287,51 @@ class MusicTrackingManager(
         
         processingMutex.withLock {
             isProcessing.value = true
-            
             try {
-                val events = batch.map { it.event }
-                val ids = listeningRepository.insertAll(events)
-                
-                val successCount = ids.count { it > 0 }
+                // Events can spend up to BATCH_TIMEOUT_MS in memory. Re-read the current
+                // Room rule before writing so a newly added NON_MUSIC mark takes effect.
+                val candidates = batch.filter { shouldPersistEvent(it.event) }
+                if (candidates.isEmpty()) {
+                    updateMetrics { it.copy(batchesProcessed = it.batchesProcessed + 1) }
+                    Log.d(TAG, "Batch contained no events allowed by current rules")
+                    return@withLock
+                }
+
+                val ids = try {
+                    listeningRepository.insertAll(candidates.map { it.event })
+                } catch (e: Exception) {
+                    Log.e(TAG, "Batch save failed, moving valid events to offline queue", e)
+                    for (pending in candidates) {
+                        if (shouldPersistEvent(pending.event)) handleFailedEvent(pending)
+                    }
+                    updateMetrics { it.copy(batchErrors = it.batchErrors + 1) }
+                    return@withLock
+                }
+
+                var successCount = 0
+                candidates.forEachIndexed { index, pending ->
+                    val id = ids.getOrNull(index) ?: -1L
+                    if (id <= 0L) {
+                        if (shouldPersistEvent(pending.event)) {
+                            handleFailedEvent(pending)
+                        }
+                    } else if (shouldPersistEvent(pending.event)) {
+                        successCount++
+                    } else {
+                        // Complements the pre-insert check. If NON_MUSIC was committed
+                        // during insertAll(), remove the row that was just created.
+                        listeningRepository.deleteById(id)
+                        Log.d(TAG, "Removed event rejected after batch persistence: trackId=${pending.event.track_id}")
+                    }
+                }
+
                 updateMetrics { 
                     it.copy(
                         eventsSaved = it.eventsSaved + successCount,
                         batchesProcessed = it.batchesProcessed + 1
                     ) 
                 }
-                
-                Log.d(TAG, "Batch saved: $successCount/${batch.size} events")
-                
-                // Handle failures
-                batch.forEachIndexed { index, pending ->
-                    if (ids.getOrNull(index) == null || ids[index] <= 0) {
-                        handleFailedEvent(pending)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Batch save failed, moving to offline queue", e)
-                batch.forEach { handleFailedEvent(it) }
-                updateMetrics { it.copy(batchErrors = it.batchErrors + 1) }
+                Log.d(TAG, "Batch saved: $successCount/${candidates.size} valid events")
             } finally {
                 isProcessing.value = false
             }
@@ -359,9 +398,8 @@ class MusicTrackingManager(
         Log.d(TAG, "Processing offline queue: ${offlineQueue.size} events")
 
         // Crash-safe: remove each event from the queue (and durable storage) only
-        // AFTER it has been successfully inserted. Clearing the whole map up front
-        // (the old behavior) meant a process death mid-loop silently discarded
-        // every event that had not been retried yet.
+        // AFTER it has been successfully inserted. A durable retry may outlive a later
+        // manual classification, so current persistence rules are re-checked as well.
         val toProcess = offlineQueue.values.toList()
 
         for (pending in toProcess) {
@@ -369,21 +407,51 @@ class MusicTrackingManager(
                 val delay = calculateRetryDelay(pending.retryCount)
                 delay(delay)
 
-                val id = listeningRepository.insert(pending.event)
-                if (id > 0) {
+                if (!shouldPersistEvent(pending.event)) {
                     offlineQueue.remove(pending.key())
-                    updateMetrics { it.copy(eventsSaved = it.eventsSaved + 1) }
+                    Log.d(TAG, "Discarded offline event rejected by current rules: trackId=${pending.event.track_id}")
+                    continue
+                }
+
+                val id = listeningRepository.insert(pending.event)
+                if (id > 0L) {
+                    if (!shouldPersistEvent(pending.event)) {
+                        listeningRepository.deleteById(id)
+                        Log.d(TAG, "Removed offline event rejected after persistence: trackId=${pending.event.track_id}")
+                    } else {
+                        updateMetrics { it.copy(eventsSaved = it.eventsSaved + 1) }
+                    }
+                    offlineQueue.remove(pending.key())
+                } else if (!shouldPersistEvent(pending.event)) {
+                    offlineQueue.remove(pending.key())
                 } else {
                     handleFailedEvent(pending)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Offline queue retry failed", e)
-                handleFailedEvent(pending)
+                if (!shouldPersistEvent(pending.event)) {
+                    offlineQueue.remove(pending.key())
+                } else {
+                    handleFailedEvent(pending)
+                }
             }
         }
 
         updateMetrics { it.copy(eventsInOfflineQueue = offlineQueue.size) }
         persistOfflineQueue()
+    }
+
+    /**
+     * Ask the repository for the current persistence rule. Validation deliberately fails
+     * open on infrastructure errors so a transient Room failure cannot silently lose music.
+     */
+    private suspend fun shouldPersistEvent(event: ListeningEvent): Boolean {
+        return try {
+            listeningRepository.shouldPersist(event)
+        } catch (e: Exception) {
+            Log.w(TAG, "Persistence rule lookup failed; keeping event", e)
+            true
+        }
     }
     
     private suspend fun <T> withRetry(
