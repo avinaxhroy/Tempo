@@ -73,3 +73,6 @@ browser-extension/dist/
 
 # Python bytecode from .github/scripts
 __pycache__/
+
+# Internal docs – never publish to GitHub
+tempo-premium-cloud-architecture.md

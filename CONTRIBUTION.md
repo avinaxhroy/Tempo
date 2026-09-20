@@ -1,6 +1,8 @@
 # Contributing to Tempo
 
-Contributions to Tempo are welcome. This guide covers how to set up your development environment, build and test the app, follow codebase conventions, and submit pull requests.
+Tempo is built with its community — contributions of all sizes are welcome and genuinely valued, from bug fixes and translations to new features, documentation, and tests. If you use Tempo, you are already part of what makes it better.
+
+This guide covers how to set up your development environment, build and test the app, follow codebase conventions, and submit pull requests.
 
 ## Project principles
 
@@ -8,9 +10,9 @@ Tempo is a local-first music companion and scrobbler for Android. Every change m
 
 - **Local storage first:** Listening history, statistics, and metadata stay on device in local SQLite databases via Room. The app never transmits listening content, search queries, notification text, or device identifiers to any server.
 - **Anonymous app-health only:** The one thing that leaves the device is anonymous crash, error and feature-usage statistics, and they are constrained by a **closed schema**. Every event and property is defined in `data/analytics/AnalyticsEvent.kt`; there are no free-form string properties, so a caller cannot pass a track title, artist name or file path. Adding a property that could carry listening content or an identifier is prohibited, and `AnalyticsSchemaTest` fails the build if one appears. Reporting is on by default with a one-tap opt-out in Settings, requires an in-app notice before the first event is sent, and is inert in any build without an `APTABASE_APP_KEY`. See [docs/ANALYTICS.md](docs/ANALYTICS.md).
-- **Use the diagnostics report instead of expanding telemetry:** when you need more detail to debug something, add it to `DiagnosticsInput` (rendered at **Settings → Your Data → Diagnostics report**), not to the analytics schema. The report is user-initiated and reviewable, so it may carry detail the automatic events never should.
+- **Use the diagnostics report instead of expanding telemetry:** when you need more detail to debug something, add it to `DiagnosticsInput` (rendered at **Settings → Your Data → Data & diagnostics**), not to the analytics schema. The report is user-initiated and reviewable, so it may carry detail the automatic events never should.
 - **Offline operation:** Core tracking, stats generation, and library browsing must work without network access. External API calls (Last.fm, Spotify, MusicBrainz, Deezer) are strictly opt-in for metadata enrichment and imports.
-- **No commercial features:** The project is released under a modified AGPLv3 license that prohibits monetization, advertisements, paid subscriptions, and rebranding.
+- **Free core forever, premium is strictly additive:** The core app — local tracking, stats, library tools, importers, local and Drive backups, LAN desktop sync, the browser extension — stays free forever and is never degraded to make premium look better. Tempo will never exploit the app for cash: no ads, no selling listening data, no paywalling merged community work, no intentionally worsened free tier. Optional premium exists only to cover real server costs for things a phone cannot do alone: cloud sync and one history across every device, AI reports, public profiles, web access, and offloaded metadata enrichment. The AGPLv3 plus "no commercial use / no rebranding" addendum in `LICENSE` binds forks and redistributors — it is what stops clones from paywalling your work. As copyright holder, the maintainer may offer first-party paid hosting for those server-cost features; that does not relicense, close, or paywall any core code.
 
 ## Development setup
 
@@ -117,6 +119,21 @@ You do not need to open an issue before submitting pull requests for:
    - Before and after screenshots or screen recordings for UI changes.
    - The issue number if one exists (for example, `Fixes #42`).
 
+### Premium roadmap overlap — please check before building
+
+To save your time and avoid duplicated effort, please open an issue first if your idea touches an area on the premium roadmap, including but not limited to:
+
+- cloud backup / cloud sync, multi-device history, accounts or device pairing
+- AI summaries, insights, or narrated reports
+- public or shareable web profiles
+- web app access
+- server-side metadata enrichment
+- any future hosted / server-cost capability the maintainer marks as premium — the roadmap evolves, so when in doubt, just ask
+
+These are server-cost features that sustain development, so they are designed and hosted as premium. If you open an issue early, the maintainer will help scope your idea toward the free core (for example, a local-first version of the feature) or point to where a clean premium hook belongs. The maintainer may also build adjacent premium capabilities later; merged core contributions always stay free and are never retroactively gated (see below).
+
+Pull requests that duplicate a planned or future premium capability, or implement a server-cost feature as free-only in a way that conflicts with the roadmap, may be redirected, asked to be rescoped to the free core, or respectfully declined — not because the work is not appreciated, but to keep the free/premium boundary clean and the project sustainable. Early discussion almost always finds a version that can be merged.
+
 ## Code and architecture standards
 
 - **Architecture:** MVVM with Clean Architecture. Keep business logic in `domain/`, data persistence and network calls in `data/`, and Jetpack Compose screens and ViewModels in `ui/`.
@@ -150,3 +167,9 @@ When adding user-facing UI text:
 Tempo is licensed under the [GNU Affero General Public License v3 (AGPLv3) with Custom Limitations](LICENSE).
 
 By submitting a pull request, you agree that your contributions are licensed under these same terms. Contributions are not accepted if they require commercial relicensing, closed-source distribution, or removal of project attribution.
+
+What this means in practice:
+
+- **Your contribution stays free:** anything merged into the core app remains free and will never be paywalled or moved behind premium later.
+- **Premium funds development, it does not take from the core:** premium is limited to additive, server-cost features (cloud sync, AI, public profiles, web access). No merged core feature is ever removed, gated, or degraded for premium.
+- **Only the maintainer may offer premium:** the no-commercial-use addendum applies to forks and redistributors. The copyright holder may offer first-party paid hosting for the premium features above without changing the license of any core code.
