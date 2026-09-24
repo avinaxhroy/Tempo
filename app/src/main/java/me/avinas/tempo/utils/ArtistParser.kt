@@ -3,8 +3,24 @@ package me.avinas.tempo.utils
 import android.util.Log
 
 /**
- * Splits, normalizes, and classifies multi-artist strings across delimiter conventions
- * (commas, ampersands, featuring markers, slashes, collaborations).
+ * Utility class for parsing and normalizing artist names from various formats.
+ * 
+ * Music apps and metadata sources use different conventions for multiple artists:
+ * - "Artist1, Artist2" (comma-separated)
+ * - "Artist1 & Artist2" (ampersand)
+ * - "Artist1 feat. Artist2" or "Artist1 ft. Artist2" (featuring)
+ * - "Artist1 x Artist2" (collaboration)
+ * - "Artist1 / Artist2" (slash-separated)
+ * - "Artist1 and Artist2"
+ * - "Artist1 with Artist2"
+ * - "Artist1 vs. Artist2" or "Artist1 vs Artist2"
+ * - "Artist1 + Artist2"
+ * 
+ * This parser handles all these formats and provides utilities for:
+ * - Extracting all artists from a string
+ * - Getting the primary (main) artist
+ * - Getting featured artists
+ * - Normalizing artist names for search/comparison
  */
 object ArtistParser {
 
@@ -72,10 +88,16 @@ object ArtistParser {
         "florida georgia line",  // Sometimes written as "Florida Georgia & Line"
         "the mamas & the papas",
         "peter paul & mary",
+        "peter, paul & mary",
         "crosby stills nash & young",
+        "crosby, stills, nash & young",
         "emerson lake & palmer",
+        "emerson, lake & palmer",
         "blood sweat & tears",
+        "blood, sweat & tears",
         "earth wind & fire",
+        "bell biv devoe",
+        "bell, biv devoe",
         "kool & the gang",
         "rob base & dj ez rock",
         "eric b & rakim",
@@ -455,8 +477,7 @@ object ArtistParser {
      */
     private fun isKnownBand(artist: String): Boolean {
         val lower = artist.trim().lowercase()
-        if (lower in KNOWN_COMPLEX_BANDS) return true
-        return lower in userKnownBands
+        return lower in KNOWN_COMPLEX_BANDS || lower in userKnownBands
     }
 
     /**
@@ -483,7 +504,10 @@ object ArtistParser {
     }
 
     /**
-     * Extracts all parsed artist names from [artistString].
+     * Get all artists as a list for comprehensive matching.
+     * 
+     * @param artistString The raw artist string
+     * @return List of all artists mentioned
      */
     fun getAllArtists(artistString: String): List<String> {
         return parse(artistString).allArtists
@@ -587,7 +611,7 @@ object ArtistParser {
      */
     fun hasAnyMatchingArtist(artists1: String, artists2: String): Boolean {
         // Handle empty/unknown artists - they should match any artist for same title
-        // Allow match when metadata arrives in partial stages with empty or unknown artist
+        // This handles the case where metadata arrives in stages
         val isUnknown1 = isUnknownArtist(artists1)
         val isUnknown2 = isUnknownArtist(artists2)
         

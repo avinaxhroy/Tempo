@@ -10,9 +10,9 @@ package me.avinas.tempo.data.local
  * Hierarchy (most → least authoritative):
  *  100 — live app tracking (the device was actually playing it; precise timing)
  *   90 — desktop satellite (real-time, second device)
- *   70 — Spotify data-export JSON (Spotify's own authoritative record)
+ *   70 — first-party Spotify JSON / Deezer XLSX data exports
  *   65 — YouTube Music data-export JSON
- *   60 — other JSON data exports
+ *   60 — other structured data exports
  *   55 — API "recently played" imports
  *   50 — Last.fm scrobbles / generic imports
  *   40 — reconstructed history (synthesized, lowest fidelity)
@@ -27,6 +27,7 @@ object SourceAuthority {
         source.contains("import.reconstructed") -> 40
         source.contains("fm.last.import") -> 50
         source.contains("import.json") && source.contains("spotify") -> 70
+        source.contains("import.xlsx") && source.contains("deezer") -> 70
         source.contains("import.json") && source.contains("youtube") -> 65
         source.contains("import.json") -> 60
         source.contains(".import") -> 55

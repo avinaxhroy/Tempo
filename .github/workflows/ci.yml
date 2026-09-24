@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build, Test & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run Unit Tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Assemble Debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Run Android Lint
+        run: ./gradlew :app:lintDebug --stacktrace
+
+      - name: Reject new lint errors
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          base_sha = os.environ["PR_BASE_SHA"]
+          diff = subprocess.check_output(
+              ["git", "diff", "--unified=0", "--no-color", f"{base_sha}...HEAD", "--"],
+              text=True,
+          )
+
+          changed_lines = {}
+          current_file = None
+          for line in diff.splitlines():
+              if line.startswith("+++ b/"):
+                  current_file = line[6:]
+                  changed_lines.setdefault(current_file, set())
+                  continue
+              if not line.startswith("@@") or current_file is None:
+                  continue
+
+              match = re.search(r"\+(\d+)(?:,(\d+))?", line)
+              if match is None:
+                  continue
+              start_line = int(match.group(1))
+              count = int(match.group(2) or "1")
+              if count > 0:
+                  changed_lines[current_file].update(
+                      range(start_line, start_line + count)
+                  )
+
+          report = Path(
+              "app/build/intermediates/lint_intermediate_text_report/"
+              "debug/lintReportDebug/lint-results-debug.txt"
+          )
+          text = report.read_text(encoding="utf-8", errors="replace")
+          errors = []
+          pattern = re.compile(r"^(.*?):(\d+): Error:", re.MULTILINE)
+
+          repo_root = Path.cwd().resolve()
+          for match in pattern.finditer(text):
+              raw = Path(match.group(1))
+              line_number = int(match.group(2))
+              try:
+                  relative = raw.resolve().relative_to(repo_root).as_posix()
+              except ValueError:
+                  relative = raw.as_posix()
+
+              if line_number in changed_lines.get(relative, set()):
+                  line_end = text.find("\n", match.start())
+                  errors.append(
+                      text[match.start(): line_end if line_end >= 0 else None]
+                  )
+
+          if errors:
+              print("Lint errors found on lines added or modified by this PR:")
+              print("\n".join(errors))
+              raise SystemExit(1)
+
+          print("No lint errors on lines added or modified by this PR.")
+          PY
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+
+
+  android-platform-tests:
+    name: Android Platform Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Android platform tests
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace

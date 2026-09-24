@@ -69,6 +69,7 @@ fun SettingsScreen(
     onNavigateToBackgroundProtection: (() -> Unit)? = null,
     onNavigateToLastFmImport: (() -> Unit)? = null,
     onNavigateToSpotifyJsonImport: (() -> Unit)? = null,
+    onNavigateToDeezerImport: (() -> Unit)? = null,
     onNavigateToYouTubeMusicImport: (() -> Unit)? = null,
     onNavigateToDesktop: () -> Unit = {},
     onNavigateToEnrichmentReport: (() -> Unit)? = null,
@@ -560,6 +561,14 @@ fun SettingsScreen(
                             title = stringResource(R.string.settings_import_spotify_json),
                             subtitle = stringResource(R.string.settings_import_spotify_json_desc),
                             onClick = { onNavigateToSpotifyJsonImport?.invoke() },
+                        )
+
+                        HorizontalDivider(color = GlassBorderSoft)
+
+                        SettingsOption(
+                            title = stringResource(R.string.settings_import_deezer),
+                            subtitle = stringResource(R.string.settings_import_deezer_desc),
+                            onClick = { onNavigateToDeezerImport?.invoke() },
                         )
 
                         HorizontalDivider(color = GlassBorderSoft)

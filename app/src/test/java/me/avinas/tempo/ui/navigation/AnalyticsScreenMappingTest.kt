@@ -29,6 +29,7 @@ class AnalyticsScreenMappingTest {
             "background_protection" to AnalyticsScreen.BACKGROUND_PROTECTION,
             "lastfm_import" to AnalyticsScreen.LASTFM_IMPORT,
             "spotify_json_import" to AnalyticsScreen.SPOTIFY_JSON_IMPORT,
+            "deezer_import" to AnalyticsScreen.DEEZER_IMPORT,
             "youtube_music_import" to AnalyticsScreen.YOUTUBE_MUSIC_IMPORT,
             "desktop_link" to AnalyticsScreen.DESKTOP_LINK,
             "enrichment_report" to AnalyticsScreen.ENRICHMENT_REPORT,

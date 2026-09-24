@@ -23,6 +23,22 @@ class ArtistNormalizationTest {
         assertEquals(listOf("Bigflo & Oli"), ArtistParser.getAllArtists("Bigflo & Oli"))
     }
 
+    @Test
+    fun `comma-separated collaborators are not collapsed by punctuation normalization`() {
+        assertEquals(
+            listOf("Kid Cudi", "Eminem"),
+            ArtistParser.getAllArtists("Kid Cudi, Eminem"),
+        )
+        assertEquals(
+            listOf("Crosby, Stills, Nash & Young"),
+            ArtistParser.getAllArtists("Crosby, Stills, Nash & Young"),
+        )
+        assertEquals(
+            listOf("Bell, Biv DeVoe"),
+            ArtistParser.getAllArtists("Bell, Biv DeVoe"),
+        )
+    }
+
     // Artist.normalizeName
 
     @Test

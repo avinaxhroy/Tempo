@@ -26,6 +26,7 @@ internal fun routeToAnalyticsScreen(route: String?): AnalyticsScreen {
         "background_protection" -> AnalyticsScreen.BACKGROUND_PROTECTION
         "lastfm_import" -> AnalyticsScreen.LASTFM_IMPORT
         "spotify_json_import" -> AnalyticsScreen.SPOTIFY_JSON_IMPORT
+        "deezer_import" -> AnalyticsScreen.DEEZER_IMPORT
         "youtube_music_import" -> AnalyticsScreen.YOUTUBE_MUSIC_IMPORT
         "desktop_link" -> AnalyticsScreen.DESKTOP_LINK
         "enrichment_report" -> AnalyticsScreen.ENRICHMENT_REPORT
