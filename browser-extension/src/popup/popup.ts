@@ -9,124 +9,39 @@ import { MessageType } from '../shared/types';
 import type { NowPlaying, Play, Settings, PairingInfo, YoutubeChannelSuggestion, ConnectionHealth } from '../shared/types';
 import type { SocketState } from '../shared/types';
 import { signRequest, validatePingResponse, pairingAgeDays } from '../shared/security';
+import {
+  SERVER_PORT, HOTSPOT_SEEDS, MDNS_HOSTNAME,
+  getLocalIPsViaWebRTC, discoveryPing,
+} from './lan-discovery';
+import { renderHomeState } from './home-state';
+import { renderNowPlayingView } from './now-playing-view';
 import type { SyncStatus } from '../background/sync';
 
 
 const QR_TOKEN_KEY    = 'tempo_pairing_token';
 const QR_EXPIRY_KEY   = 'tempo_pairing_token_expiry';
 const QR_TOKEN_TTL_MS = 10 * 60 * 1000;   // 10 minutes
-const SERVER_PORT     = 8765;
 const MANUAL_FALLBACK_AFTER_SECONDS = 30;
-
-/** Hotspot seeds — only valid when the PHONE is the hotspot gateway itself */
-const HOTSPOT_SEEDS = [
-  '192.168.43.1',  // Android hotspot (phone IS the gateway)
-  '172.20.10.1',   // iOS hotspot (phone IS the gateway)
-  '192.168.49.1',  // Android WiFi Direct
-];
-
-/**
- * Best-effort .local hostname. Android advertises a DNS-SD service; some
- * networks/OSes also make a stable host name reachable, but many do not.
- * Keep this as a fast path, not the only IP-change recovery strategy.
- */
-const MDNS_HOSTNAME = 'tempo-phone.local';
-
-// WebRTC local IP discovery
-//
-// RTCPeerConnection exposes the machine's actual LAN IP via ICE candidates.
-// This works in Chrome extensions with no extra permissions and takes ~200ms.
-// Importantly it returns the REAL adapter IP (e.g. 192.168.1.50), not the
-// gateway, so we can scan the exact /24 the phone is on.
-//
-async function getLocalIPsViaWebRTC(): Promise<string[]> {
-  return new Promise(resolve => {
-    const ips = new Set<string>();
-    let settled = false;
-
-    const finish = (pc: RTCPeerConnection) => {
-      if (settled) return;
-      settled = true;
-      try { pc.close(); } catch {}
-      resolve([...ips]);
-    };
-
-    try {
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-      });
-      const timer = setTimeout(() => finish(pc), 2000);
-
-      pc.createDataChannel('');
-      pc.createOffer()
-        .then(o => pc.setLocalDescription(o))
-        .catch(() => { clearTimeout(timer); finish(pc); });
-
-      pc.onicecandidate = ({ candidate }) => {
-        if (!candidate) {
-          clearTimeout(timer);
-          finish(pc);
-          return;
-        }
-        const m = /(?:^|\s)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?:\s|$)/.exec(
-          candidate.candidate
-        );
-        if (!m) return;
-        const addr = m[1];
-        const p = addr.split('.').map(Number);
-        const isPrivate =
-          p[0] === 10 ||
-          (p[0] === 172 && p[1] >= 16 && p[1] <= 31) ||
-          (p[0] === 192 && p[1] === 168);
-        if (isPrivate) ips.add(addr);
-      };
-    } catch {
-      resolve([]);
-    }
-  });
-}
-
-// Direct discovery ping
-//
-// For DISCOVERY we fetch directly from the popup (not via service worker IPC)
-// with an 800ms abort timeout. Non-existent hosts fail in <10ms (TCP RST or
-// ARP miss), so 254 parallel fetches typically complete in well under 1 second.
-//
-async function discoveryPing(ip: string, token: string): Promise<string | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 800);
-  try {
-    // signRequest() sends HMAC(token, body) — matches Android verification
-    const headers = await signRequest(token);
-
-    const res = await fetch(`http://${ip}:${SERVER_PORT}/api/ping`, {
-      signal: controller.signal,
-      headers,
-    });
-    clearTimeout(timer);
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return validatePingResponse(data) ?? (data.device_name ?? ip);
-    }
-    // Log non-ok responses from reachable hosts — helps diagnose auth failures
-    if (res.status !== 0) {
-      console.debug(`[Tempo] ping ${ip} → HTTP ${res.status}`);
-    }
-    return null;
-  } catch {
-    clearTimeout(timer);
-    return null;
-  }
-}
-
 
 type DiscoveryState = 'qr' | 'scanning' | 'manual' | 'success';
 
 let currentNowPlaying: NowPlaying | null = null;
-let lastNpIdentity = '';     // identity gate for now-playing DOM writes
 let currentYoutubeSuggestion: YoutubeChannelSuggestion | null = null;
 let currentPairing: PairingInfo | null = null;
 let currentQueueCount = 0;
+// A Google Drive connection is a complete history-sync destination by itself.
+// Do not describe a missing LAN pairing as a setup failure when Drive works.
+let cloudHistoryStatus: {
+  configured: boolean;
+  enabled: boolean;
+  connected: boolean;
+  needsInteractiveAuth: boolean;
+  pendingUploads: number;
+} | null = null;
+document.addEventListener('tempo-drive-status', ((event: CustomEvent) => {
+  cloudHistoryStatus = event.detail;
+  refreshHomeState();
+}) as EventListener);
 let currentPairingToken: string | null = null;
 let qrExpiryCache = 0;       // mirror of the stored QR expiry so the countdown tick needs no storage reads
 const dismissedPopupYoutubeChannels = new Set<string>();
@@ -263,66 +178,10 @@ function sanitizeStatus(s: string): string {
 // Home State
 
 function refreshHomeState() {
-  const pill    = document.getElementById('home-status-pill')!;
-  const title   = document.getElementById('home-title')!;
-  const copy    = document.getElementById('home-copy')!;
-  const primary = document.getElementById('home-primary-action') as HTMLButtonElement;
-  const second  = document.getElementById('home-secondary-action') as HTMLButtonElement;
-  const emTitle = document.getElementById('np-empty-title')!;
-  const emCopy  = document.getElementById('np-empty-copy')!;
-  const banner  = document.getElementById('queue-banner')!;
-  const heroCard = document.getElementById('home-hero-card')!;
-
-  banner.style.display = currentPairing ? 'none' : '';
-
-  if (!currentPairing) {
-    heroCard.style.display = '';
-    pill.textContent  = 'Setup required';
-    title.textContent = 'Connect your Tempo app';
-    copy.textContent  = 'Pair your phone — just scan the QR code in the Pair tab.';
-    primary.textContent = 'Scan to connect';
-    second.textContent  = currentQueueCount > 0 ? `View queue (${currentQueueCount})` : 'View queue';
-    emTitle.textContent = 'Phone not connected';
-    emCopy.textContent  = 'Open the Pair tab and scan the QR with Tempo on your phone.';
-    return;
-  }
-
-  if (currentNowPlaying?.title) {
-    heroCard.style.display = 'none';
-    pill.textContent  = 'Live tracking';
-    title.textContent = 'Now tracking this session';
-    copy.textContent  = `${currentNowPlaying.title} is being monitored.`;
-    primary.textContent = currentQueueCount > 0 ? `View queue (${currentQueueCount})` : 'View queue';
-    second.textContent  = 'Pairing details';
-    emTitle.textContent = 'No music playing';
-    emCopy.textContent  = 'Start playing from a supported site.';
-    return;
-  }
-
-  if (currentYoutubeSuggestion) {
-    heroCard.style.display = 'none';
-    pill.textContent  = 'YouTube channel found';
-    title.textContent = `Allow ${currentYoutubeSuggestion.channel}?`;
-    copy.textContent  = 'This YouTube.com channel can be added for automatic music tracking.';
-    primary.textContent = 'Allow channel';
-    second.textContent  = 'Never allow';
-    emTitle.textContent = 'YouTube channel detected';
-    emCopy.textContent  = 'Use the allow button to start tracking this channel.';
-    return;
-  }
-
-  heroCard.style.display = '';
-  pill.textContent  = 'Ready to track';
-  title.textContent = currentQueueCount > 0
-    ? `${currentQueueCount} play${currentQueueCount === 1 ? '' : 's'} waiting to sync`
-    : 'Connected and ready';
-  copy.textContent  = currentQueueCount > 0
-    ? 'Open Queue to sync them to Tempo.'
-    : 'Play music on a supported site and Tempo Stats will queue it automatically.';
-  primary.textContent = currentQueueCount > 0 ? `View queue (${currentQueueCount})` : 'Open pairing';
-  second.textContent  = currentQueueCount > 0 ? 'Open pairing' : 'View queue';
-  emTitle.textContent = 'No music playing';
-  emCopy.textContent  = 'Play on YouTube Music, Spotify Web, SoundCloud, Apple Music, or Tidal.';
+  renderHomeState({
+    currentPairing, currentNowPlaying, currentYoutubeSuggestion,
+    currentQueueCount, cloudHistoryStatus,
+  });
 }
 
 // Now Playing
@@ -352,87 +211,7 @@ async function refreshNowPlaying() {
  * tick regardless.
  */
 function renderNowPlaying(np: NowPlaying | null, suggestion: YoutubeChannelSuggestion | null) {
-  const emptyEl   = document.getElementById('np-empty')!;
-  const contentEl = document.getElementById('np-content')!;
-  const youtubeEl = document.getElementById('youtube-suggestion')!;
-
-  if (!np?.title) {
-    lastNpIdentity = '';
-    if (suggestion) {
-      emptyEl.style.display = 'none';
-      youtubeEl.style.display = '';
-      document.getElementById('youtube-suggestion-channel')!.textContent = suggestion.channel;
-      document.getElementById('youtube-suggestion-track')!.textContent = suggestion.title
-        ? suggestion.title
-        : 'Allow this channel to track YouTube.com plays.';
-    } else {
-      emptyEl.style.display = currentPairing ? '' : 'none';
-      youtubeEl.style.display = 'none';
-    }
-    contentEl.style.display = 'none';
-    refreshHomeState();
-    return;
-  }
-
-  const sourceName = np.site ?? np.sourceApp ?? '';
-  const identity = `${np.title}|${np.artist}|${np.album}|${np.isPlaying}|${sourceName}`;
-
-  // Always-on scalars — these change every tick even for the same track
-  document.getElementById('np-listened')!.textContent    = formatDuration(np.listenedMs);
-  document.getElementById('np-duration')!.textContent    = np.durationMs > 0 ? `/ ${formatDuration(np.durationMs)}` : '';
-  document.getElementById('np-completion')!.textContent  = `${Math.round(np.completionPercentage)}%`;
-  (document.getElementById('np-progress') as HTMLElement).style.width = `${Math.min(np.completionPercentage, 100)}%`;
-  const pauseSpan = document.querySelector('#np-pause-count span');
-  const seekSpan = document.querySelector('#np-seek-count span');
-  const replaySpan = document.querySelector('#np-replay-count span');
-  if (pauseSpan) pauseSpan.textContent = String(np.pauseCount);
-  if (seekSpan) seekSpan.textContent = String(np.seekCount);
-  if (replaySpan) replaySpan.textContent = String(np.replayCount);
-  document.getElementById('np-mute-badge')!.style.display  = np.isMuted ? '' : 'none';
-
-  if (identity !== lastNpIdentity) {
-    lastNpIdentity = identity;
-
-    emptyEl.style.display   = 'none';
-    youtubeEl.style.display = 'none';
-    contentEl.style.display = '';
-
-    const sourceClass = sourceName.toLowerCase().replace(/[^a-z0-9]/g, '-');
-    contentEl.className = `np-card src-${sourceClass}`;
-
-    document.getElementById('np-title')!.textContent       = np.title;
-    document.getElementById('np-artist')!.textContent      = np.artist || 'Unknown Artist';
-    document.getElementById('np-album')!.textContent       = np.album || '';
-    document.getElementById('np-source')!.textContent      = sourceName;
-
-    // Toggle disk rotation & audio visualizer bar bouncing based on playback state
-    const diskEl = document.getElementById('np-disk');
-    const visualizerEl = document.getElementById('np-visualizer');
-    const artistEl = document.getElementById('np-artist');
-    if (diskEl) {
-      if (np.isPlaying) {
-        diskEl.classList.add('playing');
-      } else {
-        diskEl.classList.remove('playing');
-      }
-    }
-    if (visualizerEl) {
-      if (np.isPlaying) {
-        visualizerEl.classList.add('animating');
-      } else {
-        visualizerEl.classList.remove('animating');
-      }
-    }
-    if (artistEl) {
-      if (np.isPlaying) {
-        artistEl.classList.add('np-artist-glowing');
-      } else {
-        artistEl.classList.remove('np-artist-glowing');
-      }
-    }
-  }
-
-  refreshHomeState();
+  renderNowPlayingView(np, suggestion, currentPairing, refreshHomeState, formatDuration);
 }
 
 function startNpPolling() {
@@ -527,16 +306,6 @@ function renderQueueItems(plays: Play[]) {
         </div>`).join('');
 }
 
-/** Full list fetch — only needed when the Queue tab is actually open. */
-async function refreshQueueItems() {
-  try {
-    const itemsR = await send(MessageType.GetQueueItems);
-    renderQueueItems(itemsR?.plays ?? []);
-  } catch (err) {
-    console.warn('[Tempo] refreshQueueItems failed:', err);
-  }
-}
-
 async function refreshQueue() {
   try {
     const [countR, itemsR, statusR] = await Promise.all([
@@ -570,9 +339,17 @@ if (queueListEl && !queueListDelegationBound) {
     e.stopPropagation();
     const id = parseInt(btn.dataset.id ?? '', 10);
     if (!id) return;
-    btn.disabled = true;
-    await send(MessageType.DeletePlay, { id });
-    refreshQueue();
+    armToConfirm(btn, 'Delete local copy?', async () => {
+      btn.disabled = true;
+      try {
+        await send(MessageType.DeletePlay, { id });
+        toast('Local play deleted', 'info');
+      } catch (error) {
+        toast(`Could not delete local play: ${String(error)}`, 'error');
+      } finally {
+        void refreshQueue();
+      }
+    });
   });
 }
 
@@ -606,12 +383,30 @@ document.getElementById('btn-sync-now')?.addEventListener('click', async () => {
   }, 2500);
 });
 
+document.getElementById('btn-sync-drive')?.addEventListener('click', () => {
+  const ready = !!cloudHistoryStatus?.enabled && !!cloudHistoryStatus.connected
+    && !cloudHistoryStatus.needsInteractiveAuth;
+  if (!ready) {
+    toast('Reconnect Google Drive in Settings before syncing.', 'error');
+    switchTab('settings');
+    return;
+  }
+  // Drive's connection and success/error UI lives in Settings. Display it
+  // rather than issuing a misleading LAN-only SyncNow command.
+  switchTab('settings');
+  document.dispatchEvent(new CustomEvent('tempo-drive-sync-request'));
+});
+
 document.getElementById('btn-clear-queue')?.addEventListener('click', (e) => {
   const btn = e.currentTarget as HTMLButtonElement;
-  armToConfirm(btn, 'Sure?', async () => {
-    await send(MessageType.ClearQueue);
-    toast('Queue cleared', 'success');
-    refreshQueue();
+  armToConfirm(btn, 'Remove Drive-backed queued plays?', async () => {
+    try {
+      const result = await send(MessageType.ClearQueue);
+      toast(`${result?.cleared ?? 0} safely removed; ${result?.protected ?? 0} unsaved local plays kept`, 'info');
+      await refreshQueue();
+    } catch (err) {
+      toast(`Queue cleanup failed: ${String(err)}`, 'error');
+    }
   });
 });
 
@@ -1288,7 +1083,6 @@ document.getElementById('btn-rebuild-connection')?.addEventListener('click', asy
   panel.style.display = '';
 
   const token = currentPairing.authToken;
-  const port  = currentPairing.phonePort;
 
   // ── Step 1: mDNS ──────────────────────────────────────────────────────────
   const mdnsStep = addRebuildStep('📡', 'Trying mDNS (tempo-phone.local)…', 'active');
@@ -1420,15 +1214,28 @@ document.getElementById('btn-unpair')?.addEventListener('click', (e) => {
 
 document.getElementById('home-primary-action')?.addEventListener('click', () => {
   if (currentYoutubeSuggestion) { allowCurrentYoutubeChannel(); return; }
-  if (!currentPairing) { switchTab('pairing'); return; }
+  if (!currentPairing) {
+    const ready = !!cloudHistoryStatus?.enabled && !!cloudHistoryStatus.connected
+      && !cloudHistoryStatus.needsInteractiveAuth;
+    switchTab(ready && (cloudHistoryStatus?.pendingUploads ?? 0) > 0 ? 'queue' :
+      cloudHistoryStatus?.configured ? 'settings' : 'pairing');
+    return;
+  }
   switchTab(currentQueueCount > 0 || currentNowPlaying?.title ? 'queue' : 'pairing');
 });
 document.getElementById('home-secondary-action')?.addEventListener('click', () => {
   if (currentYoutubeSuggestion) { blockCurrentYoutubeChannel(); return; }
-  if (!currentPairing) { switchTab('queue'); return; }
+  if (!currentPairing) {
+    const ready = !!cloudHistoryStatus?.enabled && !!cloudHistoryStatus.connected
+      && !cloudHistoryStatus.needsInteractiveAuth;
+    switchTab(ready && (cloudHistoryStatus?.pendingUploads ?? 0) === 0 || !cloudHistoryStatus?.configured ?
+      'queue' : ready ? 'settings' : 'pairing');
+    return;
+  }
   switchTab(currentQueueCount > 0 || currentNowPlaying?.title ? 'pairing' : 'queue');
 });
-document.getElementById('queue-open-pairing')?.addEventListener('click', () => switchTab('pairing'));
+document.getElementById('queue-open-pairing')?.addEventListener('click', () =>
+  switchTab(cloudHistoryStatus?.configured ? 'settings' : 'pairing'));
 
 async function allowCurrentYoutubeChannel() {
   if (!currentYoutubeSuggestion) return;

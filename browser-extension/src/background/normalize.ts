@@ -585,7 +585,6 @@ function buildArtistRegex(artistName: string): RegExp {
     if (char === ' ') {
       pattern += '[\\s\\-_\\+]*';
     } else {
-      const escaped = escapeRegExp(char);
       if (char === 's') {
         pattern += '[sS\\$]';
       } else if (char === 'a') {

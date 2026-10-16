@@ -7,13 +7,15 @@
     "build": "node build.mjs",
     "build:chrome": "node build.mjs --target=chrome",
     "build:firefox": "node build.mjs --target=firefox",
-    "build:all": "./build-all.sh",
+    "build:all": "npm run build:chrome && npm run build:firefox",
     "watch": "node build.mjs --watch",
     "watch:chrome": "node build.mjs --target=chrome --watch",
     "watch:firefox": "node build.mjs --target=firefox --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "smoke": "node smoke-tracker.mjs && node smoke-sync.mjs"
+    "smoke": "node smoke-tracker.mjs && node smoke-sync.mjs && node smoke-drive.mjs && node smoke-drive-lifecycle.mjs && node smoke-drive-popup.mjs && node smoke-drive-auth.mjs && node smoke-storage.mjs && node smoke-drive-upload-scan.mjs",
+    "build:release:chrome": "node build.mjs --target=chrome --require-drive",
+    "build:release:firefox": "node build.mjs --target=firefox --require-drive"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.40",

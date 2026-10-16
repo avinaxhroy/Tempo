@@ -11,9 +11,22 @@
     "rootDir": "./src",
     "declaration": false,
     "sourceMap": false,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["chrome"]
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "chrome"
+    ],
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

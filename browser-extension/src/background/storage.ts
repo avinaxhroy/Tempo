@@ -4,50 +4,30 @@
  * Keeps an open IndexedDB connection cached to minimize disk I/O overhead.
  */
 
-import type { Play, PairingInfo, Settings, SyncRecord, TabTrackState, ConnectionHistoryEntry, ConnectionHealth, SyncCheckpoint, SyncBackoffState } from '../shared/types';
-import { DEFAULT_SETTINGS } from '../shared/types';
+import type { Play, SyncRecord } from '../shared/types';
+export { getSettings, saveSettings, getPairing, savePairing, removePairing, saveSessionState, loadSessionState, getConnectionHistory, recordConnectionSuccess, recordConnectionFailure, recordConnectionFailures, clearConnectionHistory, getConnectionHealth, saveConnectionHealth, recordHealthPing, recordAuthFailure, getSyncCheckpoint, saveSyncCheckpoint, clearSyncCheckpoint, getSyncBackoff, saveSyncBackoff } from './connection-storage';
 
 const DB_NAME = 'TempoStatsDB';
-const DB_VERSION = 2;
+const DB_VERSION = 4;
+const UNOWNED_DRIVE_QUEUE = 'tempo-unowned';
+function pendingDriveKey(play: Play | Omit<Play, 'id'>): [string, number] | undefined {
+  if (play.driveImported || play.driveUploadedAt || play.cloudSuppressed) return undefined;
+  return [play.driveAccountSubject ?? UNOWNED_DRIVE_QUEUE,
+    Number.isFinite(play.timestampUtc) ? play.timestampUtc : 0];
+}
+function withDrivePendingKey<T extends Play | Omit<Play, 'id'>>(play: T): T {
+  const key = pendingDriveKey(play);
+  const record = { ...play };
+  if (key) record.drivePendingIndexKey = key;
+  else delete record.drivePendingIndexKey;
+  return record as T;
+}
+
 
 // Store names
 const PLAYS_STORE = 'plays';
 const SYNC_HISTORY_STORE = 'syncHistory';
 
-// Maximum age for synced/failed records before auto-cleanup (7 days)
-const MAX_RECORD_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-// Maximum number of play records to keep
-const MAX_PLAY_RECORDS = 5000;
-
-// Cheap in-memory lower-bound-ish estimate of total plays, used by
-// enforceMaxRecords() to skip the store.count() + cursor scan entirely while
-// the collection is far below the cap. Starts unknown (+Inf) so the first
-// run measures the real value.
-let _playCountEstimate = Number.POSITIVE_INFINITY;
-
-interface SettingsStorageResult {
-  settings?: Settings;
-}
-
-interface PairingStorageRecord {
-  phoneIp?: string;
-  phonePort?: number;
-  authToken?: string;
-  deviceName?: string;
-  pairedAt?: string | null;
-}
-
-interface PairingStorageResult {
-  pairing?: PairingStorageRecord;
-}
-
-interface SessionTokenStorageResult {
-  authToken?: string;
-}
-
-interface TrackerStateStorageResult {
-  trackerStates?: TabTrackState[];
-}
 
 // Cached IndexedDB Connection
 //
@@ -85,6 +65,37 @@ function openDb(): Promise<IDBDatabase> {
         store.createIndex('timestampUtc', 'timestampUtc', { unique: false });
       }
 
+      const plays = request.transaction!.objectStore(PLAYS_STORE);
+      const needsOrigins = !plays.indexNames.contains('driveOriginLookupIds');
+      const needsPending = !plays.indexNames.contains('drivePendingIndexKey');
+      if (needsOrigins) {
+        plays.createIndex('driveOriginLookupIds', 'driveOriginLookupIds',
+          { unique: false, multiEntry: true });
+      }
+      if (needsPending) {
+        plays.createIndex('drivePendingIndexKey', 'drivePendingIndexKey');
+      }
+      // One atomic pass for v1/v2 -> v4 upgrades. Two independent cursor
+      // updaters could overwrite one another's fields, losing existing source
+      // aliases when both the origin and pending indexes are introduced.
+      if (needsOrigins || needsPending) {
+        const scan = plays.openCursor();
+        scan.onsuccess = () => {
+          const cursor = scan.result;
+          if (!cursor) return;
+          const play = cursor.value as Play;
+          let record: Play = { ...play };
+          if (needsOrigins) {
+            const ids = [play.originEventId,
+              ...(play.reconciledOrigins ?? []).map(alias => alias.eventId)]
+              .filter((id): id is string => typeof id === 'string' && id.length > 0);
+            if (ids.length) record.driveOriginLookupIds = [...new Set(ids)];
+          }
+          if (needsPending) record = withDrivePendingKey(record);
+          cursor.update(record);
+          cursor.continue();
+        };
+      }
       if (!db.objectStoreNames.contains(SYNC_HISTORY_STORE)) {
         const store = db.createObjectStore(SYNC_HISTORY_STORE, { keyPath: 'id', autoIncrement: true });
         store.createIndex('syncedAt', 'syncedAt', { unique: false });
@@ -125,7 +136,7 @@ function invalidateQueueCountCache(): void {
   _cachedQueueCount = null;
 }
 
-// In-memory stats cache — getStats() scans up to 5000 plays; the popup only
+// In-memory stats cache — getStats() streams the full local archive; the popup
 // needs fresh-ish numbers, so we memoize the result briefly and clear it on
 // every mutation of the underlying stores.
 
@@ -142,37 +153,22 @@ export async function insertPlay(play: Omit<Play, 'id'>): Promise<number> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(PLAYS_STORE, 'readwrite');
     const store = tx.objectStore(PLAYS_STORE);
-    const request = store.add(play);
-    request.onsuccess = () => {
-      invalidateQueueCountCache();
-      invalidateStatsCache();
-      _playCountEstimate++;
-      resolve(request.result as number);
-    };
-    request.onerror = () => reject(request.error);
-  });
-}
-
-export async function insertPlaysBatch(plays: Array<Omit<Play, 'id'>>): Promise<number[]> {
-  if (plays.length === 0) return [];
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(PLAYS_STORE, 'readwrite');
-    const store = tx.objectStore(PLAYS_STORE);
-    const ids: number[] = [];
-    for (const play of plays) {
-      const request = store.add(play);
-      request.onsuccess = () => {
-        ids.push(request.result as number);
-      };
-    }
+    const record = play.originEventId ? {
+      ...play,
+      driveOriginLookupIds: [...new Set([play.originEventId,
+        ...(play.reconciledOrigins ?? []).map(alias => alias.eventId)])],
+    } : play;
+    const request = store.add(withDrivePendingKey(record));
+    // An add request can succeed before its transaction is committed. Drive
+    // must not advance its cursor until this row is durably stored.
     tx.oncomplete = () => {
       invalidateQueueCountCache();
       invalidateStatsCache();
-      _playCountEstimate += ids.length;
-      resolve(ids);
+      resolve(request.result as number);
     };
+    request.onerror = () => reject(request.error);
     tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Play insertion transaction aborted'));
   });
 }
 
@@ -219,6 +215,304 @@ export async function getAllPlays(limit = 100): Promise<Play[]> {
       }
     };
     request.onerror = () => reject(request.error);
+  });
+}
+
+/** Durable indexed lookup rather than a full event-history scan per sync. */
+export async function hasDriveOriginEventId(eventId: string, accountSubject: string): Promise<boolean> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readonly');
+    const req = tx.objectStore(PLAYS_STORE).index('driveOriginLookupIds')
+      .openCursor(IDBKeyRange.only(eventId));
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) { resolve(false); return; }
+      const play = cursor.value as Play;
+      if (play.driveAccountSubject === accountSubject) { resolve(true); return; }
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Drive provenance lookup aborted'));
+  });
+}
+
+/** Minimal local-origin inputs for an explicit own-device history restore.
+ * Existing locally-owned rows have no originEventId: their identity is derived
+ * from device ID plus IndexedDB row ID and track metadata. Never await hashing
+ * inside an active IndexedDB transaction; collect only these four small fields.
+ */
+export async function getOwnPlayIdentityInputs(accountSubject?: string): Promise<Array<
+  Pick<Play, 'id' | 'timestampUtc' | 'title' | 'artist'>
+>> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readonly');
+    const inputs: Array<Pick<Play, 'id' | 'timestampUtc' | 'title' | 'artist'>> = [];
+    const request = tx.objectStore(PLAYS_STORE).openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const play = cursor.value as Play;
+      if (!play.driveImported && !play.originEventId && play.id != null &&
+          (!accountSubject || !play.driveAccountSubject ||
+            play.driveAccountSubject === accountSubject)) {
+        inputs.push({
+          id: play.id,
+          timestampUtc: play.timestampUtc,
+          title: play.title,
+          artist: play.artist,
+        });
+      }
+      cursor.continue();
+    };
+    tx.oncomplete = () => resolve(inputs);
+    request.onerror = () => reject(request.error);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Local identity scan aborted'));
+  });
+}
+
+/**
+ * Return locally-owned plays that still need their first Drive upload.
+ * Scan oldest-first across the whole store: when Drive has been unavailable
+ * for a long time the database may temporarily exceed the normal 5k cap,
+ * and those older pending rows must not become unreachable.
+ */
+/**
+ * Return only owner-scoped Drive upload candidates; never fall back to a
+ * global timestamp scan that could mix previous Google identities.
+ */
+export async function getDrivePendingPlays(
+  limit: number,
+  accountSubject: string,
+  after?: { timestampUtc: number; id: number },
+): Promise<Play[]> {
+  if (!accountSubject.trim()) throw new Error('Verified Google account is required for Drive upload scan');
+  const db = await openDb();
+
+  const readOwner = (owner: string) => new Promise<Play[]>((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readonly');
+    const result: Play[] = [];
+    const floor = after && Number.isFinite(after.timestampUtc) ? after.timestampUtc : 0;
+    const request = tx.objectStore(PLAYS_STORE).index('drivePendingIndexKey')
+      // IndexedDB accepts any finite numeric key, not only safe integers.
+      // An out-of-range legacy timestamp must be surfaced for repair rather
+      // than silently excluded from the Drive upload queue.
+      .openCursor(IDBKeyRange.bound([owner, after ? floor : -Number.MAX_VALUE],
+                                    [owner, Number.MAX_VALUE]));
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor || result.length >= limit) { resolve(result); return; }
+      const play = cursor.value as Play;
+      const ts = Number.isFinite(play.timestampUtc) ? play.timestampUtc : 0;
+      if (play.id != null && !play.driveImported && !play.driveUploadedAt &&
+          (!after || ts > floor || (ts === floor && play.id > after.id))) result.push(play);
+      cursor.continue();
+    };
+    request.onerror = () => reject(request.error);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Indexed Drive queue read failed'));
+  });
+  // Unowned plays captured after sign-in belong to the current account until
+  // their first Drive operation persists that association. Previously owned
+  // plays have a distinct owner key and are never searched for this account.
+  const [owned, unowned] = await Promise.all([
+    readOwner(accountSubject), readOwner(UNOWNED_DRIVE_QUEUE),
+  ]);
+  return [...owned, ...unowned]
+    .sort((a, b) => {
+      const at = Number.isFinite(a.timestampUtc) ? a.timestampUtc : 0;
+      const bt = Number.isFinite(b.timestampUtc) ? b.timestampUtc : 0;
+      return at - bt || (a.id ?? 0) - (b.id ?? 0);
+    })
+    .slice(0, limit);
+}
+
+/** Pending cloud uploads for the verified account, including unowned recent plays.
+ * Uses the existing compound IndexedDB index instead of scanning all history.
+ */
+export async function getDrivePendingCount(accountSubject: string): Promise<number> {
+  if (!accountSubject.trim()) return 0;
+  const db = await openDb();
+  const countOwner = (owner: string): Promise<number> => new Promise((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readonly');
+    const request = tx.objectStore(PLAYS_STORE).index('drivePendingIndexKey')
+      .count(IDBKeyRange.bound([owner, -Number.MAX_VALUE], [owner, Number.MAX_VALUE]));
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Drive count read aborted'));
+  });
+  const [owned, unowned] = await Promise.all([
+    countOwner(accountSubject), countOwner(UNOWNED_DRIVE_QUEUE),
+  ]);
+  return owned + unowned;
+}
+
+/**
+ * Preserve ownership of every existing play before switching Google accounts.
+ * This transaction commits BEFORE the new account can sync. Rows recorded after
+ * the switch remain unowned until their first Drive operation on that account.
+ * A legacy installation with unverifiable prior identity is quarantined.
+ */
+export async function claimUnownedDrivePlays(accountSubject: string): Promise<void> {
+  if (!accountSubject.trim()) throw new Error('Missing verified Google account subject');
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readwrite');
+    const request = tx.objectStore(PLAYS_STORE).openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const play = cursor.value as Play;
+      if (!play.driveAccountSubject) {
+        // Previously imported Drive records without a verified account subject
+        // cannot be proven to belong to the account now connecting. Quarantine
+        // their original history rather than relabeling it and allowing a
+        // temporal match from a different Google account to claim its origin.
+        // Genuine locally captured plays may belong to the newly confirmed
+        // account and retain their usual pending-upload behavior.
+        const verifiedOwner = play.driveImported ? 'legacy-unverified' : accountSubject;
+        cursor.update(withDrivePendingKey({ ...play, driveAccountSubject: verifiedOwner }));
+      }
+      cursor.continue();
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Google owner migration aborted'));
+  });
+}
+
+/** Persist the first canonical local event ID before either LAN or Drive
+ * transmits it. The transaction must commit before the caller uses the ID;
+ * retries and title/artist edits then reuse exactly the same identity.
+ */
+export async function ensureLocalOriginEventId(
+  playId: number, candidateId: string, accountSubject?: string,
+): Promise<string> {
+  if (!/^[0-9a-f]{64}$/.test(candidateId)) throw new Error('Invalid local origin identity');
+  const db = await openDb();
+  return new Promise<string>((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readwrite');
+    const store = tx.objectStore(PLAYS_STORE);
+    let pinnedId: string | null = null;
+    const request = store.get(playId);
+    request.onsuccess = () => {
+      const play = request.result as Play | undefined;
+      if (!play || play.driveImported ||
+          (accountSubject && play.driveAccountSubject && play.driveAccountSubject !== accountSubject)) {
+        tx.abort();
+        return;
+      }
+      if (play.originEventId && !/^[0-9a-f]{64}$/.test(play.originEventId)) {
+        tx.abort();
+        return;
+      }
+      pinnedId = play.originEventId ?? candidateId;
+      if (!play.originEventId || (accountSubject && !play.driveAccountSubject)) {
+        play.originEventId = pinnedId;
+        if (accountSubject) play.driveAccountSubject = accountSubject;
+        play.driveOriginLookupIds = [...new Set([...(play.driveOriginLookupIds ?? []), pinnedId])];
+        store.put(withDrivePendingKey(play));
+      }
+    };
+    tx.oncomplete = () => {
+      if (pinnedId) resolve(pinnedId);
+      else reject(new Error('Could not pin local event identity'));
+    };
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to persist event identity'));
+    tx.onabort = () => reject(tx.error ?? new Error('Cannot pin an absent, imported, or invalid play'));
+  });
+}
+
+/** Mark uploaded rows by primary key, not by scanning every historic play.
+ * Persist the origin identity alongside the verified upload in one IndexedDB
+ * transaction: a later full restore can then recognize locally-owned events
+ * even if their display metadata has changed since first synchronization.
+ */
+export async function markDriveUploaded(
+  entries: Array<{ id: number; originEventId: string }>,
+): Promise<void> {
+  if (entries.length === 0) return;
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readwrite');
+    const store = tx.objectStore(PLAYS_STORE);
+    const uploadedAt = Date.now();
+    for (const entry of entries) {
+      const request = store.get(entry.id);
+      request.onsuccess = () => {
+        const play = request.result as Play | undefined;
+        if (!play || play.driveImported) return;
+        play.originEventId = entry.originEventId;
+        play.driveOriginLookupIds = [...new Set([
+          ...(play.driveOriginLookupIds ?? []), entry.originEventId,
+        ])];
+        play.driveUploadedAt = uploadedAt;
+        store.put(withDrivePendingKey(play));
+      };
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Drive upload flag transaction aborted'));
+  });
+}
+
+/** Apply a cloud-deletion marker durably, including locally captured plays
+ * that never reached Drive. Account B's history is never touched by A's marker.
+ */
+export async function suppressDeletedDriveHistory(accountSubject: string, markerVersion: number): Promise<void> {
+  if (!accountSubject.trim()) throw new Error('Verified Google account required');
+  if (!Number.isSafeInteger(markerVersion) || markerVersion <= 0) {
+    throw new Error('Verified Drive deletion marker is required');
+  }
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readwrite');
+    const request = tx.objectStore(PLAYS_STORE).openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const play = cursor.value as Play;
+      // A play recorded offline AFTER deletion belongs to the new archive,
+      // even if its IndexedDB row predates discovery of the remote marker.
+      if (!play.driveImported &&
+          (play.driveUploadedAt != null || play.timestampUtc <= markerVersion) &&
+          (!play.driveAccountSubject || play.driveAccountSubject === accountSubject)) {
+        cursor.update(withDrivePendingKey({
+          ...play, driveAccountSubject: accountSubject, cloudSuppressed: true,
+        }));
+      }
+      cursor.continue();
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Drive deletion suppression failed'));
+  });
+}
+
+/** Explicit, user-confirmed republishing for this same Google account only. */
+export async function authorizeOlderDriveHistory(accountSubject: string): Promise<void> {
+  if (!accountSubject.trim()) throw new Error('Verified Google account required');
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(PLAYS_STORE, 'readwrite');
+    const request = tx.objectStore(PLAYS_STORE).openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const play = cursor.value as Play;
+      if (!play.driveImported && play.driveAccountSubject === accountSubject) {
+        const updated: Play = { ...play, cloudSuppressed: false };
+        delete updated.driveUploadedAt;
+        cursor.update(withDrivePendingKey(updated));
+      }
+      cursor.continue();
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Older Drive history authorization failed'));
   });
 }
 
@@ -312,20 +606,39 @@ export async function retryFailedPlays(): Promise<number> {
   });
 }
 
-export async function clearQueue(): Promise<number> {
-  const queued = await getQueuedPlays();
-
+/**
+ * Only delete locally queued records that already have a confirmed Google
+ * Drive copy. Queued is a LAN-only flag; it does NOT mean the cloud upload
+ * finished. Keep the sole copy of any unsent recording on this device.
+ * Check and delete each row in the SAME transaction to avoid racing an upload.
+ */
+export async function clearQueue(): Promise<{ cleared: number; protected: number }> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(PLAYS_STORE, 'readwrite');
-    const store = tx.objectStore(PLAYS_STORE);
-
-    for (const play of queued) {
-      if (play.id) store.delete(play.id);
-    }
-
-    tx.oncomplete = () => { invalidateQueueCountCache(); invalidateStatsCache(); _playCountEstimate -= queued.length; resolve(queued.length); };
+    const index = tx.objectStore(PLAYS_STORE).index('status');
+    const request = index.openCursor(IDBKeyRange.only('queued'));
+    let cleared = 0;
+    let protectedCount = 0;
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const play = cursor.value as Play;
+      if (!play.cloudSuppressed && (play.driveUploadedAt || play.driveImported)) {
+        cursor.delete();
+        cleared++;
+      } else {
+        protectedCount++;
+      }
+      cursor.continue();
+    };
+    tx.oncomplete = () => {
+      invalidateQueueCountCache();
+      invalidateStatsCache();
+      resolve({ cleared, protected: protectedCount });
+    };
     tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Queue cleanup was cancelled'));
   });
 }
 
@@ -336,160 +649,127 @@ export async function deletePlay(id: number): Promise<void> {
     const tx = db.transaction(PLAYS_STORE, 'readwrite');
     const store = tx.objectStore(PLAYS_STORE);
     store.delete(id);
-    tx.oncomplete = () => { invalidateQueueCountCache(); invalidateStatsCache(); _playCountEstimate--; resolve(); };
+    tx.oncomplete = () => { invalidateQueueCountCache(); invalidateStatsCache(); resolve(); };
     tx.onerror = () => reject(tx.error);
   });
 }
 
 /**
- * Check if a recent play exists with same title+artist within ±60s window.
- * Optimized: uses a bounded cursor range on the timestampUtc index.
+ * Local retries use a short 5s window: a second short-track replay must not be
+ * discarded just because it occurred within a minute of the first play.
+ * Drive imports use a bounded 2s reconciliation window shared with
+ * Android. A full minute could conflate a real second short-track play from
+ * another device with the previous one. Two different IDs from the SAME
+ * originating device are always distinct, regardless of timestamp drift.
  */
-export async function hasRecentPlay(title: string, artist: string, timestampUtc: number): Promise<boolean> {
+export function recentPlayWindowMs(incomingOriginDeviceId?: string): number {
+  return incomingOriginDeviceId ? 2_000 : 5_000;
+}
+export async function hasRecentPlay(
+  title: string,
+  artist: string,
+  timestampUtc: number,
+  incomingOriginDeviceId?: string,
+  incomingOriginEventId?: string,
+  accountSubject?: string,
+  durationMs?: number,
+  listenedMs?: number,
+): Promise<boolean> {
   const db = await openDb();
+  const rememberRemoteOrigin = !!incomingOriginDeviceId && !!incomingOriginEventId;
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(PLAYS_STORE, 'readonly');
+    const tx = db.transaction(PLAYS_STORE, rememberRemoteOrigin ? 'readwrite' : 'readonly');
     const store = tx.objectStore(PLAYS_STORE);
     const index = store.index('timestampUtc');
-    const windowStart = timestampUtc - 60_000;
-    const windowEnd = timestampUtc + 60_000;
-    const range = IDBKeyRange.bound(windowStart, windowEnd);
+    const windowMs = recentPlayWindowMs(incomingOriginDeviceId);
+    const range = IDBKeyRange.bound(timestampUtc - windowMs, timestampUtc + windowMs);
     const request = index.openCursor(range);
-    let found = false;
+    let candidate: Play | null = null;
+    let eligibleCount = 0;
 
     request.onsuccess = () => {
       const cursor = request.result;
-      if (cursor && !found) {
-        const play = cursor.value as Play;
-        if (play.title === title && play.artist === artist) {
-          found = true;
-        } else {
-          cursor.continue();
+      if (!cursor) {
+        // Multiple eligible rows may be two real rapid replays. A first-hit
+        // merge would silently erase one event: refuse ambiguous fuzzy matches.
+        if (eligibleCount === 1 && candidate && rememberRemoteOrigin) {
+          const play = candidate;
+          const aliases = play.reconciledOrigins ?? [];
+          store.put(withDrivePendingKey({
+            ...play,
+            driveAccountSubject: accountSubject ?? play.driveAccountSubject,
+            reconciledOrigins: [...aliases, {
+              deviceId: incomingOriginDeviceId!,
+              eventId: incomingOriginEventId!,
+            }],
+            driveOriginLookupIds: [...new Set([
+              ...(play.driveOriginLookupIds ?? []),
+              ...(play.originEventId ? [play.originEventId] : []),
+              ...aliases.map(alias => alias.eventId),
+              incomingOriginEventId!,
+            ])],
+          }));
         }
-      } else {
-        resolve(found);
+        return;
       }
+      const play = cursor.value as Play;
+      const aliases = play.reconciledOrigins ?? [];
+      const representedByOrigin =
+        (!!incomingOriginDeviceId && play.originDeviceId === incomingOriginDeviceId) ||
+        aliases.some(alias => alias.deviceId === incomingOriginDeviceId);
+      // Different versions of a same-titled track can start within two
+      // seconds. If both devices know the duration and it differs by
+      // more than ten seconds, this cannot be the same playback.
+      const durationMatches =
+        typeof durationMs === 'number' && durationMs > 0 &&
+        typeof play.durationMs === 'number' && play.durationMs > 0
+          ? Math.abs(play.durationMs - durationMs) <= 10_000
+          : true;
+      // A markedly different listened interval is independent evidence that
+      // this is a different playback (even if track and timestamp match).
+      const listeningMatches = !(typeof listenedMs === 'number' && listenedMs > 0 &&
+        typeof play.listenedMs === 'number' && play.listenedMs > 0 &&
+        Math.abs(play.listenedMs - listenedMs) > 10_000);
+      // Legacy cloud imports with unknown account provenance must stay
+      // quarantined: a near-identical song in B cannot silently claim an
+      // unverified imported row that may have come from Google account A.
+      // New locally detected plays can still reconcile while unowned.
+      const belongsToAccount = !accountSubject ||
+        play.driveAccountSubject === accountSubject ||
+        (!play.driveAccountSubject && !play.driveImported);
+      if (belongsToAccount &&
+          !representedByOrigin &&
+          durationMatches && listeningMatches &&
+          play.title.trim().toLowerCase() === title.trim().toLowerCase() &&
+          play.artist.trim().toLowerCase() === artist.trim().toLowerCase()) {
+        eligibleCount++;
+        if (eligibleCount === 1) candidate = play;
+        else candidate = null;
+      }
+      cursor.continue();
     };
+    tx.oncomplete = () => resolve(eligibleCount === 1);
     request.onerror = () => reject(request.error);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Recent-play lookup transaction aborted'));
   });
 }
-
 /**
- * Clean up old synced/failed records and enforce max record count.
- * Called periodically to prevent unbounded DB growth.
- * Optimized: uses the timestampUtc index to skip non-matching records.
+ * Routine maintenance preserves all listening events.
+ *
+ * Drive is an optional transport, not proof of recoverable backup. A browser
+ * extension may be the user's ONLY Tempo client, so neither the previous
+ * seven-day expiry nor a 5,000-row cap may silently erase listening history.
+ * Sync diagnostic records are separate disposable metadata.
  */
 export async function cleanupOldRecords(): Promise<number> {
-  const cutoff = Date.now() - MAX_RECORD_AGE_MS;
-  let deleted = 0;
-
-  const db = await openDb();
-  deleted = await new Promise((resolve, reject) => {
-    const tx = db.transaction(PLAYS_STORE, 'readwrite');
-    const store = tx.objectStore(PLAYS_STORE);
-    const index = store.index('timestampUtc');
-    // Only scan records older than cutoff (fast — uses index)
-    const range = IDBKeyRange.upperBound(cutoff);
-    const request = index.openCursor(range);
-
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (cursor) {
-        const play = cursor.value as Play;
-        if (play.status === 'synced' || play.status === 'failed') {
-          cursor.delete();
-          deleted++;
-        }
-        cursor.continue();
-      }
-    };
-
-    tx.oncomplete = () => {
-      if (deleted > 0) {
-        console.log(`[Tempo] Cleaned up ${deleted} old play records`);
-      }
-      invalidateQueueCountCache();
-      invalidateStatsCache();
-      _playCountEstimate -= deleted;
-      resolve(deleted);
-    };
-    tx.onerror = () => reject(tx.error);
-  });
-
-  // Same housekeeping pass also prunes sync history (age + hard cap).
   await pruneSyncHistory();
-  return deleted;
+  return 0;
 }
 
-/**
- * Enforce maximum record count by deleting oldest entries.
- * Optimized: uses reverse cursor to find excess records directly
- * instead of loading all records into memory.
- */
+/** No automatic play deletion: preserve multi-year local history. */
 export async function enforceMaxRecords(): Promise<void> {
-  // Skip the store.count() + cursor scan entirely while our estimate says the
-  // collection is comfortably below the cap.
-  if (_playCountEstimate < MAX_PLAY_RECORDS) return;
-
-  const db = await openDb();
-
-  // First, count total records
-  const totalCount = await new Promise<number>((resolve, reject) => {
-    const tx = db.transaction(PLAYS_STORE, 'readonly');
-    const store = tx.objectStore(PLAYS_STORE);
-    const request = store.count();
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-
-  // Refresh the estimate with the measured value on every actual run.
-  _playCountEstimate = totalCount;
-
-  if (totalCount <= MAX_PLAY_RECORDS) return;
-
-  const excess = totalCount - MAX_PLAY_RECORDS;
-  const toDelete: number[] = [];
-
-  // Collect oldest record IDs (ascending order = oldest first)
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(PLAYS_STORE, 'readonly');
-    const store = tx.objectStore(PLAYS_STORE);
-    const index = store.index('timestampUtc');
-    const request = index.openCursor();
-    let collected = 0;
-
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (cursor && collected < excess) {
-        const play = cursor.value as Play;
-        if (play.id != null) {
-          toDelete.push(play.id);
-          collected++;
-        }
-        cursor.continue();
-      } else {
-        resolve();
-      }
-    };
-    request.onerror = () => reject(request.error);
-  });
-
-  if (toDelete.length === 0) return;
-
-  // Delete in a single transaction
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(PLAYS_STORE, 'readwrite');
-    const store = tx.objectStore(PLAYS_STORE);
-    for (const id of toDelete) {
-      store.delete(id);
-    }
-    tx.oncomplete = () => { _playCountEstimate = totalCount - toDelete.length; resolve(); };
-    tx.onerror = () => reject(tx.error);
-  });
-
-  invalidateQueueCountCache();
-  invalidateStatsCache();
-  console.log(`[Tempo] Pruned ${toDelete.length} excess play records`);
+  // Intentionally empty. Leave explicit user-requested deletion paths alone.
 }
 
 // Sync History
@@ -509,28 +789,6 @@ export async function recordSync(count: number, status: string, errorMessage: st
     store.add(record);
     tx.oncomplete = () => { invalidateStatsCache(); resolve(); };
     tx.onerror = () => reject(tx.error);
-  });
-}
-
-export async function getSyncHistory(limit = 10): Promise<SyncRecord[]> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(SYNC_HISTORY_STORE, 'readonly');
-    const store = tx.objectStore(SYNC_HISTORY_STORE);
-    const index = store.index('syncedAt');
-    const records: SyncRecord[] = [];
-    const request = index.openCursor(null, 'prev');
-
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (cursor && records.length < limit) {
-        records.push(cursor.value as SyncRecord);
-        cursor.continue();
-      } else {
-        resolve(records);
-      }
-    };
-    request.onerror = () => reject(request.error);
   });
 }
 
@@ -599,347 +857,6 @@ export async function pruneSyncHistory(): Promise<void> {
   });
 }
 
-// Settings (chrome.storage.local)
-
-// In-memory settings cache — chrome.storage.local reads are async and relatively
-// slow (~1-5ms). Most hot paths only need the settings object, so we cache it
-// and invalidate on write.
-let _settingsCache: Settings | null = null;
-let _settingsCacheTime = 0;
-const SETTINGS_CACHE_TTL_MS = 5_000;
-
-export async function getSettings(): Promise<Settings> {
-  if (_settingsCache && (Date.now() - _settingsCacheTime) < SETTINGS_CACHE_TTL_MS) {
-    return _settingsCache;
-  }
-
-  return new Promise<Settings>((resolve) => {
-    chrome.storage.local.get('settings', (result) => {
-      const storageResult = result as SettingsStorageResult;
-      const raw = (storageResult.settings ?? {}) as any;
-      const sanitizeArray = (val: any): string[] => {
-        if (!Array.isArray(val)) return [];
-        return val.filter((item): item is string => typeof item === 'string');
-      };
-      _settingsCache = {
-        ...DEFAULT_SETTINGS,
-        ...raw,
-        knownArtists: sanitizeArray(raw.knownArtists),
-        youtubeChannels: sanitizeArray(raw.youtubeChannels),
-        blockedYoutubeChannels: sanitizeArray(raw.blockedYoutubeChannels),
-      };
-      _settingsCacheTime = Date.now();
-      resolve(_settingsCache as Settings);
-    });
-  });
-}
-
-export async function saveSettings(settings: Settings): Promise<void> {
-  _settingsCache = settings;
-  _settingsCacheTime = Date.now();
-  return new Promise<void>((resolve) => {
-    chrome.storage.local.set({ settings }, resolve);
-  });
-}
-
-// Pairing (chrome.storage.local with session mirroring for compatibility)
-
-export async function getPairing(): Promise<PairingInfo | null> {
-  ensurePairingInvalidationListeners();
-  if (_pairingCache !== undefined) return _pairingCache;
-
-  const resolved = await new Promise<PairingInfo | null>((resolve) => {
-    chrome.storage.local.get('pairing', async (localResult) => {
-      const localPairing = (localResult as PairingStorageResult).pairing;
-      if (!localPairing) {
-        resolve(null);
-        return;
-      }
-
-      const sessionResult = await chrome.storage.session.get('authToken') as SessionTokenStorageResult;
-      const authToken = (localPairing.authToken ?? sessionResult.authToken ?? '').trim();
-      if (!authToken) {
-        resolve(null);
-        return;
-      }
-
-      if (!localPairing.authToken && authToken) {
-        await chrome.storage.local.set({ pairing: { ...localPairing, authToken } });
-      }
-
-      resolve({
-        phoneIp: localPairing.phoneIp ?? '',
-        phonePort: localPairing.phonePort ?? 8765,
-        authToken,
-        deviceName: localPairing.deviceName ?? 'Phone',
-        pairedAt: localPairing.pairedAt ?? null,
-      });
-    });
-  });
-
-  _pairingCache = resolved;
-  return resolved;
-}
-
-export async function savePairing(pairing: PairingInfo): Promise<void> {
-  const { authToken, ...localData } = pairing;
-  await chrome.storage.session.set({ authToken });
-  await new Promise<void>((resolve) => {
-    chrome.storage.local.set({ pairing: { ...localData, authToken } }, resolve);
-  });
-  _pairingCache = pairing;
-}
-
-export async function removePairing(): Promise<void> {
-  _pairingCache = null;
-  await chrome.storage.session.remove('authToken');
-  await new Promise<void>((resolve) => {
-    chrome.storage.local.remove('pairing', resolve);
-  });
-}
-
-// In-memory pairing cache — getPairing() is on the hot path (every socket
-// send, heartbeat, and sync) and normally costs a chrome.storage.local read
-// plus a chrome.storage.session read. We cache the resolved value and
-// invalidate on every write path plus chrome.storage.onChanged, so external
-// writers (other extension contexts) never see stale pairing.
-
-let _pairingCache: PairingInfo | null | undefined; // undefined = uncached
-let _pairingListenersRegistered = false;
-
-function ensurePairingInvalidationListeners(): void {
-  if (_pairingListenersRegistered) return;
-  _pairingListenersRegistered = true;
-  try {
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === 'local' && changes['pairing']) {
-        _pairingCache = undefined;
-      } else if (area === 'session' && changes['authToken']) {
-        _pairingCache = undefined;
-      }
-    });
-  } catch { /* non-critical */ }
-}
-
-// Session State (chrome.storage.session — survives hibernation)
-
-export async function saveSessionState(states: TabTrackState[]): Promise<void> {
-  return new Promise<void>((resolve) => {
-    chrome.storage.session.set({ trackerStates: states }, resolve);
-  });
-}
-
-export async function loadSessionState(): Promise<TabTrackState[]> {
-  return new Promise<TabTrackState[]>((resolve) => {
-    chrome.storage.session.get('trackerStates', (result) => {
-      const storageResult = result as TrackerStateStorageResult;
-      resolve(storageResult.trackerStates ?? []);
-    });
-  });
-}
-
-// Connection History (chrome.storage.local)
-
-interface ConnectionHistoryStorageResult {
-  connectionHistory?: ConnectionHistoryEntry[];
-}
-
-interface ConnectionHealthStorageResult {
-  connectionHealth?: ConnectionHealth;
-}
-
-interface SyncCheckpointStorageResult {
-  syncCheckpoint?: SyncCheckpoint;
-}
-
-const MAX_CONNECTION_HISTORY = 20;
-
-export async function getConnectionHistory(): Promise<ConnectionHistoryEntry[]> {
-  return new Promise<ConnectionHistoryEntry[]>((resolve) => {
-    chrome.storage.local.get('connectionHistory', (result) => {
-      const entries = (result as ConnectionHistoryStorageResult).connectionHistory;
-      resolve(Array.isArray(entries) ? entries : []);
-    });
-  });
-}
-
-export async function recordConnectionSuccess(ip: string, port: number, networkFingerprint: string): Promise<void> {
-  const entries = await getConnectionHistory();
-  const now = Date.now();
-
-  const existing = entries.find(e => e.ip === ip && e.port === port);
-  if (existing) {
-    existing.lastSeen = now;
-    existing.successCount++;
-    existing.failCount = 0;
-    existing.networkFingerprint = networkFingerprint;
-  } else {
-    entries.push({ ip, port, lastSeen: now, successCount: 1, failCount: 0, networkFingerprint });
-  }
-
-  entries.sort((a, b) => b.successCount - a.successCount || b.lastSeen - a.lastSeen);
-  if (entries.length > MAX_CONNECTION_HISTORY) entries.length = MAX_CONNECTION_HISTORY;
-
-  return new Promise<void>((resolve) => {
-    chrome.storage.local.set({ connectionHistory: entries }, resolve);
-  });
-}
-
-export async function recordConnectionFailure(ip: string, port: number): Promise<void> {
-  const entries = await getConnectionHistory();
-  const existing = entries.find(e => e.ip === ip && e.port === port);
-  if (!existing) return; // Nothing to increment — skip the chrome.storage write entirely.
-
-  existing.failCount++;
-  if (existing.failCount > 10 && existing.successCount === 0) {
-    entries.splice(entries.indexOf(existing), 1);
-  }
-
-  return new Promise<void>((resolve) => {
-    chrome.storage.local.set({ connectionHistory: entries }, resolve);
-  });
-}
-
-/**
- * Batch variant of recordConnectionFailure(): applies the same failCount
- * increments (and eviction of dead never-succeeded entries) for many IPs but
- * performs exactly ONE connectionHistory array rewrite. Entries that do not
- * exist are skipped, matching the single-IP semantics.
- */
-export async function recordConnectionFailures(failures: Array<{ ip: string; port: number }>): Promise<void> {
-  const pending = failures.filter(f => f.ip);
-  if (pending.length === 0) return;
-
-  const entries = await getConnectionHistory();
-  let changed = false;
-
-  for (const failure of pending) {
-    const existing = entries.find(e => e.ip === failure.ip && e.port === failure.port);
-    if (!existing) continue;
-
-    existing.failCount++;
-    if (existing.failCount > 10 && existing.successCount === 0) {
-      entries.splice(entries.indexOf(existing), 1);
-    }
-    changed = true;
-  }
-
-  if (!changed) return;
-
-  return new Promise<void>((resolve) => {
-    chrome.storage.local.set({ connectionHistory: entries }, resolve);
-  });
-}
-
-export async function clearConnectionHistory(): Promise<void> {
-  return new Promise<void>((resolve) => {
-    chrome.storage.local.remove('connectionHistory', resolve);
-  });
-}
-
-// Connection Health (chrome.storage.local)
-
-const DEFAULT_CONNECTION_HEALTH: ConnectionHealth = {
-  lastPing: 0,
-  healthy: false,
-  consecutiveFailures: 0,
-  consecutiveAuthFailures: 0,
-  lastSuccessAt: null,
-};
-
-export async function getConnectionHealth(): Promise<ConnectionHealth> {
-  return new Promise<ConnectionHealth>((resolve) => {
-    chrome.storage.local.get('connectionHealth', (result) => {
-      const health = (result as ConnectionHealthStorageResult).connectionHealth;
-      resolve(health ? { ...DEFAULT_CONNECTION_HEALTH, ...health } : { ...DEFAULT_CONNECTION_HEALTH });
-    });
-  });
-}
-
-export async function saveConnectionHealth(health: ConnectionHealth): Promise<void> {
-  return new Promise<void>((resolve) => {
-    chrome.storage.local.set({ connectionHealth: health }, resolve);
-  });
-}
-
-export async function recordHealthPing(success: boolean): Promise<ConnectionHealth> {
-  const health = await getConnectionHealth();
-  const now = Date.now();
-  health.lastPing = now;
-
-  if (success) {
-    health.healthy = true;
-    health.consecutiveFailures = 0;
-    health.consecutiveAuthFailures = 0;
-    health.lastSuccessAt = now;
-  } else {
-    health.consecutiveFailures++;
-    if (health.consecutiveFailures >= 3) {
-      health.healthy = false;
-    }
-  }
-
-  await saveConnectionHealth(health);
-  return health;
-}
-
-export async function recordAuthFailure(): Promise<ConnectionHealth> {
-  const health = await getConnectionHealth();
-  health.consecutiveAuthFailures++;
-  await saveConnectionHealth(health);
-  return health;
-}
-
-// Sync Checkpoint (chrome.storage.session — survives hibernation)
-
-export async function getSyncCheckpoint(): Promise<SyncCheckpoint | null> {
-  return new Promise<SyncCheckpoint | null>((resolve) => {
-    chrome.storage.session.get('syncCheckpoint', (result) => {
-      const checkpoint = (result as SyncCheckpointStorageResult).syncCheckpoint;
-      resolve(checkpoint ?? null);
-    });
-  });
-}
-
-export async function saveSyncCheckpoint(checkpoint: SyncCheckpoint): Promise<void> {
-  return new Promise<void>((resolve) => {
-    chrome.storage.session.set({ syncCheckpoint: checkpoint }, resolve);
-  });
-}
-
-export async function clearSyncCheckpoint(): Promise<void> {
-  return new Promise<void>((resolve) => {
-    chrome.storage.session.remove('syncCheckpoint', resolve);
-  });
-}
-
-// Sync Backoff State (chrome.storage.session — survives hibernation)
-
-interface SyncBackoffStorageResult {
-  syncBackoff?: SyncBackoffState;
-}
-
-export async function getSyncBackoff(): Promise<SyncBackoffState | null> {
-  return new Promise<SyncBackoffState | null>((resolve) => {
-    chrome.storage.session.get('syncBackoff', (result) => {
-      const backoff = (result as SyncBackoffStorageResult).syncBackoff;
-      resolve(backoff ?? null);
-    });
-  });
-}
-
-export async function saveSyncBackoff(backoff: SyncBackoffState): Promise<void> {
-  return new Promise<void>((resolve) => {
-    chrome.storage.session.set({ syncBackoff: backoff }, resolve);
-  });
-}
-
-export async function clearSyncBackoff(): Promise<void> {
-  return new Promise<void>((resolve) => {
-    chrome.storage.session.remove('syncBackoff', resolve);
-  });
-}
-
 // Stats
 
 export interface ExtensionStats {
@@ -956,8 +873,8 @@ export interface ExtensionStats {
  * Optimized: uses index-based counting where possible instead of loading all records.
  */
 export async function getStats(): Promise<ExtensionStats> {
-  // Brief TTL cache — the popup polls stats; recomputing on every tick means
-  // a 5000-record cursor walk each time. Cleared by every store mutation.
+  // Brief TTL cache — the popup polls stats; an archive-wide cursor walk
+  // should not be repeated on every tick. Cleared by every store mutation.
   if (_statsCache && (Date.now() - (_statsCacheTime ?? 0)) < STATS_CACHE_TTL_MS) {
     return _statsCache;
   }
@@ -993,10 +910,9 @@ export async function getStats(): Promise<ExtensionStats> {
     }),
   ]);
 
-  // For top artist/track, stream the up-to-5000 most recent plays through
-  // readonly cursors and build the frequency maps incrementally instead of
-  // materializing a getAllPlays(5000) array.
-  const STATS_PLAY_SCAN_LIMIT = 5000;
+  // Include every locally retained play, not only the newest 5000, or the
+  // lifetime leaders can be wrong. Stream via a cursor to bound memory to
+  // frequency maps instead of materializing the complete listening archive.
   const { artistCounts, trackCounts } = await new Promise<{
     artistCounts: Map<string, number>;
     trackCounts: Map<string, number>;
@@ -1005,19 +921,17 @@ export async function getStats(): Promise<ExtensionStats> {
     const index = tx.objectStore(PLAYS_STORE).index('timestampUtc');
     const artistCounts = new Map<string, number>();
     const trackCounts = new Map<string, number>();
-    let seen = 0;
     const request = index.openCursor(null, 'prev');
 
     request.onsuccess = () => {
       const cursor = request.result;
-      if (cursor && seen < STATS_PLAY_SCAN_LIMIT) {
+      if (cursor) {
         const play = cursor.value as Play;
         if (play.artist) {
           artistCounts.set(play.artist, (artistCounts.get(play.artist) ?? 0) + 1);
         }
         const key = `${play.title} - ${play.artist}`;
         trackCounts.set(key, (trackCounts.get(key) ?? 0) + 1);
-        seen++;
         cursor.continue();
       } else {
         resolve({ artistCounts, trackCounts });

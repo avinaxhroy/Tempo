@@ -26,7 +26,6 @@
   let youTubeChannelDirty = true;
   let ytMetadataDirty = true;
   let ytMusicTagRetryTimer: ReturnType<typeof setTimeout> | null = null;
-  let ytMusicTagRetryCount = 0;
   let cachedMusicSectionEl: HTMLElement | null = null;
   let musicSectionDirty = true;
   let ytMusicTagObserver: MutationObserver | null = null;
@@ -40,7 +39,6 @@
     ytMetadataDirty = true;
     musicSectionDirty = true;
     cachedMusicSectionEl = null;
-    ytMusicTagRetryCount = 0;
     ytMusicTagFruitlessBatches = 0;
     ytMusicTagLastExtractAt = 0;
     if (ytMusicTagRetryTimer) {
@@ -637,14 +635,6 @@
       return { title, artist, album, label };
     }
     return null;
-  }
-
-  function extractYoutubeDescriptionText(): string {
-    const descEl = document.querySelector('#description-inline-expander') ||
-                   document.querySelector('#description') ||
-                   document.querySelector('ytd-text-inline-expander') ||
-                   document.querySelector('.ytd-video-secondary-info-renderer');
-    return (descEl?.textContent || '').trim();
   }
 
   function parseYoutubeDescription(descText: string): { title?: string; artist?: string; album?: string; label?: string } | null {

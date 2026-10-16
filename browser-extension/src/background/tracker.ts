@@ -25,9 +25,6 @@ const MUTE_VOLUME_THRESHOLD = 0.01;
 /** Track is "skipped" if listened < 30% of duration. */
 const SKIP_FRACTION = 0.30;
 
-/** Full play threshold: listened >= 80% of duration. */
-const FULL_PLAY_FRACTION = 0.80;
-
 /** Maximum listen cap per session (1 hour). */
 const MAX_LISTEN_CAP_MS = 3_600_000;
 
@@ -429,7 +426,7 @@ export class PlaybackTracker {
   /** Called when we want to finalize ALL tabs (e.g., service worker suspending). */
   finalizeAllTabs(): TrackEvent[] {
     const events: TrackEvent[] = [];
-    for (const [tabId, tracker] of this.trackers) {
+    for (const tracker of this.trackers.values()) {
       if (tracker.currentTrackKey !== null) {
         this.accruePendingListenTime(tracker, Date.now());
         const event = this.finalizeTab(tracker);

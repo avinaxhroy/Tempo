@@ -1,0 +1,58 @@
+name: Browser Google Drive release packages
+
+# A deliberate packaging workflow. Unlike source CI, this must use the real
+# registered OAuth clients from repository variables (not CI placeholders).
+# No publishing or overwriting releases happens automatically.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: OAuth-configured ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [chrome, firefox]
+    defaults:
+      run:
+        working-directory: browser-extension
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      TEMPO_GOOGLE_OAUTH_CLIENT_ID_CHROME: ${{ vars.TEMPO_GOOGLE_OAUTH_CLIENT_ID_CHROME }}
+      TEMPO_GOOGLE_OAUTH_CLIENT_ID_FIREFOX: ${{ vars.TEMPO_GOOGLE_OAUTH_CLIENT_ID_FIREFOX }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: browser-extension/package-lock.json
+      - run: npm ci
+      - name: Typecheck and regression tests
+        run: |
+          npm run typecheck
+          npm run smoke
+      - name: Build OAuth-configured extension, reject missing or malformed IDs
+        run: npm run build:release:${{ matrix.target }}
+      - name: Record artifact integrity and exact source revision
+        shell: bash
+        run: |
+          (cd dist && sha256sum "tempo-stats-${{ matrix.target }}.zip" \
+            > "tempo-stats-${{ matrix.target }}.zip.sha256")
+          printf 'commit=%s\nrun=%s\ntarget=%s\n' \
+            "$GITHUB_SHA" "$GITHUB_RUN_ID" "${{ matrix.target }}" \
+            > "dist/tempo-stats-${{ matrix.target }}.build-info.txt"
+      - name: Upload non-published browser package, checksum and revision
+        uses: actions/upload-artifact@v4
+        with:
+          name: tempo-drive-${{ matrix.target }}
+          path: |
+            browser-extension/dist/tempo-stats-${{ matrix.target }}.zip
+            browser-extension/dist/tempo-stats-${{ matrix.target }}.zip.sha256
+            browser-extension/dist/tempo-stats-${{ matrix.target }}.build-info.txt
+          if-no-files-found: error
+          retention-days: 30

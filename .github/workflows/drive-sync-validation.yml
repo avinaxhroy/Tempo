@@ -1,0 +1,97 @@
+name: Drive Sync Validation
+
+on:
+  push:
+    paths:
+      - ".github/workflows/drive-sync-validation.yml"
+      - ".github/workflows/browser-drive-release.yml"
+      - "PRIVACY.md"
+      - "browser-extension/**"
+      - "docs/DRIVE_HISTORY_SYNC_V1.md"
+  pull_request:
+    paths:
+      - ".github/workflows/drive-sync-validation.yml"
+      - ".github/workflows/browser-drive-release.yml"
+      - "PRIVACY.md"
+      - "browser-extension/**"
+      - "docs/DRIVE_HISTORY_SYNC_V1.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: browser-extension/package-lock.json
+      - run: npm ci
+      - name: TypeScript typecheck
+        run: npm run typecheck
+      - name: Existing tracker and LAN sync smoke tests
+        run: npm run smoke
+      - name: Reject unconfigured release packaging
+        env:
+          TEMPO_GOOGLE_OAUTH_CLIENT_ID_CHROME: ""
+          TEMPO_GOOGLE_OAUTH_CLIENT_ID_FIREFOX: ""
+        run: |
+          if npm run build:release:chrome; then
+            echo "A Drive release was permitted without a Chrome OAuth client" >&2
+            exit 1
+          fi
+          if npm run build:release:firefox; then
+            echo "A Drive release was permitted without a Firefox OAuth client" >&2
+            exit 1
+          fi
+      - name: Validate release packaging with synthetic OAuth-format IDs
+        # This verifies packaging, NOT that a Google OAuth client is registered.
+        # Archives produced here are overwritten and never uploaded.
+        env:
+          TEMPO_GOOGLE_OAUTH_CLIENT_ID_CHROME: 123456789012-cifixture.apps.googleusercontent.com
+          TEMPO_GOOGLE_OAUTH_CLIENT_ID_FIREFOX: 123456789012-cifixture.apps.googleusercontent.com
+        run: |
+          npm run build:release:chrome
+          npm run build:release:firefox
+      - name: Build Chrome
+        env:
+          TEMPO_GOOGLE_OAUTH_CLIENT_ID_CHROME: test-client.apps.googleusercontent.com
+        run: npm run build:chrome
+      - name: Validate reproducible ZIP checksum and build provenance
+        shell: bash
+        run: |
+          (cd dist && sha256sum "tempo-stats-chrome.zip" > "tempo-stats-chrome.zip.sha256"
+            sha256sum -c "tempo-stats-chrome.zip.sha256")
+          printf 'commit=%s\nrun=%s\ntarget=chrome\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > "dist/tempo-stats-chrome.build-info.txt"
+          grep -Fxq "commit=$GITHUB_SHA" "dist/tempo-stats-chrome.build-info.txt"
+      - name: Validate CI Chrome OAuth manifest
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const m = JSON.parse(readFileSync("dist/chrome/manifest.json", "utf8"));
+            if (m.oauth2?.client_id !== "test-client.apps.googleusercontent.com" ||
+                !m.oauth2?.scopes?.includes("https://www.googleapis.com/auth/drive.appdata"))
+              throw new Error("CI Chrome build lost OAuth client or Drive scope");
+          '
+      - name: Build Firefox
+        env:
+          TEMPO_GOOGLE_OAUTH_CLIENT_ID_FIREFOX: test-client.apps.googleusercontent.com
+        run: npm run build:firefox
+      - name: Verify CI Firefox Drive credentials survive bundling
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const worker = readFileSync("dist/firefox/background/service-worker.js", "utf8");
+            if (!worker.includes("test-client.apps.googleusercontent.com"))
+              throw new Error("CI Firefox build lost Google OAuth client identifier");
+          '

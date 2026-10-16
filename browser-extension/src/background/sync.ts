@@ -4,9 +4,10 @@
  * rate-limit cooldowns, and alarm-based retries across worker hibernations.
  */
 
-import type { Play, SyncPayload, SyncPlay, SyncResponse, PairingInfo, ConnectionHistoryEntry } from '../shared/types';
+import type { SyncPayload, SyncResponse, PairingInfo } from '../shared/types';
 import * as storage from './storage';
-import { signRequest, buildJsonHeaders, encryptBody, decryptBody } from '../shared/security';
+import { getDriveLanOrigin } from './drive-history';
+import { signRequest, encryptBody, decryptBody } from '../shared/security';
 
 const IS_FIREFOX = typeof navigator !== 'undefined' && navigator.userAgent.includes('Firefox');
 
@@ -55,6 +56,23 @@ export type SyncErrorKind =
   | 'unreachable'
   | 'battery'
   | 'unknown';
+
+/** Only an explicit JSON ok=true is a valid LAN batch acknowledgment.
+ * Neither an empty HTTP 200 nor a partially received response may empty the
+ * persistent queue. Kept pure so the regression cases can run without Chrome.
+ */
+export function parseLanAcknowledgment(body: string): SyncResponse {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    throw new SyncError('Phone LAN acknowledgment was not valid JSON', 'network');
+  }
+  if (!payload || typeof payload !== 'object' || (payload as SyncResponse).ok !== true) {
+    throw new SyncError('Phone did not confirm the LAN batch', 'network');
+  }
+  return payload as SyncResponse;
+}
 
 export class SyncError extends Error {
   constructor(
@@ -678,7 +696,9 @@ export async function syncToPhone(options: SyncOptions = {}): Promise<number> {
       const payload: SyncPayload = {
         auth_token: pairing.authToken,
         device_name: deviceName,
-        plays: batch.map(p => ({
+        plays: await Promise.all(batch.map(async p => ({
+          ...await getDriveLanOrigin(p),
+          origin_source: `browser:${p.sourceApp}`,
           title: p.title,
           artist: p.artist,
           album: p.album,
@@ -700,7 +720,7 @@ export async function syncToPhone(options: SyncOptions = {}): Promise<number> {
           anomalies: p.anomalies ?? [],
           total_pause_duration_ms: p.totalPauseDurationMs ?? 0,
           position_updates_count: p.positionUpdatesCount ?? 0,
-        })),
+        }))),
       };
 
       const url = `http://${address.ip}:${address.port}/api/plays`;
@@ -849,17 +869,25 @@ async function sendWithRetry(url: string, payload: SyncPayload, authToken: strin
       clearTimeout(timeout);
 
       if (response.ok) {
+        // An HTTP 200 is NOT a durable acknowledgment unless the phone
+        // explicitly confirms the batch. A truncated/encrypted/invalid body
+        // must keep every queued play eligible for retry.
+        let data: SyncResponse;
         try {
           const isEncrypted = response.headers.get('X-Tempo-Encrypted') === '1';
           const responseText = await response.text();
           const decryptedText = isEncrypted
             ? await decryptBody(responseText, authToken)
             : responseText;
-          const data: SyncResponse = JSON.parse(decryptedText);
-          return data;
-        } catch {
-          return { ok: true };
+          data = parseLanAcknowledgment(decryptedText);
+        } catch (error) {
+          throw new SyncError(
+            'Phone returned an unreadable LAN acknowledgment; keeping plays queued',
+            'network',
+            response.status,
+          );
         }
+        return data;
       }
 
       const body = await response.text();

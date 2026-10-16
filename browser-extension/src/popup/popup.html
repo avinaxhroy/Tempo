@@ -77,9 +77,9 @@
       <section id="tab-now-playing" class="tab-panel active" role="tabpanel" aria-labelledby="tabbtn-now-playing">
         <!-- Setup Promotion Hero (visible when NOT paired or NOT playing) -->
         <div class="hero-card" id="home-hero-card">
-          <div class="hero-status" id="home-status-pill">Setup required</div>
-          <h2 class="hero-title" id="home-title">Connect your Tempo app</h2>
-          <p class="hero-copy" id="home-copy">Pair your phone — just scan the QR code in the Pair tab.</p>
+          <div class="hero-status" id="home-status-pill">Checking connections…</div>
+          <h2 class="hero-title" id="home-title">Checking sync destinations</h2>
+          <p class="hero-copy" id="home-copy">Checking your Google Drive and local network connections.</p>
           <div class="hero-actions">
             <button class="btn btn-primary" id="home-primary-action">Scan to connect</button>
             <button class="btn btn-ghost" id="home-secondary-action">View queue</button>
@@ -231,16 +231,19 @@
         <div class="queue-header">
           <div class="queue-stats">
             <span class="queue-count" id="queue-count">0</span>
-            <span class="text-muted"> plays queued</span>
+            <span class="text-muted" id="queue-count-label"> awaiting phone (LAN)</span>
           </div>
           <div class="queue-actions">
+            <button class="btn btn-ghost btn-sm" id="btn-sync-drive" style="display:none;">
+              Sync to Google Drive
+            </button>
             <button class="btn btn-primary btn-sm" id="btn-sync-now">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="23 4 23 10 17 10"></polyline>
                 <polyline points="1 20 1 14 7 14"></polyline>
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
               </svg>
-              <span>Sync Now</span>
+              <span>Sync to phone</span>
             </button>
             <button class="btn btn-ghost btn-sm" id="btn-retry-failed" title="Retry failed tracks">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -257,7 +260,14 @@
             </button>
           </div>
         </div>
-        <div class="sync-status" id="sync-status"></div>
+        <div class="sync-status" id="sync-status" role="status" aria-live="polite"></div>
+        <div class="setting-desc" id="queue-drive-count" role="status" aria-live="polite">
+          Checking Google Drive uploads…
+        </div>
+        <p class="setting-desc" style="margin:5px 0 10px;">
+          The phone queue and Google Drive uploads are tracked separately. Clear Queue keeps recordings
+          that have not been saved to Drive.
+        </p>
         
         <div class="queue-list" id="queue-list">
           <div class="empty-state"><p class="text-muted">No plays in queue</p></div>

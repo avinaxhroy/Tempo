@@ -79,6 +79,7 @@ Tempo is a local-first music journal and scrobbler for Android. It follows playb
 - Resolves album cover art, release details, and genre tags from MusicBrainz.
 
 ### Browser companion extension
+- Optional Google Drive history sync exchanges events across networks between Android and Chrome/Firefox. It is disabled by default and requires configured Google OAuth clients; see [Drive sync setup](docs/DRIVE_HISTORY_SYNC_V1.md#oauth-setup-and-release-validation).
 - Manifest V3 companion for Chrome and Firefox logging web playback from YouTube Music, Spotify Web, SoundCloud, Bandcamp, Apple Music Web, Deezer, and Tidal Web.
 - Measures listen time directly from HTML media element playback positions rather than wall-clock timers.
 - Queues plays locally in IndexedDB during network disconnections.

@@ -19,7 +19,7 @@ await esbuild.build({
 });
 
 const mod = await import(pathToFileURL(out).href);
-const { isTransientSyncError, backoffDelayMinutes, SyncError } = mod;
+const { isTransientSyncError, backoffDelayMinutes, SyncError, parseLanAcknowledgment } = mod;
 
 let pass = 0, fail = 0;
 function check(name, cond, detail = '') {
@@ -60,6 +60,18 @@ console.log('\n[3] SyncError carries kind, status, retryAfter');
   const auth = new SyncError('denied', 'auth', 401);
   check('auth error has no retryAfter', auth.retryAfterMs === undefined);
 }
+
+console.log('\n[4] LAN response must explicitly confirm receipt');
+for (const bad of ['', 'ok', '{}', 'null', '{"ok":false}', '{"ok":"true"}']) {
+  let rejectedTransiently = false;
+  try { parseLanAcknowledgment(bad); }
+  catch (error) {
+    rejectedTransiently = error instanceof SyncError && isTransientSyncError(error.kind);
+  }
+  check('unconfirmed HTTP 200 retains queue: ' + JSON.stringify(bad), rejectedTransiently);
+}
+const acknowledged = parseLanAcknowledgment('{"ok":true,"accepted":1,"duplicates":0}');
+check('explicitly acknowledged LAN batch is accepted', acknowledged.ok === true);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail > 0 ? 1 : 0);
