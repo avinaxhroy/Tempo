@@ -29,7 +29,8 @@ import androidx.room.PrimaryKey
         Index(name = "index_listening_events_timestamp_track_id", value = ["timestamp", "track_id"]),
         Index(name = "index_listening_events_track_id_timestamp", value = ["track_id", "timestamp"]),
         Index(name = "index_listening_events_stats", value = ["timestamp", "track_id", "playDuration", "completionPercentage"]),
-        Index(value = ["content_fingerprint"])  // Layer 1 idempotency lookups
+        Index(value = ["content_fingerprint"]), // Layer 1 idempotency lookups
+        Index(value = ["drive_account_subject"]) // Room schema must match migration 56->57
     ]
 )
 data class ListeningEvent(
@@ -62,7 +63,11 @@ data class ListeningEvent(
     // Import reconciliation: deterministic SHA-256 of (source|track_id|timestamp|
     // playDuration|endTimestamp). Guarantees re-importing the same data is a no-op.
     // NULL for legacy rows written before this column existed (fall back to temporal dedup).
-    @ColumnInfo(name = "content_fingerprint", defaultValue = "NULL") val contentFingerprint: String? = null
+    @ColumnInfo(name = "content_fingerprint", defaultValue = "NULL") val contentFingerprint: String? = null,
+    // Identity of the Google account that imported or initially owned this
+    // event. Unattributed historic Drive imports are quarantined by migration.
+    @ColumnInfo(name = "drive_account_subject", defaultValue = "NULL")
+    val driveAccountSubject: String? = null
 ) {
     /**
      * Check if volume was explicitly 0 (muted). Legacy records (null) are treated as audible.

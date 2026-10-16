@@ -14,6 +14,7 @@ import me.avinas.tempo.data.local.entities.DailyChallenge
 import me.avinas.tempo.data.local.entities.EnrichedMetadata
 import me.avinas.tempo.data.local.entities.LastFmImportMetadata
 import me.avinas.tempo.data.local.entities.ListeningEvent
+import me.avinas.tempo.data.local.entities.ListeningEventOrigin
 import me.avinas.tempo.data.local.entities.ManualContentMark
 import me.avinas.tempo.data.local.entities.ScrobbleArchive
 import me.avinas.tempo.data.local.entities.Track
@@ -45,6 +46,7 @@ internal class TempoExportJsonCodec(private val moshi: Moshi) {
     private val albumAdapter: JsonAdapter<Album> = moshi.adapter(Album::class.java)
     private val trackArtistAdapter: JsonAdapter<TrackArtist> = moshi.adapter(TrackArtist::class.java)
     private val listeningEventAdapter: JsonAdapter<ListeningEvent> = moshi.adapter(ListeningEvent::class.java)
+    private val originAdapter: JsonAdapter<ListeningEventOrigin> = moshi.adapter(ListeningEventOrigin::class.java)
     private val enrichedMetadataAdapter: JsonAdapter<EnrichedMetadata> = moshi.adapter(EnrichedMetadata::class.java)
     private val userPreferencesAdapter: JsonAdapter<UserPreferences> = moshi.adapter(UserPreferences::class.java)
     private val userLevelAdapter: JsonAdapter<UserLevel> = moshi.adapter(UserLevel::class.java)
@@ -70,7 +72,8 @@ internal class TempoExportJsonCodec(private val moshi: Moshi) {
     */
     data class StreamHandlers(
         val onListeningEvent: (suspend (ListeningEvent) -> Unit)? = null,
-        val onScrobbleArchiveRow: (suspend (ScrobbleArchive) -> Unit)? = null
+        val onScrobbleArchiveRow: (suspend (ScrobbleArchive) -> Unit)? = null,
+        val onListeningEventOrigin: (suspend (ListeningEventOrigin) -> Unit)? = null
     )
 
     /**
@@ -84,7 +87,8 @@ internal class TempoExportJsonCodec(private val moshi: Moshi) {
         writer: JsonWriter,
         shell: TempoExportData,
         eventPages: suspend () -> List<ListeningEvent>?,
-        archivePages: suspend () -> List<ScrobbleArchive>?
+        archivePages: suspend () -> List<ScrobbleArchive>?,
+        originPages: suspend () -> List<ListeningEventOrigin>? = { null },
     ) {
         writer.beginObject()
 
@@ -106,6 +110,15 @@ internal class TempoExportJsonCodec(private val moshi: Moshi) {
             val page = eventPages()
             if (page.isNullOrEmpty()) break
             page.forEach { listeningEventAdapter.toJson(writer, it) }
+        }
+        writer.endArray()
+
+        writer.name("listeningEventOrigins")
+        writer.beginArray()
+        while (true) {
+            val page = originPages()
+            if (page.isNullOrEmpty()) break
+            page.forEach { originAdapter.toJson(writer, it) }
         }
         writer.endArray()
 
@@ -190,6 +203,11 @@ internal class TempoExportJsonCodec(private val moshi: Moshi) {
                     if (handler != null) streamArray(reader, listeningEventAdapter, handler)
                     else reader.skipValue()
                 }
+                "listeningEventOrigins" -> {
+                    val handler = handlers.onListeningEventOrigin
+                    if (handler != null) streamArray(reader, originAdapter, handler)
+                    else reader.skipValue()
+                }
                 "enrichedMetadata" -> enrichedMetadata = readArray(reader, enrichedMetadataAdapter)
                 "userPreferences" -> userPreferences = nextNullableObject(reader, userPreferencesAdapter)
                 "userLevel" -> userLevel = nextNullableObject(reader, userLevelAdapter)
@@ -226,6 +244,7 @@ internal class TempoExportJsonCodec(private val moshi: Moshi) {
             albums = albums,
             trackArtists = trackArtists,
             listeningEvents = emptyList(),
+            listeningEventOrigins = emptyList(),
             enrichedMetadata = enrichedMetadata,
             userPreferences = userPreferences,
             userLevel = userLevel,

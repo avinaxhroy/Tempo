@@ -19,6 +19,7 @@ import me.avinas.tempo.BuildConfig
 import me.avinas.tempo.data.analytics.AnalyticsConsent
 import me.avinas.tempo.data.analytics.AnalyticsDefaults
 import me.avinas.tempo.data.analytics.AnalyticsGate
+import me.avinas.tempo.data.drive.DriveHistorySyncManager
 import me.avinas.tempo.data.importexport.ImportConflictStrategy
 import me.avinas.tempo.data.importexport.ImportExportManager
 import me.avinas.tempo.data.importexport.ImportExportProgress
@@ -39,6 +40,7 @@ class SettingsViewModel
         @param:ApplicationContext private val context: Context,
         private val database: AppDatabase,
         private val importExportManager: ImportExportManager,
+        private val driveHistorySyncManager: DriveHistorySyncManager,
         private val profileIdentityManager: ProfileIdentityManager,
         private val userPreferencesDao: me.avinas.tempo.data.local.dao.UserPreferencesDao,
         private val analyticsConsent: AnalyticsConsent,
@@ -392,7 +394,9 @@ class SettingsViewModel
         ) {
             _showConflictDialog.value = null
             viewModelScope.launch {
-                val result = importExportManager.importData(uri, strategy)
+                val result = driveHistorySyncManager.withLocalHistoryRestore {
+                    importExportManager.importData(uri, strategy)
+                }
                 _importExportResult.value = result
             }
         }

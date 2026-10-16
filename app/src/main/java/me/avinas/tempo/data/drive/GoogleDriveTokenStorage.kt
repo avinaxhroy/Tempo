@@ -10,8 +10,15 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Stores Google Drive OAuth tokens in EncryptedSharedPreferences.
- * Keys and values are encrypted via Android Keystore.
+ * Secure storage for Google Drive OAuth tokens using EncryptedSharedPreferences.
+ *
+ * Uses AES-256-GCM encryption for values and AES-256-SIV for keys,
+ * backed by Android Keystore for key management. This ensures tokens
+ * are stored securely and cannot be read by other apps.
+ *
+ * This enables background workers (like DriveBackupWorker) to restore
+ * user sessions without requiring UI interaction, making scheduled
+ * backups reliable even when the app has been killed.
  */
 @Singleton
 class GoogleDriveTokenStorage @Inject constructor(
@@ -24,9 +31,11 @@ class GoogleDriveTokenStorage @Inject constructor(
         // Token keys
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_TOKEN_TIMESTAMP = "token_timestamp"
+        private const val KEY_GRANTED_SCOPES = "granted_scopes"
         
         // Account info keys
         private const val KEY_ACCOUNT_EMAIL = "account_email"
+        private const val KEY_ACCOUNT_SUBJECT = "account_subject"
         private const val KEY_ACCOUNT_DISPLAY_NAME = "account_display_name"
         private const val KEY_ACCOUNT_PHOTO_URL = "account_photo_url"
         
@@ -65,11 +74,12 @@ class GoogleDriveTokenStorage @Inject constructor(
      * Note: Google's OAuth for Drive only provides access tokens via the
      * Authorization API. Refresh tokens are managed internally by Google Play Services.
      */
-    fun saveAccessToken(accessToken: String) {
-        require(accessToken.isNotBlank()) { "Google Drive access token must not be blank" }
+    fun saveAccessToken(accessToken: String, grantedScopes: Collection<String> = emptyList()) {
+        require(accessToken.isNotBlank()) { "Google Drive access token cannot be blank" }
         encryptedPrefs.edit().apply {
             putString(KEY_ACCESS_TOKEN, accessToken)
             putLong(KEY_TOKEN_TIMESTAMP, System.currentTimeMillis())
+            putStringSet(KEY_GRANTED_SCOPES, grantedScopes.filter { it.isNotBlank() }.toSet())
             apply()
         }
         Log.d(TAG, "Access token saved")
@@ -82,6 +92,11 @@ class GoogleDriveTokenStorage @Inject constructor(
     fun getAccessToken(): String? {
         return encryptedPrefs.getString(KEY_ACCESS_TOKEN, null)
             ?.takeIf { it.isNotBlank() }
+    }
+
+    fun hasGrantedScopes(requiredScopes: Set<String>): Boolean {
+        val persisted = encryptedPrefs.getStringSet(KEY_GRANTED_SCOPES, emptySet()).orEmpty()
+        return requiredScopes.all(persisted::contains)
     }
     
     /**
@@ -130,6 +145,7 @@ class GoogleDriveTokenStorage @Inject constructor(
         encryptedPrefs.edit().apply {
             remove(KEY_ACCESS_TOKEN)
             remove(KEY_TOKEN_TIMESTAMP)
+            remove(KEY_GRANTED_SCOPES)
             apply()
         }
         Log.d(TAG, "Access token cleared")
@@ -138,10 +154,12 @@ class GoogleDriveTokenStorage @Inject constructor(
     /**
      * Save the Google account information.
      */
-    fun saveAccountInfo(email: String, displayName: String?, photoUrl: String?) {
+    fun saveAccountInfo(email: String, displayName: String?, photoUrl: String?, subject: String? = null) {
         require(email.isNotBlank()) { "Google account email must not be blank" }
         encryptedPrefs.edit().apply {
             putString(KEY_ACCOUNT_EMAIL, email)
+            if (!subject.isNullOrBlank()) putString(KEY_ACCOUNT_SUBJECT, subject)
+            else remove(KEY_ACCOUNT_SUBJECT)
             if (displayName != null) {
                 putString(KEY_ACCOUNT_DISPLAY_NAME, displayName)
             } else {
@@ -195,7 +213,12 @@ class GoogleDriveTokenStorage @Inject constructor(
         return GoogleAccount(
             email = email,
             displayName = getAccountDisplayName(),
-            photoUrl = getAccountPhotoUrl()
+            photoUrl = getAccountPhotoUrl(),
+            // Older releases accidentally persisted GoogleIdTokenCredential.id
+            // (an email) as subject. Do not reuse this mutable identifier as
+            // a verified account boundary after upgrading.
+            subject = encryptedPrefs.getString(KEY_ACCOUNT_SUBJECT, null)
+                ?.takeIf { it.isNotBlank() && !it.contains('@') }
         )
     }
     
@@ -205,6 +228,7 @@ class GoogleDriveTokenStorage @Inject constructor(
     fun clearAccountInfo() {
         encryptedPrefs.edit().apply {
             remove(KEY_ACCOUNT_EMAIL)
+            remove(KEY_ACCOUNT_SUBJECT)
             remove(KEY_ACCOUNT_DISPLAY_NAME)
             remove(KEY_ACCOUNT_PHOTO_URL)
             apply()

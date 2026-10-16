@@ -7,6 +7,7 @@ import me.avinas.tempo.data.local.entities.Album
 import me.avinas.tempo.data.local.entities.Artist
 import me.avinas.tempo.data.local.entities.ArtistRole
 import me.avinas.tempo.data.local.entities.ListeningEvent
+import me.avinas.tempo.data.local.entities.ListeningEventOrigin
 import me.avinas.tempo.data.local.entities.ScrobbleArchive
 import me.avinas.tempo.data.local.entities.Track
 import me.avinas.tempo.data.local.entities.TrackArtist
@@ -101,6 +102,7 @@ class TempoExportJsonCodecRoundTripTest {
     private suspend fun writeDocument(): Buffer {
         var eventPage = 0
         var archivePage = 0
+        var originPage = 0
         val buffer = Buffer()
         val writer = JsonWriter.of(buffer)
         codec.write(
@@ -118,6 +120,16 @@ class TempoExportJsonCodecRoundTripTest {
                     0 -> List(3) { archiveRow(0, it) }
                     else -> null
                 }
+            },
+            originPages = {
+                when (originPage++) {
+                    0 -> listOf(
+                        ListeningEventOrigin("a".repeat(64), 1L, "desktop-one"),
+                        ListeningEventOrigin("b".repeat(64), 1L, "browser-two")
+                    )
+                    1 -> listOf(ListeningEventOrigin("c".repeat(64), 13L, "desktop-one"))
+                    else -> null
+                }
             }
         )
         writer.close()
@@ -129,12 +141,14 @@ class TempoExportJsonCodecRoundTripTest {
         val expectedShell = sampleShell()
         val events = mutableListOf<ListeningEvent>()
         val archive = mutableListOf<ScrobbleArchive>()
+        val origins = mutableListOf<ListeningEventOrigin>()
 
         val data = codec.read(
             JsonReader.of(writeDocument()),
             TempoExportJsonCodec.StreamHandlers(
                 onListeningEvent = { events.add(it) },
-                onScrobbleArchiveRow = { archive.add(it) }
+                onScrobbleArchiveRow = { archive.add(it) },
+                onListeningEventOrigin = { origins.add(it) }
             )
         )
 
@@ -151,6 +165,11 @@ class TempoExportJsonCodecRoundTripTest {
         assertEquals(event(0, 0), events.first())
         assertEquals(event(1, 6), events.last())
 
+        assertEquals(3, origins.size)
+        assertEquals(ListeningEventOrigin("a".repeat(64), 1L, "desktop-one"), origins[0])
+        assertEquals(ListeningEventOrigin("b".repeat(64), 1L, "browser-two"), origins[1])
+        assertEquals(ListeningEventOrigin("c".repeat(64), 13L, "desktop-one"), origins[2])
+
         assertEquals(3, archive.size)
         assertEquals("hash-0-0", archive.first().trackHash)
         assertEquals("hash-0-2", archive.last().trackHash)
@@ -162,6 +181,24 @@ class TempoExportJsonCodecRoundTripTest {
         // The shell never materializes the unbounded tables.
         assertTrue(data.listeningEvents.isEmpty())
         assertTrue(data.scrobbleArchive.isEmpty())
+        assertTrue(data.listeningEventOrigins.isEmpty())
+    }
+
+    @Test
+    fun `old backups without origin claims remain readable`() = runBlocking {
+        val raw = writeDocument().readUtf8()
+        val originsStart = raw.indexOf(",\"listeningEventOrigins\":")
+        val nextField = raw.indexOf(",\"enrichedMetadata\":", originsStart)
+        assertTrue(originsStart > 0 && nextField > originsStart)
+        val legacy = raw.removeRange(originsStart, nextField)
+            .replaceFirst("\"version\":${TempoExportData.CURRENT_VERSION}",
+                "\"version\":9")
+        val rows = mutableListOf<ListeningEvent>()
+        val data = codec.read(JsonReader.of(Buffer().writeUtf8(legacy)),
+            TempoExportJsonCodec.StreamHandlers(onListeningEvent = { rows.add(it) }))
+        assertEquals(9, data.version)
+        assertEquals(17, rows.size)
+        assertTrue(data.listeningEventOrigins.isEmpty())
     }
 
     @Test

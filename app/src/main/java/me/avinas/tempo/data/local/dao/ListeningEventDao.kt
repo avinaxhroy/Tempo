@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import me.avinas.tempo.data.local.EventFingerprint
 import me.avinas.tempo.data.local.SourceAuthority
 import me.avinas.tempo.data.local.entities.ListeningEvent
+import me.avinas.tempo.data.local.entities.ListeningEventOrigin
 
 @Dao
 interface ListeningEventDao {
@@ -24,6 +25,11 @@ interface ListeningEventDao {
         // using the tight [DUPLICATE_TOLERANCE_MS] so legitimate back-to-back plays
         // are never merged.
         const val RECONCILIATION_WINDOW_MS = 60_000L
+        // Drive clients record comparable playback completion timestamps.
+        // Re-using a 60s fallback for Drive imports silently removes genuine
+        // back-to-back plays (e.g. two 25s tracks) across separate batches.
+        // Align the Drive-specific fallback with Desktop and browser clients. Exact origin aliases handle retries; a short window reduces false merges of rapid replays.
+        const val DRIVE_RECONCILIATION_WINDOW_MS = 2_000L
     }
 
     @Query("SELECT * FROM listening_events WHERE id = :id")
@@ -108,9 +114,73 @@ interface ListeningEventDao {
         """
         SELECT DISTINCT content_fingerprint FROM listening_events
         WHERE content_fingerprint IN (:fingerprints)
+          AND (:accountSubject IS NULL OR drive_account_subject = :accountSubject)
     """,
     )
-    suspend fun getExistingFingerprints(fingerprints: List<String>): List<String>
+    suspend fun getExistingFingerprints(fingerprints: List<String>, accountSubject: String?): List<String>
+
+    /** An exact origin alias may represent a merged playback without being the
+     * primary row's content fingerprint. Query it before any temporal matching.
+     */
+    @Query("SELECT originEventId FROM listening_event_origins WHERE originEventId IN (:ids) " +
+        "AND (:accountSubject IS NULL OR accountSubject = :accountSubject)")
+    suspend fun getKnownOriginAliases(ids: List<String>, accountSubject: String?): List<String>
+
+    data class OriginClaim(
+        val listeningEventId: Long, val sourceDeviceId: String,
+        val originEventId: String, val accountSubject: String,
+    )
+
+    @Query(
+        "SELECT listeningEventId, sourceDeviceId, originEventId, accountSubject " +
+            "FROM listening_event_origins WHERE listeningEventId IN (:ids)",
+    )
+    suspend fun getOriginClaimsForEvents(ids: List<Long>): List<OriginClaim>
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertOriginAliases(aliases: List<ListeningEventOrigin>)
+
+    /** Batched origin lookup for offline restore; avoids one SQL round trip per play. */
+    @Query(
+        "SELECT listeningEventId, sourceDeviceId, originEventId, accountSubject " +
+            "FROM listening_event_origins WHERE originEventId IN (:originIds)",
+    )
+    suspend fun getOriginClaimsByOriginIds(originIds: List<String>): List<OriginClaim>
+
+    /** Keyset pagination for provenance backup; an event can have several origins.
+     * Sorting by (row ID, producer ID) avoids skips at page boundaries.
+     */
+    @Query(
+        "SELECT * FROM listening_event_origins WHERE " +
+            "(listeningEventId > :afterId OR " +
+            "(listeningEventId = :afterId AND sourceDeviceId > :afterDevice)) " +
+            "AND listeningEventId <= :maxEventId " +
+            "ORDER BY listeningEventId ASC, sourceDeviceId ASC LIMIT :limit",
+    )
+    suspend fun getOriginPage(
+        afterId: Long,
+        afterDevice: String,
+        maxEventId: Long,
+        limit: Int,
+    ): List<ListeningEventOrigin>
+
+    /** A restored row may have a different auto-generated primary key. Only
+     * recover its aliases when its identity can be matched unambiguously.
+     */
+    @Query(
+        "SELECT id FROM listening_events WHERE track_id = :trackId " +
+            "AND timestamp = :timestamp AND source = :source " +
+            "AND ((:accountSubject IS NULL AND drive_account_subject IS NULL) " +
+            "OR drive_account_subject = :accountSubject) " +
+            "ORDER BY id ASC LIMIT 2",
+    )
+    suspend fun getBackupRestoredEventIds(
+        trackId: Long,
+        timestamp: Long,
+        source: String,
+        accountSubject: String?,
+    ): List<Long>
+
 
     /**
      * Layer 2: fetch a lightweight view of existing events for one track within a
@@ -119,10 +189,11 @@ interface ListeningEventDao {
      */
     @Query(
         """
-        SELECT id, track_id, timestamp, playDuration, source, content_fingerprint, end_timestamp
+        SELECT id, track_id, timestamp, playDuration, source, content_fingerprint, end_timestamp, drive_account_subject, estimated_duration_ms
         FROM listening_events
         WHERE track_id = :trackId
         AND timestamp BETWEEN :tsMin AND :tsMax
+        ORDER BY timestamp ASC, id ASC
     """,
     )
     suspend fun getEventsForReconciliation(
@@ -161,125 +232,262 @@ interface ListeningEventDao {
      * Same-source comparisons keep using the tight [DUPLICATE_TOLERANCE_MS] so
      * legitimate back-to-back plays of a track are never merged.
      */
+    /**
+     * Recover a stable producer ID from the original Drive/LAN wire event.
+     * Non-Drive import fingerprints remain untouched by this transport table.
+     */
+    private fun originOf(event: ListeningEvent): Pair<String, String>? {
+        val device = SourceAuthority.driveDeviceId(event.source) ?: return null
+        val fingerprint = event.contentFingerprint ?: return null
+        if (!fingerprint.startsWith("drive:v1:")) return null
+        val id = fingerprint.removePrefix("drive:v1:")
+        if (id.length != 64 || !id.all { it in '0'..'9' || it in 'a'..'f' }) return null
+        return device to id
+    }
+
+    @Query("UPDATE listening_events SET drive_account_subject = :subject WHERE drive_account_subject IS NULL")
+    suspend fun claimUnownedDriveHistoryRows(subject: String): Int
+
+    @Query("UPDATE listening_event_origins SET accountSubject = :subject " +
+        "WHERE accountSubject = 'legacy-unverified' AND listeningEventId IN " +
+        "(SELECT id FROM listening_events WHERE drive_account_subject = :subject)")
+    suspend fun claimUnownedDriveOriginAliases(subject: String): Int
+
     @Transaction
-    suspend fun insertAllBatchedWithDedup(events: List<ListeningEvent>): InsertResult {
+    suspend fun claimUnownedDriveHistory(subject: String): Int {
+        val claimed = claimUnownedDriveHistoryRows(subject)
+        claimUnownedDriveOriginAliases(subject)
+        return claimed
+    }
+
+    /** Upgrades the deprecated GoogleIdTokenCredential.id (email) ownership
+     * to its immutable uniqueId when the same verified email signs in again.
+     * Never touches imported rows quarantined as legacy-unverified.
+     */
+    @Query("UPDATE listening_events SET drive_account_subject = :subject " +
+        "WHERE drive_account_subject = :oldEmail")
+    suspend fun upgradeLegacyEmailOwnerRows(oldEmail: String, subject: String): Int
+
+    @Query("UPDATE listening_event_origins SET accountSubject = :subject " +
+        "WHERE accountSubject = :oldEmail")
+    suspend fun upgradeLegacyEmailOriginAliases(oldEmail: String, subject: String): Int
+
+    @Transaction
+    suspend fun upgradeLegacyEmailOwner(oldEmail: String, subject: String): Int {
+        val count = upgradeLegacyEmailOwnerRows(oldEmail, subject)
+        upgradeLegacyEmailOriginAliases(oldEmail, subject)
+        return count
+    }
+
+    /** A verified cloud copy of an exact producer event establishes the owner
+     * of a previously paired LAN-only record. Do not infer ownership from
+     * title/time or from a different Google subject.
+     */
+    @Query(
+        "UPDATE listening_events SET drive_account_subject = :subject " +
+            "WHERE source LIKE 'lan:%' AND drive_account_subject = 'lan-unverified' " +
+            "AND content_fingerprint IN (:fingerprints) " +
+            "AND NOT EXISTS (SELECT 1 FROM listening_events owned " +
+            "WHERE owned.drive_account_subject = :subject " +
+            "AND owned.content_fingerprint = listening_events.content_fingerprint)"
+    )
+    suspend fun assignVerifiedLanOwners(fingerprints: List<String>, subject: String): Int
+
+    @Query(
+        "UPDATE listening_event_origins SET accountSubject = :subject " +
+            "WHERE accountSubject = 'lan-unverified' " +
+            "AND listeningEventId IN (SELECT id FROM listening_events " +
+            "WHERE drive_account_subject = :subject AND source LIKE 'lan:%' " +
+            "AND content_fingerprint IN (:fingerprints)) " +
+            "AND NOT EXISTS (SELECT 1 FROM listening_event_origins claimed " +
+            "WHERE claimed.accountSubject = :subject " +
+            "AND claimed.originEventId = listening_event_origins.originEventId)"
+    )
+    suspend fun assignVerifiedLanAliases(fingerprints: List<String>, subject: String): Int
+
+    @Query("SELECT * FROM listening_events WHERE id IN (:ids)")
+    suspend fun getDriveRetryRows(ids: List<Long>): List<ListeningEvent>
+
+    @Transaction
+    suspend fun insertAllBatchedWithDedup(
+        events: List<ListeningEvent>,
+        accountSubject: String? = null,
+    ): InsertResult {
         if (events.isEmpty()) return InsertResult(0, 0)
 
-        // ── Layer 1: fingerprint every incoming event ──────────────────────
-        val withFp =
-            events.map { e ->
-                if (e.contentFingerprint != null) {
-                    e
-                } else {
-                    e.copy(contentFingerprint = EventFingerprint.compute(e))
-                }
-            }
-
+        val withFp = events.map { event ->
+            if (event.contentFingerprint != null) event
+            else event.copy(contentFingerprint = EventFingerprint.compute(event))
+        }
         val incomingFps = withFp.mapNotNull { it.contentFingerprint }.distinct()
-        val existingFps: Set<String> =
-            if (incomingFps.isEmpty()) {
-                emptySet()
-            } else {
-                incomingFps.chunked(900).flatMap { getExistingFingerprints(it) }.toSet()
+        // A paired LAN play may have reached this phone before the sender
+        // enabled Drive. Its source and exact 64-hex producer ID survive the LAN
+        // transfer, but its cloud owner was unknowable at that point. When the
+        // *same exact producer event* later arrives from a verified Drive account,
+        // claim that LAN row and its aliases rather than importing a second copy.
+        // No temporal/title-based attribution and never reassign an A/B owner.
+        if (accountSubject != null) {
+            val cloudFingerprints = withFp.filter { it.source.startsWith("drive:") &&
+                originOf(it) != null }.mapNotNull { it.contentFingerprint }.distinct()
+            for (fingerprints in cloudFingerprints.chunked(900)) {
+                assignVerifiedLanOwners(fingerprints, accountSubject)
+                assignVerifiedLanAliases(fingerprints, accountSubject)
             }
+        }
+        val existingFps = incomingFps.chunked(900)
+            .flatMap { getExistingFingerprints(it, accountSubject) }.toSet()
+        val originIds = withFp.mapNotNull { originOf(it)?.second }.distinct()
+        val knownAliases = originIds.chunked(900)
+            .flatMap { getKnownOriginAliases(it, accountSubject) }.toSet()
 
-        // Drop exact-fingerprint duplicates (DB or earlier in this batch).
         val seenFp = HashSet<String>(incomingFps.size)
-        val layer1Survivors = ArrayList<ListeningEvent>(withFp.size)
+        val survivors = ArrayList<ListeningEvent>(withFp.size)
         var skipped = 0
-        for (e in withFp) {
-            val fp = e.contentFingerprint
-            if (fp != null && (fp in existingFps || !seenFp.add(fp))) {
+        for (event in withFp) {
+            val fp = event.contentFingerprint
+            val originId = originOf(event)?.second
+            if ((fp != null && (fp in existingFps || !seenFp.add(fp))) ||
+                (originId != null && originId in knownAliases)
+            ) {
                 skipped++
             } else {
-                layer1Survivors.add(e)
+                survivors.add(event)
             }
         }
 
-        // ── Layer 2: cross-source temporal reconciliation ──────────────────
-        val toInsert = ArrayList<ListeningEvent>(layer1Survivors.size)
+        val toInsert = ArrayList<ListeningEvent>(survivors.size)
         val toDelete = mutableSetOf<Long>()
+        val aliasesForExisting = mutableListOf<ListeningEventOrigin>()
+        val newSlots = mutableMapOf<String, Slot>()
+        for ((trackId, allTrackEvents) in survivors.groupBy { it.track_id }) {
+            // Drive/LAN clocks use a strict two-second fuzzy window.
+            // A sparse ten-year import must not query every local play between
+            // its oldest and newest event (nor build a gigantic candidates list).
+            // Split only transport-origin events: legacy local imports retain
+            // their broader cross-source reconciliation semantics.
+            val transportOnly = allTrackEvents.all {
+                SourceAuthority.driveDeviceId(it.source) != null
+            }
+            val windows = if (transportOnly) clusterDrivePlaybackWindows(
+                allTrackEvents,
+                DRIVE_RECONCILIATION_WINDOW_MS,
+                timestampOf = { it.timestamp },
+            ) else listOf(allTrackEvents)
+            for (trackEvents in windows) {
+                val radius = if (transportOnly) DRIVE_RECONCILIATION_WINDOW_MS else RECONCILIATION_WINDOW_MS
+                val minTs = trackEvents.minOf { it.timestamp } - radius
+                val maxTs = trackEvents.maxOf { it.timestamp } + radius
+                val existingAlive = getEventsForReconciliation(trackId, minTs, maxTs)
+                    // A verified cloud import can reconcile only against events
+                    // already proven to belong to that Google account. Previously
+                    // unowned LAN captures are adopted above ONLY on exact producer
+                    // identity, not merely because title/timestamp happen to match.
+                    .filter { it.id !in toDelete &&
+                        (accountSubject == null || it.driveAccountSubject == accountSubject)
+                    }.toMutableList()
+                val claims = if (existingAlive.isEmpty()) emptyList()
+                    else existingAlive.map { it.id }.chunked(900)
+                        .flatMap { getOriginClaimsForEvents(it) }
+                val claimsByRow = claims.groupBy { it.listeningEventId }
+                val acceptedSlots = ArrayList<Slot>(existingAlive.size + trackEvents.size)
+                for (ref in existingAlive) {
+                    val origins = claimsByRow[ref.id].orEmpty()
+                        .associate { it.sourceDeviceId to it.originEventId }.toMutableMap()
+                    SourceAuthority.driveDeviceId(ref.source)?.let { origins.putIfAbsent(it, "") }
+                    acceptedSlots.add(Slot(
+                        ref.timestamp, ref.end_timestamp, ref.playDuration, ref.source,
+                        true, ref.id, origins, ref.estimatedDurationMs,
+                    ))
+                }
 
-        // Group by track for bounded per-track queries (uses the (track_id,
-        // timestamp) index). Process higher-authority events first within each
-        // track so they claim the slot and lower-authority siblings are dropped.
-        val byTrack = layer1Survivors.groupBy { it.track_id }
-        for ((trackId, trackEvents) in byTrack) {
-            val minTs = trackEvents.minOf { it.timestamp } - RECONCILIATION_WINDOW_MS
-            val maxTs = trackEvents.maxOf { it.timestamp } + RECONCILIATION_WINDOW_MS
-            val existing = getEventsForReconciliation(trackId, minTs, maxTs)
-
-            // Existing refs not yet marked for deletion.
-            val existingAlive = existing.filter { it.id !in toDelete }.toMutableList()
-
-            // Incoming events for this track, most authoritative first (tie → earliest).
-            val sortedIncoming =
-                trackEvents.sortedWith(
+                for (incoming in trackEvents.sortedWith(
                     compareByDescending<ListeningEvent> { SourceAuthority.rank(it.source) }
                         .thenBy { it.timestamp },
-                )
-
-            // Timestamps already accepted (existing-kept + incoming-accepted) for
-            // same-play conflict checks on this track.
-            val acceptedSlots = ArrayList<Slot>(existingAlive.size + sortedIncoming.size)
-            for (ex in existingAlive) {
-                acceptedSlots.add(Slot(ex.timestamp, ex.end_timestamp, ex.playDuration, ex.source, true, ex.id))
-            }
-
-            for (incoming in sortedIncoming) {
-                val incomingAuth = SourceAuthority.rank(incoming.source)
-                val conflictIdx = acceptedSlots.indexOfFirst { slot -> isSamePlay(slot, incoming) }
-
-                if (conflictIdx < 0) {
-                    // No conflict → accept the incoming event.
-                    toInsert.add(incoming)
-                    acceptedSlots.add(
-                        Slot(incoming.timestamp, incoming.endTimestamp, incoming.playDuration, incoming.source, false),
-                    )
-                    continue
-                }
-
-                val conflict = acceptedSlots[conflictIdx]
-                if (conflict.isExisting && incomingAuth > SourceAuthority.rank(conflict.source)) {
-                    // Incoming is more authoritative → it replaces the existing event.
-                    // Match by primary key, not by (timestamp, endTimestamp, source): two
-                    // legacy rows can share all three, and `first {}` would then delete the
-                    // wrong one. Every isExisting slot carries the id it came from.
-                    val ref = existingAlive.first { it.id == conflict.existingId }
-                    toDelete.add(ref.id)
-                    existingAlive.remove(ref)
-                    // Replace the slot with the incoming event so later comparisons
-                    // see the new (higher-authority) representation.
-                    acceptedSlots[conflictIdx] =
-                        Slot(
+                )) {
+                    val incomingOrigin = originOf(incoming)
+                    // A track can have two distinct quick replays inside this
+                    // window. A first match depends on SQLite's unspecified row
+                    // order and can bind the origin to the wrong playback.
+                    val conflictIdx = if (incomingOrigin != null) {
+                        uniqueEligiblePlaybackIndex(acceptedSlots) { isSamePlay(it, incoming) }
+                    } else {
+                        nearestEligiblePlaybackIndex(
+                            acceptedSlots,
                             incoming.timestamp,
-                            incoming.endTimestamp,
-                            incoming.playDuration,
-                            incoming.source,
-                            false,
+                            timestampOf = { it.timestamp },
+                            eligible = { isSamePlay(it, incoming) },
                         )
-                    toInsert.add(incoming)
-                } else {
-                    // Existing/equal authority wins, or the slot was already taken
-                    // by an equal-higher-authority incoming sibling → drop this one.
-                    skipped++
+                    }
+                    if (conflictIdx < 0) {
+                        toInsert.add(incoming)
+                        val originMap = mutableMapOf<String, String>()
+                        incomingOrigin?.let { (dev, id) -> originMap[dev] = id }
+                        val slot = Slot(
+                            incoming.timestamp, incoming.endTimestamp, incoming.playDuration,
+                            incoming.source, false, null, originMap, incoming.estimatedDurationMs,
+                        )
+                        acceptedSlots.add(slot)
+                        incoming.contentFingerprint?.let { newSlots[it] = slot }
+                        continue
+                    }
+
+                    val conflict = acceptedSlots[conflictIdx]
+                    if (conflict.isExisting &&
+                        SourceAuthority.rank(incoming.source) > SourceAuthority.rank(conflict.source)
+                    ) {
+                        val ref = existingAlive.first { it.id == conflict.existingId }
+                        toDelete.add(ref.id)
+                        existingAlive.remove(ref)
+                        // Move aliases to the replacement within this Room transaction.
+                        // Otherwise the foreign-key cascade would drop their identities.
+                        val replacementOrigins = conflict.origins.toMutableMap()
+                        incomingOrigin?.let { (dev, id) -> replacementOrigins[dev] = id }
+                        val replacementSlot = Slot(
+                            incoming.timestamp, incoming.endTimestamp, incoming.playDuration,
+                            incoming.source, false, null, replacementOrigins, incoming.estimatedDurationMs,
+                        )
+                        acceptedSlots[conflictIdx] = replacementSlot
+                        toInsert.add(incoming)
+                        incoming.contentFingerprint?.let { newSlots[it] = replacementSlot }
+                    } else {
+                        incomingOrigin?.let { (dev, id) ->
+                            conflict.origins[dev] = id
+                            if (conflict.isExisting) {
+                                aliasesForExisting.add(ListeningEventOrigin(id, requireNotNull(conflict.existingId), dev,
+                                    accountSubject ?: "legacy-unverified"))
+                            }
+                        }
+                        skipped++
+                    }
                 }
             }
         }
 
-        // Delete the lower-authority events that were replaced.
         if (toDelete.isNotEmpty()) {
-            toDelete.chunked(900).forEach { ids -> deleteByIds(ids) }
+            toDelete.chunked(900).forEach { deleteByIds(it) }
         }
 
-        // Insert the survivors (fingerprint already set on each).
-        val inserted =
-            if (toInsert.isEmpty()) {
-                0
-            } else {
-                toInsert.chunked(BATCH_SIZE).sumOf { batch -> insertAll(batch).size }
+        val aliasWrites = aliasesForExisting.filter { it.listeningEventId !in toDelete }
+            .toMutableList()
+        var inserted = 0
+        for (batch in toInsert.chunked(BATCH_SIZE)) {
+            val rowIds = insertAll(batch)
+            inserted += rowIds.size
+            for ((index, event) in batch.withIndex()) {
+                val slot = newSlots[event.contentFingerprint]
+                if (slot != null) {
+                    for ((dev, originId) in slot.origins) {
+                        if (originId.isNotBlank()) {
+                            aliasWrites.add(ListeningEventOrigin(originId, rowIds[index], dev,
+                                accountSubject ?: event.driveAccountSubject ?: "legacy-unverified"))
+                        }
+                    }
+                }
             }
-
+        }
+        if (aliasWrites.isNotEmpty()) {
+            insertOriginAliases(aliasWrites)
+        }
         return InsertResult(inserted = inserted, skipped = skipped, replaced = toDelete.size)
     }
 
@@ -292,6 +500,9 @@ interface ListeningEventDao {
         val isExisting: Boolean,
         /** listening_events.id when this slot came from the database; null for incoming events. */
         val existingId: Long? = null,
+        /** Durable producer -> origin identity claims attached to this playback. */
+        val origins: MutableMap<String, String> = mutableMapOf(),
+        val estimatedDurationMs: Long? = null,
     )
 
     /**
@@ -300,19 +511,45 @@ interface ListeningEventDao {
      * legitimate back-to-back plays); different sources use a generous window that
      * absorbs cross-source timestamp drift.
      */
-    private fun isSamePlay(
-        slot: Slot,
-        incoming: ListeningEvent,
-    ): Boolean {
-        val sameSource = slot.source == incoming.source
-        val window: Long =
-            if (sameSource) {
-                DUPLICATE_TOLERANCE_MS
-            } else {
-                val half = maxOf(slot.playDuration, incoming.playDuration) / 2L
-                if (half < RECONCILIATION_WINDOW_MS) RECONCILIATION_WINDOW_MS else half
-            }
-        return kotlin.math.abs(slot.timestamp - incoming.timestamp) <= window
+    private fun isSamePlay(slot: Slot, incoming: ListeningEvent): Boolean {
+        val slotDriveDevice = SourceAuthority.driveDeviceId(slot.source)
+        val incomingDriveDevice = SourceAuthority.driveDeviceId(incoming.source)
+        // Layer 1 already removed an exact Drive event id. Distinct ids from the
+        // same originating device are real rapid replays, not temporal dupes.
+        if (slotDriveDevice != null && slotDriveDevice == incomingDriveDevice) return false
+        if (incomingDriveDevice != null && incomingDriveDevice in slot.origins) return false
+
+        // Different versions of a same-titled track can start within the reconciliation
+        // window. If both devices know the duration and it differs by more than ten
+        // seconds, this cannot be the same playback.
+        val slotDuration = slot.estimatedDurationMs
+        val incomingDuration = incoming.estimatedDurationMs
+        if (slotDuration != null && slotDuration > 0L && incomingDuration != null && incomingDuration > 0L) {
+            if (kotlin.math.abs(slotDuration - incomingDuration) > 10_000L) return false
+        }
+
+        // Distinct listening lengths are evidence against a shared playback;
+        // exact producer aliases remain the authoritative way to deduplicate.
+        // Apply this guard only to cross-client Drive/LAN data so established
+        // local import reconciliation rules keep their existing behavior.
+        if ((slotDriveDevice != null || incomingDriveDevice != null) &&
+            slot.playDuration > 0L && incoming.playDuration > 0L &&
+            kotlin.math.abs(slot.playDuration - incoming.playDuration) > 10_000L) return false
+
+        val sameSource = slot.source == incoming.source &&
+            slotDriveDevice == null && incomingDriveDevice == null
+        val window: Long = if (sameSource) {
+            DUPLICATE_TOLERANCE_MS
+        } else {
+            val half = maxOf(slot.playDuration, incoming.playDuration) / 2L
+            if (half < RECONCILIATION_WINDOW_MS) RECONCILIATION_WINDOW_MS else half
+        }
+        val effectiveWindow = if (slotDriveDevice != null || incomingDriveDevice != null) {
+            minOf(window, DRIVE_RECONCILIATION_WINDOW_MS)
+        } else {
+            window
+        }
+        return kotlin.math.abs(slot.timestamp - incoming.timestamp) <= effectiveWindow
     }
 
     /**
@@ -365,6 +602,8 @@ interface ListeningEventDao {
         val source: String,
         val content_fingerprint: String?,
         val end_timestamp: Long?,
+        @ColumnInfo(name = "drive_account_subject") val driveAccountSubject: String?,
+        @ColumnInfo(name = "estimated_duration_ms") val estimatedDurationMs: Long? = null,
     )
 
     /** Desktop source → count breakdown. */
@@ -420,6 +659,41 @@ interface ListeningEventDao {
         maxId: Long,
         limit: Int,
     ): List<ListeningEvent>
+
+    /**
+     * A LAN pairing authenticates a device, NOT its Google account.
+     * Never promote 'lan-unverified' plays during a background Drive sync.
+     * Only the separate, user-confirmed "Upload older local history" action
+     * may claim this exact snapshot for the currently verified account.
+     */
+    @Query(
+        "UPDATE listening_events SET drive_account_subject = :accountSubject " +
+            "WHERE id <= :throughEventId AND drive_account_subject = 'lan-unverified' " +
+            "AND source LIKE 'lan:%' AND content_fingerprint LIKE 'drive:v1:%'"
+    )
+    suspend fun claimExplicitLanRelays(accountSubject: String, throughEventId: Long): Int
+
+    /** Move only aliases of explicitly approved local LAN captures. */
+    @Query(
+        "UPDATE listening_event_origins SET accountSubject = :accountSubject " +
+            "WHERE accountSubject = 'lan-unverified' AND listeningEventId IN (" +
+            "SELECT id FROM listening_events WHERE id <= :throughEventId " +
+            "AND drive_account_subject = :accountSubject " +
+            "AND source LIKE 'lan:%' AND content_fingerprint LIKE 'drive:v1:%') " +
+            "AND NOT EXISTS (SELECT 1 FROM listening_event_origins owned " +
+            "WHERE owned.accountSubject = :accountSubject " +
+            "AND owned.originEventId = listening_event_origins.originEventId)"
+    )
+    suspend fun claimExplicitLanRelayAliases(accountSubject: String, throughEventId: Long): Int
+
+    @Transaction
+    suspend fun authorizeLanRelaysForAccount(accountSubject: String, throughEventId: Long): Int {
+        require(accountSubject.isNotBlank()) { "Verified Google subject required" }
+        require(throughEventId >= 0L) { "LAN authorization boundary must not be negative" }
+        val claimed = claimExplicitLanRelays(accountSubject, throughEventId)
+        claimExplicitLanRelayAliases(accountSubject, throughEventId)
+        return claimed
+    }
 
     /** Highest event id at the moment of the call — export snapshot boundary. */
     @Query("SELECT COALESCE(MAX(id), 0) FROM listening_events")

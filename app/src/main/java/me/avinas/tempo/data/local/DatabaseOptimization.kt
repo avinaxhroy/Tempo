@@ -220,7 +220,11 @@ class DatabaseOptimization @Inject constructor(
      * @param retentionDays Number of days of data to keep
      * @return Number of events deleted
      */
-    suspend fun cleanupOldData(retentionDays: Int = DEFAULT_RETENTION_DAYS): Int = withContext(Dispatchers.IO) {
+    /** Explicit destructive cleanup ONLY. Routine maintenance never calls this.
+     * The caller must deliberately specify a retention period so a one-year
+     * default cannot silently remove a user's decade-long listening history.
+     */
+    suspend fun cleanupOldData(retentionDays: Int): Int = withContext(Dispatchers.IO) {
         try {
             val cutoffTimestamp = System.currentTimeMillis() - (retentionDays.toLong() * 24 * 60 * 60 * 1000)
             
@@ -318,8 +322,11 @@ class DatabaseOptimization @Inject constructor(
         // Analyze for query optimization
         analyzeDatabase()
         
-        // Cleanup old data
-        val deletedEvents = cleanupOldData()
+        // Long-term history is user data, not a disposable cache. Routine
+        // maintenance must never silently erase events after one year.
+        // cleanupOldData(retentionDays) remains an explicitly-invoked operation,
+        // but it is NOT part of routine full maintenance.
+        val deletedEvents = 0
         
         // Vacuum if needed
         val statsBeforeVacuum = getDatabaseStats()

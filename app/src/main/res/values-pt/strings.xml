@@ -1,5 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Browser extension history import -->
+    <string name="settings_import_extension">Importar reproduções do navegador</string>
+    <string name="settings_import_extension_desc">Adicione ao seu histórico as reproduções exportadas da extensão Tempo Stats</string>
+    <string name="extension_import_title">Importar reproduções da extensão</string>
+    <string name="extension_import_headline">Traga as suas reproduções do navegador para o Tempo</string>
+    <string name="extension_import_how_to">1. Abra a extensão Tempo Stats no navegador\n2. No separador Definições, toque em Exportar reproduções\n3. Selecione abaixo o ficheiro tempo-plays transferido</string>
+    <string name="extension_import_choose_file">Escolher ficheiro exportado</string>
+    <string name="extension_import_selected_files">%1$d ficheiro(s) selecionado(s)</string>
+    <string name="extension_import_button">Importar reproduções</string>
+    <string name="extension_import_running">A importar…</string>
+    <string name="extension_import_parsing">A ler %1$s…</string>
+    <string name="extension_import_file_counter">Ficheiro %1$d de %2$d</string>
+    <string name="extension_import_progress">%1$d reproduções processadas</string>
+    <string name="extension_import_progress_added">%1$d adicionadas até agora</string>
+    <string name="extension_import_result_title">Importação concluída</string>
+    <string name="extension_import_stat_imported">Reproduções adicionadas</string>
+    <string name="extension_import_stat_duplicates">Já no seu histórico</string>
+    <string name="extension_import_stat_tracks">Novas faixas</string>
+    <string name="extension_import_stat_too_short">Demasiado curtas para contar</string>
+    <string name="extension_import_stat_unreadable">Linhas ilegíveis</string>
+    <string name="extension_import_stat_files">Ficheiros lidos</string>
+    <string name="extension_import_truncated">Este ficheiro contém mais reproduções do que uma única importação consegue ler. Importe-o novamente para continuar de onde parou.</string>
+    <string name="extension_import_done">Concluído</string>
+    <string name="extension_import_failed_title">A importação falhou</string>
+    <string name="extension_import_retry">Tentar novamente</string>
+
     <string name="app_name">Tempo</string>
     
     <!-- Service notification -->
@@ -379,7 +405,7 @@
     <string name="backup_export">Exportar para dispositivo</string>
     <string name="backup_import">Importar do dispositivo</string>
     <string name="backup_tips">💡 Dicas de backup</string>
-    <string name="backup_drive_auto">• Os backups do Google Drive são automáticos e criptografados\n</string>
+    <string name="backup_drive_auto">• Os backups do Google Drive são automáticos e armazenados na sua conta do Drive\n</string>
     <string name="backup_use_different">Use uma conta diferente</string>
     <string name="backup_last_backup">Último backup: %1$s</string>
 
@@ -1179,4 +1205,49 @@
     <string name="deezer_import_notification_channel_desc">Notificações de progresso da importação da exportação de dados do Deezer</string>
     <string name="deezer_import_notification_title">Importando dados do Deezer</string>
     <string name="deezer_import_notification_progress">Importando %1$d/%2$d entradas</string>
+
+    <!-- Google Drive history sync -->
+    <string name="drive_auth_required">É necessária autorização do Google Drive antes de ativar a sincronização.</string>
+    <string name="drive_deleted_success">%1$d lotes de histórico excluídos do Google Drive. A sincronização será desativada nos dispositivos vinculados quando reconectarem.</string>
+    <string name="drive_operation_failed">Falha na operação do histórico do Google Drive.</string>
+    <string name="drive_sync_success">Sincronizado: %1$d enviados e %2$d recebidos.</string>
+    <string name="drive_heading">HISTÓRICO ENTRE DISPOSITIVOS</string>
+    <string name="drive_toggle_title">Sincronizar histórico de reprodução</string>
+    <string name="drive_toggle_subtitle">Compartilhe seu histórico entre Android, Desktop e navegadores usando dados privados do Google Drive. Nenhum servidor Tempo é usado.</string>
+    <string name="drive_connecting">Conectando ao Google Drive…</string>
+    <string name="drive_status_title">Sincronização do Google Drive</string>
+    <string name="drive_sync_now">Sincronizar agora</string>
+    <string name="drive_restore">Restaurar todo o histórico do Drive</string>
+    <string name="drive_restore_hint">Verifica os dados antigos no Drive sem apagar as reproduções locais.</string>
+    <string name="drive_share">Enviar histórico local antigo</string>
+    <string name="drive_share_hint">Republica reproduções antigas, inclusive dados LAN sem conta Google verificada.</string>
+    <string name="drive_delete">Excluir histórico da nuvem</string>
+    <string name="drive_share_confirm_title">Enviar histórico antigo?</string>
+    <string name="drive_share_confirm_body">Compartilha as reproduções antigas com a conta Google selecionada, inclusive histórico excluído do Drive e dados LAN sem proprietário verificado. Algumas reproduções podem pertencer a outra conta. Novos dados LAN permanecem excluídos.</string>
+    <string name="drive_share_confirm">Enviar histórico antigo</string>
+    <string name="drive_cancel">Cancelar</string>
+    <string name="drive_delete_confirm_title">Excluir histórico da nuvem?</string>
+    <string name="drive_delete_confirm_body">Exclui os dados compartilhados do Tempo no Google Drive e desativa a sincronização dos dispositivos vinculados quando reconectarem. O histórico local permanece intacto. Você pode reativar a sincronização depois.</string>
+    <string name="drive_delete_confirm">Excluir e desativar</string>
+    <string name="drive_never">Nunca</string>
+    <string name="drive_last_message">Última sincronização: %1$s • %2$s</string>
+    <string name="drive_last_counts">Última sincronização: %1$s • %2$d enviados • %3$d recebidos</string>
+    <string name="drive_schedule_hint">Executa a cada seis horas, aproximadamente, ou ao tocar em Sincronizar agora.</string>
+    <string name="drive_signin_hint">Conecte o Google para sincronizar o histórico entre dispositivos. Este recurso é separado dos backups do aparelho. Seu histórico local permanece no telefone.</string>
+    <string name="drive_signin_action">Conectar Google para sincronizar histórico</string>
+    <string name="drive_device_backup_heading">BACKUPS DO DISPOSITIVO NO GOOGLE DRIVE</string>
+    <string name="drive_device_backup_explanation">Os backups salvam uma cópia para restauração. Eles são separados da sincronização automática do histórico de reprodução.</string>
+    <string name="drive_device_restore_title">Restaurar backup do dispositivo</string>
+    <string name="drive_device_restore_question">Restaurar o backup do dispositivo de %1$s? Isso é diferente de restaurar o histórico de reprodução sincronizado.</string>
+    <string name="drive_device_backup_action_hint">Salvar backup completo do dispositivo no Google Drive</string>
+    <string name="drive_device_backup_now">Fazer backup</string>
+    <string name="drive_device_backup_toggle">Ativar backups do dispositivo no Google Drive</string>
+    <string name="drive_device_backup_toggle_hint">Separado da sincronização do histórico musical. Ative apenas para fazer backup completo do dispositivo.</string>
+    <string name="backup_leave_title">Sair durante uma operação?</string>
+    <string name="backup_leave_warning">Sair desta tela pode interromper a importação ou exportação local. Algumas operações na nuvem continuam em segundo plano.</string>
+    <string name="backup_leave_confirm">Sair da tela</string>
+    <string name="drive_status_disabled">Sincronização desativada</string>
+    <string name="drive_status_running">Sincronizando histórico de reprodução…</string>
+    <string name="drive_status_failed">Falha na sincronização</string>
+    <string name="drive_status_failed_detail">Falha na sincronização: %1$s</string>
 </resources>

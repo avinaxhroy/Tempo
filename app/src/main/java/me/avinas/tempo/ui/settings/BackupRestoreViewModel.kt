@@ -56,6 +56,7 @@ class BackupRestoreViewModel @Inject constructor(
     private val googleAuthManager: GoogleAuthManager,
     private val driveService: GoogleDriveService,
     private val backupSettingsManager: BackupSettingsManager,
+    private val driveHistorySyncManager: DriveHistorySyncManager,
     private val applicationScope: CoroutineScope,
     private val tracker: AnalyticsTracker
 ) : ViewModel() {
@@ -422,7 +423,9 @@ class BackupRestoreViewModel @Inject constructor(
     fun importData(uri: Uri, strategy: ImportConflictStrategy) {
         _showConflictDialog.value = null
         applicationScope.launch {
-            val result = importExportManager.importData(uri, strategy)
+            val result = driveHistorySyncManager.withLocalHistoryRestore {
+                importExportManager.importData(uri, strategy)
+            }
             _importExportResult.value = result
             // Refresh stats after import
             calculateStats()
@@ -491,6 +494,16 @@ class BackupRestoreViewModel @Inject constructor(
                         // and folder cache before any operation under the selected
                         // account, including the no-consent fast path.
                         driveService.clearCache()
+                        // Merely authorizing Google must not opt the user into
+                        // device backups (history sync is a separate opt-in).
+                        // Never carry an old account's backup consent into a
+                        // different Google identity.
+                        val previousBackup = backupSettingsManager.settings.first()
+                        if (!previousBackup.googleAccountEmail.equals(
+                                result.account.email, ignoreCase = true
+                            )) {
+                            backupSettingsManager.setGoogleDriveEnabled(false)
+                        }
                         backupSettingsManager.setGoogleAccountEmail(result.account.email)
 
                         // Google identity sign-in and Drive authorization are separate.
@@ -503,7 +516,8 @@ class BackupRestoreViewModel @Inject constructor(
                             _consentRequested.value = true
                             _driveOperation.value = DriveOperationState.SigningIn
                         } else if (googleAuthManager.getAccessToken() != null) {
-                            backupSettingsManager.setGoogleDriveEnabled(true)
+                            // Google sign-in authorizes Drive only: backup
+                            // uploads start after an explicit opt-in below.
                             scheduleAutomaticBackups(backupSettingsManager.settings.first())
                             refreshDriveBackups()
                                 .onSuccess {
@@ -561,8 +575,8 @@ class BackupRestoreViewModel @Inject constructor(
                         // Verify that we actually have an access token now
                         val hasToken = googleAuthManager.getAccessToken() != null
                         if (hasToken) {
-                            // Drive becomes enabled only after consent produced a real token.
-                            backupSettingsManager.setGoogleDriveEnabled(true)
+                            // Do not enable device backups when the user only
+                            // connected Google for cross-device music history.
                             driveService.clearCache()
                             scheduleAutomaticBackups(backupSettingsManager.settings.first())
                             refreshDriveBackups()
@@ -842,14 +856,15 @@ class BackupRestoreViewModel @Inject constructor(
                         _driveOperation.value = DriveOperationState.Restoring
 
                         val importResult = try {
-                            importExportManager.importData(
-                                Uri.fromFile(downloadResult.localFile),
-                                strategy
-                            )
+                            driveHistorySyncManager.withLocalHistoryRestore {
+                                importExportManager.importData(
+                                    Uri.fromFile(downloadResult.localFile),
+                                    strategy
+                                )
+                            }
                         } finally {
                             downloadResult.localFile.delete()
                         }
-                        
                         when (importResult) {
                             is ImportExportResult.Success -> {
                                 calculateStats()
@@ -909,6 +924,24 @@ class BackupRestoreViewModel @Inject constructor(
         }
     }
     
+    /**
+     * Device backups require their own opt-in, independent from authentication
+     * and the Google Drive listening-history transport.
+     */
+    fun setDriveBackupEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            if (enabled && (!googleAuthManager.isSignedIn.value ||
+                    googleAuthManager.getAccessToken() == null)) {
+                _driveOperation.value = DriveOperationState.Error(
+                    "Connect and authorize Google Drive before enabling device backups."
+                )
+                return@launch
+            }
+            backupSettingsManager.setGoogleDriveEnabled(enabled)
+            scheduleAutomaticBackups(backupSettingsManager.settings.first())
+        }
+    }
+
     /**
      * Set backup interval and schedule the automatic device/Drive worker.
      */

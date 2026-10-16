@@ -50,7 +50,6 @@ import me.avinas.tempo.ui.components.TempoSnackbar
 import me.avinas.tempo.ui.theme.*
 import me.avinas.tempo.ui.components.TempoDropdownMenu
 import me.avinas.tempo.ui.components.TempoDropdownMenuItem
-import me.avinas.tempo.ui.components.TempoIcons
 import me.avinas.tempo.utils.FormatUtils.formatBytes
 import java.text.SimpleDateFormat
 import java.util.*
@@ -97,7 +96,8 @@ fun BackupRestoreScreen(
         driveOperation is DriveOperationState.Restoring ||
         driveOperation is DriveOperationState.Uploading ||
         importExportProgress != null
-    BackHandler(enabled = isOperationActive) { }
+    var confirmLeaveDuringOperation by remember { mutableStateOf(false) }
+    BackHandler(enabled = isOperationActive) { confirmLeaveDuringOperation = true }
     // Handle sign-in request from ViewModel
     val signInRequested by viewModel.signInRequested.collectAsState()
     val sessionRestoreRequested by viewModel.sessionRestoreRequested.collectAsState()
@@ -199,6 +199,25 @@ fun BackupRestoreScreen(
         }
     }
     
+    if (confirmLeaveDuringOperation) {
+        AlertDialog(
+            onDismissRequest = { confirmLeaveDuringOperation = false },
+            title = { Text(stringResource(R.string.backup_leave_title)) },
+            text = { Text(stringResource(R.string.backup_leave_warning)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmLeaveDuringOperation = false
+                    onNavigateBack()
+                }) { Text(stringResource(R.string.backup_leave_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmLeaveDuringOperation = false }) {
+                    Text(stringResource(R.string.drive_cancel))
+                }
+            }
+        )
+    }
+
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
@@ -206,8 +225,10 @@ fun BackupRestoreScreen(
                 title = { Text(stringResource(R.string.settings_backup_restore), color = TextPrimary) },
                 navigationIcon = {
                     IconButton(
-                        onClick = onNavigateBack,
-                        enabled = !isOperationActive
+                        onClick = {
+                            if (isOperationActive) confirmLeaveDuringOperation = true
+                            else onNavigateBack()
+                        }
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
@@ -238,7 +259,16 @@ fun BackupRestoreScreen(
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                // Google Drive Section
+                // Cross-device listening history is independent from device
+                // backups and visible even before Google sign-in.
+                DriveHistorySyncSection(
+                    isGoogleSignedIn = isSignedIn,
+                    accountEmail = googleAccount?.email,
+                    onRequestGoogleSignIn = viewModel::requestSignIn
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Full-device Google Drive backup/restore.
                 GoogleDriveSection(
                     isSignedIn = isSignedIn,
                     googleAccount = googleAccount,
@@ -247,6 +277,7 @@ fun BackupRestoreScreen(
                     driveOperation = driveOperation,
                     onSignIn = viewModel::requestSignIn,
                     onSignOut = viewModel::signOut,
+                    onSetDriveBackupEnabled = viewModel::setDriveBackupEnabled,
                     onBackupNow = viewModel::backupToDrive,
                     onRestore = viewModel::startDriveRestore,
                     onDelete = viewModel::deleteDriveBackup,
@@ -355,7 +386,7 @@ fun BackupRestoreScreen(
                 TextButton(
                     onClick = { viewModel.importData(uri, ImportConflictStrategy.REPLACE) }
                 ) {
-                    Text("Replace Existing", color = TempoPrimary, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_replace_existing), color = TempoPrimary, fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
@@ -366,7 +397,7 @@ fun BackupRestoreScreen(
                     TextButton(
                         onClick = { viewModel.importData(uri, ImportConflictStrategy.SKIP) }
                     ) {
-                        Text("Skip Duplicates", color = TextSecondary)
+                        Text(stringResource(R.string.settings_skip_duplicates), color = TextSecondary)
                     }
                 }
             }
@@ -380,10 +411,10 @@ fun BackupRestoreScreen(
             containerColor = TempoSurfaceDialog,
             shape = RoundedCornerShape(24.dp),
             icon = { Icon(Icons.Default.CloudDownload, contentDescription = null, tint = TempoPrimary) },
-            title = { Text("Restore from Cloud", color = TextPrimary, fontWeight = FontWeight.SemiBold) },
+            title = { Text(stringResource(R.string.drive_device_restore_title), color = TextPrimary, fontWeight = FontWeight.SemiBold) },
             text = {
                 Column {
-                    Text("Restore backup from ${formatDate(backup.createdAt)}?", color = TextSecondary)
+                    Text(stringResource(R.string.drive_device_restore_question, formatDate(backup.createdAt)), color = TextSecondary)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Size: ${formatBytes(backup.sizeBytes)}",
@@ -399,7 +430,7 @@ fun BackupRestoreScreen(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "How should duplicates be handled?",
+                        text = stringResource(R.string.restore_handle_conflicts),
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary
                     )
@@ -409,7 +440,7 @@ fun BackupRestoreScreen(
                 TextButton(
                     onClick = { viewModel.restoreFromDrive(backup, ImportConflictStrategy.REPLACE) }
                 ) {
-                    Text("Replace Existing", color = TempoPrimary, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_replace_existing), color = TempoPrimary, fontWeight = FontWeight.SemiBold)
                 }
             },
             dismissButton = {
@@ -420,7 +451,7 @@ fun BackupRestoreScreen(
                     TextButton(
                         onClick = { viewModel.restoreFromDrive(backup, ImportConflictStrategy.SKIP) }
                     ) {
-                        Text("Skip Duplicates", color = TextSecondary)
+                        Text(stringResource(R.string.settings_skip_duplicates), color = TextSecondary)
                     }
                 }
             }
@@ -558,12 +589,19 @@ private fun GoogleDriveSection(
     driveOperation: DriveOperationState,
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
+    onSetDriveBackupEnabled: (Boolean) -> Unit,
     onBackupNow: () -> Unit,
     onRestore: (DriveBackupInfo) -> Unit,
     onDelete: (DriveBackupInfo) -> Unit,
     onRefreshBackups: () -> Unit
 ) {
-    SettingsSectionHeader("Google Drive")
+    SettingsSectionHeader(stringResource(R.string.drive_device_backup_heading))
+    Text(
+        text = stringResource(R.string.drive_device_backup_explanation),
+        style = MaterialTheme.typography.bodySmall,
+        color = TextSecondary,
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+    )
     
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -601,12 +639,12 @@ private fun GoogleDriveSection(
                     
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Connect Google Account",
+                            text = stringResource(R.string.restore_connect_google),
                             style = MaterialTheme.typography.bodyLarge,
                             color = TextPrimary
                         )
                         Text(
-                            text = "Back up your data to Google Drive",
+                            text = stringResource(R.string.drive_device_backup_action_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -674,7 +712,14 @@ private fun GoogleDriveSection(
                 }
                 
                 HorizontalDivider(color = GlassBorderSoft)
-                
+                SettingsSwitch(
+                    title = stringResource(R.string.drive_device_backup_toggle),
+                    subtitle = stringResource(R.string.drive_device_backup_toggle_hint),
+                    checked = backupSettings.isGoogleDriveEnabled,
+                    onCheckedChange = onSetDriveBackupEnabled
+                )
+                HorizontalDivider(color = GlassBorderSoft)
+
                 // Backup Now button
                 Row(
                     modifier = Modifier
@@ -706,7 +751,7 @@ private fun GoogleDriveSection(
                     ) {
                         Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Backup Now")
+                        Text(stringResource(R.string.drive_device_backup_now))
                     }
                 }
                 
@@ -722,7 +767,7 @@ private fun GoogleDriveSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Backup History (${driveBackups.size})",
+                            text = stringResource(R.string.backup_history, driveBackups.size),
                             style = MaterialTheme.typography.titleSmall,
                             color = TextSecondary
                         )
@@ -756,7 +801,7 @@ private fun AutomaticBackupSection(
     onSetInterval: (BackupInterval) -> Unit,
     onSetWifiOnly: (Boolean) -> Unit
 ) {
-    SettingsSectionHeader("Automatic Backups")
+    SettingsSectionHeader(stringResource(R.string.backup_auto))
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),

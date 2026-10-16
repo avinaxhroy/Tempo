@@ -440,7 +440,7 @@
     <string name="backup_export">Export to Device</string>
     <string name="backup_import">Import from Device</string>
     <string name="backup_tips">💡 Backup Tips</string>
-    <string name="backup_drive_auto">• Google Drive backups are automatic and encrypted\n</string>
+    <string name="backup_drive_auto">• Google Drive backups are automatic and stored in your Drive account\n</string>
     <string name="backup_use_different">Use a different account</string>
     <string name="backup_last_backup">Last backup: %1$s</string>
 
@@ -1516,4 +1516,49 @@
     <string name="history_video_non_music_track_description">Remove existing plays and block future matches</string>
     <string name="history_video_non_music_artist">Treat %1$s as video / non-music</string>
     <string name="history_video_non_music_artist_description">Remove all matching history and block future plays</string>
+
+    <!-- Google Drive history sync -->
+    <string name="drive_auth_required">Google Drive authorization is required before enabling sync.</string>
+    <string name="drive_deleted_success">Deleted %1$d Google Drive history batches. Sync is turned off on linked devices when they reconnect.</string>
+    <string name="drive_operation_failed">Google Drive history operation failed.</string>
+    <string name="drive_sync_success">Synced %1$d outgoing and %2$d incoming plays.</string>
+    <string name="drive_heading">CROSS-DEVICE HISTORY</string>
+    <string name="drive_toggle_title">Sync listening history</string>
+    <string name="drive_toggle_subtitle">Share your listening history across Android, Desktop and browsers using private Google Drive app data. No Tempo server is used.</string>
+    <string name="drive_connecting">Connecting to Google Drive…</string>
+    <string name="drive_status_title">Google Drive sync</string>
+    <string name="drive_sync_now">Sync now</string>
+    <string name="drive_restore">Restore all Drive history</string>
+    <string name="drive_restore_hint">Checks older Drive records without deleting local listening history.</string>
+    <string name="drive_share">Upload older local history</string>
+    <string name="drive_share_hint">Republishes older recordings, including LAN plays with unverified Google ownership.</string>
+    <string name="drive_delete">Delete cloud history</string>
+    <string name="drive_share_confirm_title">Upload older local history?</string>
+    <string name="drive_share_confirm_body">This shares older local recordings with the selected Google account, including previously deleted Drive history and LAN plays with unverified ownership. Some plays may belong to another Google account. Later LAN deliveries remain excluded.</string>
+    <string name="drive_share_confirm">Upload older history</string>
+    <string name="drive_cancel">Cancel</string>
+    <string name="drive_delete_confirm_title">Delete cloud history?</string>
+    <string name="drive_delete_confirm_body">Deletes shared Tempo history from Google Drive and turns off sync on linked devices when they reconnect. Local listening history stays on every device. You can explicitly enable sync again later.</string>
+    <string name="drive_delete_confirm">Delete and turn off</string>
+    <string name="drive_never">Never</string>
+    <string name="drive_last_message">Last sync: %1$s • %2$s</string>
+    <string name="drive_last_counts">Last sync: %1$s • %2$d sent • %3$d received</string>
+    <string name="drive_schedule_hint">Runs about every six hours and whenever you choose Sync now.</string>
+    <string name="drive_signin_hint">Connect Google to share listening history across devices. This is separate from full-device backups. Your local history stays on your phone.</string>
+    <string name="drive_signin_action">Connect Google for history sync</string>
+    <string name="drive_device_backup_heading">GOOGLE DRIVE DEVICE BACKUPS</string>
+    <string name="drive_device_backup_explanation">Device backups save a snapshot for recovery. They are separate from automatic cross-device listening-history sync.</string>
+    <string name="drive_device_restore_title">Restore device backup</string>
+    <string name="drive_device_restore_question">Restore the device backup from %1$s? This is different from restoring your listening history via cross-device sync.</string>
+    <string name="drive_device_backup_action_hint">Save a full-device backup to Google Drive</string>
+    <string name="drive_device_backup_now">Back up now</string>
+    <string name="drive_device_backup_toggle">Enable Google Drive device backups</string>
+    <string name="drive_device_backup_toggle_hint">Separate from listening-history sync. Turn on only if you want whole-device backups saved to Drive.</string>
+    <string name="backup_leave_title">Leave while work is in progress?</string>
+    <string name="backup_leave_warning">Leaving this screen may interrupt a local import or export. Some cloud operations can continue in the background.</string>
+    <string name="backup_leave_confirm">Leave screen</string>
+    <string name="drive_status_disabled">Sync disabled</string>
+    <string name="drive_status_running">Syncing listening history…</string>
+    <string name="drive_status_failed">Sync failed</string>
+    <string name="drive_status_failed_detail">Sync failed: %1$s</string>
 </resources>

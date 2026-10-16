@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import androidx.room.withTransaction
 import me.avinas.tempo.BuildConfig
 import me.avinas.tempo.data.local.AppDatabase
+import me.avinas.tempo.data.local.dao.ListeningEventDao
 import me.avinas.tempo.data.local.entities.*
 import me.avinas.tempo.data.profile.ProfileIdentityManager
 import me.avinas.tempo.utils.ImageUrlHostAllowlist
@@ -276,6 +277,8 @@ class ImportExportManager @Inject constructor(
                     var lastEventId = 0L
                     var eventsWritten = 0
                     var lastArchiveId = 0L
+                    var lastOriginEventId = 0L
+                    var lastOriginDevice = ""
 
                     zipOut.putNextEntry(ZipEntry(TempoExportData.DATA_FILENAME))
                     val dataSink = zipOut.sink().buffer()
@@ -296,6 +299,16 @@ class ImportExportManager @Inject constructor(
                             val page = database.scrobbleArchiveDao()
                                 .getArchivePage(lastArchiveId, maxArchiveId, EXPORT_PAGE_SIZE)
                             if (page.isNotEmpty()) lastArchiveId = page.last().id
+                            page
+                        },
+                        originPages = {
+                            val page = database.listeningEventDao().getOriginPage(
+                                lastOriginEventId, lastOriginDevice, maxEventId, EXPORT_PAGE_SIZE
+                            )
+                            if (page.isNotEmpty()) {
+                                lastOriginEventId = page.last().listeningEventId
+                                lastOriginDevice = page.last().sourceDeviceId
+                            }
                             page
                         }
                     )
@@ -363,8 +376,10 @@ class ImportExportManager @Inject constructor(
         // memory whole, so restores of huge libraries cannot OOM.
         val stagedEventsFile = File(context.cacheDir, "import_events.jsonl")
         val stagedArchiveFile = File(context.cacheDir, "import_archive.jsonl")
+        val stagedOriginsFile = File(context.cacheDir, "import_origins.jsonl")
         stagedEventsFile.delete()
         stagedArchiveFile.delete()
+        stagedOriginsFile.delete()
 
         try {
             _progress.value = ImportExportProgress("Reading backup file...", 0, 100, true)
@@ -375,6 +390,7 @@ class ImportExportManager @Inject constructor(
             var totalExtractedImageBytes = 0L
             var stagedEventCount = 0
             var stagedArchiveCount = 0
+            var stagedOriginCount = 0
             
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 ZipInputStream(BufferedInputStream(inputStream)).use { zipIn ->
@@ -387,8 +403,10 @@ class ImportExportManager @Inject constructor(
                                 val reader = JsonReader.of(zipIn.source().buffer())
                                 val eventAdapter = moshi.adapter(ListeningEvent::class.java)
                                 val archiveAdapter = moshi.adapter(ScrobbleArchive::class.java)
+                                val originAdapter = moshi.adapter(ListeningEventOrigin::class.java)
                                 val eventSink = stagedEventsFile.sink().buffer()
                                 val archiveSink = stagedArchiveFile.sink().buffer()
+                                val originSink = stagedOriginsFile.sink().buffer()
                                 try {
                                     exportData = codec.read(
                                         reader,
@@ -402,6 +420,11 @@ class ImportExportManager @Inject constructor(
                                                 archiveAdapter.toJson(archiveSink, row)
                                                 archiveSink.writeUtf8("\n")
                                                 stagedArchiveCount++
+                                            },
+                                            onListeningEventOrigin = { origin ->
+                                                originAdapter.toJson(originSink, origin)
+                                                originSink.writeUtf8("\n")
+                                                stagedOriginCount++
                                             }
                                         )
                                     )
@@ -409,6 +432,7 @@ class ImportExportManager @Inject constructor(
                                     // flush only — close() would close the ZipInputStream
                                     eventSink.flush()
                                     archiveSink.flush()
+                                    originSink.flush()
                                 }
                             }
                             entry.name.startsWith(IMAGES_DIR) && !entry.isDirectory -> {
@@ -442,7 +466,7 @@ class ImportExportManager @Inject constructor(
                 )
             }
             
-            Log.i(TAG, "Extracted ${extractedImages.size} images, staged $stagedEventCount events and $stagedArchiveCount archive rows")
+            Log.i(TAG, "Extracted ${extractedImages.size} images, staged $stagedEventCount events, $stagedOriginCount origin claims and $stagedArchiveCount archive rows")
             
             // Build path mapping: old file:// path -> new file:// path
             val pathMapping = data.localImageManifest.mapNotNull { (bundledName, originalPath) ->
@@ -621,7 +645,7 @@ class ImportExportManager @Inject constructor(
             // whose track could not be mapped are skipped. The pipeline deduplicates
             // against existing rows (fingerprint + temporal reconciliation), so a
             // re-import is a no-op and real listening data is never overwritten.
-            importedEvents = replayStagedEvents(stagedEventsFile, trackIdMap)
+            importedEvents = replayStagedEvents(stagedEventsFile, stagedOriginsFile, trackIdMap)
             Log.i(TAG, "Imported $importedEvents listening events from staged file")
             
             _progress.value = ImportExportProgress("Importing metadata...", 80, 100)
@@ -826,6 +850,7 @@ class ImportExportManager @Inject constructor(
         } finally {
             stagedEventsFile.delete()
             stagedArchiveFile.delete()
+            stagedOriginsFile.delete()
             _progress.value = null
             operationLease.release()
         }
@@ -838,38 +863,185 @@ class ImportExportManager @Inject constructor(
      */
     private suspend fun replayStagedEvents(
         stagedFile: File,
+        stagedOriginsFile: File,
         trackIdMap: Map<Long, Long>
     ): Int {
         if (!stagedFile.exists() || stagedFile.length() == 0L) return 0
 
+        val dao = database.listeningEventDao()
         val eventAdapter = moshi.adapter(ListeningEvent::class.java)
+        val originAdapter = moshi.adapter(ListeningEventOrigin::class.java)
         var inserted = 0
-        var chunk = ArrayList<ListeningEvent>(EVENT_IMPORT_CHUNK)
+        var chunk = ArrayList<Pair<ListeningEvent, List<ListeningEventOrigin>>>(EVENT_IMPORT_CHUNK)
 
+        // Called inside the enclosing Room transaction. Restore aliases after
+        // resolving each event's NEW row ID; never reuse exported numeric IDs.
         suspend fun flush() {
             if (chunk.isEmpty()) return
-            val result = database.listeningEventDao().insertAllBatchedWithDedup(chunk)
-            inserted += result.inserted
+            // Re-imported producer identities may already belong to a row with
+            // different track metadata, source or timestamp. Replaying such an
+            // event through temporal dedup first can create a duplicate local
+            // listening row before the alias resolver finds the real original.
+            // Query these immutable identities once per chunk and do not insert
+            // a second playback for an already-represented origin.
+            val restoredOriginKeys = chunk.asSequence()
+                .flatMap { (_, aliases) -> aliases.asSequence().map { it.restoredKey() } }
+                .distinct().toList()
+            val restoredOriginIds = restoredOriginKeys.map { it.originEventId }.distinct()
+            val existingByOrigin = restoredOriginIds.chunked(900)
+                .flatMap { dao.getOriginClaimsByOriginIds(it) }
+                .associate { RestoredOriginKey(it.accountSubject, it.originEventId) to it.listeningEventId }
+            for ((event, aliases) in chunk) {
+                val expectedOwner = event.driveAccountSubject ?: "legacy-unverified"
+                check(aliases.all { it.accountSubject == expectedOwner }) {
+                    "Backup contains producer aliases whose Google owner differs from the listening event"
+                }
+            }
+            val newEvents = chunk.filter { (_, aliases) ->
+                shouldImportOfflinePlayback(aliases, existingByOrigin)
+            }.map { it.first }
+            // A mixed-account ZIP must not use the global dedup scope. Without
+            // grouping, identical content fingerprints from Google A and B
+            // silently discard one archive before alias reconciliation.
+            for ((owner, ownedEvents) in newEvents.groupBy { it.driveAccountSubject }) {
+                inserted += dao.insertAllBatchedWithDedup(ownedEvents, owner).inserted
+            }
+            // The dedup insert may have created new claims. Refresh once per
+            // chunk, rather than issuing a separate query for every playback.
+            // Ten years of listening history can contain hundreds of thousands
+            // of aliases; round trips must scale with pages, not row count.
+            val currentOriginRows = restoredOriginIds.chunked(900)
+                .flatMap { dao.getOriginClaimsByOriginIds(it) }
+                .associate { RestoredOriginKey(it.accountSubject, it.originEventId) to it.listeningEventId }
+            // Resolve target rows first, then fetch every target's existing
+            // producer claims in bounded chunks. Avoid issuing one Room query
+            // per event during multi-year offline backup restores.
+            val resolvedTargets = mutableListOf<Pair<Long, List<ListeningEventOrigin>>>()
+            for ((event, exportedAliases) in chunk) {
+                if (exportedAliases.isEmpty()) continue
+                // Prefer immutable producer IDs. A previously-restored event
+                // may be represented by a different source or timestamp after
+                // another device reconciled it. Only fall back to time when no
+                // saved origin identifies the playback.
+                val byOrigin = exportedAliases.mapNotNull { currentOriginRows[it.restoredKey()] }.distinct()
+                check(byOrigin.size <= 1) {
+                    "Cannot safely restore aliases: producer IDs point to different listening events"
+                }
+                val targetId = if (byOrigin.size == 1) {
+                    byOrigin.single()
+                } else {
+                    val exact = dao.getBackupRestoredEventIds(
+                        event.track_id, event.timestamp, event.source,
+                        event.driveAccountSubject,
+                    )
+                    if (exact.size == 1) {
+                        exact.single()
+                    } else if (exact.isEmpty()) {
+                        // An alias-free target may have a different timestamp
+                        // or source: use a bounded, unambiguous reconciliation.
+                        val window = ListeningEventDao.DRIVE_RECONCILIATION_WINDOW_MS
+                        val nearby = dao.getEventsForReconciliation(
+                            event.track_id, event.timestamp - window, event.timestamp + window
+                        ).filter { it.driveAccountSubject == event.driveAccountSubject }
+                        .filter { ref ->
+                            val refDur = ref.estimatedDurationMs
+                            val evDur = event.estimatedDurationMs
+                            if (refDur != null && refDur > 0L && evDur != null && evDur > 0L) {
+                                kotlin.math.abs(refDur - evDur) <= 10_000L
+                            } else true
+                        }
+                        check(nearby.size == 1) {
+                            "Cannot safely restore producer aliases for event at ${event.timestamp}: ambiguous playback"
+                        }
+                        nearby.single().id
+                    } else {
+                        error("Cannot safely restore aliases: duplicate event identity")
+                    }
+                }
+
+                resolvedTargets.add(targetId to exportedAliases)
+            }
+            val savedClaims = resolvedTargets.asSequence().map { it.first }.distinct()
+                .toList().chunked(900)
+                .flatMap { dao.getOriginClaimsForEvents(it) }
+                .groupBy { it.listeningEventId }
+            val claimsByRestoredId = savedClaims.mapValues { (_, origins) ->
+                origins.associate { (it.accountSubject to it.sourceDeviceId) to it.originEventId }.toMutableMap()
+            }.toMutableMap()
+            val newAliases = mutableListOf<ListeningEventOrigin>()
+            for ((targetId, exportedAliases) in resolvedTargets) {
+                // Mutate the map as aliases are staged so repeated entries in
+                // the same chunk are checked against each other as well.
+                val claimed = claimsByRestoredId.getOrPut(targetId) { mutableMapOf() }
+                for (origin in exportedAliases) {
+                    val claimKey = origin.accountSubject to origin.sourceDeviceId
+                    val existing = claimed[claimKey]
+                    if (existing != null) {
+                        check(existing == origin.originEventId) {
+                            "Two different origins claim the same producer and playback"
+                        }
+                        continue
+                    }
+                    check(origin.originEventId.matches(Regex("^[0-9a-f]{64}$")) &&
+                        origin.sourceDeviceId.matches(Regex("^[A-Za-z0-9._-]{1,200}$"))
+                    ) {
+                        "Backup contains an invalid producer identity"
+                    }
+                    newAliases.add(origin.copy(listeningEventId = targetId))
+                    claimed[claimKey] = origin.originEventId
+                }
+            }
+            if (newAliases.isNotEmpty()) dao.insertOriginAliases(newAliases)
             chunk = ArrayList(EVENT_IMPORT_CHUNK)
         }
 
-        stagedFile.bufferedReader().useLines { lines ->
-            for (line in lines) {
-                if (line.isBlank()) continue
-                val event = try {
-                    eventAdapter.fromJson(line)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Skipping malformed staged listening event", e)
-                    null
-                } ?: continue
-                val newTrackId = trackIdMap[event.track_id] ?: continue
-                chunk.add(event.copy(id = 0, track_id = newTrackId))
-                if (chunk.size >= EVENT_IMPORT_CHUNK) {
-                    flush()
+        val originReader = stagedOriginsFile.takeIf { it.length() > 0L }?.bufferedReader()
+        try {
+            val originLines = originReader?.lineSequence()?.iterator()
+            fun readNextOrigin(): ListeningEventOrigin? {
+                if (originLines?.hasNext() != true) return null
+                return requireNotNull(originAdapter.fromJson(originLines.next())) {
+                    "Unexpected null origin entry in Tempo backup"
                 }
             }
+            var pendingOrigin = readNextOrigin()
+            stagedFile.bufferedReader().useLines { lines ->
+                for (line in lines) {
+                    if (line.isBlank()) continue
+                    val event = try {
+                        eventAdapter.fromJson(line)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Skipping malformed staged listening event", e)
+                        null
+                    } ?: continue
+                    // Both arrays are written in listening-event ID order.
+                    // Consume sidecar origins together with their original row.
+                    check(pendingOrigin == null ||
+                        requireNotNull(pendingOrigin).listeningEventId >= event.id
+                    ) { "Backup contains a producer alias with no corresponding listening event" }
+                    val aliases = mutableListOf<ListeningEventOrigin>()
+                    while (pendingOrigin?.listeningEventId == event.id) {
+                        aliases.add(requireNotNull(pendingOrigin))
+                        pendingOrigin = readNextOrigin()
+                    }
+                    val newTrackId = trackIdMap[event.track_id]
+                    if (newTrackId == null) {
+                        check(aliases.isEmpty()) {
+                            "Cannot restore producer aliases: the original track is missing"
+                        }
+                        continue
+                    }
+                    chunk.add(event.copy(id = 0, track_id = newTrackId) to aliases)
+                    if (chunk.size >= EVENT_IMPORT_CHUNK) flush()
+                }
+            }
+            check(pendingOrigin == null) {
+                "Backup contains a producer alias after the last listening event"
+            }
+            flush()
+        } finally {
+            originReader?.close()
         }
-        flush()
         return inserted
     }
 

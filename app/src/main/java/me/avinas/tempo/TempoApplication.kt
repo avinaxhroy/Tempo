@@ -23,6 +23,7 @@ import me.avinas.tempo.data.analytics.CrashSignatureRecorder
 import me.avinas.tempo.data.analytics.DbMigration
 import me.avinas.tempo.data.drive.BackupInterval
 import me.avinas.tempo.data.drive.BackupSettingsManager
+import me.avinas.tempo.data.drive.DriveHistorySyncSettingsManager
 import me.avinas.tempo.data.drive.LocalBackupStorage
 import me.avinas.tempo.data.local.AppDatabase
 import me.avinas.tempo.data.local.dao.UserKnownArtistDao
@@ -35,6 +36,7 @@ import me.avinas.tempo.utils.FrameworkRaceGuard
 import me.avinas.tempo.worker.AnalyticsFlushWorker
 import me.avinas.tempo.worker.ChallengeWorker
 import me.avinas.tempo.worker.DriveBackupWorker
+import me.avinas.tempo.worker.DriveHistorySyncWorker
 import me.avinas.tempo.worker.EnrichmentWorker
 import me.avinas.tempo.worker.ListeningActivityWorker
 import me.avinas.tempo.worker.LocalBackupWorker
@@ -76,6 +78,9 @@ class TempoApplication :
 
     @Inject
     lateinit var backupSettingsManager: BackupSettingsManager
+
+    @Inject
+    lateinit var driveHistorySyncSettingsManager: DriveHistorySyncSettingsManager
 
     @Inject
     lateinit var crashSignatureRecorder: CrashSignatureRecorder
@@ -313,6 +318,22 @@ class TempoApplication :
         ListeningActivityWorker.schedule(this)
 
         scheduleSpotifyPollingIfEnabled()
+
+        // Restore the independent, opt-in history schedule after a restart.
+        applicationScope.launch {
+            try {
+                val settings = driveHistorySyncSettingsManager.settings.first()
+                if (settings.enabled) {
+                    DriveHistorySyncWorker.schedule(this@TempoApplication)
+                } else {
+                    DriveHistorySyncWorker.cancel(this@TempoApplication)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("TempoApplication", "Failed to restore Drive history sync schedule", e)
+            }
+        }
 
         Handler(Looper.getMainLooper()).postDelayed({
             SpotlightUnlockWorker.scheduleWeekly(this)

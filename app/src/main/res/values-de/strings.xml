@@ -1,5 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Browser extension history import -->
+    <string name="settings_import_extension">Browser-Wiedergaben importieren</string>
+    <string name="settings_import_extension_desc">Füge exportierte Wiedergaben aus der Tempo Stats-Erweiterung zu deinem Verlauf hinzu</string>
+    <string name="extension_import_title">Wiedergaben aus Erweiterung importieren</string>
+    <string name="extension_import_headline">Übertrage deine Browser-Wiedergaben zu Tempo</string>
+    <string name="extension_import_how_to">1. Öffne die Tempo Stats-Browser-Erweiterung\n2. Öffne den Tab Einstellungen und tippe auf Wiedergaben exportieren\n3. Wähle unten die heruntergeladene tempo-plays-Datei aus</string>
+    <string name="extension_import_choose_file">Exportdatei auswählen</string>
+    <string name="extension_import_selected_files">%1$d Datei(en) ausgewählt</string>
+    <string name="extension_import_button">Wiedergaben importieren</string>
+    <string name="extension_import_running">Importieren…</string>
+    <string name="extension_import_parsing">%1$s wird gelesen…</string>
+    <string name="extension_import_file_counter">Datei %1$d von %2$d</string>
+    <string name="extension_import_progress">%1$d Wiedergaben verarbeitet</string>
+    <string name="extension_import_progress_added">Bisher %1$d hinzugefügt</string>
+    <string name="extension_import_result_title">Import abgeschlossen</string>
+    <string name="extension_import_stat_imported">Hinzugefügte Wiedergaben</string>
+    <string name="extension_import_stat_duplicates">Bereits in deinem Verlauf</string>
+    <string name="extension_import_stat_tracks">Neue Titel</string>
+    <string name="extension_import_stat_too_short">Zu kurz zum Zählen</string>
+    <string name="extension_import_stat_unreadable">Unlesbare Zeilen</string>
+    <string name="extension_import_stat_files">Gelesene Dateien</string>
+    <string name="extension_import_truncated">Diese Datei enthält mehr Wiedergaben, als ein einzelner Import liest. Importiere sie erneut, um an der letzten Stelle fortzufahren.</string>
+    <string name="extension_import_done">Fertig</string>
+    <string name="extension_import_failed_title">Import fehlgeschlagen</string>
+    <string name="extension_import_retry">Erneut versuchen</string>
+
     <string name="app_name">Tempo</string>
     
     <!-- Service notification -->
@@ -378,7 +404,7 @@
     <string name="backup_export">Auf Gerät exportieren</string>
     <string name="backup_import">Vom Gerät importieren</string>
     <string name="backup_tips">💡 Backup-Tipps</string>
-    <string name="backup_drive_auto">• Google-Drive-Backups erfolgen automatisch und verschlüsselt\n</string>
+    <string name="backup_drive_auto">• Google-Drive-Backups erfolgen automatisch und werden in Ihrem Drive-Konto gespeichert\n</string>
     <string name="backup_use_different">Ein anderes Konto verwenden</string>
     <string name="backup_last_backup">Letztes Backup: %1$s</string>
 
@@ -1070,4 +1096,49 @@
     <string name="deezer_import_notification_channel_desc">Fortschrittsmeldungen für den Import eines Deezer-Datenexports</string>
     <string name="deezer_import_notification_title">Deezer-Daten werden importiert</string>
     <string name="deezer_import_notification_progress">%1$d/%2$d Einträge werden importiert</string>
+
+    <!-- Google Drive history sync -->
+    <string name="drive_auth_required">Vor der Synchronisierung ist eine Google Drive-Anmeldung erforderlich.</string>
+    <string name="drive_deleted_success">%1$d Verlaufsdateien aus Google Drive gelöscht. Die Synchronisierung wird bei erneuter Verbindung anderer Geräte deaktiviert.</string>
+    <string name="drive_operation_failed">Google Drive-Vorgang fehlgeschlagen.</string>
+    <string name="drive_sync_success">Synchronisiert: %1$d gesendet, %2$d empfangen.</string>
+    <string name="drive_heading">GERÄTEÜBERGREIFENDER VERLAUF</string>
+    <string name="drive_toggle_title">Hörverlauf synchronisieren</string>
+    <string name="drive_toggle_subtitle">Hörverlauf zwischen Android, Desktop und Browsern über private Google Drive-App-Daten austauschen. Kein Tempo-Server.</string>
+    <string name="drive_connecting">Verbindung zu Google Drive…</string>
+    <string name="drive_status_title">Google Drive-Synchronisierung</string>
+    <string name="drive_sync_now">Jetzt synchronisieren</string>
+    <string name="drive_restore">Vollständigen Verlauf wiederherstellen</string>
+    <string name="drive_restore_hint">Prüft alle älteren Drive-Daten, ohne lokale Wiedergaben zu löschen.</string>
+    <string name="drive_share">Älteren lokalen Verlauf hochladen</string>
+    <string name="drive_share_hint">Veröffentlicht ältere Wiedergaben erneut, auch LAN-Daten ohne bestätigtes Google-Konto.</string>
+    <string name="drive_delete">Cloud-Verlauf löschen</string>
+    <string name="drive_share_confirm_title">Älteren Verlauf hochladen?</string>
+    <string name="drive_share_confirm_body">Ältere Wiedergaben werden an das ausgewählte Google-Konto übertragen, auch zuvor gelöschte Daten und LAN-Einträge ohne bestätigten Eigentümer. Einige können zu einem anderen Konto gehören. Künftige LAN-Einträge bleiben ausgeschlossen.</string>
+    <string name="drive_share_confirm">Älteren Verlauf hochladen</string>
+    <string name="drive_cancel">Abbrechen</string>
+    <string name="drive_delete_confirm_title">Cloud-Verlauf löschen?</string>
+    <string name="drive_delete_confirm_body">Löscht geteilte Tempo-Verlaufsdaten aus Google Drive und stoppt die Synchronisierung auf verbundenen Geräten bei deren Wiederverbindung. Lokale Wiedergaben bleiben erhalten. Synchronisierung kann später erneut aktiviert werden.</string>
+    <string name="drive_delete_confirm">Löschen und deaktivieren</string>
+    <string name="drive_never">Nie</string>
+    <string name="drive_last_message">Letzte Synchronisierung: %1$s • %2$s</string>
+    <string name="drive_last_counts">Letzte Synchronisierung: %1$s • %2$d gesendet • %3$d empfangen</string>
+    <string name="drive_schedule_hint">Automatisch etwa alle sechs Stunden und beim Tippen auf Jetzt synchronisieren.</string>
+    <string name="drive_signin_hint">Verbinden Sie Google, um den Hörverlauf zwischen Geräten zu synchronisieren. Dies ist unabhängig von Gerätesicherungen. Lokale Daten bleiben auf dem Telefon.</string>
+    <string name="drive_signin_action">Google für den Hörverlauf verbinden</string>
+    <string name="drive_device_backup_heading">GOOGLE DRIVE-GERÄTESICHERUNGEN</string>
+    <string name="drive_device_backup_explanation">Gerätesicherungen speichern einen Stand zur Wiederherstellung. Sie sind von der automatischen Synchronisierung des Hörverlaufs getrennt.</string>
+    <string name="drive_device_restore_title">Gerätesicherung wiederherstellen</string>
+    <string name="drive_device_restore_question">Gerätesicherung vom %1$s wiederherstellen? Das unterscheidet sich vom Wiederherstellen des synchronisierten Hörverlaufs.</string>
+    <string name="drive_device_backup_action_hint">Vollständige Gerätesicherung in Google Drive speichern</string>
+    <string name="drive_device_backup_now">Jetzt sichern</string>
+    <string name="drive_device_backup_toggle">Gerätesicherungen auf Google Drive aktivieren</string>
+    <string name="drive_device_backup_toggle_hint">Unabhängig vom synchronisierten Hörverlauf. Aktivieren Sie dies nur für vollständige Gerätesicherungen.</string>
+    <string name="backup_leave_title">Laufenden Vorgang verlassen?</string>
+    <string name="backup_leave_warning">Beim Verlassen kann ein lokaler Import oder Export abgebrochen werden. Einige Cloud-Vorgänge laufen im Hintergrund weiter.</string>
+    <string name="backup_leave_confirm">Bildschirm verlassen</string>
+    <string name="drive_status_disabled">Synchronisierung ausgeschaltet</string>
+    <string name="drive_status_running">Hörverlauf wird synchronisiert…</string>
+    <string name="drive_status_failed">Synchronisierung fehlgeschlagen</string>
+    <string name="drive_status_failed_detail">Synchronisierung fehlgeschlagen: %1$s</string>
 </resources>

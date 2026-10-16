@@ -18,6 +18,7 @@ import me.avinas.tempo.data.local.entities.*
  * - v7: Added userName (display name) from DataStore
  * - v8: Added userKnownArtists and dailyChallenges tables
  * - v9: Added userProfileImagePath from DataStore-backed profile identity
+ * - v10: Streamed persistent listening-event producer aliases for offline recovery
  */
 @JsonClass(generateAdapter = true)
 data class TempoExportData(
@@ -36,6 +37,8 @@ data class TempoExportData(
     val albums: List<Album> = emptyList(),
     val trackArtists: List<TrackArtist> = emptyList(),
     val listeningEvents: List<ListeningEvent> = emptyList(),
+    // v10: Cross-device origin claims, streamed in .tempo ZIP exports.
+    val listeningEventOrigins: List<ListeningEventOrigin> = emptyList(),
     val enrichedMetadata: List<EnrichedMetadata> = emptyList(),
     val userPreferences: UserPreferences? = null,
     
@@ -80,7 +83,7 @@ data class TempoExportData(
     val imageManifest: Map<String, String> = emptyMap()
 ) {
     companion object {
-        const val CURRENT_VERSION = 9
+        const val CURRENT_VERSION = 10
         const val DATA_FILENAME = "data.json"
     }
 }

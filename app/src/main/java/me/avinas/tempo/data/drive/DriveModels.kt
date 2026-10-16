@@ -22,7 +22,9 @@ data class DriveBackupInfo(
 data class GoogleAccount(
     val email: String,
     val displayName: String?,
-    val photoUrl: String?
+    val photoUrl: String?,
+    /** Immutable Google account identifier from the verified ID token. */
+    val subject: String? = null
 )
 
 /**

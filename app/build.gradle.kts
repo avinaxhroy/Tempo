@@ -23,6 +23,13 @@ val localProperties =
 val appVersionCode = 4811
 val appVersionName = "4.8.11"
 
+// Local development can keep using local.properties. CI/release builders can
+// inject the public Google OAuth client ID without creating a repository file.
+val googleWebClientId = localProperties.getProperty("GOOGLE_WEB_CLIENT_ID")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: System.getenv("TEMPO_GOOGLE_WEB_CLIENT_ID")?.trim().orEmpty()
+
 android {
     namespace = "me.avinas.tempo"
     compileSdk = 36
@@ -64,7 +71,7 @@ android {
         )
         buildConfigField("Long", "MUSICBRAINZ_RATE_LIMIT_MS", "1000L")
         buildConfigField("String", "LASTFM_API_KEY", "\"${localProperties.getProperty("LASTFM_API_KEY", "")}\"")
-        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${localProperties.getProperty("GOOGLE_WEB_CLIENT_ID", "")}\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
 
         // Anonymous app-health analytics. The key is deliberately NOT committed: a blank
         // key makes AnalyticsGate report the build as unconfigured, so anyone building
@@ -265,6 +272,10 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.sqlite.jdbc)
+    // Android's local-unit-test stub does not provide a functional org.json.
+    // Use the reference JVM implementation so Drive protocol encode/decode tests
+    // execute the same JSON semantics instead of returning stub nulls.
+    testImplementation("org.json:json:20260814")
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.espresso.core)
 

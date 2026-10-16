@@ -1,5 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Browser extension history import -->
+    <string name="settings_import_extension">Importer les écoutes du navigateur</string>
+    <string name="settings_import_extension_desc">Ajoutez à votre historique les écoutes exportées depuis l’extension Tempo Stats</string>
+    <string name="extension_import_title">Importer les écoutes de l’extension</string>
+    <string name="extension_import_headline">Ajoutez vos écoutes du navigateur à Tempo</string>
+    <string name="extension_import_how_to">1. Ouvrez l’extension de navigateur Tempo Stats\n2. Dans son onglet Paramètres, appuyez sur Exporter les écoutes\n3. Sélectionnez ci-dessous le fichier tempo-plays téléchargé</string>
+    <string name="extension_import_choose_file">Choisir le fichier exporté</string>
+    <string name="extension_import_selected_files">%1$d fichier(s) sélectionné(s)</string>
+    <string name="extension_import_button">Importer les écoutes</string>
+    <string name="extension_import_running">Importation…</string>
+    <string name="extension_import_parsing">Lecture de %1$s…</string>
+    <string name="extension_import_file_counter">Fichier %1$d sur %2$d</string>
+    <string name="extension_import_progress">%1$d écoutes traitées</string>
+    <string name="extension_import_progress_added">%1$d ajoutées pour le moment</string>
+    <string name="extension_import_result_title">Importation terminée</string>
+    <string name="extension_import_stat_imported">Écoutes ajoutées</string>
+    <string name="extension_import_stat_duplicates">Déjà dans votre historique</string>
+    <string name="extension_import_stat_tracks">Nouveaux titres</string>
+    <string name="extension_import_stat_too_short">Trop courtes pour être comptées</string>
+    <string name="extension_import_stat_unreadable">Lignes illisibles</string>
+    <string name="extension_import_stat_files">Fichiers lus</string>
+    <string name="extension_import_truncated">Ce fichier contient plus d’écoutes qu’une seule importation ne peut lire. Importez-le à nouveau pour reprendre là où elle s’est arrêtée.</string>
+    <string name="extension_import_done">Terminé</string>
+    <string name="extension_import_failed_title">Échec de l’importation</string>
+    <string name="extension_import_retry">Réessayer</string>
+
     <string name="app_name">Tempo</string>
     
     <!-- Service notification -->
@@ -378,7 +404,7 @@
     <string name="backup_export">Exporter sur l\'appareil</string>
     <string name="backup_import">Importer depuis l\'appareil</string>
     <string name="backup_tips">💡 Astuces de sauvegarde</string>
-    <string name="backup_drive_auto">• Les sauvegardes Google Drive sont automatiques et chiffrées\n</string>
+    <string name="backup_drive_auto">• Les sauvegardes Google Drive sont automatiques et stockées dans votre compte Drive\n</string>
     <string name="backup_use_different">Utiliser un autre compte</string>
     <string name="backup_last_backup">Dernière sauvegarde : %1$s</string>
 
@@ -1068,4 +1094,49 @@
     <string name="deezer_import_notification_channel_desc">Notifications de progression pour l\'import d\'export Deezer</string>
     <string name="deezer_import_notification_title">Import des données Deezer</string>
     <string name="deezer_import_notification_progress">Import de %1$d/%2$d entrées</string>
+
+    <!-- Google Drive history sync -->
+    <string name="drive_auth_required">Autorisez Google Drive avant d’activer la synchronisation.</string>
+    <string name="drive_deleted_success">%1$d lots d’historique supprimés de Google Drive. La synchronisation s’arrêtera sur les appareils associés à leur reconnexion.</string>
+    <string name="drive_operation_failed">Échec de l’opération sur l’historique Google Drive.</string>
+    <string name="drive_sync_success">Synchronisation : %1$d écoutes envoyées et %2$d reçues.</string>
+    <string name="drive_heading">HISTORIQUE MULTIAPPAREIL</string>
+    <string name="drive_toggle_title">Synchroniser les écoutes</string>
+    <string name="drive_toggle_subtitle">Partagez votre historique entre Android, ordinateur et navigateurs via les données privées de Google Drive. Aucun serveur Tempo n’est utilisé.</string>
+    <string name="drive_connecting">Connexion à Google Drive…</string>
+    <string name="drive_status_title">Synchronisation Google Drive</string>
+    <string name="drive_sync_now">Synchroniser</string>
+    <string name="drive_restore">Restaurer tout l’historique Drive</string>
+    <string name="drive_restore_hint">Vérifie les anciennes données Drive sans supprimer les écoutes locales.</string>
+    <string name="drive_share">Envoyer l’ancien historique local</string>
+    <string name="drive_share_hint">Republie les anciennes écoutes, y compris celles reçues par réseau local sans compte Google vérifié.</string>
+    <string name="drive_delete">Supprimer l’historique cloud</string>
+    <string name="drive_share_confirm_title">Envoyer les anciennes écoutes ?</string>
+    <string name="drive_share_confirm_body">Cette action partage les anciennes écoutes avec le compte Google sélectionné, y compris celles supprimées du cloud et celles dont le propriétaire Google est inconnu. Certaines peuvent appartenir à un autre compte. Les futures écoutes reçues par réseau local restent exclues.</string>
+    <string name="drive_share_confirm">Envoyer l’ancien historique</string>
+    <string name="drive_cancel">Annuler</string>
+    <string name="drive_delete_confirm_title">Supprimer l’historique cloud ?</string>
+    <string name="drive_delete_confirm_body">Supprime l’historique Tempo partagé sur Google Drive et désactive la synchronisation des appareils associés à leur reconnexion. Vos écoutes locales sont conservées. La synchronisation pourra être réactivée explicitement.</string>
+    <string name="drive_delete_confirm">Supprimer et désactiver</string>
+    <string name="drive_never">Jamais</string>
+    <string name="drive_last_message">Dernière synchro : %1$s • %2$s</string>
+    <string name="drive_last_counts">Dernière synchro : %1$s • %2$d envoyées • %3$d reçues</string>
+    <string name="drive_schedule_hint">Exécution environ toutes les six heures ou lorsque vous choisissez Synchroniser.</string>
+    <string name="drive_signin_hint">Connectez Google pour partager vos écoutes entre appareils. Cette fonction est distincte des sauvegardes complètes. Votre historique local reste sur le téléphone.</string>
+    <string name="drive_signin_action">Connecter Google pour synchroniser l’historique</string>
+    <string name="drive_device_backup_heading">SAUVEGARDES DE L’APPAREIL SUR GOOGLE DRIVE</string>
+    <string name="drive_device_backup_explanation">Les sauvegardes créent une copie pour restaurer l’appareil. Elles sont distinctes de la synchronisation automatique de vos écoutes.</string>
+    <string name="drive_device_restore_title">Restaurer une sauvegarde de l’appareil</string>
+    <string name="drive_device_restore_question">Restaurer la sauvegarde de l’appareil du %1$s ? Cette opération est différente de la récupération des écoutes synchronisées.</string>
+    <string name="drive_device_backup_action_hint">Enregistrer une sauvegarde complète de l’appareil sur Google Drive</string>
+    <string name="drive_device_backup_now">Sauvegarder</string>
+    <string name="drive_device_backup_toggle">Activer les sauvegardes de l’appareil sur Drive</string>
+    <string name="drive_device_backup_toggle_hint">Indépendant des écoutes synchronisées. Activez uniquement pour sauvegarder les données de l’appareil sur Drive.</string>
+    <string name="backup_leave_title">Quitter pendant une opération ?</string>
+    <string name="backup_leave_warning">Quitter cet écran peut interrompre un import ou un export local. Certaines opérations cloud continuent en arrière-plan.</string>
+    <string name="backup_leave_confirm">Quitter l’écran</string>
+    <string name="drive_status_disabled">Synchronisation désactivée</string>
+    <string name="drive_status_running">Synchronisation de l’historique…</string>
+    <string name="drive_status_failed">Échec de la synchronisation</string>
+    <string name="drive_status_failed_detail">Échec de la synchronisation : %1$s</string>
 </resources>

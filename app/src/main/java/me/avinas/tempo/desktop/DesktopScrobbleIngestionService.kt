@@ -7,6 +7,7 @@ import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import me.avinas.tempo.data.repository.ArtistLinkingService
 import me.avinas.tempo.data.repository.EnrichedMetadataRepository
+import me.avinas.tempo.data.local.dao.ListeningEventDao
 import me.avinas.tempo.data.local.entities.ListeningEvent
 import me.avinas.tempo.data.local.entities.Track
 import me.avinas.tempo.data.repository.ListeningRepository
@@ -59,6 +60,7 @@ class DesktopPlayIngestionService @Inject constructor(
     private val pairingManager: DesktopPairingManager,
     private val trackRepository: TrackRepository,
     private val listeningRepository: ListeningRepository,
+    private val listeningEventDao: ListeningEventDao,
     private val enrichedMetadataRepository: EnrichedMetadataRepository,
     private val artistLinkingService: ArtistLinkingService,
     private val refreshCoordinator: RefreshCoordinator
@@ -67,10 +69,10 @@ class DesktopPlayIngestionService @Inject constructor(
         private const val TAG = "DesktopIngestion"
 
         /** Deduplication window: skip if same track exists within ±5 min. */
-        private const val DEDUP_WINDOW_MS = 300_000L
+        private const val DEDUP_WINDOW_MS = 10_000L
+        private val DRIVE_DEVICE_ID = Regex("^[A-Za-z0-9._-]{1,200}$")
+        private val DRIVE_EVENT_ID = Regex("^[0-9a-f]{64}$")
 
-        /** Minimum sensible play duration to accept (5 seconds). */
-        private const val MIN_PLAY_DURATION_MS = 5_000L
 
         /** Assumed completion percentage for desktop plays (90 %, stricter than Last.fm's
          *  50 % threshold, since desktop clients only log finished tracks). */
@@ -121,25 +123,52 @@ class DesktopPlayIngestionService @Inject constructor(
         var duplicates = 0
         val newTrackIds = mutableSetOf<Long>()
 
+        // Reject malformed batches instead of acknowledging plays we silently
+        // discarded. LAN senders remove whole batches on a successful response,
+        // so a missing title/artist/timestamp would otherwise be lost forever.
         for (i in 0 until playsArray.length()) {
-            val entry = playsArray.optJSONObject(i) ?: continue
+            val entry = playsArray.optJSONObject(i)
+                ?: return IngestionResult.Error("invalid_play_at_index_$i")
+            if (entry.optString("title").isBlank() ||
+                entry.optString("artist").isBlank() ||
+                entry.optLong("timestamp_utc", 0L) <= 0L
+            ) {
+                return IngestionResult.Error("invalid_play_at_index_$i")
+            }
+        }
 
-            val title = entry.optString("title").trim().takeIf { it.isNotBlank() } ?: continue
-            val artist = entry.optString("artist").trim().takeIf { it.isNotBlank() } ?: continue
+        for (i in 0 until playsArray.length()) {
+            val entry = playsArray.getJSONObject(i)
+
+            val title = entry.getString("title").trim()
+            val artist = entry.getString("artist").trim()
             val album = entry.optString("album").takeIf { it.isNotBlank() }
-            val timestampUtc = entry.optLong("timestamp_utc", 0L).takeIf { it > 0L } ?: continue
+            val timestampUtc = entry.getLong("timestamp_utc")
             val durationMs = entry.optLong("duration_ms", 0L)
             // listened_ms is sent by the browser extension and represents actual listened time.
             // Fall back to duration_ms (full track duration) for desktop app plays that
             // don't send this field.
             val listenedMs = entry.optLong("listened_ms", 0L).takeIf { it > 0L } ?: durationMs
             val sourceApp = entry.optString("source_app", "Desktop").trim()
+            val declaredDeviceId = entry.optString("origin_device_id", "")
+            val declaredEventId = entry.optString("origin_event_id", "")
+            // An authenticated pairing proves the sender device, not ownership
+            // of a Google account. Only explicitly supplied provenance can
+            // authorise a future cloud relay. Missing/invalid stays LAN-only.
+            val senderAccount = entry.optString("origin_account_subject", "").trim()
+                .takeIf { it.isNotBlank() && it.length <= 255 &&
+                    !it.contains('@') && it != "legacy-unverified" }
+            // Older LAN senders omit these fields, so keep their existing
+            // heuristic path. New senders reuse their exact Google Drive event
+            // identity, eliminating LAN -> Android -> Drive publication loops.
+            val stableOrigin = if (
+                DRIVE_DEVICE_ID.matches(declaredDeviceId) &&
+                DRIVE_EVENT_ID.matches(declaredEventId)
+            ) declaredDeviceId to declaredEventId else null
 
-            // Guard: ignore implausibly short plays
-            if (durationMs in 1 until MIN_PLAY_DURATION_MS) {
-                Log.d(TAG, "Skipping short play ($durationMs ms): $title")
-                continue
-            }
+            // The LAN transport preserves the sender's history as-is.
+            // Duration filtering is a separate user preference: silently
+            // skipping short plays would make a successful batch incomplete.
 
             try {
                 // 3. Find or create the Track record
@@ -186,7 +215,7 @@ class DesktopPlayIngestionService @Inject constructor(
                 }
 
                 // 4. Deduplication: skip if an event for this track exists within ±60 s
-                val isDuplicate = checkDuplicate(trackId, timestampUtc)
+                val isDuplicate = stableOrigin == null && checkDuplicate(trackId, timestampUtc)
                 if (isDuplicate) {
                     Log.d(TAG, "Duplicate skipped: $title @ $timestampUtc")
                     duplicates++
@@ -202,24 +231,53 @@ class DesktopPlayIngestionService @Inject constructor(
                 } else {
                     DESKTOP_COMPLETION_PERCENT
                 }
+                val originSource = entry.optString("origin_source", "desktop:$sourceApp")
                 val event = ListeningEvent(
                     track_id = trackId,
                     timestamp = timestampUtc,
                     playDuration = listenedMs.coerceAtLeast(0L),
                     completionPercentage = completionPct,
-                    source = "desktop:$sourceApp",
+                    // A LAN-delivered play is not necessarily present on Drive:
+                    // the sender may have disabled Google sync. Keep its exact
+                    // producer/event ID, but distinguish LAN from cloud imports
+                    // so Android can relay this play without generating a new ID.
+                    source = stableOrigin?.let { "lan:${it.first}:$originSource" } ?: "desktop:$sourceApp",
                     wasSkipped = completionPct < 30,
                     isReplay = false,
-                    estimatedDurationMs = durationMs.takeIf { it > 0L }
+                    estimatedDurationMs = durationMs.takeIf { it > 0L },
+                    contentFingerprint = stableOrigin?.let { "drive:v1:${it.second}" },
+                    driveAccountSubject = if (stableOrigin == null) "lan-unverified"
+                        else senderAccount ?: "lan-unverified"
                 )
-                listeningRepository.insert(event)
-                accepted++
+                if (stableOrigin == null) {
+                    listeningRepository.insert(event)
+                    accepted++
+                } else {
+                    val result = listeningEventDao.insertAllBatchedWithDedup(
+                        listOf(event), event.driveAccountSubject
+                    )
+                    accepted += result.inserted
+                    duplicates += result.skipped
+                }
                 Log.d(TAG, "Accepted: $title by $artist @ $timestampUtc")
 
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Error processing play [$title / $artist]", e)
-                // Continue with remaining entries rather than aborting the whole batch
+                Log.e(TAG, "Could not durably ingest LAN play [$title / $artist] at index $i", e)
+                // The sender acknowledges and clears the entire LAN batch on
+                // success. Return a non-2xx error instead; already committed
+                // events are safe to retry because of their stable origin IDs.
+                // Never rotate the pairing token on a failed batch.
+                return IngestionResult.Error("ingestion_failed_retry_batch")
             }
+        }
+
+        // Never rotate the pairing token or return ok:true when the whole
+        // request was not accounted for. Desktop now checks these counts.
+        // Already committed events are safe to resend by stable event ID.
+        if (accepted.toLong() + duplicates.toLong() != playsArray.length().toLong()) {
+            return IngestionResult.Error("ingestion_failed_retry_batch")
         }
 
         // 6. Update pairing session last-seen

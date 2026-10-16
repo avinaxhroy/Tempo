@@ -1,5 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Browser extension history import -->
+    <string name="settings_import_extension">Импорт прослушиваний из браузера</string>
+    <string name="settings_import_extension_desc">Добавьте в историю прослушивания, экспортированные из расширения Tempo Stats</string>
+    <string name="extension_import_title">Импорт из расширения</string>
+    <string name="extension_import_headline">Перенесите прослушивания из браузера в Tempo</string>
+    <string name="extension_import_how_to">1. Откройте расширение Tempo Stats в браузере\n2. На вкладке настроек нажмите «Экспорт прослушиваний»\n3. Выберите ниже скачанный файл tempo-plays</string>
+    <string name="extension_import_choose_file">Выбрать файл экспорта</string>
+    <string name="extension_import_selected_files">Выбрано файлов: %1$d</string>
+    <string name="extension_import_button">Импортировать прослушивания</string>
+    <string name="extension_import_running">Импорт…</string>
+    <string name="extension_import_parsing">Чтение %1$s…</string>
+    <string name="extension_import_file_counter">Файл %1$d из %2$d</string>
+    <string name="extension_import_progress">Обработано прослушиваний: %1$d</string>
+    <string name="extension_import_progress_added">Добавлено: %1$d</string>
+    <string name="extension_import_result_title">Импорт завершён</string>
+    <string name="extension_import_stat_imported">Добавлено прослушиваний</string>
+    <string name="extension_import_stat_duplicates">Уже в вашей истории</string>
+    <string name="extension_import_stat_tracks">Новые треки</string>
+    <string name="extension_import_stat_too_short">Слишком короткие</string>
+    <string name="extension_import_stat_unreadable">Нечитаемые строки</string>
+    <string name="extension_import_stat_files">Прочитано файлов</string>
+    <string name="extension_import_truncated">В этом файле больше прослушиваний, чем можно прочитать за один импорт. Импортируйте его снова, чтобы продолжить с места остановки.</string>
+    <string name="extension_import_done">Готово</string>
+    <string name="extension_import_failed_title">Ошибка импорта</string>
+    <string name="extension_import_retry">Повторить</string>
+
     <string name="app_name">Tempo</string>
     
     <!-- Service notification -->
@@ -410,7 +436,7 @@
     <string name="backup_export">Экспорт на устройство</string>
     <string name="backup_import">Импорт с устройства</string>
     <string name="backup_tips">💡 Советы по резервному копированию</string>
-    <string name="backup_drive_auto">• Копии на Google Диске автоматические и зашифрованные\n</string>
+    <string name="backup_drive_auto">• Копии на Google Диске создаются автоматически и хранятся в вашем аккаунте Drive\n</string>
     <string name="backup_use_different">Использовать другой аккаунт</string>
     <string name="backup_last_backup">Последняя копия: %1$s</string>
 
@@ -1296,4 +1322,49 @@
     <string name="deezer_import_notification_channel_desc">Уведомления о ходе импорта экспорта данных Deezer</string>
     <string name="deezer_import_notification_title">Импорт данных Deezer</string>
     <string name="deezer_import_notification_progress">Импорт %1$d/%2$d записей</string>
+
+    <!-- Google Drive history sync -->
+    <string name="drive_auth_required">Для синхронизации требуется авторизация в Google Drive.</string>
+    <string name="drive_deleted_success">Удалено пакетов истории Google Drive: %1$d. Синхронизация на связанных устройствах отключится при повторном подключении.</string>
+    <string name="drive_operation_failed">Не удалось выполнить операцию с историей Google Drive.</string>
+    <string name="drive_sync_success">Синхронизировано: отправлено %1$d, получено %2$d.</string>
+    <string name="drive_heading">ИСТОРИЯ НА РАЗНЫХ УСТРОЙСТВАХ</string>
+    <string name="drive_toggle_title">Синхронизировать историю прослушиваний</string>
+    <string name="drive_toggle_subtitle">Обменивайтесь историей между Android, компьютером и браузерами через закрытые данные приложения Google Drive. Сервер Tempo не используется.</string>
+    <string name="drive_connecting">Подключение к Google Drive…</string>
+    <string name="drive_status_title">Синхронизация Google Drive</string>
+    <string name="drive_sync_now">Синхронизировать</string>
+    <string name="drive_restore">Восстановить всю историю Drive</string>
+    <string name="drive_restore_hint">Проверяет старые записи Drive, не удаляя локальную историю.</string>
+    <string name="drive_share">Загрузить старую локальную историю</string>
+    <string name="drive_share_hint">Повторно публикует старые записи, включая данные LAN без подтверждённого аккаунта Google.</string>
+    <string name="drive_delete">Удалить облачную историю</string>
+    <string name="drive_share_confirm_title">Загрузить старую историю?</string>
+    <string name="drive_share_confirm_body">Старые записи будут переданы в выбранный аккаунт Google, включая удалённую облачную историю и данные LAN с неподтверждённым владельцем. Часть записей может относиться к другому аккаунту. Новые передачи LAN не включаются.</string>
+    <string name="drive_share_confirm">Загрузить старую историю</string>
+    <string name="drive_cancel">Отмена</string>
+    <string name="drive_delete_confirm_title">Удалить облачную историю?</string>
+    <string name="drive_delete_confirm_body">Удаляет общую историю Tempo из Google Drive и отключает синхронизацию на связанных устройствах при их повторном подключении. Локальная история сохраняется. Синхронизацию можно снова включить вручную.</string>
+    <string name="drive_delete_confirm">Удалить и отключить</string>
+    <string name="drive_never">Никогда</string>
+    <string name="drive_last_message">Последняя синхронизация: %1$s • %2$s</string>
+    <string name="drive_last_counts">Последняя синхронизация: %1$s • %2$d отправлено • %3$d получено</string>
+    <string name="drive_schedule_hint">Автоматически примерно каждые шесть часов или после нажатия Синхронизировать.</string>
+    <string name="drive_signin_hint">Подключите Google, чтобы синхронизировать историю прослушиваний между устройствами. Это отдельная функция от резервного копирования телефона. Локальная история сохраняется.</string>
+    <string name="drive_signin_action">Подключить Google для истории</string>
+    <string name="drive_device_backup_heading">РЕЗЕРВНЫЕ КОПИИ УСТРОЙСТВА В GOOGLE DRIVE</string>
+    <string name="drive_device_backup_explanation">Резервная копия сохраняет снимок для восстановления устройства. Это не то же самое, что автоматическая синхронизация истории прослушиваний.</string>
+    <string name="drive_device_restore_title">Восстановление резервной копии устройства</string>
+    <string name="drive_device_restore_question">Восстановить резервную копию устройства от %1$s? Это не то же самое, что восстановить синхронизированную историю прослушиваний.</string>
+    <string name="drive_device_backup_action_hint">Сохранить полную резервную копию устройства в Google Drive</string>
+    <string name="drive_device_backup_now">Создать копию</string>
+    <string name="drive_device_backup_toggle">Включить резервные копии устройства в Google Drive</string>
+    <string name="drive_device_backup_toggle_hint">Отдельно от синхронизации истории прослушиваний. Включайте только для сохранения резервных копий устройства.</string>
+    <string name="backup_leave_title">Выйти во время операции?</string>
+    <string name="backup_leave_warning">При выходе локальный импорт или экспорт может прерваться. Некоторые облачные операции продолжаются в фоне.</string>
+    <string name="backup_leave_confirm">Выйти</string>
+    <string name="drive_status_disabled">Синхронизация выключена</string>
+    <string name="drive_status_running">Синхронизация истории прослушиваний…</string>
+    <string name="drive_status_failed">Ошибка синхронизации</string>
+    <string name="drive_status_failed_detail">Ошибка синхронизации: %1$s</string>
 </resources>

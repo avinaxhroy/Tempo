@@ -543,7 +543,10 @@ class DesktopSatelliteServer @Inject constructor(
                     entry.optString("artist").length > MAX_FIELD_LENGTH ||
                     entry.optString("album").length > MAX_FIELD_LENGTH ||
                     entry.optString("source_app").length > MAX_FIELD_LENGTH ||
-                    entry.optString("device_name").length > MAX_FIELD_LENGTH) {
+                    entry.optString("device_name").length > MAX_FIELD_LENGTH ||
+                    entry.optString("origin_device_id").length > 200 ||
+                    entry.optString("origin_event_id").length > 64 ||
+                    entry.optString("origin_source").length > MAX_FIELD_LENGTH) {
                     return errorResponse(Response.Status.BAD_REQUEST, "field_too_long")
                 }
             }
@@ -577,7 +580,15 @@ class DesktopSatelliteServer @Inject constructor(
                             is IngestionResult.Error -> {
                                 val escaped = JSONObject.quote(result.message)
                                 syncFailureCount++
-                                IngestOutcome(Response.Status.BAD_REQUEST, """{"ok":false,"error":$escaped}""")
+                                // Storage failures are retryable: the sender must
+                                // keep the full LAN batch rather than moving its
+                                // listens to a permanently failed queue.
+                                val status = if (result.message == "ingestion_failed_retry_batch") {
+                                    Response.Status.SERVICE_UNAVAILABLE
+                                } else {
+                                    Response.Status.BAD_REQUEST
+                                }
+                                IngestOutcome(status, """{"ok":false,"error":$escaped}""")
                             }
                         }
                     }
