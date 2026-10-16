@@ -1179,4 +1179,25 @@
     <string name="deezer_import_notification_channel_desc">Notificações de progresso da importação da exportação de dados do Deezer</string>
     <string name="deezer_import_notification_title">Importando dados do Deezer</string>
     <string name="deezer_import_notification_progress">Importando %1$d/%2$d entradas</string>
+
+    <string name="details_change_cover">Alterar capa</string>
+    <string name="details_change_cover_title">Escolher uma capa</string>
+    <string name="details_change_cover_body">Compare capas de vários serviços. A sua escolha ficará bloqueada até a alterar ou voltar à seleção automática.</string>
+    <string name="details_cover_current">Atual</string>
+    <string name="details_cover_searching">A procurar…</string>
+    <string name="details_cover_not_found">Nenhuma capa encontrada</string>
+    <string name="details_cover_use">Usar esta capa</string>
+    <string name="details_cover_manual">Capa manual</string>
+    <string name="details_cover_restore_auto">Voltar à seleção automática</string>
+    <string name="details_cover_restore_auto_hint">O Tempo poderá voltar a escolher a capa automaticamente.</string>
+    <string name="details_cover_try_again">Pesquisar novamente</string>
+
+    <string name="details_cover_preview_error">Não foi possível carregar a pré-visualização da imagem</string>
+    <string name="details_cover_current_hint">Capa apresentada atualmente</string>
+    <string name="details_cover_retry_source">Tentar esta fonte novamente</string>
+    <string name="details_cover_unavailable">Indisponível</string>
+    <string name="details_cover_error">Falha na pesquisa</string>
+    <string name="details_cover_load_error">Não foi possível carregar as capas</string>
+    <string name="details_cover_save_error">Não foi possível guardar a capa</string>
+    <string name="details_cover_restore_auto_error">Não foi possível restaurar a seleção automática</string>
 </resources>

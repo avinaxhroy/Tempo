@@ -191,7 +191,7 @@ data class EnrichedMetadata(
     
     // Album art source tracking for priority-based replacement
     // Higher priority sources can replace lower priority ones
-    // Priority: SPOTIFY > MUSICBRAINZ > ITUNES > DEEZER > LOCAL > NONE
+    // Priority: USER_SELECTED > SPOTIFY > MUSICBRAINZ > ITUNES > DEEZER > LOCAL > NONE
     @ColumnInfo(name = "album_art_source", defaultValue = "NONE")
     val albumArtSource: AlbumArtSource = AlbumArtSource.NONE,
     
@@ -340,25 +340,31 @@ enum class EnrichmentStatus {
  * Higher priority sources provide higher quality, more reliable artwork.
  * 
  * Priority order (highest to lowest):
- * 1. SPOTIFY (6) - Official album artwork from Spotify
- * 2. MUSICBRAINZ (5) - Cover Art Archive (community verified)
- * 3. ITUNES (4) - Apple Music artwork (high quality)
- * 4. DEEZER (3) - Deezer album artwork
- * 5. LOCAL (2) - Extracted from MediaSession/notification
- * 6. NONE (0) - No album art yet
+ * 1. USER_SELECTED (100) - Explicit user choice; never replaced automatically
+ * 2. SPOTIFY (6) - Official album artwork from Spotify
+ * 3. MUSICBRAINZ (5) - Cover Art Archive (community verified)
+ * 4. ITUNES (4) - Apple Music artwork (high quality)
+ * 5. DEEZER (3) - Deezer album artwork
+ * 6. LOCAL (2) - Extracted from MediaSession/notification
+ * 7. NONE / USER_RESET (0) - No automatic album art currently selected
  * 
  * Key behavior:
  * - LOCAL art can be replaced by any API source
  * - API sources generally shouldn't be replaced by lower priority sources
  * - Same-priority sources can replace each other (to refresh stale art)
+ * - USER_SELECTED is only changed by an explicit user action
+ * - USER_RESET is an internal tombstone that prevents stale full-row Track writes
+ *   from resurrecting a manual cover after the user returns to automatic selection
  */
 enum class AlbumArtSource(val priority: Int) {
     NONE(0),
+    USER_RESET(0),   // Explicit reset tombstone; any real automatic source may replace it
     LOCAL(2),        // Extracted from device (MediaSession/notification)
     DEEZER(3),       // Deezer album artwork
     ITUNES(4),       // iTunes/Apple Music artwork
     MUSICBRAINZ(5),  // Cover Art Archive (community verified)
-    SPOTIFY(6);      // Spotify official artwork (highest priority)
+    SPOTIFY(6),      // Spotify official artwork (highest automatic priority)
+    USER_SELECTED(100); // Explicit user choice; locked against automatic replacement
     
     /**
      * Check if this source should be replaced by another.
@@ -366,7 +372,11 @@ enum class AlbumArtSource(val priority: Int) {
      * Equal priority allows refreshing stale art from same source.
      */
     fun shouldBeReplacedBy(other: AlbumArtSource): Boolean {
-        return other.priority >= this.priority && other != NONE
+        // USER_RESET is a control-state tombstone, not an artwork source. It is
+        // applied only by the explicit reset action and must never win automatic
+        // source arbitration.
+        if (other == NONE || other == USER_RESET) return false
+        return other.priority >= this.priority
     }
     
     /**
@@ -377,7 +387,11 @@ enum class AlbumArtSource(val priority: Int) {
     /**
      * Check if this is an API source (not local or none).
      */
-    fun isApiSource(): Boolean = this != NONE && this != LOCAL
+    fun isApiSource(): Boolean =
+        this != NONE && this != USER_RESET && this != LOCAL && this != USER_SELECTED
+
+    /** True only for an explicit artwork choice made by the user. */
+    fun isUserSelected(): Boolean = this == USER_SELECTED
 }
 
 /**

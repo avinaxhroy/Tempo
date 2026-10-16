@@ -227,6 +227,7 @@ class AlbumMergeRepositoryTest {
         // Here we override mergeTracks invocation through a subclass or delegate
         val customTrackAliasRepo = object : TrackAliasRepository(
             createProxy { _, _ -> null },
+            createProxy { _, _ -> null }, // EnrichedMetadataDao
             createProxy { _, _ -> null },
             createProxy { _, _ -> null },
             createProxy { _, _ -> null },

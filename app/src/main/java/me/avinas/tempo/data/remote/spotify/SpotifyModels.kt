@@ -9,6 +9,16 @@ import com.squareup.moshi.JsonClass
  * Documentation: https://developer.spotify.com/documentation/web-api/reference
  */
 
+// Public oEmbed response
+
+@JsonClass(generateAdapter = true)
+data class SpotifyOEmbedResponse(
+    val title: String? = null,
+    @param:Json(name = "thumbnail_url") val thumbnailUrl: String? = null,
+    @param:Json(name = "thumbnail_width") val thumbnailWidth: Int? = null,
+    @param:Json(name = "thumbnail_height") val thumbnailHeight: Int? = null,
+)
+
 // Search Response
 
 @JsonClass(generateAdapter = true)

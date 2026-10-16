@@ -114,7 +114,7 @@ class ListColumnRepairService @Inject constructor(
             val metadata = enrichedMetadataDao.getById(id) ?: continue
             // tags/genres are already repaired by the converter on read; update()
             // persists them in canonical delimited form.
-            enrichedMetadataDao.update(metadata)
+            enrichedMetadataDao.upsertFromAutomaticEnrichment(metadata)
             fixed++
         }
         if (fixed > 0) Log.i(TAG, "Rewrote $fixed enriched metadata rows")

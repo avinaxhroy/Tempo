@@ -34,17 +34,39 @@ class RoomEnrichedMetadataRepository @Inject constructor(
     // Write Operations (for Enrichment Services)
     
     override suspend fun upsert(metadata: EnrichedMetadata): Long = dao.upsert(metadata)
+
+    override suspend fun upsertFromAutomaticEnrichment(metadata: EnrichedMetadata): Long =
+        dao.upsertFromAutomaticEnrichment(metadata)
+
+    override suspend fun setUserSelectedArtwork(
+        trackId: Long,
+        albumArtUrl: String,
+        albumArtUrlSmall: String,
+        albumArtUrlLarge: String,
+    ): Long =
+        dao.setUserSelectedArtwork(
+            trackId = trackId,
+            albumArtUrl = albumArtUrl,
+            albumArtUrlSmall = albumArtUrlSmall,
+            albumArtUrlLarge = albumArtUrlLarge,
+            timestamp = System.currentTimeMillis(),
+        )
+
+    override suspend fun resetArtworkToAutomatic(trackId: Long): Long =
+        dao.resetArtworkToAutomatic(
+            trackId = trackId,
+            timestamp = System.currentTimeMillis(),
+        )
     
     override suspend fun createPendingIfNotExists(trackId: Long) {
-        val existing = dao.forTrackSync(trackId)
-        if (existing == null) {
-            val pending = EnrichedMetadata(
-                trackId = trackId,
-                enrichmentStatus = EnrichmentStatus.PENDING,
-                cacheTimestamp = System.currentTimeMillis()
-            )
-            dao.upsert(pending)
-        }
+        val pending = EnrichedMetadata(
+            trackId = trackId,
+            enrichmentStatus = EnrichmentStatus.PENDING,
+            cacheTimestamp = System.currentTimeMillis()
+        )
+        // One INSERT OR IGNORE is atomic. A manual selection or enrichment row
+        // that wins the race is preserved instead of being REPLACEd by PENDING.
+        dao.insertIfAbsent(pending)
     }
     
     override suspend fun markForReEnrichment(trackId: Long) {

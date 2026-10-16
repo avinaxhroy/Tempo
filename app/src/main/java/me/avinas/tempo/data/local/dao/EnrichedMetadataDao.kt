@@ -1,6 +1,7 @@
 package me.avinas.tempo.data.local.dao
 
 import androidx.room.*
+import me.avinas.tempo.data.local.entities.AlbumArtSource
 import me.avinas.tempo.data.local.entities.EnrichedMetadata
 import me.avinas.tempo.data.local.entities.EnrichmentStatus
 import me.avinas.tempo.data.local.entities.SpotifyEnrichmentStatus
@@ -14,15 +15,178 @@ interface EnrichedMetadataDao {
     
     @Query("SELECT * FROM enriched_metadata WHERE track_id = :trackId LIMIT 1")
     suspend fun forTrackSync(trackId: Long): EnrichedMetadata?
+
+    @Query("SELECT * FROM enriched_metadata WHERE track_id IN (:trackIds)")
+    suspend fun forTracksSync(trackIds: List<Long>): List<EnrichedMetadata>
     
     @Query("SELECT * FROM enriched_metadata WHERE musicbrainz_recording_id = :mbid LIMIT 1")
     suspend fun findByMusicBrainzId(mbid: String): EnrichedMetadata?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(metadata: EnrichedMetadata): Long
+
+    /**
+     * Insert metadata only when no row for the track exists.
+     *
+     * The unique track_id index makes this a single atomic SQLite decision, so a
+     * concurrent manual artwork selection can never be replaced by a stale
+     * "create pending" check-then-upsert sequence.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(metadata: EnrichedMetadata): Long
+
+    /**
+     * Persist metadata produced by automatic enrichment without allowing a stale
+     * in-flight request to overwrite or resurrect a user's explicit artwork choice.
+     *
+     * The current row is read inside the same Room transaction immediately before
+     * the write. This closes both races:
+     * - user selects manual art while an automatic lookup is already running;
+     * - user resets to automatic while an older request still carries USER_SELECTED.
+     */
+    @Transaction
+    suspend fun upsertFromAutomaticEnrichment(metadata: EnrichedMetadata): Long {
+        val current = forTrackSync(metadata.trackId)
+        val resolved = mergeAutomaticEnrichmentArtwork(current, metadata)
+        val rowId = upsert(resolved)
+
+        // Track.album_art_url is normally a denormalized UI mirror, but it may
+        // intentionally contain a file:// backup while enriched_metadata keeps the
+        // preferred remote URL. Preserve that backup across automatic refreshes.
+        val currentTrackArtwork = getTrackAlbumArtUrlForArtwork(resolved.trackId)
+        when {
+            resolved.albumArtSource == AlbumArtSource.USER_RESET ->
+                updateTrackAlbumArtUrlForArtwork(resolved.trackId, null)
+            resolved.albumArtSource == AlbumArtSource.USER_SELECTED &&
+                !resolved.albumArtUrl.isNullOrBlank() ->
+                updateTrackAlbumArtUrlForArtwork(resolved.trackId, resolved.albumArtUrl)
+            shouldPreserveLocalTrackBackup(
+                source = resolved.albumArtSource,
+                canonicalArtworkUrl = resolved.albumArtUrl,
+                currentTrackArtworkUrl = currentTrackArtwork,
+            ) -> Unit
+            !resolved.albumArtUrl.isNullOrBlank() ->
+                updateTrackAlbumArtUrlForArtwork(resolved.trackId, resolved.albumArtUrl)
+        }
+
+        return rowId
+    }
+
+    @Query("SELECT album_art_url FROM tracks WHERE id = :trackId LIMIT 1")
+    suspend fun getTrackAlbumArtUrlForArtwork(trackId: Long): String?
+
+    @Query("UPDATE tracks SET album_art_url = :albumArtUrl WHERE id = :trackId")
+    suspend fun updateTrackAlbumArtUrlForArtwork(trackId: Long, albumArtUrl: String?)
+
+    /**
+     * Save an explicit artwork choice and mirror it to tracks atomically.
+     *
+     * The current metadata row is read inside the transaction so a concurrent
+     * enrichment result cannot be lost when the user changes only the artwork.
+     */
+    @Transaction
+    suspend fun setUserSelectedArtwork(
+        trackId: Long,
+        albumArtUrl: String,
+        albumArtUrlSmall: String,
+        albumArtUrlLarge: String,
+        timestamp: Long,
+    ): Long {
+        val current = forTrackSync(trackId) ?: EnrichedMetadata(trackId = trackId)
+        val updated = current.copy(
+            albumArtUrl = albumArtUrl,
+            albumArtUrlSmall = albumArtUrlSmall,
+            albumArtUrlLarge = albumArtUrlLarge,
+            albumArtSource = AlbumArtSource.USER_SELECTED,
+            cacheTimestamp = timestamp,
+        )
+        val rowId = upsert(updated)
+        updateTrackAlbumArtUrlForArtwork(trackId, albumArtUrl)
+        return rowId
+    }
+
+    /**
+     * Remove the explicit artwork choice and clear the Track mirror atomically.
+     *
+     * USER_RESET is intentionally kept until a real automatic artwork source wins.
+     * It acts as a tombstone against stale Track snapshots that still carry the old
+     * manual URL.
+     */
+    @Transaction
+    suspend fun resetArtworkToAutomatic(
+        trackId: Long,
+        timestamp: Long,
+    ): Long {
+        val current = forTrackSync(trackId) ?: EnrichedMetadata(trackId = trackId)
+        val reset = current.copy(
+            albumArtUrl = null,
+            albumArtUrlSmall = null,
+            albumArtUrlLarge = null,
+            albumArtSource = AlbumArtSource.USER_RESET,
+            enrichmentStatus = EnrichmentStatus.PENDING,
+            retryCount = 0,
+            cacheTimestamp = timestamp,
+        )
+        val rowId = upsert(reset)
+        updateTrackAlbumArtUrlForArtwork(trackId, null)
+        return rowId
+    }
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(metadata: List<EnrichedMetadata>): List<Long>
+
+    /**
+     * Batch counterpart of [upsertFromAutomaticEnrichment].
+     * Process rows sequentially inside one transaction so duplicate track IDs in a
+     * batch also see the preceding protected write.
+     */
+    @Transaction
+    suspend fun upsertAllFromAutomaticEnrichment(
+        metadata: List<EnrichedMetadata>,
+    ): List<Long> {
+        if (metadata.isEmpty()) return emptyList()
+
+        // Last.fm currently flushes at 500 rows, safely below Android SQLite's
+        // conservative bind-variable limit. Read existing rows once instead of
+        // issuing one SELECT per imported metadata row.
+        val currentByTrackId = forTracksSync(metadata.map { it.trackId }.distinct())
+            .associateBy { it.trackId }
+            .toMutableMap()
+        val merged = ArrayList<EnrichedMetadata>(metadata.size)
+
+        for (item in metadata) {
+            val resolved = mergeAutomaticEnrichmentArtwork(
+                current = currentByTrackId[item.trackId],
+                incoming = item,
+            )
+            currentByTrackId[item.trackId] = resolved
+            merged += resolved
+        }
+
+        val rowIds = upsertAll(merged)
+
+        // Keep Track mirrors aligned for batch imports too, without discarding a
+        // local file:// fallback that is deliberately stored outside metadata.
+        for (resolved in merged) {
+            val currentTrackArtwork = getTrackAlbumArtUrlForArtwork(resolved.trackId)
+            when {
+                resolved.albumArtSource == AlbumArtSource.USER_RESET ->
+                    updateTrackAlbumArtUrlForArtwork(resolved.trackId, null)
+                resolved.albumArtSource == AlbumArtSource.USER_SELECTED &&
+                    !resolved.albumArtUrl.isNullOrBlank() ->
+                    updateTrackAlbumArtUrlForArtwork(resolved.trackId, resolved.albumArtUrl)
+                shouldPreserveLocalTrackBackup(
+                    source = resolved.albumArtSource,
+                    canonicalArtworkUrl = resolved.albumArtUrl,
+                    currentTrackArtworkUrl = currentTrackArtwork,
+                ) -> Unit
+                !resolved.albumArtUrl.isNullOrBlank() ->
+                    updateTrackAlbumArtUrlForArtwork(resolved.trackId, resolved.albumArtUrl)
+            }
+        }
+
+        return rowIds
+    }
     
     @Update
     suspend fun update(metadata: EnrichedMetadata)
@@ -380,6 +544,18 @@ interface EnrichedMetadataDao {
 
     @Query("SELECT album_art_url FROM enriched_metadata WHERE album_art_url LIKE 'file://%' UNION SELECT spotify_artist_image_url FROM enriched_metadata WHERE spotify_artist_image_url LIKE 'file://%' UNION SELECT album_art_url_small FROM enriched_metadata WHERE album_art_url_small LIKE 'file://%' UNION SELECT album_art_url_large FROM enriched_metadata WHERE album_art_url_large LIKE 'file://%' UNION SELECT itunes_artist_image_url FROM enriched_metadata WHERE itunes_artist_image_url LIKE 'file://%' UNION SELECT deezer_artist_image_url FROM enriched_metadata WHERE deezer_artist_image_url LIKE 'file://%' UNION SELECT lastfm_artist_image_url FROM enriched_metadata WHERE lastfm_artist_image_url LIKE 'file://%'")
     suspend fun getLocalImageUrls(): List<String>
+
+    @Query("""
+        SELECT COUNT(*) FROM enriched_metadata
+        WHERE album_art_url = :url
+           OR album_art_url_small = :url
+           OR album_art_url_large = :url
+           OR spotify_artist_image_url = :url
+           OR itunes_artist_image_url = :url
+           OR deezer_artist_image_url = :url
+           OR lastfm_artist_image_url = :url
+    """)
+    suspend fun countImageUrlReferences(url: String): Int
     
     /**
      * Get count of tracks pending enrichment from Last.fm imports.
@@ -533,3 +709,92 @@ data class SpotifyEnrichmentStatusCount(
     @ColumnInfo(name = "spotify_enrichment_status") val status: SpotifyEnrichmentStatus,
     val count: Int
 )
+
+
+/**
+ * Artwork conflict resolver for automatic enrichment writes.
+ *
+ * Manual artwork is controlled exclusively by explicit UI actions:
+ * automatic writes may preserve an existing manual choice, but may never create,
+ * replace, or resurrect USER_SELECTED from a stale snapshot.
+ */
+internal fun mergeAutomaticEnrichmentArtwork(
+    current: EnrichedMetadata?,
+    incoming: EnrichedMetadata,
+): EnrichedMetadata {
+    fun preserveCurrentArtwork(): EnrichedMetadata =
+        incoming.copy(
+            albumArtUrl = current?.albumArtUrl,
+            albumArtUrlSmall = current?.albumArtUrlSmall,
+            albumArtUrlLarge = current?.albumArtUrlLarge,
+            albumArtSource = current?.albumArtSource ?: AlbumArtSource.NONE,
+        )
+
+    val currentManual = current?.takeIf {
+        it.albumArtSource == AlbumArtSource.USER_SELECTED &&
+            !it.albumArtUrl.isNullOrBlank()
+    }
+
+    if (currentManual != null) {
+        val selectedUrl = currentManual.albumArtUrl!!
+        return incoming.copy(
+            albumArtUrl = selectedUrl,
+            albumArtUrlSmall = currentManual.albumArtUrlSmall ?: selectedUrl,
+            albumArtUrlLarge = currentManual.albumArtUrlLarge ?: selectedUrl,
+            albumArtSource = AlbumArtSource.USER_SELECTED,
+        )
+    }
+
+    val incomingHasRealAutomaticArtwork =
+        incoming.albumArtSource != AlbumArtSource.NONE &&
+            incoming.albumArtSource != AlbumArtSource.USER_RESET &&
+            incoming.albumArtSource != AlbumArtSource.USER_SELECTED &&
+            !incoming.albumArtUrl.isNullOrBlank()
+
+    // After an explicit reset, keep the tombstone until a real automatic source
+    // provides non-empty artwork. This prevents stale full-row snapshots from
+    // resurrecting the old manual URL or prematurely erasing the reset marker.
+    if (current?.albumArtSource == AlbumArtSource.USER_RESET &&
+        !incomingHasRealAutomaticArtwork
+    ) {
+        return incoming.copy(
+            albumArtUrl = null,
+            albumArtUrlSmall = null,
+            albumArtUrlLarge = null,
+            albumArtSource = AlbumArtSource.USER_RESET,
+        )
+    }
+
+    // An automatic task can hold a stale copy of USER_SELECTED after the user has
+    // deliberately returned to automatic selection. Never let that stale snapshot
+    // re-create the manual lock.
+    if (incoming.albumArtSource == AlbumArtSource.USER_SELECTED) {
+        return preserveCurrentArtwork()
+    }
+
+    val currentHasArtwork = !current?.albumArtUrl.isNullOrBlank()
+    if (currentHasArtwork && !incomingHasRealAutomaticArtwork) {
+        // Status/genre/etc. writes without artwork must not erase a cover selected
+        // by a previous automatic source.
+        return preserveCurrentArtwork()
+    }
+
+    val currentHasRealAutomaticArtwork =
+        currentHasArtwork &&
+            current?.albumArtSource != null &&
+            current.albumArtSource != AlbumArtSource.NONE &&
+            current.albumArtSource != AlbumArtSource.USER_RESET &&
+            current.albumArtSource != AlbumArtSource.USER_SELECTED
+
+    if (currentHasRealAutomaticArtwork &&
+        incomingHasRealAutomaticArtwork &&
+        !current!!.albumArtSource.shouldBeReplacedBy(incoming.albumArtSource)
+    ) {
+        // The incoming request may have started before a higher-priority provider
+        // finished. Preserve the winner while still accepting all non-art metadata
+        // from the stale request.
+        return preserveCurrentArtwork()
+    }
+
+    return incoming
+}

@@ -1069,7 +1069,7 @@ class SpotifyHistoryReconstructionService @Inject constructor(
         )
         
         try {
-            enrichedMetadataDao.upsert(metadata)
+            enrichedMetadataDao.upsertFromAutomaticEnrichment(metadata)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to create metadata for track $trackId", e)
         }
@@ -1088,7 +1088,7 @@ class SpotifyHistoryReconstructionService @Inject constructor(
         try {
             val existing = enrichedMetadataDao.forTrackSync(trackId)
             if (existing != null && existing.genres.isEmpty()) {
-                enrichedMetadataDao.update(existing.copy(
+                enrichedMetadataDao.upsertFromAutomaticEnrichment(existing.copy(
                     genres = genres,
                     cacheTimestamp = System.currentTimeMillis()
                 ))

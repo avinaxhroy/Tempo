@@ -25,6 +25,16 @@ class TrackingPersistenceRulesTest {
             when (name) {
                 "getTrackById" -> track
                 "update" -> { track = args[0] as Track; Unit }
+                "updateContentType" -> {
+                    val trackId = args[0] as Long
+                    val contentType = args[1] as String
+                    if (track.id == trackId) {
+                        track = track.copy(contentType = contentType)
+                        1
+                    } else {
+                        0
+                    }
+                }
                 else -> error(name)
             }
         },

@@ -5,10 +5,14 @@ import me.avinas.tempo.data.local.dao.EnrichedMetadataDao
 import me.avinas.tempo.data.local.dao.ManualContentMarkDao
 import me.avinas.tempo.data.local.dao.TrackArtistDao
 import me.avinas.tempo.data.local.dao.TrackDao
+import me.avinas.tempo.data.local.dao.isLocalBackupArtwork
+import me.avinas.tempo.data.local.dao.isManagedLocalArtworkFile
 import me.avinas.tempo.data.local.entities.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,6 +26,16 @@ class RoomTrackRepository @Inject constructor(
 
     companion object {
         private const val TAG = "TrackRepository"
+        private val albumArtBackupMutex = Mutex()
+    }
+
+    private suspend fun <T> withAlbumArtBackupLock(block: suspend () -> T): T {
+        albumArtBackupMutex.lock()
+        return try {
+            block()
+        } finally {
+            albumArtBackupMutex.unlock()
+        }
     }
 
     override fun getById(id: Long): Flow<Track?> = dao.getById(id)
@@ -40,8 +54,83 @@ class RoomTrackRepository @Inject constructor(
         dao.findFuzzyCandidates(title, artist)
     override suspend fun insert(track: Track): Long = dao.insert(track)
     override suspend fun insertAll(tracks: List<Track>): List<Long> = dao.insertAll(tracks)
-    override suspend fun update(track: Track) = dao.update(track)
+    override suspend fun update(track: Track) = dao.updatePreservingManualArtwork(track)
     override suspend fun updateTitle(trackId: Long, title: String) = dao.updateTitle(trackId, title)
+    override suspend fun updateAutomaticAlbumArtUrl(
+        trackId: Long,
+        albumArtUrl: String?,
+    ): String? {
+        // content:// is local artwork too, but Tempo does not own its backing
+        // file. Only managed file:// backups need the stale-file existence guard.
+        if (!isManagedLocalArtworkFile(albumArtUrl)) {
+            return dao.updateAutomaticAlbumArtUrl(trackId, albumArtUrl)
+        }
+
+        return withContext(Dispatchers.IO) {
+            withAlbumArtBackupLock {
+                val localFile = File(albumArtUrl!!.removePrefix("file://"))
+                if (localFile.exists()) {
+                    dao.updateAutomaticAlbumArtUrl(trackId, albumArtUrl)
+                } else {
+                    // A remote-success cleanup may have retired this exact path while
+                    // a delayed tracking write was still in flight. Prefer the
+                    // current canonical remote mirror when one exists; otherwise
+                    // leave the current protected Track value unchanged.
+                    dao.promoteLocalAlbumArtToCanonicalIfMatches(
+                        trackId = trackId,
+                        expectedLocalUrl = albumArtUrl,
+                    ) ?: dao.getCurrentTrackAlbumArtUrl(trackId)
+                }
+            }
+        }
+    }
+
+    private suspend fun deleteLocalAlbumArtIfUnreferenced(localUrl: String) {
+        if (!isManagedLocalArtworkFile(localUrl)) return
+
+        val stillReferenced =
+            dao.countAlbumArtUrlReferences(localUrl) > 0 ||
+                enrichedMetadataDao.countImageUrlReferences(localUrl) > 0
+        if (stillReferenced) {
+            Log.d(TAG, "Keeping shared local album art still referenced by another row: $localUrl")
+            return
+        }
+
+        val localFile = File(localUrl.removePrefix("file://"))
+        if (localFile.exists() && !localFile.delete()) {
+            Log.w(TAG, "Failed to delete obsolete local album art: " + localFile.absolutePath)
+        }
+    }
+
+    override suspend fun consumeLocalAlbumArtBackup(
+        trackId: Long,
+        expectedLocalUrl: String,
+    ): String? =
+        withContext(Dispatchers.IO) {
+            withAlbumArtBackupLock {
+                val canonicalRemote =
+                    dao.promoteLocalAlbumArtToCanonicalIfMatches(
+                        trackId = trackId,
+                        expectedLocalUrl = expectedLocalUrl,
+                    )
+
+                if (canonicalRemote != null) {
+                    deleteLocalAlbumArtIfUnreferenced(expectedLocalUrl)
+                }
+
+                canonicalRemote
+            }
+        }
+
+    override suspend fun discardLocalAlbumArtBackup(expectedLocalUrl: String) =
+        withContext(Dispatchers.IO) {
+            withAlbumArtBackupLock {
+                if (!isLocalBackupArtwork(expectedLocalUrl)) return@withAlbumArtBackupLock
+
+                deleteLocalAlbumArtIfUnreferenced(expectedLocalUrl)
+            }
+        }
+
     override suspend fun updateYoutubeIdIfMissing(trackId: Long, youtubeId: String): Int =
         dao.updateYoutubeIdIfMissing(trackId, youtubeId)
     override fun all(): Flow<List<Track>> = dao.all()

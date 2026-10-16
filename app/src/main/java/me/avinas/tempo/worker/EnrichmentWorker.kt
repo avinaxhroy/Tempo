@@ -32,6 +32,16 @@ import me.avinas.tempo.utils.ArtistParser
 import me.avinas.tempo.worker.LastFmImportWorker
 import java.util.concurrent.TimeUnit
 
+internal fun immediateEnrichmentWorkPolicy(
+    trackId: Long?,
+    appendAfterExisting: Boolean,
+): ExistingWorkPolicy =
+    if (trackId == null || appendAfterExisting) {
+        ExistingWorkPolicy.APPEND_OR_REPLACE
+    } else {
+        ExistingWorkPolicy.KEEP
+    }
+
 /**
  * WorkManager worker that enriches unenriched tracks with metadata from external APIs.
  */
@@ -139,6 +149,7 @@ class EnrichmentWorker
             fun enqueueImmediate(
                 context: Context,
                 trackId: Long? = null,
+                appendAfterExisting: Boolean = false,
             ) {
                 val constraints =
                     Constraints
@@ -162,15 +173,18 @@ class EnrichmentWorker
                         .addTag("enrichment_immediate")
                         .build()
 
-                // Per-track enrichments each get a unique work name so that a desktop batch
-                // (which enqueues multiple track IDs in quick succession) does not cause each
-                // submission to replace the previous still-ENQUEUED one under APPEND_OR_REPLACE.
-                // KEEP policy is correct here: if the same track is already queued, there is no
-                // need to enqueue a duplicate job.
-                // The generic (null trackId) path keeps APPEND_OR_REPLACE so a startup
-                // sweep always runs after in-flight work settles.
+                // Per-track enrichments normally use KEEP to deduplicate repeated requests.
+                // A user action that changes enrichment state (notably "return to automatic
+                // artwork") must get a fresh pass *after* any in-flight request that may have
+                // started from an older snapshot. APPEND_OR_REPLACE preserves the current work
+                // when it is healthy and guarantees a successor; if the chain is already failed
+                // or cancelled WorkManager starts a replacement instead.
                 val workName = if (trackId != null) "${WORK_NAME_IMMEDIATE}_$trackId" else WORK_NAME_IMMEDIATE
-                val workPolicy = if (trackId != null) ExistingWorkPolicy.KEEP else ExistingWorkPolicy.APPEND_OR_REPLACE
+                val workPolicy =
+                    immediateEnrichmentWorkPolicy(
+                        trackId = trackId,
+                        appendAfterExisting = appendAfterExisting,
+                    )
 
                 WorkManager.getInstance(context).enqueueUniqueWork(
                     workName,
@@ -414,14 +428,14 @@ class EnrichmentWorker
                         val fixedArtUrl = MusicBrainzEnrichmentService.fixHttpUrl(metadata.albumArtUrl)
                         val updatedTrack =
                             track.copy(
-                                albumArtUrl = fixedArtUrl,
                                 album = if (track.album.isNullOrBlank()) metadata.albumTitle else track.album,
                             )
-                        trackDao.update(updatedTrack)
+                        trackDao.updatePreservingManualArtwork(updatedTrack)
+                        trackDao.updateAutomaticAlbumArtUrl(metadata.trackId, fixedArtUrl)
 
                         // Also update the enriched metadata if URL was fixed
                         if (fixedArtUrl != metadata.albumArtUrl) {
-                            enrichedMetadataDao.upsert(
+                            enrichedMetadataDao.upsertFromAutomaticEnrichment(
                                 metadata.copy(
                                     albumArtUrl = fixedArtUrl,
                                     albumArtUrlSmall = MusicBrainzEnrichmentService.fixHttpUrl(metadata.albumArtUrlSmall),
@@ -459,7 +473,7 @@ class EnrichmentWorker
                 Log.d(TAG, "Skipping enrichment for track $trackId: artist is unknown")
                 val meta = enrichedMetadataDao.forTrackSync(trackId)
                 if (meta != null && meta.enrichmentStatus == EnrichmentStatus.PENDING) {
-                    enrichedMetadataDao.upsert(meta.copy(enrichmentStatus = EnrichmentStatus.SKIPPED))
+                    enrichedMetadataDao.upsertFromAutomaticEnrichment(meta.copy(enrichmentStatus = EnrichmentStatus.SKIPPED))
                 }
                 return
             }
@@ -539,7 +553,7 @@ class EnrichmentWorker
                                 enrichmentStatus = me.avinas.tempo.data.local.entities.EnrichmentStatus.ENRICHED,
                                 cacheTimestamp = System.currentTimeMillis(),
                             )
-                        enrichedMetadataDao.upsert(updatedMetadata)
+                        enrichedMetadataDao.upsertFromAutomaticEnrichment(updatedMetadata)
                     } else {
                         Log.d(TAG, "Track $trackId: No genres found from artist's other tracks either")
                     }
@@ -563,16 +577,16 @@ class EnrichmentWorker
                         Log.i(TAG, "Propagating enriched album art to Track $trackId: $fixedArtUrl")
                         val updatedTrack =
                             currentTrack.copy(
-                                albumArtUrl = fixedArtUrl,
                                 // Also update album name if track is missing it
                                 album = if (currentTrack.album.isNullOrBlank()) finalMetadata.albumTitle else currentTrack.album,
                             )
-                        trackDao.update(updatedTrack)
+                        trackDao.updatePreservingManualArtwork(updatedTrack)
+                        trackDao.updateAutomaticAlbumArtUrl(trackId, fixedArtUrl)
 
                         // Also update the enriched metadata if URL was changed
                         if (fixedArtUrl != finalMetadata.albumArtUrl) {
                             Log.d(TAG, "Fixed HTTP URL to HTTPS for track $trackId")
-                            enrichedMetadataDao.upsert(
+                            enrichedMetadataDao.upsertFromAutomaticEnrichment(
                                 finalMetadata.copy(
                                     albumArtUrl = fixedArtUrl,
                                     albumArtUrlSmall = MusicBrainzEnrichmentService.fixHttpUrl(finalMetadata.albumArtUrlSmall),
@@ -612,7 +626,7 @@ class EnrichmentWorker
                         settled.previewUrl != null
                 if (gainedData || settled.enrichmentStatus == EnrichmentStatus.PENDING) {
                     val terminalStatus = if (gainedData) EnrichmentStatus.ENRICHED else EnrichmentStatus.NOT_FOUND
-                    enrichedMetadataDao.upsert(
+                    enrichedMetadataDao.upsertFromAutomaticEnrichment(
                         settled.copy(
                             enrichmentStatus = terminalStatus,
                             enrichmentError = if (gainedData) null else "No source matched this track",
@@ -867,7 +881,7 @@ class EnrichmentWorker
                         Log.e(TAG, "Enrich All: track ${metadata.trackId} threw, marking FAILED", e)
                         val meta = enrichedMetadataDao.forTrackSync(metadata.trackId)
                         if (meta != null && meta.enrichmentStatus == EnrichmentStatus.PENDING) {
-                            enrichedMetadataDao.upsert(
+                            enrichedMetadataDao.upsertFromAutomaticEnrichment(
                                 meta.copy(
                                     enrichmentStatus = EnrichmentStatus.FAILED,
                                     enrichmentError = e.message ?: "Enrichment crashed",

@@ -111,10 +111,9 @@ class TrackResolver @Inject constructor(
             updated = updated.copy(album = query.album)
             dirty = true
         }
-        if (query.albumArtUrl != null && existing.albumArtUrl == null) {
-            updated = updated.copy(albumArtUrl = query.albumArtUrl)
-            dirty = true
-        }
+        val automaticArtworkCandidate = query.albumArtUrl
+            ?.takeIf { it.isNotBlank() && existing.albumArtUrl.isNullOrBlank() }
+
         if (query.duration != null && existing.duration == null) {
             updated = updated.copy(duration = query.duration)
             dirty = true
@@ -122,6 +121,18 @@ class TrackResolver @Inject constructor(
         if (dirty) {
             trackRepository.update(updated)
         }
+
+        // Artwork has a separate guarded write path. Generic full-row updates deliberately
+        // preserve the currently stored artwork, so routing automatic backfill through
+        // update() would silently discard a newly discovered cover.
+        if (automaticArtworkCandidate != null) {
+            val persistedArtwork = trackRepository.updateAutomaticAlbumArtUrl(
+                existing.id,
+                automaticArtworkCandidate,
+            )
+            updated = updated.copy(albumArtUrl = persistedArtwork)
+        }
+
         return Resolution(existing.id, isNewTrack = false, track = updated)
     }
 }

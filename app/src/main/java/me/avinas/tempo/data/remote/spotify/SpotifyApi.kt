@@ -22,6 +22,16 @@ import retrofit2.http.Query
  */
 interface SpotifyApi {
 
+    /**
+     * Spotify oEmbed is public and does not require OAuth. Tempo uses it only when
+     * a Spotify track ID/URL is already known, so the cover picker can still offer
+     * Spotify artwork even while the authenticated Web API integration is disabled.
+     */
+    @GET("https://open.spotify.com/oembed")
+    suspend fun getOEmbed(
+        @Query("url") spotifyUrl: String
+    ): Response<SpotifyOEmbedResponse>
+
     companion object {
         const val BASE_URL = "https://api.spotify.com/v1/"
         const val AUTH_URL = "https://accounts.spotify.com/authorize"

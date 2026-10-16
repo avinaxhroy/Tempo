@@ -1296,4 +1296,25 @@
     <string name="deezer_import_notification_channel_desc">Уведомления о ходе импорта экспорта данных Deezer</string>
     <string name="deezer_import_notification_title">Импорт данных Deezer</string>
     <string name="deezer_import_notification_progress">Импорт %1$d/%2$d записей</string>
+
+    <string name="details_change_cover">Изменить обложку</string>
+    <string name="details_change_cover_title">Выбрать обложку</string>
+    <string name="details_change_cover_body">Сравните обложки из нескольких сервисов. Ваш выбор останется закреплённым, пока вы не измените его или не вернётесь к автоматическому выбору.</string>
+    <string name="details_cover_current">Текущая</string>
+    <string name="details_cover_searching">Поиск…</string>
+    <string name="details_cover_not_found">Обложка не найдена</string>
+    <string name="details_cover_use">Использовать эту обложку</string>
+    <string name="details_cover_manual">Выбранная вручную обложка</string>
+    <string name="details_cover_restore_auto">Вернуться к автоматическому выбору</string>
+    <string name="details_cover_restore_auto_hint">Tempo снова сможет автоматически выбирать обложку.</string>
+    <string name="details_cover_try_again">Искать снова</string>
+
+    <string name="details_cover_preview_error">Не удалось загрузить предпросмотр изображения</string>
+    <string name="details_cover_current_hint">Текущая отображаемая обложка</string>
+    <string name="details_cover_retry_source">Повторить попытку для этого источника</string>
+    <string name="details_cover_unavailable">Недоступно</string>
+    <string name="details_cover_error">Ошибка поиска</string>
+    <string name="details_cover_load_error">Не удалось загрузить обложки</string>
+    <string name="details_cover_save_error">Не удалось сохранить обложку</string>
+    <string name="details_cover_restore_auto_error">Не удалось восстановить автоматический выбор обложки</string>
 </resources>

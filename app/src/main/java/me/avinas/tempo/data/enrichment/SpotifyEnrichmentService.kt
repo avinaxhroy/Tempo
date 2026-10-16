@@ -14,6 +14,7 @@ import me.avinas.tempo.data.remote.spotify.SpotifyAuthManager
 import me.avinas.tempo.data.remote.spotify.SpotifyFullArtist
 import me.avinas.tempo.data.remote.spotify.SpotifyTrack
 import me.avinas.tempo.utils.ArtistParser
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -49,6 +50,68 @@ class SpotifyEnrichmentService @Inject constructor(
         object NotConnected : SpotifyEnrichmentResult()
         object TrackNotFound : SpotifyEnrichmentResult()
         data class Error(val message: String, val retryable: Boolean = true) : SpotifyEnrichmentResult()
+    }
+
+    sealed class SpotifyCoverArtResult {
+        data class Success(
+            val albumArtUrl: String,
+            val title: String? = null,
+        ) : SpotifyCoverArtResult()
+
+        object Unavailable : SpotifyCoverArtResult()
+        object NotFound : SpotifyCoverArtResult()
+        data class Error(val message: String) : SpotifyCoverArtResult()
+    }
+
+    /**
+     * Fetch cover art from Spotify's public oEmbed endpoint when Tempo already knows
+     * the Spotify identity of the track. This does not re-enable authenticated Spotify
+     * Web API search; it only resolves artwork for an existing Spotify ID/URL.
+     */
+    suspend fun fetchCoverArtForPicker(
+        track: Track,
+        existingMetadata: EnrichedMetadata?,
+    ): SpotifyCoverArtResult {
+        val spotifyId = extractSpotifyTrackId(
+            track.spotifyId?.takeIf { it.isNotBlank() }
+                ?: existingMetadata?.spotifyId?.takeIf { it.isNotBlank() }
+                ?: existingMetadata?.spotifyTrackUrl
+        )
+
+        if (spotifyId.isNullOrBlank()) return SpotifyCoverArtResult.Unavailable
+
+        return try {
+            val spotifyUrl = "https://open.spotify.com/track/$spotifyId"
+            val response = spotifyApi.getOEmbed(spotifyUrl)
+            when {
+                response.isSuccessful -> {
+                    val body = response.body()
+                    val art = body?.thumbnailUrl?.takeIf { it.isNotBlank() }
+                    val providerTitle = body?.title?.takeIf { it.isNotBlank() }
+                    if (art != null &&
+                        isSpotifyPickerIdentityCompatible(
+                            track = track,
+                            existingMetadata = existingMetadata,
+                            providerTitle = providerTitle,
+                        )
+                    ) {
+                        SpotifyCoverArtResult.Success(
+                            albumArtUrl = art,
+                            title = providerTitle,
+                        )
+                    } else {
+                        SpotifyCoverArtResult.NotFound
+                    }
+                }
+                response.code() == 404 -> SpotifyCoverArtResult.NotFound
+                else -> SpotifyCoverArtResult.Error("Spotify oEmbed error: ${response.code()}")
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Spotify oEmbed artwork lookup failed", e)
+            SpotifyCoverArtResult.Error(e.message ?: "Spotify artwork lookup failed")
+        }
     }
 
     /**
@@ -542,7 +605,7 @@ class SpotifyEnrichmentService @Inject constructor(
             Log.d(TAG, "Spotify: Replacing ${existingMetadata.albumArtSource} album art with SPOTIFY source")
         }
 
-        enrichedMetadataDao.upsert(updated)
+        enrichedMetadataDao.upsertFromAutomaticEnrichment(updated)
         // Log simplified message
         Log.d(TAG, "Saved Spotify data for track $trackId (artistId: $primaryArtistId, url: ${spotifyTrack.externalUrls.spotify})")
         
@@ -1395,4 +1458,40 @@ class SpotifyEnrichmentService @Inject constructor(
             }
         """.trimIndent()
     }
+}
+
+
+internal fun isSpotifyPickerIdentityCompatible(
+    track: Track,
+    existingMetadata: EnrichedMetadata?,
+    providerTitle: String?,
+): Boolean {
+    val verifiedArtist = existingMetadata?.spotifyVerifiedArtist
+    val artistMatches =
+        verifiedArtist.isNullOrBlank() ||
+            isSafeCoverArtistMatch(
+                expectedArtist = me.avinas.tempo.utils.ArtistParser.getPrimaryArtist(track.artist),
+                candidateArtist = verifiedArtist,
+            )
+    // Spotify's oEmbed schema provides the entity title. Without it we cannot
+    // prove that a cached Spotify ID still belongs to the edited Track.
+    val titleMatches =
+        !providerTitle.isNullOrBlank() &&
+            isSafeCoverTrackTitleMatch(track.title, providerTitle)
+
+    return artistMatches && titleMatches
+}
+
+internal fun extractSpotifyTrackId(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    val trimmed = raw.trim()
+    val candidate = when {
+        trimmed.startsWith("spotify:track:") ->
+            trimmed.removePrefix("spotify:track:")
+        trimmed.contains("/track/") ->
+            trimmed.substringAfter("/track/")
+        else -> trimmed
+    }
+    val cleanId = candidate.substringBefore('?').substringBefore('&').substringBefore('/').trim()
+    return cleanId.takeIf { it.isNotBlank() && !it.contains(":") }
 }

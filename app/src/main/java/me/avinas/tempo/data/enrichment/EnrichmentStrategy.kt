@@ -244,7 +244,7 @@ class ITunesEnrichmentSource @Inject constructor(
                 finalMetadata = updated.copy(iTunesArtistImageUrl = primaryArtistImageUrl)
             }
             
-            metadataDao.upsert(finalMetadata)
+            metadataDao.upsertFromAutomaticEnrichment(finalMetadata)
             finalMetadata
         } else {
             null
@@ -379,7 +379,7 @@ class DeezerEnrichmentSource @Inject constructor(
                 Log.d("EnrichmentSource", "Deezer: Replacing ${base.albumArtSource} album art with DEEZER source")
             }
             
-            metadataDao.upsert(updated)
+            metadataDao.upsertFromAutomaticEnrichment(updated)
             updated
         } else {
             null
@@ -476,7 +476,7 @@ class SpotifyArtistFeaturesSource @Inject constructor(
                  audioFeaturesSource = me.avinas.tempo.data.local.entities.AudioFeaturesSource.SPOTIFY_ARTIST_DERIVED,
                  cacheTimestamp = System.currentTimeMillis()
              )
-             enrichedMetadataDao.upsert(updated)
+             enrichedMetadataDao.upsertFromAutomaticEnrichment(updated)
              updated
         } else {
             null

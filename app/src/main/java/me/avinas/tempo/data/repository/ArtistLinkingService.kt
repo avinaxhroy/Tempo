@@ -79,7 +79,7 @@ class ArtistLinkingService @Inject constructor(
                 primaryArtistId = primaryArtist.id,
                 artist = updatedArtistString
             )
-            trackDao.update(updatedTrack)
+            trackDao.updatePreservingManualArtwork(updatedTrack)
         } else if (primaryArtist == null && track.primaryArtistId == null) {
             // No valid artist found - use "Unknown Artist" placeholder to prevent infinite loop
             val unknownArtist = getOrCreateUnknownArtist()
@@ -87,10 +87,10 @@ class ArtistLinkingService @Inject constructor(
                 primaryArtistId = unknownArtist.id,
                 artist = updatedArtistString
             )
-            trackDao.update(updatedTrack)
+            trackDao.updatePreservingManualArtwork(updatedTrack)
         } else if (artistStringChanged) {
             updatedTrack = track.copy(artist = updatedArtistString)
-            trackDao.update(updatedTrack)
+            trackDao.updatePreservingManualArtwork(updatedTrack)
         }
         
         // Clear existing relationships and create new ones

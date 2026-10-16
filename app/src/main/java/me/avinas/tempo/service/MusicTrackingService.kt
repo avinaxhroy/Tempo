@@ -2986,7 +2986,7 @@ class MusicTrackingService : NotificationListenerService() {
                 if (track != null && track.albumArtUrl.isNullOrBlank() && savedLocalArtUrl != null) {
                     // Store local art in Track table as immediate backup
                     Log.i(TAG, "Storing local art as backup in Track table while enriched hotlink exists")
-                    trackRepository.update(track.copy(albumArtUrl = savedLocalArtUrl))
+                    trackRepository.updateAutomaticAlbumArtUrl(trackId, savedLocalArtUrl)
                 } else if (track != null && enrichedArtIsRemoteUrl && savedLocalArtUrl != null) {
                     // We have both enriched hotlink and local backup
                     // Keep current setup but log for tracking
@@ -3052,7 +3052,7 @@ class MusicTrackingService : NotificationListenerService() {
                     cacheTimestamp = System.currentTimeMillis(),
                 )
 
-            enrichedMetadataRepository.upsert(updatedMetadata)
+            enrichedMetadataRepository.upsertFromAutomaticEnrichment(updatedMetadata)
 
             // Log what we filled in
             val filledFields = mutableListOf<String>()
@@ -3071,11 +3071,11 @@ class MusicTrackingService : NotificationListenerService() {
                 if (track != null && track.albumArtUrl.isNullOrBlank()) {
                     val updatedTrack =
                         track.copy(
-                            albumArtUrl = localArtUrl,
                             album = track.album.takeUnless { it.isNullOrBlank() } ?: updatedLocalMetadata.album,
                             duration = track.duration ?: updatedLocalMetadata.durationMs,
                         )
                     trackRepository.update(updatedTrack)
+                    trackRepository.updateAutomaticAlbumArtUrl(trackId, localArtUrl)
                 }
             }
         } catch (e: Exception) {
@@ -3100,12 +3100,12 @@ class MusicTrackingService : NotificationListenerService() {
                         .fixHttpUrl(enrichedArtUrl)
                 if (!fixedEnrichedUrl.isNullOrBlank()) {
                     Log.i(TAG, "Backfilling Track $trackId with enriched art: $fixedEnrichedUrl")
-                    trackRepository.update(track.copy(albumArtUrl = fixedEnrichedUrl))
+                    trackRepository.updateAutomaticAlbumArtUrl(trackId, fixedEnrichedUrl)
                 }
                 // Otherwise try pre-saved local art first (already on disk)
                 else if (savedLocalArtUrl != null) {
                     Log.i(TAG, "Backfilling Track $trackId with pre-saved local art: $savedLocalArtUrl")
-                    trackRepository.update(track.copy(albumArtUrl = savedLocalArtUrl))
+                    trackRepository.updateAutomaticAlbumArtUrl(trackId, savedLocalArtUrl)
                 }
                 // Finally try to save from bitmap or URI
                 else {
@@ -3116,7 +3116,7 @@ class MusicTrackingService : NotificationListenerService() {
 
                     if (localArtUrl != null) {
                         Log.i(TAG, "Backfilling Track $trackId with local art: $localArtUrl")
-                        trackRepository.update(track.copy(albumArtUrl = localArtUrl))
+                        trackRepository.updateAutomaticAlbumArtUrl(trackId, localArtUrl)
                     }
                 }
             }
@@ -3275,8 +3275,7 @@ class MusicTrackingService : NotificationListenerService() {
             // Only update if track doesn't have album art URL
             if (track.albumArtUrl.isNullOrBlank()) {
                 Log.i(TAG, "Updating track $trackId with local album art: $localArtUrl")
-                val updatedTrack = track.copy(albumArtUrl = localArtUrl)
-                trackRepository.update(updatedTrack)
+                trackRepository.updateAutomaticAlbumArtUrl(trackId, localArtUrl)
             } else {
                 Log.d(TAG, "Track $trackId already has album art, skipping local art update")
             }

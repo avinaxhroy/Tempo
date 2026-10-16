@@ -16,7 +16,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import androidx.palette.graphics.Palette
 import coil3.BitmapImage
-import coil3.ImageLoader
 import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
 import coil3.imageLoader
@@ -25,12 +24,7 @@ import coil3.request.ImageRequest
 import coil3.size.Precision
 import coil3.size.Scale
 import coil3.size.Size
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import me.avinas.tempo.R
 import me.avinas.tempo.data.enrichment.MusicBrainzEnrichmentService
-import java.io.File
 
 private const val TAG = "AlbumArtImage"
 
@@ -48,13 +42,14 @@ fun AlbumArtImage(
     modifier: Modifier = Modifier.fillMaxSize(),
     contentScale: ContentScale = ContentScale.Crop,
     placeholderEmoji: String = "🎵",
+    targetSizePx: Int = 1024,
     onHotlinkSuccess: ((String) -> Unit)? = null,
     onPaletteExtracted: ((Color) -> Unit)? = null,
     onArtworkReady: ((android.graphics.Bitmap, Palette?) -> Unit)? = null,
+    onImageLoaded: (() -> Unit)? = null,
+    onImageError: ((Throwable?) -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-
     // Get the singleton ImageLoader with our cache configuration
     // This uses the ImageLoaderFactory implementation in TempoApplication
     // which provides the Hilt-injected singleton with 50MB disk cache
@@ -95,7 +90,7 @@ fun AlbumArtImage(
 
         // Create a stable, cacheable image request with aggressive caching
         val imageRequest =
-            remember(urlToLoad, cacheKey) {
+            remember(urlToLoad, cacheKey, targetSizePx) {
                 ImageRequest
                     .Builder(context)
                     .data(urlToLoad)
@@ -104,14 +99,14 @@ fun AlbumArtImage(
                     .diskCachePolicy(CachePolicy.ENABLED)
                     .networkCachePolicy(CachePolicy.ENABLED)
                     // Use smart cache keys that normalize URLs for better cache hits
-                    .memoryCacheKey(cacheKey)
+                    .memoryCacheKey("$cacheKey:$targetSizePx")
                     .diskCacheKey(cacheKey)
-                    // EXACT precision with 1024px cap guarantees the decoded bitmap never exceeds
+                    // EXACT precision with targetSizePx cap guarantees the decoded bitmap never exceeds
                     // a safe size, preventing Canvas "too large bitmap" crashes on devices with
                     // strict software bitmap limits.
                     .precision(Precision.EXACT)
                     .scale(Scale.FILL)
-                    .size(Size(1024, 1024))
+                    .size(Size(targetSizePx, targetSizePx))
                     .build()
             }
 
@@ -132,23 +127,23 @@ fun AlbumArtImage(
             snapshotFlow { painter.state.value }.collect { painterState = it }
         }
 
-        // Handle load state separately from the request
-        val state = painterState
-        if (state is AsyncImagePainter.State.Success) {
-            // Image loaded successfully
-            if (isHotlink && !localArtUrl.isNullOrBlank() && localArtUrl.startsWith("file://")) {
-                // Hotlink worked! Clean up local backup in background
-                LaunchedEffect(urlToLoad) {
-                    deleteLocalArtFile(localArtUrl)
+        // Handle load state callbacks in a standalone effect
+        LaunchedEffect(painterState, urlToLoad) {
+            when (val s = painterState) {
+                is AsyncImagePainter.State.Success -> {
+                    onImageLoaded?.invoke()
+                    if (isHotlink && !localArtUrl.isNullOrBlank() && localArtUrl.startsWith("file://")) {
+                        onHotlinkSuccess?.invoke(albumArtUrl!!)
+                    }
                 }
-                onHotlinkSuccess?.invoke(albumArtUrl!!)
-            }
-        } else if (state is AsyncImagePainter.State.Error) {
-            // Image failed to load
-            if (isHotlink && !localArtUrl.isNullOrBlank()) {
-                // Hotlink failed, try local fallback
-                Log.w(TAG, "Hotlink failed: $urlToLoad, falling back to local")
-                useLocalFallback = true
+                is AsyncImagePainter.State.Error -> {
+                    onImageError?.invoke(s.result.throwable)
+                    if (isHotlink && !localArtUrl.isNullOrBlank()) {
+                        Log.w(TAG, "Hotlink failed: $urlToLoad, falling back to local")
+                        useLocalFallback = true
+                    }
+                }
+                else -> Unit
             }
         }
 
@@ -215,27 +210,6 @@ private fun averageColor(bitmap: android.graphics.Bitmap): Int {
     return android.graphics.Color.rgb((r / n).toInt(), (g / n).toInt(), (b / n).toInt())
 }
 
-/**
- * Delete local album art file to save storage after hotlink loads successfully.
- */
-private suspend fun deleteLocalArtFile(localArtUrl: String) {
-    withContext(Dispatchers.IO) {
-        try {
-            val filePath = localArtUrl.removePrefix("file://")
-            val file = File(filePath)
-            if (file.exists()) {
-                val deleted = file.delete()
-                if (deleted) {
-                    Log.d(TAG, "Deleted local art file to save storage: $filePath")
-                } else {
-                    Log.w(TAG, "Failed to delete local art file: $filePath")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error deleting local art file", e)
-        }
-    }
-}
 
 /**
  * Placeholder for album art when no image is available.

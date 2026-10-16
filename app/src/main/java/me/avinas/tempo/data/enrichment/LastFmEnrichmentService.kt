@@ -43,6 +43,8 @@ class LastFmEnrichmentService
                 val albumArtUrl: String? = null,
                 val albumTitle: String? = null,
                 val musicbrainzId: String? = null,
+                val trackTitle: String? = null,
+                val artistName: String? = null,
             ) : LastFmResult()
 
             object NotConfigured : LastFmResult()
@@ -129,6 +131,34 @@ class LastFmEnrichmentService
         }
 
         /**
+         * Look up track metadata directly from Last.fm for user-driven artwork selection.
+         * Unlike [supplementMetadata], this does not write to the database or skip tracks
+         * that already have genre/tag data.
+         */
+        suspend fun searchTrackInfo(title: String, artist: String): LastFmResult {
+            if (!isAvailable()) return LastFmResult.NotConfigured
+            if (ArtistParser.isUnknownArtist(artist)) {
+                return LastFmResult.TrackNotFound
+            }
+            val apiKey = getApiKey()
+            val initial = fetchTrackInfo(title, artist, apiKey)
+            if (initial !is LastFmResult.TrackNotFound) return initial
+
+            // When raw artist or title has featured guests or extra qualifiers,
+            // retry with primary artist / cleaned title variants as fallback.
+            // Strict cover identity matching still guards the result before display.
+            val primaryArtist = ArtistParser.getPrimaryArtist(artist)
+            val titleVariants = coverSearchTitleVariants(title)
+            for (titleVariant in titleVariants) {
+                if (titleVariant == title && primaryArtist == artist) continue
+                val fallback = fetchTrackInfo(titleVariant, primaryArtist, apiKey)
+                if (fallback is LastFmResult.Success) return fallback
+            }
+
+            return LastFmResult.TrackNotFound
+        }
+
+        /**
          * Fetch track info from Last.fm.
          */
         private suspend fun fetchTrackInfo(
@@ -142,6 +172,7 @@ class LastFmEnrichmentService
                         track = title,
                         artist = artist,
                         apiKey = apiKey,
+                        autocorrect = 0,
                     )
 
                 if (!response.isSuccessful) {
@@ -179,6 +210,8 @@ class LastFmEnrichmentService
                     albumArtUrl = albumArtUrl,
                     albumTitle = albumTitle,
                     musicbrainzId = trackInfo.mbid,
+                    trackTitle = trackInfo.name,
+                    artistName = trackInfo.artist?.name ?: trackInfo.album?.artist,
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -401,7 +434,7 @@ class LastFmEnrichmentService
                     cacheTimestamp = System.currentTimeMillis(),
                 )
 
-            enrichedMetadataDao.upsert(updatedMetadata)
+            enrichedMetadataDao.upsertFromAutomaticEnrichment(updatedMetadata)
 
             // Only log as "Updated" if we actually added useful data
             if (lastFmResult.genres.isNotEmpty() || lastFmResult.tags.isNotEmpty()) {
@@ -622,7 +655,7 @@ class LastFmEnrichmentService
                 )
 
             // Save the updated metadata
-            enrichedMetadataDao.upsert(updatedMetadata)
+            enrichedMetadataDao.upsertFromAutomaticEnrichment(updatedMetadata)
 
             Log.i(TAG, "Pre-enriched track ${track.id} with Last.fm MBIDs")
             return updatedMetadata

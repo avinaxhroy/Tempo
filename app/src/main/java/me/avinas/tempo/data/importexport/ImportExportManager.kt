@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import androidx.room.withTransaction
 import me.avinas.tempo.BuildConfig
 import me.avinas.tempo.data.local.AppDatabase
+import me.avinas.tempo.data.local.dao.isLocalBackupArtwork
 import me.avinas.tempo.data.local.entities.*
 import me.avinas.tempo.data.profile.ProfileIdentityManager
 import me.avinas.tempo.utils.ImageUrlHostAllowlist
@@ -638,6 +639,24 @@ class ImportExportManager @Inject constructor(
                     database.enrichedMetadataDao().update(remappedMeta.copy(id = existingMeta.id))
                 }
             }
+
+            // Track.albumArtUrl is a denormalized mirror used by the UI. Restoring tracks
+            // before enriched metadata can temporarily reintroduce artwork that contradicts
+            // a local/imported USER_RESET tombstone, especially with "Skip Duplicates".
+            // Reconcile the mirror from the final metadata state before this transaction
+            // commits so callers can never observe a split-brain artwork preference.
+            for (restoredTrackId in trackIdMap.values.toSet()) {
+                val restoredTrack = database.trackDao().getTrackById(restoredTrackId) ?: continue
+                val restoredMetadata = database.enrichedMetadataDao().forTrackSync(restoredTrackId)
+                val reconciledArtwork = resolveRestoredTrackArtwork(
+                    albumArtSource = restoredMetadata?.albumArtSource,
+                    metadataArtUrl = restoredMetadata?.albumArtUrl,
+                    trackArtUrl = restoredTrack.albumArtUrl,
+                )
+                if (reconciledArtwork != restoredTrack.albumArtUrl) {
+                    database.trackDao().updateAlbumArtUrl(restoredTrackId, reconciledArtwork)
+                }
+            }
             
             _progress.value = ImportExportProgress("Importing preferences...", 90, 100)
             
@@ -1060,28 +1079,25 @@ class ImportExportManager @Inject constructor(
     
     // Path remapping functions for different entity types
     
-    private fun remapImagePath(track: Track, pathMapping: Map<String, String>): Track {
-        val newArtUrl = track.albumArtUrl?.let { pathMapping[it] ?: it }
-        return track.copy(albumArtUrl = newArtUrl)
-    }
+    private fun remapImagePath(track: Track, pathMapping: Map<String, String>): Track =
+        track.copy(albumArtUrl = remapRestoredImageUrl(track.albumArtUrl, pathMapping))
     
-    private fun remapImagePath(artist: Artist, pathMapping: Map<String, String>): Artist {
-        val newImageUrl = artist.imageUrl?.let { pathMapping[it] ?: it }
-        return artist.copy(imageUrl = newImageUrl)
-    }
+    private fun remapImagePath(artist: Artist, pathMapping: Map<String, String>): Artist =
+        artist.copy(imageUrl = remapRestoredImageUrl(artist.imageUrl, pathMapping))
     
-    private fun remapImagePath(album: Album, pathMapping: Map<String, String>): Album {
-        val newArtworkUrl = album.artworkUrl?.let { pathMapping[it] ?: it }
-        return album.copy(artworkUrl = newArtworkUrl)
-    }
+    private fun remapImagePath(album: Album, pathMapping: Map<String, String>): Album =
+        album.copy(artworkUrl = remapRestoredImageUrl(album.artworkUrl, pathMapping))
     
-    private fun remapImagePath(meta: EnrichedMetadata, pathMapping: Map<String, String>): EnrichedMetadata {
-        return meta.copy(
-            albumArtUrl = meta.albumArtUrl?.let { pathMapping[it] ?: it },
-            albumArtUrlSmall = meta.albumArtUrlSmall?.let { pathMapping[it] ?: it },
-            albumArtUrlLarge = meta.albumArtUrlLarge?.let { pathMapping[it] ?: it }
+    private fun remapImagePath(meta: EnrichedMetadata, pathMapping: Map<String, String>): EnrichedMetadata =
+        meta.copy(
+            albumArtUrl = remapRestoredImageUrl(meta.albumArtUrl, pathMapping),
+            albumArtUrlSmall = remapRestoredImageUrl(meta.albumArtUrlSmall, pathMapping),
+            albumArtUrlLarge = remapRestoredImageUrl(meta.albumArtUrlLarge, pathMapping),
+            spotifyArtistImageUrl = remapRestoredImageUrl(meta.spotifyArtistImageUrl, pathMapping),
+            iTunesArtistImageUrl = remapRestoredImageUrl(meta.iTunesArtistImageUrl, pathMapping),
+            deezerArtistImageUrl = remapRestoredImageUrl(meta.deezerArtistImageUrl, pathMapping),
+            lastFmArtistImageUrl = remapRestoredImageUrl(meta.lastFmArtistImageUrl, pathMapping),
         )
-    }
     /**
      * Post-write integrity check: the archive must be a readable ZIP that
      * actually contains data.json. Returns null when valid, otherwise a
@@ -1131,6 +1147,41 @@ private data class ExtractedImage(
     val path: String,
     val bytesWritten: Long
 )
+
+internal fun remapRestoredImageUrl(
+    exportedUrl: String?,
+    pathMapping: Map<String, String>,
+): String? {
+    if (exportedUrl.isNullOrBlank()) return exportedUrl
+    if (exportedUrl.startsWith("content://")) {
+        // Content-provider grants are device/session specific and are not
+        // transferable through a Tempo backup.
+        return null
+    }
+    if (!exportedUrl.startsWith("file://")) return exportedUrl
+
+    // file:// paths are device-private. They are usable after restore only when
+    // the corresponding image was actually bundled and extracted successfully.
+    return pathMapping[exportedUrl]
+}
+
+internal fun resolveRestoredTrackArtwork(
+    albumArtSource: AlbumArtSource?,
+    metadataArtUrl: String?,
+    trackArtUrl: String?,
+): String? =
+    when (albumArtSource) {
+        AlbumArtSource.USER_RESET -> null
+        AlbumArtSource.USER_SELECTED ->
+            metadataArtUrl?.takeIf { it.isNotBlank() }
+                ?: trackArtUrl?.takeIf { it.isNotBlank() }
+        else ->
+            when {
+                isLocalBackupArtwork(trackArtUrl) -> trackArtUrl
+                !metadataArtUrl.isNullOrBlank() -> metadataArtUrl
+                else -> trackArtUrl?.takeIf { it.isNotBlank() }
+            }
+    }
 
 internal fun resolveRestoredProfileImagePath(
     exportedProfileImagePath: String?,

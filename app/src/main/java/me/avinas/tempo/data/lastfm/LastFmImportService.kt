@@ -1512,7 +1512,7 @@ class LastFmImportService
                     copy
                 }
             try {
-                enrichedMetadataDao.upsertAll(batch)
+                enrichedMetadataDao.upsertAllFromAutomaticEnrichment(batch)
                 Log.d(TAG, "Flushed ${batch.size} pending metadata records")
             } catch (e: CancellationException) {
                 throw e

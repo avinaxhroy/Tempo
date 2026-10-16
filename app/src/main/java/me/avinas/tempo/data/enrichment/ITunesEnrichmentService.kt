@@ -3,6 +3,7 @@ package me.avinas.tempo.data.enrichment
 import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.avinas.tempo.data.remote.itunes.iTunesApi
@@ -108,7 +109,8 @@ class ITunesEnrichmentService @Inject constructor(
     suspend fun searchAlbumArt(
         artist: String,
         album: String? = null,
-        track: String? = null
+        track: String? = null,
+        preserveExplicitTrackVersion: Boolean = false,
     ): iTunesResult {
         if (ArtistParser.isUnknownArtist(artist)) {
             Log.d(TAG, "Skipping iTunes search: artist is unknown")
@@ -116,10 +118,17 @@ class ITunesEnrichmentService @Inject constructor(
         }
 
         // Build search strategies
-        val searchStrategies = buildSearchStrategies(artist, album, track)
+        val searchStrategies = buildSearchStrategies(
+            artist = artist,
+            album = album,
+            track = track,
+            preserveExplicitTrackVersion = preserveExplicitTrackVersion,
+        )
         
         // Track unique queries to avoid duplicates
         val uniqueQueries = searchStrategies.distinct()
+        var hadSuccessfulResponse = false
+        var lastProviderError: String? = null
         
         for ((index, query) in uniqueQueries.withIndex()) {
             Log.d(TAG, "Searching iTunes (strategy ${index + 1}/${uniqueQueries.size}): $query")
@@ -140,9 +149,11 @@ class ITunesEnrichmentService @Inject constructor(
                 )
 
                 if (!response.isSuccessful) {
+                    lastProviderError = "iTunes API error: ${response.code()}"
                     Log.e(TAG, "iTunes search failed for '$query': ${response.code()}")
                     continue // Try next strategy
                 }
+                hadSuccessfulResponse = true
 
                 val searchResponse = response.body()
                 val results = searchResponse?.results ?: emptyList()
@@ -151,32 +162,12 @@ class ITunesEnrichmentService @Inject constructor(
                     continue // Try next strategy
                 }
 
-                // Check for match using relaxed artist validation
-                val cleanTrack = if (track != null) ArtistParser.cleanTrackTitle(track) else null
-                
-                val bestMatch = results.find { result ->
-                    val resultArtist = result.artistName ?: ""
-                    
-                    // Verify at least one artist token matches to reject wrong-artist results
-                    val isArtistMatch = ArtistParser.hasAnyMatchingArtist(resultArtist, artist)
-                    
-                    if (!isArtistMatch) return@find false
-
-                    // If searching for a track, validate track title
-                    if (track != null && cleanTrack != null) {
-                        (result.trackName?.contains(cleanTrack, ignoreCase = true) == true || 
-                         result.trackCensoredName?.contains(cleanTrack, ignoreCase = true) == true ||
-                         cleanTrack.contains(result.trackName ?: "", ignoreCase = true) ||
-                         cleanTrack.contains(result.trackCensoredName ?: "", ignoreCase = true))
-                    } else if (album != null) {
-                        // If searching for album, validate album title
-                        (result.collectionName?.contains(album, ignoreCase = true) == true ||
-                         result.collectionCensoredName?.contains(album, ignoreCase = true) == true)
-                    } else {
-                        // If just searching by artist (no album/track provided), take the first artist match
-                        true
-                    }
-                }
+                val bestMatch = selectBestITunesCoverMatch(
+                    results = results,
+                    expectedArtist = artist,
+                    expectedTrack = track,
+                    expectedAlbum = album,
+                )
 
                 if (bestMatch != null) {
                     val artworkUrl = bestMatch.getBestArtworkUrl()
@@ -202,14 +193,20 @@ class ITunesEnrichmentService @Inject constructor(
                     Log.d(TAG, "Results found for '$query' but none matched artist '$artist' or title")
                 }
 
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                lastProviderError = e.message ?: "iTunes lookup failed"
                 Log.e(TAG, "Error searching iTunes with query '$query'", e)
-                // Continue to next strategy on error
+                // Continue to next strategy on ordinary provider/network errors.
             }
         }
         
         Log.d(TAG, "iTunes search exhausted all strategies for '$artist' - '$track'")
-        return iTunesResult.NotFound
+        return resolveITunesCoverSearchTerminalResult(
+            hadSuccessfulResponse = hadSuccessfulResponse,
+            lastProviderError = lastProviderError,
+        )
     }
     
     /**
@@ -795,7 +792,12 @@ class ITunesEnrichmentService @Inject constructor(
         return "$basePath/${size}x${size}cc.$ext"
     }
 
-    private fun buildSearchStrategies(artist: String, album: String?, track: String?): List<String> {
+    private fun buildSearchStrategies(
+        artist: String,
+        album: String?,
+        track: String?,
+        preserveExplicitTrackVersion: Boolean = false,
+    ): List<String> {
         val strategies = mutableListOf<String>()
         val primaryArtist = ArtistParser.getPrimaryArtist(artist)
         
@@ -806,8 +808,14 @@ class ITunesEnrichmentService @Inject constructor(
         
         // Strategy 2: Primary Artist + Track (Best for track metadata)
         if (!track.isNullOrBlank()) {
-            val cleanTrack = ArtistParser.cleanTrackTitle(track)
-            strategies.add("$primaryArtist $cleanTrack")
+            val titleVariants =
+                if (preserveExplicitTrackVersion) coverSearchTitleVariants(track)
+                else listOf(ArtistParser.cleanTrackTitle(track))
+            val cleanTrack = titleVariants.last()
+
+            titleVariants.forEach { titleVariant ->
+                strategies.add("$primaryArtist $titleVariant")
+            }
             
             // Strategy 3: Try other artists if available
             val allArtists = ArtistParser.getAllArtists(artist)
@@ -839,4 +847,77 @@ class ITunesEnrichmentService @Inject constructor(
      * Always returns true since no auth is required.
      */
     fun isAvailable(): Boolean = true
+}
+
+internal fun resolveITunesCoverSearchTerminalResult(
+    hadSuccessfulResponse: Boolean,
+    lastProviderError: String?,
+): ITunesEnrichmentService.iTunesResult =
+    if (hadSuccessfulResponse) {
+        ITunesEnrichmentService.iTunesResult.NotFound
+    } else {
+        ITunesEnrichmentService.iTunesResult.Error(lastProviderError ?: "iTunes lookup failed")
+    }
+
+internal fun selectBestITunesCoverMatch(
+    results: List<AppleMusicResult>,
+    expectedArtist: String,
+    expectedTrack: String?,
+    expectedAlbum: String?,
+): AppleMusicResult? {
+    val expectedTrackTitle = expectedTrack?.takeIf { it.isNotBlank() }
+    val normalizedAlbum = expectedAlbum
+        ?.let(ArtistParser::normalizeForSearch)
+        ?.takeIf { it.isNotBlank() }
+
+    return results
+        .asSequence()
+        .filter { !it.getBestArtworkUrl().isNullOrBlank() }
+        .filter { result ->
+            val resultArtist = result.artistName.orEmpty()
+            if (!isSafeCoverArtistMatch(expectedArtist, resultArtist)) return@filter false
+
+            when {
+                expectedTrackTitle != null -> {
+                    val resultTitles = listOfNotNull(
+                        result.trackName?.takeIf { it.isNotBlank() },
+                        result.trackCensoredName?.takeIf { it.isNotBlank() },
+                    )
+                    resultTitles.any { isSafeCoverTrackTitleMatch(expectedTrackTitle, it) }
+                }
+                normalizedAlbum != null -> {
+                    listOfNotNull(
+                        result.collectionName?.takeIf { it.isNotBlank() },
+                        result.collectionCensoredName?.takeIf { it.isNotBlank() },
+                    ).any { isSafeCoverTrackTitleMatch(expectedAlbum.orEmpty(), it) }
+                }
+                else -> true
+            }
+        }
+        .withIndex()
+        .maxWithOrNull(
+            compareBy<IndexedValue<AppleMusicResult>> { indexed ->
+                iTunesCoverMatchScore(indexed.value, normalizedAlbum)
+            }.thenBy { indexed -> -indexed.index }
+        )
+        ?.value
+}
+
+private fun iTunesCoverMatchScore(
+    result: AppleMusicResult,
+    normalizedAlbum: String?,
+): Int {
+    var score = 0
+    val candidateAlbum = result.collectionName
+        ?.let(ArtistParser::normalizeForSearch)
+        ?.takeIf { it.isNotBlank() }
+
+    if (normalizedAlbum != null && candidateAlbum != null) {
+        when {
+            candidateAlbum == normalizedAlbum -> score += 100
+            isSafeCoverTrackTitleMatch(normalizedAlbum, candidateAlbum) -> score += 40
+        }
+    }
+
+    return score
 }

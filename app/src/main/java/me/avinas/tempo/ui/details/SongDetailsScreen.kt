@@ -367,6 +367,10 @@ fun SongDetailsContent(
                         onNavigateToArtist = onNavigateToArtist,
                         onNavigateToAlbum = onNavigateToAlbum,
                         onEditTitle = { viewModel.showEditTitleDialog() },
+                        onEditCover = { viewModel.showCoverPicker() },
+                        onHotlinkSuccess = {
+                            viewModel.consumeLocalArtworkBackup(trackDetails.localBackupArtUrl)
+                        },
                         onTitlePositioned = { top ->
                             val collapsed = top <= headerBottomPx
                             if (collapsed != showCollapsedTitle) {
@@ -570,6 +574,18 @@ fun SongDetailsContent(
         )
     }
 
+    if (uiState.showCoverPicker) {
+        CoverArtPickerSheet(
+            state = uiState,
+            onSelect = viewModel::selectCover,
+            onSelectProvider = viewModel::setSelectedCoverProvider,
+            onResetAutomatic = viewModel::resetCoverToAutomatic,
+            onRetry = { viewModel.retryCoverCandidates() },
+            onRetryProvider = viewModel::retryCoverCandidates,
+            onDismiss = viewModel::dismissCoverPicker,
+        )
+    }
+
     if (uiState.showDeleteDialog) {
         DeleteSongConfirmDialog(
             trackDetails = trackDetails,
@@ -696,6 +712,8 @@ fun SongHeroEditorialStage(
     onNavigateToArtist: (String) -> Unit,
     onNavigateToAlbum: (String, String) -> Unit,
     onEditTitle: () -> Unit,
+    onEditCover: () -> Unit,
+    onHotlinkSuccess: () -> Unit = {},
     onTitlePositioned: (Float) -> Unit = {},
     genre: String? = null,
     releaseDate: String? = null,
@@ -748,6 +766,7 @@ fun SongHeroEditorialStage(
                         R.string.details_cover_artwork_cd, trackDetails.track.title
                     ),
                     modifier = Modifier.fillMaxSize(),
+                    onHotlinkSuccess = { onHotlinkSuccess() },
                 )
 
                 // Favorite Badge
@@ -769,6 +788,26 @@ fun SongHeroEditorialStage(
                             modifier = Modifier.size(16.dp)
                         )
                     }
+                }
+
+                // Explicit affordance: artwork is editable without relying on a hidden gesture.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(TempoDarkSurface.copy(alpha = 0.90f))
+                        .border(0.8.dp, GlassBorderMedium, CircleShape)
+                        .premiumClickable(onClick = onEditCover),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Edit,
+                        contentDescription = stringResource(R.string.details_change_cover),
+                        tint = TextPrimary,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
             }
         }

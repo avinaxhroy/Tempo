@@ -1,6 +1,7 @@
 package me.avinas.tempo.data.local.dao
 
 import androidx.room.*
+import me.avinas.tempo.data.local.entities.AlbumArtSource
 import me.avinas.tempo.data.local.entities.Artist
 import me.avinas.tempo.data.local.entities.Track
 import kotlinx.coroutines.flow.Flow
@@ -35,11 +36,150 @@ interface TrackDao {
     suspend fun update(track: Track)
 
     /**
+     * Full-row Track updates are used for artist, album, duration and identifier
+     * maintenance. Artwork is deliberately NOT part of that contract: preserving
+     * the currently stored URL prevents a stale Track snapshot from resurrecting an
+     * old cover after the user changed or reset it.
+     */
+    @Query("""
+        SELECT album_art_url FROM enriched_metadata
+        WHERE track_id = :trackId
+        AND album_art_source = 'USER_SELECTED'
+        AND album_art_url IS NOT NULL
+        AND album_art_url != ''
+        LIMIT 1
+    """)
+    suspend fun getManualAlbumArtUrl(trackId: Long): String?
+
+    @Query("SELECT album_art_source FROM enriched_metadata WHERE track_id = :trackId LIMIT 1")
+    suspend fun getAlbumArtSource(trackId: Long): AlbumArtSource?
+
+    @Query("SELECT album_art_url FROM enriched_metadata WHERE track_id = :trackId LIMIT 1")
+    suspend fun getMetadataAlbumArtUrl(trackId: Long): String?
+
+    @Query("SELECT album_art_url FROM tracks WHERE id = :trackId LIMIT 1")
+    suspend fun getCurrentTrackAlbumArtUrl(trackId: Long): String?
+
+    @Transaction
+    suspend fun updatePreservingManualArtwork(track: Track) {
+        val source = getAlbumArtSource(track.id)
+        val manualArt = if (source == AlbumArtSource.USER_SELECTED) {
+            getManualAlbumArtUrl(track.id)
+        } else {
+            null
+        }
+        val currentTrackArt = getCurrentTrackAlbumArtUrl(track.id)
+        val preservedArtwork = resolveProtectedTrackArtwork(
+            source = source,
+            manualArtUrl = manualArt,
+            currentTrackArtUrl = currentTrackArt,
+            incomingArtUrl = currentTrackArt,
+        )
+        update(track.copy(albumArtUrl = preservedArtwork))
+    }
+
+    /**
+     * The only automatic path allowed to change Track.album_art_url.
+     *
+     * Re-check the authoritative metadata decision in the same transaction. Once
+     * enriched_metadata contains an accepted automatic cover, callers with stale
+     * provider results must mirror that canonical URL instead of diverging the
+     * Track row. USER_SELECTED and USER_RESET retain their stronger protections.
+     */
+    @Transaction
+    suspend fun updateAutomaticAlbumArtUrl(
+        trackId: Long,
+        albumArtUrl: String?,
+    ): String? {
+        val source = getAlbumArtSource(trackId)
+        val manualArt = if (source == AlbumArtSource.USER_SELECTED) {
+            getManualAlbumArtUrl(trackId)
+        } else {
+            null
+        }
+        val canonicalAutomaticArt =
+            if (source != null &&
+                source != AlbumArtSource.NONE &&
+                source != AlbumArtSource.USER_RESET &&
+                source != AlbumArtSource.USER_SELECTED
+            ) {
+                getMetadataAlbumArtUrl(trackId)?.takeIf { it.isNotBlank() }
+            } else {
+                null
+            }
+        val currentTrackArt = getCurrentTrackAlbumArtUrl(trackId)
+        val resolvedArtwork = resolveAutomaticTrackArtwork(
+            source = source,
+            manualArtUrl = manualArt,
+            currentTrackArtUrl = currentTrackArt,
+            canonicalAutomaticArtUrl = canonicalAutomaticArt,
+            incomingArtUrl = albumArtUrl,
+        )
+
+        updateAlbumArtUrl(
+            trackId = trackId,
+            albumArtUrl = resolvedArtwork,
+        )
+        return resolvedArtwork
+    }
+
+    /**
      * Update only the title of a track.
      * Targeted update avoids overwriting other columns (e.g. enriched art URLs).
      */
     @Query("UPDATE tracks SET title = :title WHERE id = :trackId")
     suspend fun updateTitle(trackId: Long, title: String)
+
+    /** Update only content classification without overwriting concurrently refreshed metadata. */
+    @Query("UPDATE tracks SET content_type = :contentType WHERE id = :trackId")
+    suspend fun updateContentType(trackId: Long, contentType: String): Int
+
+    /** Update only the artwork URL without overwriting concurrently refreshed track metadata. */
+    @Query("UPDATE tracks SET album_art_url = :albumArtUrl WHERE id = :trackId")
+    suspend fun updateAlbumArtUrl(trackId: Long, albumArtUrl: String?)
+
+    @Query("""
+        UPDATE tracks
+        SET album_art_url = :replacementUrl
+        WHERE id = :trackId
+        AND album_art_url = :expectedLocalUrl
+        AND (album_art_url LIKE 'file://%' OR album_art_url LIKE 'content://%')
+    """)
+    suspend fun replaceLocalAlbumArtUrlIfMatches(
+        trackId: Long,
+        expectedLocalUrl: String,
+        replacementUrl: String,
+    ): Int
+
+    /**
+     * Promote a consumed local fallback back to the authoritative remote artwork.
+     *
+     * The replacement is allowed only while automatic metadata still owns a real
+     * remote/API cover and Track still points at the exact local fallback that the
+     * UI just consumed.
+     */
+    @Transaction
+    suspend fun promoteLocalAlbumArtToCanonicalIfMatches(
+        trackId: Long,
+        expectedLocalUrl: String,
+    ): String? {
+        val source = getAlbumArtSource(trackId)
+        if (source?.isApiSource() != true) return null
+
+        val canonicalRemote =
+            getMetadataAlbumArtUrl(trackId)
+                ?.takeIf { isRemoteArtwork(it) }
+                ?: return null
+
+        val updated =
+            replaceLocalAlbumArtUrlIfMatches(
+                trackId = trackId,
+                expectedLocalUrl = expectedLocalUrl,
+                replacementUrl = canonicalRemote,
+            )
+
+        return canonicalRemote.takeIf { updated > 0 }
+    }
 
     @Query("UPDATE tracks SET youtube_id = :youtubeId WHERE id = :trackId AND (youtube_id IS NULL OR youtube_id = '')")
     suspend fun updateYoutubeIdIfMissing(trackId: Long, youtubeId: String): Int
@@ -117,6 +257,14 @@ interface TrackDao {
 
     @Query("SELECT album_art_url FROM tracks WHERE album_art_url LIKE 'file://%'")
     suspend fun getLocalImageUrls(): List<String>
+
+    @Query("""
+        SELECT
+            (SELECT COUNT(*) FROM tracks WHERE album_art_url = :albumArtUrl) +
+            (SELECT COUNT(*) FROM albums WHERE artwork_url = :albumArtUrl) +
+            (SELECT COUNT(*) FROM artists WHERE image_url = :albumArtUrl)
+    """)
+    suspend fun countAlbumArtUrlReferences(albumArtUrl: String): Int
     
     // Find by Title and Artist
     
@@ -320,3 +468,72 @@ interface TrackDao {
     suspend fun updateArtistString(trackId: Long, artist: String): Int
 }
 
+
+internal fun resolveProtectedTrackArtwork(
+    source: AlbumArtSource?,
+    manualArtUrl: String?,
+    currentTrackArtUrl: String?,
+    incomingArtUrl: String?,
+): String? =
+    when (source) {
+        AlbumArtSource.USER_SELECTED -> manualArtUrl ?: currentTrackArtUrl ?: incomingArtUrl
+        AlbumArtSource.USER_RESET -> null
+        else -> incomingArtUrl
+    }
+
+/**
+ * Resolve a Track-table artwork write produced by automatic tracking/enrichment.
+ *
+ * When enriched_metadata already owns a canonical automatic remote cover,
+ * Track.album_art_url may intentionally contain a file:// image as an offline
+ * fallback. Keep (or refresh) that local backup instead of replacing it with the
+ * remote URL. Remote/stale provider writes still collapse to the canonical
+ * metadata URL, while USER_SELECTED and USER_RESET remain authoritative.
+ */
+internal fun resolveAutomaticTrackArtwork(
+    source: AlbumArtSource?,
+    manualArtUrl: String?,
+    currentTrackArtUrl: String?,
+    canonicalAutomaticArtUrl: String?,
+    incomingArtUrl: String?,
+): String? {
+    val hasCanonicalRemoteArtwork =
+        source?.isApiSource() == true &&
+            isRemoteArtwork(canonicalAutomaticArtUrl)
+
+    val automaticCandidate =
+        if (hasCanonicalRemoteArtwork) {
+            incomingArtUrl?.takeIf(::isLocalBackupArtwork)
+                ?: currentTrackArtUrl?.takeIf(::isLocalBackupArtwork)
+                ?: canonicalAutomaticArtUrl
+        } else {
+            incomingArtUrl
+        }
+
+    return resolveProtectedTrackArtwork(
+        source = source,
+        manualArtUrl = manualArtUrl,
+        currentTrackArtUrl = currentTrackArtUrl,
+        incomingArtUrl = automaticCandidate,
+    )
+}
+
+internal fun isLocalBackupArtwork(url: String?): Boolean =
+    url?.startsWith("file://") == true ||
+        url?.startsWith("content://") == true
+
+internal fun isManagedLocalArtworkFile(url: String?): Boolean =
+    url?.startsWith("file://") == true
+
+internal fun isRemoteArtwork(url: String?): Boolean =
+    url?.startsWith("https://", ignoreCase = true) == true ||
+        url?.startsWith("http://", ignoreCase = true) == true
+
+internal fun shouldPreserveLocalTrackBackup(
+    source: AlbumArtSource,
+    canonicalArtworkUrl: String?,
+    currentTrackArtworkUrl: String?,
+): Boolean =
+    source.isApiSource() &&
+        isRemoteArtwork(canonicalArtworkUrl) &&
+        isLocalBackupArtwork(currentTrackArtworkUrl)

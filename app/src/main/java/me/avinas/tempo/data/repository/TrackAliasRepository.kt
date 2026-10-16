@@ -4,10 +4,13 @@ import android.util.Log
 import androidx.room.withTransaction
 import me.avinas.tempo.data.local.AppDatabase
 import me.avinas.tempo.data.local.ArchiveTimestampCodec
+import me.avinas.tempo.data.local.dao.EnrichedMetadataDao
 import me.avinas.tempo.data.local.dao.ListeningEventDao
 import me.avinas.tempo.data.local.dao.ScrobbleArchiveDao
 import me.avinas.tempo.data.local.dao.TrackDao
 import me.avinas.tempo.data.local.dao.TrackAliasDao
+import me.avinas.tempo.data.local.entities.AlbumArtSource
+import me.avinas.tempo.data.local.entities.EnrichedMetadata
 import me.avinas.tempo.data.local.entities.ScrobbleArchive
 import me.avinas.tempo.data.local.entities.Track
 import me.avinas.tempo.data.local.entities.TrackAlias
@@ -33,6 +36,7 @@ import javax.inject.Singleton
 @Singleton
 open class TrackAliasRepository @Inject constructor(
     private val trackAliasDao: TrackAliasDao,
+    private val enrichedMetadataDao: EnrichedMetadataDao,
     private val listeningEventDao: ListeningEventDao,
     private val trackDao: TrackDao,
     private val scrobbleArchiveDao: ScrobbleArchiveDao,
@@ -107,23 +111,32 @@ open class TrackAliasRepository @Inject constructor(
             return false
         }
         
-        val sourceTrack = trackDao.getTrackById(sourceTrackId)
-        val targetTrack = trackDao.getTrackById(targetTrackId)
+        val sourceTrackSnapshot = trackDao.getTrackById(sourceTrackId)
+        val targetTrackSnapshot = trackDao.getTrackById(targetTrackId)
         
-        if (sourceTrack == null) {
+        if (sourceTrackSnapshot == null) {
             Log.w(TAG, "Source track $sourceTrackId not found")
             return false
         }
-        if (targetTrack == null) {
+        if (targetTrackSnapshot == null) {
             Log.w(TAG, "Target track $targetTrackId not found")
             return false
         }
         
-        Log.i(TAG, "Merging track '${sourceTrack.title}' by '${sourceTrack.artist}' " +
-                "into '${targetTrack.title}' by '${targetTrack.artist}'")
+        Log.i(TAG, "Merging track '${sourceTrackSnapshot.title}' by '${sourceTrackSnapshot.artist}' " +
+                "into '${targetTrackSnapshot.title}' by '${targetTrackSnapshot.artist}'")
         
         return try {
             database.withTransaction {
+                // Re-read every merge-sensitive row inside the transaction. The user may
+                // have selected/reset artwork after the preliminary existence check.
+                val sourceTrack = trackDao.getTrackById(sourceTrackId)
+                    ?: error("Source track $sourceTrackId disappeared before merge")
+                val targetTrack = trackDao.getTrackById(targetTrackId)
+                    ?: error("Target track $targetTrackId disappeared before merge")
+                val sourceMetadata = enrichedMetadataDao.forTrackSync(sourceTrackId)
+                val targetMetadata = enrichedMetadataDao.forTrackSync(targetTrackId)
+
                 // 1. Create alias for future lookups
                 val alias = TrackAlias(
                     targetTrackId = targetTrackId,
@@ -156,6 +169,35 @@ open class TrackAliasRepository @Inject constructor(
                 
                 // 3. Merge metadata from source into target (fill missing fields)
                 var updatedTarget = mergeTrackMetadata(sourceTrack, targetTrack)
+
+                // Returning the surviving target to automatic selection is also an
+                // explicit preference. Do not resurrect artwork from the source track.
+                if (targetMetadata?.albumArtSource == AlbumArtSource.USER_RESET) {
+                    updatedTarget = updatedTarget.copy(albumArtUrl = null)
+                }
+
+                // A user-selected cover is an explicit preference, not ordinary enrichment.
+                // Preserve the target's manual cover when it already has one; otherwise carry
+                // the source manual cover across the merge before the source row is deleted.
+                val manualArtwork = preferredManualArtwork(
+                    sourceMetadata = sourceMetadata,
+                    targetMetadata = targetMetadata,
+                )
+
+                if (manualArtwork != null) {
+                    val selectedUrl = manualArtwork.albumArtUrl!!
+                    updatedTarget = updatedTarget.copy(albumArtUrl = selectedUrl)
+
+                    val mergedMetadata = (targetMetadata ?: EnrichedMetadata(trackId = targetTrackId)).copy(
+                        albumArtUrl = selectedUrl,
+                        albumArtUrlSmall = manualArtwork.albumArtUrlSmall ?: selectedUrl,
+                        albumArtUrlLarge = manualArtwork.albumArtUrlLarge ?: selectedUrl,
+                        albumArtSource = AlbumArtSource.USER_SELECTED,
+                        cacheTimestamp = System.currentTimeMillis(),
+                    )
+                    enrichedMetadataDao.upsert(mergedMetadata)
+                    Log.d(TAG, "Preserved user-selected cover while merging into track $targetTrackId")
+                }
                 // A merge target whose artist is a structural placeholder label
                 // (e.g. the Takeout "Release" artifact) must not keep it — the
                 // surviving track would stay pooled under the bogus artist and
@@ -285,4 +327,23 @@ open class TrackAliasRepository @Inject constructor(
     suspend fun getAllAliases(): List<TrackAlias> {
         return trackAliasDao.getAllSync()
     }
+}
+
+
+/**
+ * Resolve the artwork preference for a track merge. The surviving target's explicit
+ * choice always wins; otherwise an explicit choice from the source follows the merge.
+ */
+internal fun preferredManualArtwork(
+    sourceMetadata: EnrichedMetadata?,
+    targetMetadata: EnrichedMetadata?,
+): EnrichedMetadata? {
+    fun EnrichedMetadata?.validManualArtwork(): EnrichedMetadata? =
+        this?.takeIf {
+            it.albumArtSource == AlbumArtSource.USER_SELECTED &&
+                !it.albumArtUrl.isNullOrBlank()
+        }
+
+    if (targetMetadata?.albumArtSource == AlbumArtSource.USER_RESET) return null
+    return targetMetadata.validManualArtwork() ?: sourceMetadata.validManualArtwork()
 }

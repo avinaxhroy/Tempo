@@ -698,7 +698,7 @@ class SpotifyJsonImportService @Inject constructor(
                 cacheTimestamp = System.currentTimeMillis(),
                 lastEnrichmentAttempt = System.currentTimeMillis()
             )
-            enrichedMetadataDao.upsert(metadata)
+            enrichedMetadataDao.upsertFromAutomaticEnrichment(metadata)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to create enriched metadata for track $trackId", e)
         }

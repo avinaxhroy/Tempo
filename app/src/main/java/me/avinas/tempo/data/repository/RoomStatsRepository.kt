@@ -1,5 +1,7 @@
 package me.avinas.tempo.data.repository
 
+import me.avinas.tempo.data.local.dao.isLocalBackupArtwork
+
 import android.util.Log
 import android.util.LruCache
 import me.avinas.tempo.data.local.dao.*
@@ -1863,7 +1865,7 @@ class RoomStatsRepository @Inject constructor(
             
             // Determine which is hotlink and which is local backup
             val isEnrichedRemote = fixedEnrichedUrl?.startsWith("http") == true
-            val isTrackLocal = fixedTrackUrl?.startsWith("file://") == true
+            val isTrackLocal = isLocalBackupArtwork(fixedTrackUrl)
             
             // Strategy:
             // - If we have enriched hotlink: use it in track.albumArtUrl, keep local in localBackupArtUrl

@@ -1068,4 +1068,25 @@
     <string name="deezer_import_notification_channel_desc">Notifications de progression pour l\'import d\'export Deezer</string>
     <string name="deezer_import_notification_title">Import des données Deezer</string>
     <string name="deezer_import_notification_progress">Import de %1$d/%2$d entrées</string>
+
+    <string name="details_change_cover">Modifier la pochette</string>
+    <string name="details_change_cover_title">Choisir une pochette</string>
+    <string name="details_change_cover_body">Compare les pochettes de plusieurs services. Ton choix restera verrouillé jusqu’à ce que tu le changes ou que tu repasses en sélection automatique.</string>
+    <string name="details_cover_current">Actuelle</string>
+    <string name="details_cover_searching">Recherche…</string>
+    <string name="details_cover_not_found">Aucune pochette trouvée</string>
+    <string name="details_cover_use">Utiliser cette pochette</string>
+    <string name="details_cover_manual">Pochette manuelle</string>
+    <string name="details_cover_restore_auto">Revenir à la sélection automatique</string>
+    <string name="details_cover_restore_auto_hint">Tempo pourra de nouveau choisir automatiquement la pochette.</string>
+    <string name="details_cover_try_again">Relancer la recherche</string>
+
+    <string name="details_cover_preview_error">Impossible de charger l’aperçu de l’image</string>
+    <string name="details_cover_current_hint">Pochette actuellement affichée</string>
+    <string name="details_cover_retry_source">Réessayer cette source</string>
+    <string name="details_cover_unavailable">Indisponible</string>
+    <string name="details_cover_error">Erreur de recherche</string>
+    <string name="details_cover_load_error">Impossible de charger les pochettes</string>
+    <string name="details_cover_save_error">Impossible d’enregistrer la pochette</string>
+    <string name="details_cover_restore_auto_error">Impossible de rétablir la sélection automatique</string>
 </resources>

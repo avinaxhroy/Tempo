@@ -1408,7 +1408,7 @@ class YouTubeMusicImportService
                         lastEnrichmentAttempt = null,
                         cacheTimestamp = System.currentTimeMillis(),
                     )
-                enrichedMetadataDao.upsert(repaired)
+                enrichedMetadataDao.upsertFromAutomaticEnrichment(repaired)
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to re-queue repaired track $trackId for enrichment", e)
             }
@@ -1453,7 +1453,7 @@ class YouTubeMusicImportService
                         cacheTimestamp = System.currentTimeMillis(),
                         lastEnrichmentAttempt = System.currentTimeMillis(),
                     )
-                enrichedMetadataDao.upsert(metadata)
+                enrichedMetadataDao.upsertFromAutomaticEnrichment(metadata)
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to create enriched metadata for track $trackId", e)
             }

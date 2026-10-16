@@ -1516,4 +1516,31 @@
     <string name="history_video_non_music_track_description">Remove existing plays and block future matches</string>
     <string name="history_video_non_music_artist">Treat %1$s as video / non-music</string>
     <string name="history_video_non_music_artist_description">Remove all matching history and block future plays</string>
+
+    <string name="details_change_cover">Change cover</string>
+    <string name="details_change_cover_title">Choose a cover</string>
+    <string name="details_change_cover_body">Compare artwork from multiple services. Your choice stays locked until you change it or return to automatic selection.</string>
+    <string name="details_cover_current">Current</string>
+    <string name="details_cover_searching">Searching…</string>
+    <string name="details_cover_not_found">No cover found</string>
+    <string name="details_cover_use">Use this cover</string>
+    <string name="details_cover_manual">Manual cover</string>
+    <string name="details_cover_restore_auto">Return to automatic selection</string>
+    <string name="details_cover_restore_auto_hint">Tempo will be allowed to choose artwork automatically again.</string>
+    <string name="details_cover_try_again">Search again</string>
+
+    <string name="details_cover_provider_spotify" translatable="false">Spotify</string>
+    <string name="details_cover_provider_apple_music" translatable="false">Apple Music</string>
+    <string name="details_cover_provider_musicbrainz" translatable="false">MusicBrainz</string>
+    <string name="details_cover_provider_deezer" translatable="false">Deezer</string>
+    <string name="details_cover_provider_lastfm" translatable="false">Last.fm</string>
+
+    <string name="details_cover_preview_error">Unable to load image preview</string>
+    <string name="details_cover_current_hint">Currently displayed artwork</string>
+    <string name="details_cover_retry_source">Retry this source</string>
+    <string name="details_cover_unavailable">Unavailable</string>
+    <string name="details_cover_error">Lookup failed</string>
+    <string name="details_cover_load_error">Failed to load cover art</string>
+    <string name="details_cover_save_error">Failed to save cover art</string>
+    <string name="details_cover_restore_auto_error">Failed to restore automatic artwork</string>
 </resources>

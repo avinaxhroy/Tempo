@@ -55,7 +55,7 @@ class RoomListeningRepository @Inject constructor(
                 // Stats/history also filter by Track.contentType. Normalize the track itself
                 // so an old PODCAST/AUDIOBOOK classification cannot hide an allowed play.
                 if (track.contentType != "MUSIC") {
-                    trackDao.update(track.copy(contentType = "MUSIC"))
+                    trackDao.updateContentType(track.id, "MUSIC")
                 }
                 true
             }

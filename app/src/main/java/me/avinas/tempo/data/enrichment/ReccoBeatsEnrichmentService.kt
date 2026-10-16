@@ -441,7 +441,7 @@ class ReccoBeatsEnrichmentService @Inject constructor(
             cacheTimestamp = System.currentTimeMillis()
         )
 
-        enrichedMetadataDao.upsert(updated)
+        enrichedMetadataDao.upsertFromAutomaticEnrichment(updated)
         Log.d(TAG, "Saved ReccoBeats data for track $trackId: mood=${result.mood}, energy=${result.energyLevel}")
     }
 
