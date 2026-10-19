@@ -1091,4 +1091,9 @@
     <string name="details_cover_preview_error">Bildvorschau konnte nicht geladen werden</string>
     <string name="details_cover_current_hint">Derzeit angezeigtes Cover</string>
     <string name="details_cover_retry_source">Diese Quelle erneut versuchen</string>
+
+    <!-- Preferred album artwork source -->
+    <string name="settings_cover_source_title">Bevorzugte Coverquelle</string>
+    <string name="settings_cover_source_description">Wählen Sie, welcher Dienst zuerst für Album-Cover versucht wird. Wird kein Cover gefunden, nutzt Tempo automatisch andere Dienste.</string>
+    <string name="settings_cover_source_automatic">Automatisch (Standard)</string>
 </resources>

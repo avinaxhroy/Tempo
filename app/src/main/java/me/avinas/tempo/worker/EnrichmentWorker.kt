@@ -17,6 +17,7 @@ import me.avinas.tempo.data.analytics.EnrichmentRun
 import me.avinas.tempo.data.analytics.EnrichmentTrigger
 import me.avinas.tempo.data.analytics.FailureClassifier
 import me.avinas.tempo.data.analytics.RunPhase
+import me.avinas.tempo.data.enrichment.CoverArtSourcePreference
 import me.avinas.tempo.data.enrichment.DeezerEnrichmentService
 import me.avinas.tempo.data.enrichment.EnrichmentSource
 import me.avinas.tempo.data.enrichment.ITunesEnrichmentService
@@ -26,6 +27,7 @@ import me.avinas.tempo.data.enrichment.ReccoBeatsEnrichmentService
 import me.avinas.tempo.data.enrichment.SpotifyEnrichmentService
 import me.avinas.tempo.data.local.dao.EnrichedMetadataDao
 import me.avinas.tempo.data.local.dao.TrackDao
+import me.avinas.tempo.data.local.entities.AlbumArtSource
 import me.avinas.tempo.data.local.entities.AudioFeaturesSource
 import me.avinas.tempo.data.local.entities.EnrichedMetadata
 import me.avinas.tempo.data.local.entities.EnrichmentStatus
@@ -70,6 +72,7 @@ class EnrichmentWorker
         private val artistLinkingService: me.avinas.tempo.data.repository.ArtistLinkingService,
         private val enrichedMetadataRepository: EnrichedMetadataRepository,
         private val analyticsTracker: AnalyticsTracker,
+        private val coverArtSourcePreference: me.avinas.tempo.data.enrichment.CoverArtSourcePreference,
     ) : CoroutineWorker(appContext, workerParams) {
         private val strategies: List<EnrichmentSource> =
             listOf(
@@ -528,11 +531,12 @@ class EnrichmentWorker
             Log.d(TAG, "Starting modular enrichment for track $trackId")
 
             var metadata = enrichedMetadataDao.forTrackSync(trackId)
-
-            // Loop through strategies in priority order
-            // Only run a strategy if there is a gap it can fill
+            val preferred = coverArtSourcePreference.getPreferredSource()
+            // Preserve the normal enrichment order: the preference applies to
+            // artwork arbitration only, not genres, previews or audio features.
+            // Only keep the artwork gap open for strategies that can actually provide or replace the artwork.
             for (strategy in strategies) {
-                val currentGap =
+                val originalGap =
                     metadata?.identifyGap() ?: me.avinas.tempo.data.enrichment.EnrichmentGap(
                         missingAlbumArt = true,
                         missingGenres = true,
@@ -541,6 +545,23 @@ class EnrichmentWorker
                         missingPreviewUrl = true,
                     )
 
+                val currentGap = if (preferred != null && metadata?.albumArtSource != preferred) {
+                    val strategySource = strategy.albumArtSource
+                    val canReplace = strategySource != null &&
+                        (strategySource == preferred ||
+                            CoverArtSourcePreference.shouldReplace(
+                                metadata?.albumArtSource ?: AlbumArtSource.NONE,
+                                strategySource,
+                                preferred,
+                            ))
+                    if (canReplace) {
+                        originalGap.copy(missingAlbumArt = true)
+                    } else {
+                        originalGap
+                    }
+                } else {
+                    originalGap
+                }
                 if (currentGap.isEmpty()) {
                     Log.d(TAG, "Track $trackId is fully enriched. Stopping chain.")
                     break

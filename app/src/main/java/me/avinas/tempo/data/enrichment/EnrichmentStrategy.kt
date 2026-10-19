@@ -30,6 +30,7 @@ data class EnrichmentGap(
 interface EnrichmentSource {
     val name: String
     val priority: Int // Lower value = higher priority
+    val albumArtSource: AlbumArtSource? get() = null
 
     /**
      * Check if this source can potentially fill the given gap.
@@ -52,6 +53,7 @@ class SpotifyEnrichmentSource @Inject constructor(
 ) : EnrichmentSource {
     override val name = "Spotify"
     override val priority = 1
+    override val albumArtSource = AlbumArtSource.SPOTIFY
 
     override fun canProvide(gap: EnrichmentGap): Boolean {
         // Spotify is the best source for everything EXCEPT genres (MusicBrainz is better)
@@ -131,10 +133,12 @@ class LastFmMbidPreEnrichmentSource @Inject constructor(
 
 @Singleton
 class MusicBrainzEnrichmentSource @Inject constructor(
-    private val musicBrainzService: MusicBrainzEnrichmentService
+    private val musicBrainzService: MusicBrainzEnrichmentService,
+    private val coverArtSourcePreference: CoverArtSourcePreference,
 ) : EnrichmentSource {
     override val name = "MusicBrainz"
     override val priority = 3
+    override val albumArtSource = AlbumArtSource.MUSICBRAINZ
 
     override fun canProvide(gap: EnrichmentGap): Boolean {
         // Primary source for generic metadata and genres
@@ -145,7 +149,12 @@ class MusicBrainzEnrichmentSource @Inject constructor(
         // MusicBrainz logic typically creates new metadata if none exists, or supplements
         // In this modular flow, we might need to handle both.
         // The service's enrichTrack handles both creation and update/supplement.
-        val result = musicBrainzService.enrichTrack(track, forceRefresh = false)
+        // A cached metadata hit must not prevent choosing MusicBrainz artwork.
+        val refreshPreferredArt =
+            coverArtSourcePreference.getPreferredSource() == AlbumArtSource.MUSICBRAINZ &&
+                (currentMetadata?.albumArtSource != AlbumArtSource.MUSICBRAINZ ||
+                    currentMetadata?.albumArtUrl.isNullOrBlank())
+        val result = musicBrainzService.enrichTrack(track, forceRefresh = refreshPreferredArt)
         return if (result is MusicBrainzEnrichmentService.EnrichmentResult.Success) {
             result.metadata
         } else {
@@ -185,10 +194,12 @@ class ITunesEnrichmentSource @Inject constructor(
     private val iTunesService: ITunesEnrichmentService,
     private val metadataDao: me.avinas.tempo.data.local.dao.EnrichedMetadataDao,
     private val artistDao: me.avinas.tempo.data.local.dao.ArtistDao,
-    private val artistAliasDao: me.avinas.tempo.data.local.dao.ArtistAliasDao
+    private val artistAliasDao: me.avinas.tempo.data.local.dao.ArtistAliasDao,
+    private val coverArtSourcePreference: CoverArtSourcePreference,
 ) : EnrichmentSource {
     override val name = "iTunes"
     override val priority = 5
+    override val albumArtSource = AlbumArtSource.ITUNES
 
     override fun canProvide(gap: EnrichmentGap): Boolean {
         // iTunes is great for cover art, genres, and artist images
@@ -210,8 +221,8 @@ class ITunesEnrichmentSource @Inject constructor(
             
             // Check if we should update album art based on source priority
             // iTunes (priority 4) can replace LOCAL (priority 2) and DEEZER (priority 3)
-            val shouldUpdateArt = base.albumArtUrl.isNullOrBlank() || 
-                base.albumArtSource.shouldBeReplacedBy(AlbumArtSource.ITUNES)
+            val shouldUpdateArt = base.albumArtUrl.isNullOrBlank() ||
+                coverArtSourcePreference.shouldReplace(base.albumArtSource, AlbumArtSource.ITUNES)
             
             // Merge logic with source-aware album art handling
             val updated = base.copy(
@@ -343,47 +354,41 @@ class ITunesEnrichmentSource @Inject constructor(
 @Singleton
 class DeezerEnrichmentSource @Inject constructor(
     private val deezerService: DeezerEnrichmentService,
-    private val metadataDao: me.avinas.tempo.data.local.dao.EnrichedMetadataDao
+    private val metadataDao: me.avinas.tempo.data.local.dao.EnrichedMetadataDao,
+    private val coverArtSourcePreference: CoverArtSourcePreference,
 ) : EnrichmentSource {
     override val name = "Deezer"
     override val priority = 6
+    override val albumArtSource = AlbumArtSource.DEEZER
 
-    override fun canProvide(gap: EnrichmentGap): Boolean {
-        // Deezer is mainly for previews and cover art fallbacks
-        return gap.missingPreviewUrl || gap.missingAlbumArt || gap.missingArtistImage
-    }
+    override fun canProvide(gap: EnrichmentGap): Boolean =
+        gap.missingPreviewUrl || gap.missingAlbumArt || gap.missingArtistImage
 
     override suspend fun enrich(track: Track, currentMetadata: EnrichedMetadata?): EnrichedMetadata? {
         val result = deezerService.getAudioPreview(track.artist, track.title, track.album)
-        
-        return if (result is DeezerEnrichmentService.DeezerResult.Success) {
-            val base = currentMetadata ?: EnrichedMetadata(trackId = track.id)
-            
-            // Check if we should update album art based on source priority
-            // Deezer (priority 3) can only replace LOCAL (priority 2) and NONE
-            val shouldUpdateArt = (base.albumArtUrl.isNullOrBlank() || 
-                base.albumArtSource.shouldBeReplacedBy(AlbumArtSource.DEEZER)) &&
-                result.albumArtUrl != null
-            
-            val updated = base.copy(
-                previewUrl = base.previewUrl ?: result.previewUrl,
-                albumArtUrl = if (shouldUpdateArt) result.albumArtUrl else base.albumArtUrl,
-                albumArtUrlSmall = if (shouldUpdateArt) result.albumArtUrlSmall ?: base.albumArtUrlSmall else base.albumArtUrlSmall,
-                albumArtUrlLarge = if (shouldUpdateArt) result.albumArtUrlLarge ?: base.albumArtUrlLarge else base.albumArtUrlLarge,
-                albumArtSource = if (shouldUpdateArt) AlbumArtSource.DEEZER else base.albumArtSource,
-                deezerArtistImageUrl = base.deezerArtistImageUrl ?: result.artistImageUrl,
-                cacheTimestamp = System.currentTimeMillis()
-            )
-            
-            if (shouldUpdateArt) {
-                Log.d("EnrichmentSource", "Deezer: Replacing ${base.albumArtSource} album art with DEEZER source")
-            }
-            
-            metadataDao.upsertFromAutomaticEnrichment(updated)
-            updated
-        } else {
-            null
+        if (result !is DeezerEnrichmentService.DeezerResult.Success) return null
+
+        val base = currentMetadata ?: EnrichedMetadata(trackId = track.id)
+        val shouldUpdateArt = !result.albumArtUrl.isNullOrBlank() &&
+            (base.albumArtUrl.isNullOrBlank() ||
+                coverArtSourcePreference.shouldReplace(base.albumArtSource, AlbumArtSource.DEEZER))
+
+        val updated = base.copy(
+            previewUrl = base.previewUrl ?: result.previewUrl,
+            albumArtUrl = if (shouldUpdateArt) result.albumArtUrl else base.albumArtUrl,
+            albumArtUrlSmall = if (shouldUpdateArt) result.albumArtUrlSmall ?: base.albumArtUrlSmall else base.albumArtUrlSmall,
+            albumArtUrlLarge = if (shouldUpdateArt) result.albumArtUrlLarge ?: base.albumArtUrlLarge else base.albumArtUrlLarge,
+            albumArtSource = if (shouldUpdateArt) AlbumArtSource.DEEZER else base.albumArtSource,
+            deezerArtistImageUrl = base.deezerArtistImageUrl ?: result.artistImageUrl,
+            cacheTimestamp = System.currentTimeMillis(),
+        )
+
+        if (shouldUpdateArt) {
+            Log.d("EnrichmentSource", "Deezer: Replacing ${base.albumArtSource} album art with DEEZER source")
         }
+
+        metadataDao.upsertFromAutomaticEnrichment(updated)
+        return updated
     }
 }
 

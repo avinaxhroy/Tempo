@@ -32,7 +32,8 @@ class MusicBrainzEnrichmentService @Inject constructor(
     private val trackDao: TrackDao,
     private val artistDao: ArtistDao,
     private val albumDao: AlbumDao,
-    private val artistAliasDao: ArtistAliasDao
+    private val artistAliasDao: ArtistAliasDao,
+    private val coverArtSourcePreference: CoverArtSourcePreference,
 ) {
     companion object {
         private const val TAG = "MBEnrichmentService"
@@ -284,7 +285,7 @@ class MusicBrainzEnrichmentService @Inject constructor(
             is SearchResult.Found -> {
                 // Check if we already have metadata for this MusicBrainz ID
                 val existingByMbid = enrichedMetadataDao.findByMusicBrainzId(searchResult.recording.id)
-                if (existingByMbid != null && existingByMbid.trackId != track.id && existingByMbid.isCacheValid()) {
+                if (!forceRefresh && existingByMbid != null && existingByMbid.trackId != track.id && existingByMbid.isCacheValid()) {
                     // Reuse existing metadata for different track with same MB ID
                     Log.d(TAG, "Deduplication: reusing metadata from track ${existingByMbid.trackId}")
                     val reusable = existingByMbid.copy(
@@ -685,21 +686,22 @@ class MusicBrainzEnrichmentService @Inject constructor(
             // MusicBrainz (priority 5) should not overwrite Spotify (priority 6)
             val currentSource = existingMetadata?.albumArtSource ?: AlbumArtSource.NONE
             val shouldUpdateArt = albumArtUrl != null && 
-                currentSource.shouldBeReplacedBy(AlbumArtSource.MUSICBRAINZ)
+                coverArtSourcePreference.shouldReplace(currentSource, AlbumArtSource.MUSICBRAINZ)
             
             // Build metadata - use complete artist name that includes all credited artists
             // Respect existing album art if from higher priority source (e.g., Spotify)
-            val metadata = EnrichedMetadata(
-                id = existingMetadata?.id ?: 0,
-                trackId = track.id,
+            // Keep metadata supplied by Spotify, iTunes and Deezer when refreshing
+            // the MusicBrainz cover. Rebuilding a blank entity would erase their IDs,
+            // preview URLs and audio features from a previously enriched track.
+            val metadata = (existingMetadata ?: EnrichedMetadata(trackId = track.id)).copy(
                 musicbrainzRecordingId = recording.id,
                 musicbrainzArtistId = primaryArtist?.id,
                 musicbrainzReleaseId = primaryRelease?.id,
                 musicbrainzReleaseGroupId = primaryRelease?.releaseGroup?.id,
-                albumTitle = primaryRelease?.title,
-                releaseDate = releaseDate,
-                releaseYear = releaseYear,
-                releaseType = primaryRelease?.releaseGroup?.primaryType,
+                albumTitle = primaryRelease?.title ?: existingMetadata?.albumTitle,
+                releaseDate = releaseDate ?: existingMetadata?.releaseDate,
+                releaseYear = releaseYear ?: existingMetadata?.releaseYear,
+                releaseType = primaryRelease?.releaseGroup?.primaryType ?: existingMetadata?.releaseType,
                 albumArtUrl = if (shouldUpdateArt) albumArtUrl else (existingMetadata?.albumArtUrl ?: albumArtUrl),
                 albumArtUrlSmall = if (shouldUpdateArt) albumArtUrlSmall else (existingMetadata?.albumArtUrlSmall ?: albumArtUrlSmall),
                 albumArtUrlLarge = if (shouldUpdateArt) albumArtUrlLarge else (existingMetadata?.albumArtUrlLarge ?: albumArtUrlLarge),
@@ -707,14 +709,14 @@ class MusicBrainzEnrichmentService @Inject constructor(
                 albumArtSource = if (shouldUpdateArt) AlbumArtSource.MUSICBRAINZ 
                                  else (existingMetadata?.albumArtSource ?: 
                                        if (albumArtUrl != null) AlbumArtSource.MUSICBRAINZ else AlbumArtSource.NONE),
-                artistName = allArtistNames ?: primaryArtist?.name ?: recording.artistCredit?.firstOrNull()?.name,
-                artistCountry = primaryArtist?.country,
-                artistType = primaryArtist?.type,
-                trackDurationMs = recording.length,
-                isrc = recording.isrcs?.firstOrNull(),
-                tags = tags,
-                genres = genres,
-                recordLabel = primaryRelease?.labelInfo?.firstOrNull()?.label?.name,
+                artistName = allArtistNames ?: primaryArtist?.name ?: recording.artistCredit?.firstOrNull()?.name ?: existingMetadata?.artistName,
+                artistCountry = primaryArtist?.country ?: existingMetadata?.artistCountry,
+                artistType = primaryArtist?.type ?: existingMetadata?.artistType,
+                trackDurationMs = recording.length ?: existingMetadata?.trackDurationMs,
+                isrc = recording.isrcs?.firstOrNull() ?: existingMetadata?.isrc,
+                tags = if (tags.isNotEmpty()) tags else (existingMetadata?.tags ?: emptyList()),
+                genres = if (genres.isNotEmpty()) genres else (existingMetadata?.genres ?: emptyList()),
+                recordLabel = primaryRelease?.labelInfo?.firstOrNull()?.label?.name ?: existingMetadata?.recordLabel,
                 enrichmentStatus = EnrichmentStatus.ENRICHED,
                 enrichmentError = null,
                 retryCount = 0,

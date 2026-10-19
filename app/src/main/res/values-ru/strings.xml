@@ -1317,4 +1317,9 @@
     <string name="details_cover_preview_error">Не удалось загрузить предпросмотр изображения</string>
     <string name="details_cover_current_hint">Текущая отображаемая обложка</string>
     <string name="details_cover_retry_source">Повторить этот источник</string>
+
+    <!-- Preferred album artwork source -->
+    <string name="settings_cover_source_title">Предпочитаемый источник обложек</string>
+    <string name="settings_cover_source_description">Выберите сервис, который будет опрашиваться первым для обложек альбомов. Если обложка не найдена, Tempo автоматически использует другие сервисы.</string>
+    <string name="settings_cover_source_automatic">Автоматически (по умолчанию)</string>
 </resources>

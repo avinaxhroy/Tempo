@@ -336,11 +336,16 @@ enum class AlbumArtSource(val priority: Int) {
      * Returns true if the other source has higher or equal priority.
      * Equal priority allows refreshing stale art from same source.
      */
-    fun shouldBeReplacedBy(other: AlbumArtSource): Boolean {
+    fun shouldBeReplacedBy(other: AlbumArtSource, preferred: AlbumArtSource? = null): Boolean {
         // USER_RESET is a control-state tombstone, not an artwork source. It is
         // applied only by the explicit reset action and must never win automatic
         // source arbitration.
         if (other == NONE || other == USER_RESET) return false
+        if (this.priority > SPOTIFY.priority) return false
+        if (preferred != null) {
+            if (this == preferred) return other == preferred
+            if (other == preferred) return true
+        }
         return other.priority >= this.priority
     }
     

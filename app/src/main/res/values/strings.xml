@@ -1549,4 +1549,9 @@
     <string name="details_cover_load_error">Failed to load cover art</string>
     <string name="details_cover_save_error">Failed to save cover art</string>
     <string name="details_cover_restore_auto_error">Failed to restore automatic artwork</string>
+
+    <!-- Preferred album artwork source -->
+    <string name="settings_cover_source_title">Preferred cover source</string>
+    <string name="settings_cover_source_description">Choose which service to try first for album artwork. If no cover is found, Tempo falls back to other services automatically.</string>
+    <string name="settings_cover_source_automatic">Automatic (default)</string>
 </resources>

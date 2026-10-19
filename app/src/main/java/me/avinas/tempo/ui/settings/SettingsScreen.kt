@@ -13,9 +13,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
@@ -39,6 +41,7 @@ import kotlinx.coroutines.delay
 import me.avinas.tempo.R
 import me.avinas.tempo.data.importexport.ImportConflictStrategy
 import me.avinas.tempo.data.importexport.ImportExportResult
+import me.avinas.tempo.data.local.entities.AlbumArtSource
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.SettingsOption
@@ -106,6 +109,17 @@ fun SettingsScreen(
 
     // Language selector state
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showCoverSourceDialog by remember { mutableStateOf(false) }
+    val coverSourceOptions: List<Pair<AlbumArtSource?, String>> = listOf(
+        null to stringResource(R.string.settings_cover_source_automatic),
+        AlbumArtSource.DEEZER to "Deezer",
+        AlbumArtSource.SPOTIFY to "Spotify",
+        AlbumArtSource.ITUNES to "Apple Music / iTunes",
+        AlbumArtSource.MUSICBRAINZ to "MusicBrainz",
+    )
+    val selectedCoverSourceName =
+        coverSourceOptions.firstOrNull { it.first == uiState.preferredCoverSource }?.second
+            ?: stringResource(R.string.settings_cover_source_automatic)
     val currentLocale = AppCompatDelegate.getApplicationLocales().get(0)?.language ?: "en"
     val languages =
         listOf(
@@ -462,6 +476,12 @@ fun SettingsScreen(
                                 },
                             checked = uiState.pauseTrackingOnLowBattery,
                             onCheckedChange = viewModel::togglePauseTrackingOnLowBattery,
+                        )
+                        HorizontalDivider(color = GlassBorderSoft)
+                        SettingsOption(
+                            title = stringResource(R.string.settings_cover_source_title),
+                            subtitle = selectedCoverSourceName,
+                            onClick = { showCoverSourceDialog = true },
                         )
                     }
                 }
@@ -929,6 +949,63 @@ fun SettingsScreen(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showLanguageDialog = false }) {
+                    Text(stringResource(R.string.settings_cancel), color = TextTertiary)
+                }
+            },
+        )
+    }
+
+    // Preferred album artwork provider
+    if (showCoverSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { showCoverSourceDialog = false },
+            containerColor = TempoSurfaceDialog,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    stringResource(R.string.settings_cover_source_title),
+                    color = TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        stringResource(R.string.settings_cover_source_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    coverSourceOptions.forEach { (source, name) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .selectable(
+                                    selected = source == uiState.preferredCoverSource,
+                                    onClick = {
+                                        viewModel.setPreferredCoverSource(source)
+                                        showCoverSourceDialog = false
+                                    },
+                                    role = Role.RadioButton,
+                                )
+                                .padding(vertical = 10.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = source == uiState.preferredCoverSource,
+                                onClick = null,
+                                colors = RadioButtonDefaults.colors(selectedColor = TempoPrimary),
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(name, style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showCoverSourceDialog = false }) {
                     Text(stringResource(R.string.settings_cancel), color = TextTertiary)
                 }
             },

@@ -24,6 +24,8 @@ import me.avinas.tempo.data.importexport.ImportExportManager
 import me.avinas.tempo.data.importexport.ImportExportProgress
 import me.avinas.tempo.data.importexport.ImportExportResult
 import me.avinas.tempo.data.local.AppDatabase
+import me.avinas.tempo.data.local.entities.AlbumArtSource
+import me.avinas.tempo.data.enrichment.CoverArtSourcePreference
 import me.avinas.tempo.data.profile.ProfileIdentityManager
 import me.avinas.tempo.ui.onboarding.dataStore
 import me.avinas.tempo.worker.ChallengeWorker
@@ -45,6 +47,7 @@ class SettingsViewModel
         private val analyticsInstallId: me.avinas.tempo.data.analytics.AnalyticsInstallId,
         private val analyticsDailyLedger: me.avinas.tempo.data.analytics.AnalyticsDailyLedger,
         private val analyticsFeatureLedger: me.avinas.tempo.data.analytics.AnalyticsFeatureLedger,
+        private val coverArtSourcePreference: CoverArtSourcePreference,
     ) : ViewModel() {
         private val _uiState = MutableStateFlow(SettingsUiState())
         val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -88,6 +91,8 @@ class SettingsViewModel
                         achievementsEnabled = dataStorePrefs[NOTIF_ACHIEVEMENTS_KEY] ?: true,
                         dailyChallengesEnabled = dataStorePrefs[NOTIF_CHALLENGES_KEY] ?: true,
                         extendedAudioAnalysisEnabled = dataStorePrefs[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
+                        // Load preference directly from DataStore snapshot to avoid race conditions.
+                        preferredCoverSource = CoverArtSourcePreference.decode(dataStorePrefs[CoverArtSourcePreference.PREFERENCE_KEY]) ?: it.preferredCoverSource,
                         userName = dataStorePrefs[USER_NAME_KEY] ?: "User",
                         profileImagePath = profileIdentityManager.getStoredProfileImagePath(),
                         mergeAlternateVersions = roomPrefs.mergeAlternateVersions,
@@ -133,6 +138,12 @@ class SettingsViewModel
                             extendedAudioAnalysisEnabled = preferences[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
                         )
                     }
+                }
+            }
+
+            viewModelScope.launch {
+                coverArtSourcePreference.preferredSource.collect { preferred ->
+                    _uiState.update { it.copy(preferredCoverSource = preferred) }
                 }
             }
 
@@ -237,6 +248,15 @@ class SettingsViewModel
                 } else {
                     // Disabled: cancel any pending challenge notification
                     NotificationWorker.cancelChallengeReady(context)
+                }
+            }
+        }
+
+        fun setPreferredCoverSource(source: AlbumArtSource?) {
+            viewModelScope.launch {
+                coverArtSourcePreference.setPreferredSource(source)
+                if (source != null) {
+                    database.enrichedMetadataDao().requeueTracksNotMatchingCoverSource(source)
                 }
             }
         }
@@ -474,6 +494,7 @@ data class SettingsUiState(
     val achievementsEnabled: Boolean = true,
     val dailyChallengesEnabled: Boolean = true,
     val extendedAudioAnalysisEnabled: Boolean = false,
+    val preferredCoverSource: AlbumArtSource? = null,
     val isSpotifyConnected: Boolean = false,
     val spotifyUsername: String? = null,
     val userName: String = "User",

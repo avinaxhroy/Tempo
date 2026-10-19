@@ -3,9 +3,10 @@ package me.avinas.tempo.data.enrichment
 import android.util.Log
 import me.avinas.tempo.data.remote.deezer.DeezerApi
 import me.avinas.tempo.data.remote.deezer.DeezerTrack
+import me.avinas.tempo.utils.ArtistParser
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
 /**
@@ -23,7 +24,7 @@ class DeezerEnrichmentService @Inject constructor(
     
     sealed class DeezerResult {
         data class Success(
-            val previewUrl: String,
+            val previewUrl: String? = null,
             val deezerId: Long,
             val link: String,
             val coverMd5: String?,
@@ -182,106 +183,68 @@ class DeezerEnrichmentService @Inject constructor(
     }
 
     /**
-     * Search for a track and get its preview URL.
+     * Search for a track and get its preview URL, album art, and artist image.
      */
     suspend fun getAudioPreview(
         artist: String,
         track: String,
         album: String? = null
     ): DeezerResult {
+        if (ArtistParser.isUnknownArtist(artist)) return DeezerResult.NotFound
         return try {
-            // Deezer advanced search syntax: artist:"..." track:"..."
-            // Strip featured artists and clean title for Deezer search syntax
-            val cleanArtist = sanitizeDeezerSearchValue(
-                me.avinas.tempo.utils.ArtistParser.getPrimaryArtist(artist)
-            )
-            val cleanTrack = sanitizeDeezerSearchValue(
-                me.avinas.tempo.utils.ArtistParser.cleanTrackTitle(track)
-            )
-            
-            // Construct query: artist:'X' track:'Y'
-            // We use standard quotes for Deezer syntax
+            val cleanArtist = sanitizeDeezerSearchValue(ArtistParser.getPrimaryArtist(artist))
+            val cleanTrack = sanitizeDeezerSearchValue(ArtistParser.cleanTrackTitle(track))
+            if (cleanArtist.isBlank() || cleanTrack.isBlank()) return DeezerResult.NotFound
             val query = "artist:\"$cleanArtist\" track:\"$cleanTrack\""
-            
             Log.d(TAG, "Searching Deezer: $query")
-            
-            val response = deezerApi.searchTracks(query)
-            
+
+            val response = deezerApi.searchTracks(query, limit = 25)
             if (!response.isSuccessful) {
                 return DeezerResult.Error("API Error: ${response.code()}")
             }
-            
-            val results = response.body()?.data
-            if (results.isNullOrEmpty()) {
-                // Try relaxed search (just text, no filters) if structured search failed
-                Log.d(TAG, "Structured search failed, trying loose search for '$cleanTrack $cleanArtist'")
-                val looseQuery = "$cleanTrack $cleanArtist"
-                return searchLoose(looseQuery)
+
+            val results = response.body()?.data.orEmpty()
+            val match = findPreferredDeezerArtwork(results, artist, track, album)
+                ?: if (results.isEmpty()) searchLoose(artist, track, album) else null
+
+            if (match == null) {
+                return DeezerResult.NotFound
             }
-            
-            // Find best match (prefer one with preview)
-            val bestMatch = results.firstOrNull { 
-                !it.preview.isNullOrBlank() 
-            } ?: results.first()
-            
-            if (bestMatch.preview.isNullOrBlank()) {
-                return DeezerResult.Error("Track found but no preview available")
-            }
-            
-            Log.i(TAG, "Found Deezer match: '${bestMatch.title}' by '${bestMatch.artist.name}' with cover art and artist image")
-            
+
+            Log.i(TAG, "Found Deezer match: '${match.title}' by '${match.artist.name}'")
+
             DeezerResult.Success(
-                previewUrl = bestMatch.preview,
-                deezerId = bestMatch.id,
-                link = bestMatch.link,
-                coverMd5 = bestMatch.album.md5Image,
-                // Include album cover art URLs
-                albumArtUrl = bestMatch.album.coverBig ?: bestMatch.album.coverMedium,
-                albumArtUrlSmall = bestMatch.album.coverSmall,
-                albumArtUrlLarge = bestMatch.album.coverXl ?: bestMatch.album.coverBig,
-                // Include artist image URL
-                artistImageUrl = bestMatch.artist.pictureXl ?: bestMatch.artist.pictureBig ?: bestMatch.artist.pictureMedium,
-                // Album title for fallback
-                albumTitle = bestMatch.album.title
+                previewUrl = match.preview?.takeIf { it.isNotBlank() },
+                deezerId = match.id,
+                link = match.link,
+                coverMd5 = match.album.md5Image,
+                albumArtUrl = match.album.coverXl ?: match.album.coverBig
+                    ?: match.album.coverMedium ?: match.album.coverSmall,
+                albumArtUrlSmall = match.album.coverSmall,
+                albumArtUrlLarge = match.album.coverXl ?: match.album.coverBig,
+                artistImageUrl = match.artist.pictureXl ?: match.artist.pictureBig
+                    ?: match.artist.pictureMedium,
+                albumTitle = match.album.title,
             )
-            
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Log.e(TAG, "Deezer search error", e)
             DeezerResult.Error(e.message ?: "Unknown error")
         }
     }
-    
-    private suspend fun searchLoose(query: String): DeezerResult {
-        try {
+
+    private suspend fun searchLoose(artist: String, track: String, album: String?): DeezerTrack? {
+        return try {
             delay(RATE_LIMIT_DELAY_MS)
-            val response = deezerApi.searchTracks(query)
-            
-            if (!response.isSuccessful) return DeezerResult.NotFound
-            
-            val results = response.body()?.data
-            if (results.isNullOrEmpty()) return DeezerResult.NotFound
-            
-            val bestMatch = results.firstOrNull { !it.preview.isNullOrBlank() } 
-                ?: return DeezerResult.NotFound
-                
-            Log.i(TAG, "Found Deezer match (loose search): '${bestMatch.title}' with cover art and artist image")
-            
-            return DeezerResult.Success(
-                previewUrl = bestMatch.preview!!,
-                deezerId = bestMatch.id,
-                link = bestMatch.link,
-                coverMd5 = bestMatch.album.md5Image,
-                // Include album cover art URLs
-                albumArtUrl = bestMatch.album.coverBig ?: bestMatch.album.coverMedium,
-                albumArtUrlSmall = bestMatch.album.coverSmall,
-                albumArtUrlLarge = bestMatch.album.coverXl ?: bestMatch.album.coverBig,
-                // Include artist image URL
-                artistImageUrl = bestMatch.artist.pictureXl ?: bestMatch.artist.pictureBig ?: bestMatch.artist.pictureMedium,
-                // Album title for fallback
-                albumTitle = bestMatch.album.title
-            )
+            val cleanArtist = sanitizeDeezerSearchValue(ArtistParser.getPrimaryArtist(artist))
+            val cleanTrack = sanitizeDeezerSearchValue(ArtistParser.cleanTrackTitle(track))
+            val response = deezerApi.searchTracks("$cleanTrack $cleanArtist", limit = 10)
+            if (!response.isSuccessful) return null
+            val results = response.body()?.data.orEmpty()
+            findPreferredDeezerArtwork(results, artist, track, album)
         } catch (e: Exception) {
-            return DeezerResult.Error(e.message ?: "Unknown error")
+            null
         }
     }
 }
@@ -307,3 +270,51 @@ internal fun sanitizeDeezerSearchValue(value: String): String =
         .trim()
 
 private val WHITESPACE_RUN = Regex("""\s+""")
+
+/**
+ * Strict matching for preferred covers; never take Deezer's first result simply
+ * because it has a preview. This deliberately does not alter legacy preview lookup.
+ */
+internal fun findPreferredDeezerArtwork(
+    results: List<DeezerTrack>,
+    artist: String,
+    title: String,
+    album: String?,
+): DeezerTrack? {
+    val expectedTitle = ArtistParser.normalizeForSearch(title)
+    val cleanedTitle = ArtistParser.normalizeForSearch(ArtistParser.cleanTrackTitle(title))
+    val expectedAlbum = album?.let(ArtistParser::normalizeForSearch).orEmpty()
+    if (expectedTitle.isBlank() || ArtistParser.isUnknownArtist(artist)) return null
+    val primaryArtist = ArtistParser.getPrimaryArtist(artist)
+    return results
+        .asSequence()
+        .filter { candidate ->
+            val a = candidate.album
+            val hasCover = listOf(a.coverXl, a.coverBig, a.coverMedium, a.coverSmall)
+                .any { !it.isNullOrBlank() }
+            val candidateArtistMatches = ArtistParser.isStrictSameArtist(primaryArtist, candidate.artist.name) ||
+                ArtistParser.isStrictSameArtist(primaryArtist, ArtistParser.getPrimaryArtist(candidate.artist.name))
+            if (!hasCover || !candidateArtistMatches) {
+                false
+            } else {
+                val candidates = listOf(candidate.title, candidate.titleShort)
+                    .map(ArtistParser::normalizeForSearch)
+                val exact = expectedTitle in candidates
+                val cleanedMatch = cleanedTitle.isNotBlank() &&
+                    listOf(candidate.title, candidate.titleShort).any {
+                        ArtistParser.normalizeForSearch(ArtistParser.cleanTrackTitle(it)) == cleanedTitle
+                    }
+                exact || cleanedMatch
+            }
+        }
+        .sortedWith(
+            compareByDescending<DeezerTrack> {
+                expectedAlbum.isNotBlank() &&
+                    ArtistParser.normalizeForSearch(it.album.title) == expectedAlbum
+            }.thenByDescending {
+                ArtistParser.normalizeForSearch(it.title) == expectedTitle ||
+                    ArtistParser.normalizeForSearch(it.titleShort) == expectedTitle
+            },
+        )
+        .firstOrNull()
+}
