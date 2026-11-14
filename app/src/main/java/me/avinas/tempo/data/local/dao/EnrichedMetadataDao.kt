@@ -273,6 +273,18 @@ interface EnrichedMetadataDao {
         trackId: Long, 
         newStatus: EnrichmentStatus = EnrichmentStatus.PENDING
     )
+
+    /**
+     * Requeue tracks whose current album art source does not match the preferred source,
+     * so that subsequent enrichment will attempt to fetch covers from the preferred provider.
+     */
+    @Query("""
+        UPDATE enriched_metadata
+        SET enrichment_status = 'PENDING', retry_count = 0
+        WHERE album_art_source != :preferredSource
+          AND album_art_source != 'NONE'
+    """)
+    suspend fun requeueTracksNotMatchingCoverSource(preferredSource: AlbumArtSource): Int
     
     @Query("SELECT COUNT(*) FROM enriched_metadata WHERE enrichment_status = :status")
     suspend fun countByStatus(status: EnrichmentStatus): Int

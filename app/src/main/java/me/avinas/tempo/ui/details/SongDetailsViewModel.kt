@@ -229,7 +229,7 @@ class SongDetailsViewModel @Inject constructor(
 
                 // On-demand enrichment trigger
                 if (!hasTriggeredOnDemandEnrichment
-                    && details.track.albumArtUrl.isNullOrBlank()
+                    && (details.track.albumArtUrl.isNullOrBlank() || enrichedMetadata?.enrichmentStatus == EnrichmentStatus.PENDING)
                     && enrichedMetadata?.enrichmentStatus != EnrichmentStatus.ENRICHED) {
                     hasTriggeredOnDemandEnrichment = true
                     enrichedMetadataRepository.markForReEnrichment(trackId)

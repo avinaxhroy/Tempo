@@ -725,4 +725,9 @@
     <string name="details_cover_preview_error">Az előnézet betöltése nem sikerült</string>
     <string name="details_cover_current_hint">Jelenleg megjelenített borító</string>
     <string name="details_cover_retry_source">Forrás újrapróbálása</string>
+
+    <!-- Preferred album artwork source -->
+    <string name="settings_cover_source_title">Előnyben részesített borítóforrás</string>
+    <string name="settings_cover_source_description">Válassza ki, melyik szolgáltatásból próbáljon először borítót betölteni. Ha nem található borító, a Tempo automatikusan más szolgáltatásokat használ.</string>
+    <string name="settings_cover_source_automatic">Automatikus (alapértelmezett)</string>
 </resources>

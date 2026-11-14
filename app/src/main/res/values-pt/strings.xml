@@ -1200,4 +1200,9 @@
     <string name="details_cover_preview_error">Não foi possível carregar a pré-visualização da imagem</string>
     <string name="details_cover_current_hint">Capa exibida atualmente</string>
     <string name="details_cover_retry_source">Tentar novamente esta fonte</string>
+
+    <!-- Preferred album artwork source -->
+    <string name="settings_cover_source_title">Fonte preferida das capas</string>
+    <string name="settings_cover_source_description">Escolha qual serviço consultar primeiro para capas de álbuns. Se nenhuma capa for encontrada, o Tempo usa outros serviços automaticamente.</string>
+    <string name="settings_cover_source_automatic">Automático (predefinido)</string>
 </resources>

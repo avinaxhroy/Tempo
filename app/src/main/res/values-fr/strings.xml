@@ -1089,4 +1089,9 @@
     <string name="details_cover_load_error">Impossible de charger les pochettes</string>
     <string name="details_cover_save_error">Impossible d’enregistrer la pochette</string>
     <string name="details_cover_restore_auto_error">Impossible de rétablir la sélection automatique</string>
+
+    <!-- Preferred album artwork source -->
+    <string name="settings_cover_source_title">Fournisseur de pochettes</string>
+    <string name="settings_cover_source_description">Choisissez le service utilisé en priorité pour les pochettes d\'album. Si aucune pochette n\'est trouvée, Tempo utilise automatiquement les autres services.</string>
+    <string name="settings_cover_source_automatic">Automatique (par défaut)</string>
 </resources>

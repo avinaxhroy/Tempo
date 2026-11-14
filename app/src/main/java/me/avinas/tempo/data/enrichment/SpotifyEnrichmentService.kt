@@ -30,7 +30,8 @@ class SpotifyEnrichmentService @Inject constructor(
     private val enrichedMetadataDao: EnrichedMetadataDao,
     private val artistDao: me.avinas.tempo.data.local.dao.ArtistDao,
     private val artistAliasDao: ArtistAliasDao,
-    private val moshi: Moshi
+    private val moshi: Moshi,
+    private val coverArtSourcePreference: CoverArtSourcePreference,
 ) {
     companion object {
         private const val TAG = "SpotifyEnrichment"
@@ -68,10 +69,20 @@ class SpotifyEnrichmentService @Inject constructor(
             return SpotifyEnrichmentResult.NotConnected
         }
 
-        // Check if we already have Spotify data
+        // A Spotify ID does not mean its cover is currently selected. When the
+        // user explicitly prefers Spotify, permit a fresh lookup to replace an
+        // existing cover from another source during the next enrichment.
         if (existingMetadata?.spotifyId != null) {
-            Log.d(TAG, "Track ${track.id} already has Spotify data")
-            return SpotifyEnrichmentResult.Success(existingMetadata.spotifyId)
+            val preferredArtworkNeedsRefresh =
+                coverArtSourcePreference.getPreferredSource() ==
+                    me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY &&
+                    (existingMetadata.albumArtSource !=
+                        me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY ||
+                        existingMetadata.albumArtUrl.isNullOrBlank())
+            if (!preferredArtworkNeedsRefresh) {
+                Log.d(TAG, "Track ${track.id} already has Spotify data")
+                return SpotifyEnrichmentResult.Success(existingMetadata.spotifyId)
+            }
         }
 
         // Skip enrichment if artist is unknown - waiting for metadata to settle
@@ -448,7 +459,7 @@ class SpotifyEnrichmentService @Inject constructor(
         val currentSource = existingMetadata?.albumArtSource ?: me.avinas.tempo.data.local.entities.AlbumArtSource.NONE
         val hasSpotifyArt = spotifyTrack.album.mediumImageUrl != null
         val shouldUpdateArt = hasSpotifyArt && (existingMetadata?.albumArtUrl.isNullOrBlank() || 
-            currentSource.shouldBeReplacedBy(me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY))
+            coverArtSourcePreference.shouldReplace(currentSource, me.avinas.tempo.data.local.entities.AlbumArtSource.SPOTIFY))
 
         val updated = existingMetadata?.copy(
             spotifyId = spotifyTrack.id,
