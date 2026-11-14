@@ -156,4 +156,97 @@ class AutomaticArtworkWriteGuardTest {
         assertEquals(refreshed, mergeAutomaticEnrichmentArtwork(current, refreshed))
     }
 
+    /**
+     * The preferred-provider setting only takes effect at this boundary: enrichment
+     * sources compute their own `shouldUpdateArt`, but the merge re-arbitrates against
+     * the row that is actually in the database. Passing `preferred` here is what lets a
+     * preferred lower-priority provider displace an already-stored higher-priority cover.
+     */
+    @Test
+    fun preferredProviderCanDisplaceHigherPriorityStoredArtwork() {
+        val current = EnrichedMetadata(
+            trackId = 1L,
+            albumArtUrl = "https://spotify.example/current.jpg",
+            albumArtSource = AlbumArtSource.SPOTIFY,
+        )
+        val deezerArt = EnrichedMetadata(
+            trackId = 1L,
+            albumArtUrl = "https://deezer.example/preferred.jpg",
+            albumArtSource = AlbumArtSource.DEEZER,
+        )
+
+        val merged = mergeAutomaticEnrichmentArtwork(
+            current = current,
+            incoming = deezerArt,
+            preferred = AlbumArtSource.DEEZER,
+        )
+
+        assertEquals(AlbumArtSource.DEEZER, merged.albumArtSource)
+        assertEquals("https://deezer.example/preferred.jpg", merged.albumArtUrl)
+    }
+
+    @Test
+    fun preferredProviderWinsEvenWhenHigherPriorityCoverArrivesLater() {
+        val current = EnrichedMetadata(
+            trackId = 1L,
+            albumArtUrl = "https://deezer.example/preferred.jpg",
+            albumArtSource = AlbumArtSource.DEEZER,
+        )
+        val spotifyArt = EnrichedMetadata(
+            trackId = 1L,
+            albumArtUrl = "https://spotify.example/later.jpg",
+            albumArtSource = AlbumArtSource.SPOTIFY,
+        )
+
+        val merged = mergeAutomaticEnrichmentArtwork(
+            current = current,
+            incoming = spotifyArt,
+            preferred = AlbumArtSource.DEEZER,
+        )
+
+        assertEquals(AlbumArtSource.DEEZER, merged.albumArtSource)
+        assertEquals("https://deezer.example/preferred.jpg", merged.albumArtUrl)
+    }
+
+    @Test
+    fun withoutPreferenceExistingPriorityOrderIsUnchanged() {
+        val current = EnrichedMetadata(
+            trackId = 1L,
+            albumArtUrl = "https://spotify.example/current.jpg",
+            albumArtSource = AlbumArtSource.SPOTIFY,
+        )
+        val deezerArt = EnrichedMetadata(
+            trackId = 1L,
+            albumArtUrl = "https://deezer.example/lower.jpg",
+            albumArtSource = AlbumArtSource.DEEZER,
+        )
+
+        val merged = mergeAutomaticEnrichmentArtwork(current, deezerArt)
+
+        assertEquals(AlbumArtSource.SPOTIFY, merged.albumArtSource)
+        assertEquals("https://spotify.example/current.jpg", merged.albumArtUrl)
+    }
+
+    @Test
+    fun preferenceNeverOverridesAManualChoice() {
+        val manual = EnrichedMetadata(
+            trackId = 1L,
+            albumArtUrl = "https://manual.example/pinned.jpg",
+            albumArtSource = AlbumArtSource.USER_SELECTED,
+        )
+        val preferredArt = EnrichedMetadata(
+            trackId = 1L,
+            albumArtUrl = "https://deezer.example/preferred.jpg",
+            albumArtSource = AlbumArtSource.DEEZER,
+        )
+
+        val merged = mergeAutomaticEnrichmentArtwork(
+            current = manual,
+            incoming = preferredArt,
+            preferred = AlbumArtSource.DEEZER,
+        )
+
+        assertEquals(AlbumArtSource.USER_SELECTED, merged.albumArtSource)
+        assertEquals("https://manual.example/pinned.jpg", merged.albumArtUrl)
+    }
 }

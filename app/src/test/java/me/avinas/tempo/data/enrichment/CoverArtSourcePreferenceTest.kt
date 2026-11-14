@@ -36,7 +36,6 @@ class CoverArtSourcePreferenceTest {
         assertEquals(null, CoverArtSourcePreference.decode("UNSUPPORTED"))
         assertEquals(null, CoverArtSourcePreference.decode(null))
         assertEquals(AlbumArtSource.DEEZER, CoverArtSourcePreference.decode("DEEZER"))
-        assertEquals(AlbumArtSource.SPOTIFY, CoverArtSourcePreference.decode("SPOTIFY"))
         assertEquals(AlbumArtSource.ITUNES, CoverArtSourcePreference.decode("ITUNES"))
         assertEquals(AlbumArtSource.MUSICBRAINZ, CoverArtSourcePreference.decode("MUSICBRAINZ"))
     }
@@ -47,13 +46,20 @@ class CoverArtSourcePreferenceTest {
     }
 
     @Test
-    fun futureUserSelectedSourceHigherThanSpotifyIsNeverReplaced() {
-        // Simulating a future source with priority > SPOTIFY.priority
-        val higherPrioritySource = object {
-            val priority = AlbumArtSource.SPOTIFY.priority + 1
-        }
-        // When current source priority exceeds Spotify priority, shouldReplace is false
-        // Tested via AlbumArtSource boundary rule
-        assertFalse(CoverArtSourcePreference.shouldReplace(AlbumArtSource.SPOTIFY, AlbumArtSource.DEEZER, null))
+    fun spotifyIsNotAnOfferedPreference() {
+        // Spotify art only exists for tracks already linked to a Spotify ID, so it is not
+        // something a user can meaningfully prefer. A stored "SPOTIFY" value must decay to
+        // Automatic rather than resurrect a provider we no longer offer.
+        assertFalse(AlbumArtSource.SPOTIFY in CoverArtSourcePreference.PROVIDERS)
+        assertEquals(null, CoverArtSourcePreference.decode("SPOTIFY"))
+    }
+
+    @Test
+    fun providerListCoversEveryNonSpotifyApiSource() {
+        // Guards the setting against silently losing a provider during refactors.
+        assertEquals(
+            listOf(AlbumArtSource.MUSICBRAINZ, AlbumArtSource.ITUNES, AlbumArtSource.DEEZER),
+            CoverArtSourcePreference.PROVIDERS,
+        )
     }
 }

@@ -1,6 +1,7 @@
 package me.avinas.tempo.data.repository
 
 import me.avinas.tempo.data.local.dao.EnrichedMetadataDao
+import me.avinas.tempo.data.local.entities.AlbumArtSource
 import me.avinas.tempo.data.local.entities.EnrichedMetadata
 import me.avinas.tempo.data.local.entities.EnrichmentStatus
 import me.avinas.tempo.data.local.entities.SpotifyEnrichmentStatus
@@ -24,8 +25,10 @@ class RoomEnrichedMetadataRepository @Inject constructor(
     
     override suspend fun upsert(metadata: EnrichedMetadata): Long = dao.upsert(metadata)
 
-    override suspend fun upsertFromAutomaticEnrichment(metadata: EnrichedMetadata): Long =
-        dao.upsertFromAutomaticEnrichment(metadata)
+    override suspend fun upsertFromAutomaticEnrichment(
+        metadata: EnrichedMetadata,
+        preferred: AlbumArtSource?,
+    ): Long = dao.upsertFromAutomaticEnrichment(metadata, preferred)
 
     override suspend fun setUserSelectedArtwork(
         trackId: Long,

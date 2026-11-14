@@ -23,8 +23,15 @@ class CoverArtSourcePreference @Inject constructor(
     companion object {
         val PREFERENCE_KEY = stringPreferencesKey("preferred_album_art_provider")
 
+        /**
+         * Sources the user may pick as preferred.
+         *
+         * Spotify is deliberately excluded: its cover art is only available for tracks
+         * already linked to a Spotify ID, which is a minority of a local library, so
+         * offering it as a *preference* promises artwork most tracks can never get.
+         * Spotify art is still accepted through the normal automatic priority order.
+         */
         val PROVIDERS = listOf(
-            AlbumArtSource.SPOTIFY,
             AlbumArtSource.MUSICBRAINZ,
             AlbumArtSource.ITUNES,
             AlbumArtSource.DEEZER,

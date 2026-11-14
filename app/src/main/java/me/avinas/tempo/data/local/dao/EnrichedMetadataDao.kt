@@ -45,9 +45,12 @@ interface EnrichedMetadataDao {
      * - user resets to automatic while an older request still carries USER_SELECTED.
      */
     @Transaction
-    suspend fun upsertFromAutomaticEnrichment(metadata: EnrichedMetadata): Long {
+    suspend fun upsertFromAutomaticEnrichment(
+        metadata: EnrichedMetadata,
+        preferred: AlbumArtSource? = null,
+    ): Long {
         val current = forTrackSync(metadata.trackId)
-        val resolved = mergeAutomaticEnrichmentArtwork(current, metadata)
+        val resolved = mergeAutomaticEnrichmentArtwork(current, metadata, preferred)
         val rowId = upsert(resolved)
 
         // Track.album_art_url is normally a denormalized UI mirror, but it may
@@ -143,6 +146,7 @@ interface EnrichedMetadataDao {
     @Transaction
     suspend fun upsertAllFromAutomaticEnrichment(
         metadata: List<EnrichedMetadata>,
+        preferred: AlbumArtSource? = null,
     ): List<Long> {
         if (metadata.isEmpty()) return emptyList()
 
@@ -158,6 +162,7 @@ interface EnrichedMetadataDao {
             val resolved = mergeAutomaticEnrichmentArtwork(
                 current = currentByTrackId[item.trackId],
                 incoming = item,
+                preferred = preferred,
             )
             currentByTrackId[item.trackId] = resolved
             merged += resolved
@@ -275,16 +280,45 @@ interface EnrichedMetadataDao {
     )
 
     /**
-     * Requeue tracks whose current album art source does not match the preferred source,
-     * so that subsequent enrichment will attempt to fetch covers from the preferred provider.
+     * Queue tracks whose cached cover came from a source other than [preferredSource]
+     * so the preferred provider gets a chance to replace it.
+     *
+     * Only rows that already hold automatic artwork are requeued. User choices are
+     * never part of this sweep:
+     * - USER_SELECTED outranks every automatic provider, so re-enriching cannot change
+     *   the cover and would only churn API calls against a row the user pinned;
+     * - USER_RESET is the tombstone that keeps artwork deliberately empty.
+     * Rows already at [preferredSource] are skipped — nothing left to win there.
+     *
+     * Bounded on purpose: this runs from a single radio-button tap, so it must not
+     * issue one unbounded UPDATE across a library that can hold tens of thousands of
+     * rows. The worker drains the PENDING backlog in batches.
      */
     @Query("""
         UPDATE enriched_metadata
         SET enrichment_status = 'PENDING', retry_count = 0
         WHERE album_art_source != :preferredSource
-          AND album_art_source != 'NONE'
+          AND album_art_source IN ('LOCAL', 'DEEZER', 'ITUNES', 'MUSICBRAINZ', 'SPOTIFY')
+          AND album_art_url IS NOT NULL
+          AND album_art_url != ''
     """)
     suspend fun requeueTracksNotMatchingCoverSource(preferredSource: AlbumArtSource): Int
+
+    /**
+     * Requeue every track holding an automatic cover when the user returns to Automatic.
+     *
+     * No single provider is "the match" in Automatic mode, so there is nothing to compare
+     * against: arbitration is the fixed priority order and any automatic row may end up
+     * with a different winner than the one the previous preference pinned.
+     */
+    @Query("""
+        UPDATE enriched_metadata
+        SET enrichment_status = 'PENDING', retry_count = 0
+        WHERE album_art_source IN ('LOCAL', 'DEEZER', 'ITUNES', 'MUSICBRAINZ', 'SPOTIFY')
+          AND album_art_url IS NOT NULL
+          AND album_art_url != ''
+    """)
+    suspend fun requeueAllAutomaticArtworkSources(): Int
     
     @Query("SELECT COUNT(*) FROM enriched_metadata WHERE enrichment_status = :status")
     suspend fun countByStatus(status: EnrichmentStatus): Int
@@ -666,6 +700,7 @@ data class SpotifyEnrichmentStatusCount(
 internal fun mergeAutomaticEnrichmentArtwork(
     current: EnrichedMetadata?,
     incoming: EnrichedMetadata,
+    preferred: AlbumArtSource? = null,
 ): EnrichedMetadata {
     fun preserveCurrentArtwork(): EnrichedMetadata =
         incoming.copy(
@@ -733,7 +768,7 @@ internal fun mergeAutomaticEnrichmentArtwork(
 
     if (currentHasRealAutomaticArtwork &&
         incomingHasRealAutomaticArtwork &&
-        !current!!.albumArtSource.shouldBeReplacedBy(incoming.albumArtSource)
+        !current!!.albumArtSource.shouldBeReplacedBy(incoming.albumArtSource, preferred)
     ) {
         // The incoming request may have started before a higher-priority provider
         // finished. Preserve the winner while still accepting all non-art metadata

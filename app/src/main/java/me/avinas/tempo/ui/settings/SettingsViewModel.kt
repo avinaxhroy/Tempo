@@ -25,10 +25,12 @@ import me.avinas.tempo.data.importexport.ImportExportProgress
 import me.avinas.tempo.data.importexport.ImportExportResult
 import me.avinas.tempo.data.local.AppDatabase
 import me.avinas.tempo.data.local.entities.AlbumArtSource
+import me.avinas.tempo.data.local.entities.EnrichmentStatus
 import me.avinas.tempo.data.enrichment.CoverArtSourcePreference
 import me.avinas.tempo.data.profile.ProfileIdentityManager
 import me.avinas.tempo.ui.onboarding.dataStore
 import me.avinas.tempo.worker.ChallengeWorker
+import me.avinas.tempo.worker.EnrichmentWorker
 import me.avinas.tempo.worker.GamificationWorker
 import me.avinas.tempo.worker.NotificationWorker
 import me.avinas.tempo.worker.SpotifyPollingWorker
@@ -92,7 +94,10 @@ class SettingsViewModel
                         dailyChallengesEnabled = dataStorePrefs[NOTIF_CHALLENGES_KEY] ?: true,
                         extendedAudioAnalysisEnabled = dataStorePrefs[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
                         // Load preference directly from DataStore snapshot to avoid race conditions.
-                        preferredCoverSource = CoverArtSourcePreference.decode(dataStorePrefs[CoverArtSourcePreference.PREFERENCE_KEY]) ?: it.preferredCoverSource,
+                        // decode() returns null both for "absent" and "not a known provider", and
+                        // null *is* the Automatic value — falling back to the previous state here
+                        // would keep a stale provider name selected after the user resets.
+                        preferredCoverSource = CoverArtSourcePreference.decode(dataStorePrefs[CoverArtSourcePreference.PREFERENCE_KEY]),
                         userName = dataStorePrefs[USER_NAME_KEY] ?: "User",
                         profileImagePath = profileIdentityManager.getStoredProfileImagePath(),
                         mergeAlternateVersions = roomPrefs.mergeAlternateVersions,
@@ -255,8 +260,24 @@ class SettingsViewModel
         fun setPreferredCoverSource(source: AlbumArtSource?) {
             viewModelScope.launch {
                 coverArtSourcePreference.setPreferredSource(source)
+                // Requeue rows that still hold art from another automatic provider so the
+                // new preference can win. Returning to Automatic needs the same sweep: it
+                // hands arbitration back to the fixed priority order, which may well pick
+                // a different cover than the one the old preference pinned.
+                val dao = database.enrichedMetadataDao()
                 if (source != null) {
-                    database.enrichedMetadataDao().requeueTracksNotMatchingCoverSource(source)
+                    dao.requeueTracksNotMatchingCoverSource(source)
+                } else {
+                    dao.requeueAllAutomaticArtworkSources()
+                }
+                // Requeuing only flips rows to PENDING, so the preference does nothing until
+                // something drains them. A plain immediate run is not enough: it processes one
+                // 10-track batch, while the periodic worker only picks up 10 more per hour —
+                // a library-wide preference change would take weeks to apply. The Enrich All
+                // sweep is the existing mechanism that drains a backlog to empty.
+                val pending = dao.countByStatus(EnrichmentStatus.PENDING)
+                if (pending > 0) {
+                    EnrichmentWorker.enqueueEnrichAll(context, pending)
                 }
             }
         }

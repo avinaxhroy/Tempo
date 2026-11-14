@@ -1,5 +1,6 @@
 package me.avinas.tempo.data.repository
 
+import me.avinas.tempo.data.local.entities.AlbumArtSource
 import me.avinas.tempo.data.local.entities.EnrichedMetadata
 import me.avinas.tempo.data.local.entities.EnrichmentStatus
 import me.avinas.tempo.data.local.entities.SpotifyEnrichmentStatus
@@ -28,8 +29,15 @@ interface EnrichedMetadataRepository {
     /**
      * Persist metadata produced automatically while preserving the user's artwork lock
      * against in-flight enrichment races.
+     *
+     * [preferred] is the user's preferred cover provider, when one is set. It must be
+     * threaded through to the merge so that a cover from the preferred provider can
+     * displace one from a higher-priority-but-not-preferred provider.
      */
-    suspend fun upsertFromAutomaticEnrichment(metadata: EnrichedMetadata): Long
+    suspend fun upsertFromAutomaticEnrichment(
+        metadata: EnrichedMetadata,
+        preferred: AlbumArtSource? = null,
+    ): Long
 
     /** Atomically persist a user-selected cover and its Track-table mirror. */
     suspend fun setUserSelectedArtwork(

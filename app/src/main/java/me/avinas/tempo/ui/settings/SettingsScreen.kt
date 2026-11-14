@@ -112,10 +112,9 @@ fun SettingsScreen(
     var showCoverSourceDialog by remember { mutableStateOf(false) }
     val coverSourceOptions: List<Pair<AlbumArtSource?, String>> = listOf(
         null to stringResource(R.string.settings_cover_source_automatic),
-        AlbumArtSource.DEEZER to "Deezer",
-        AlbumArtSource.SPOTIFY to "Spotify",
-        AlbumArtSource.ITUNES to "Apple Music / iTunes",
         AlbumArtSource.MUSICBRAINZ to "MusicBrainz",
+        AlbumArtSource.ITUNES to "Apple Music / iTunes",
+        AlbumArtSource.DEEZER to "Deezer",
     )
     val selectedCoverSourceName =
         coverSourceOptions.firstOrNull { it.first == uiState.preferredCoverSource }?.second

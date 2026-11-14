@@ -283,12 +283,18 @@ class MusicBrainzEnrichmentService @Inject constructor(
         
         return when (searchResult) {
             is SearchResult.Found -> {
-                // Check if we already have metadata for this MusicBrainz ID
-                val existingByMbid = enrichedMetadataDao.findByMusicBrainzId(searchResult.recording.id)
-                if (!forceRefresh && existingByMbid != null && existingByMbid.trackId != track.id && existingByMbid.isCacheValid()) {
+                // Check if we already have metadata for this MusicBrainz ID.
+                // A forced refresh only bypasses this reuse when the cached row cannot
+                // supply artwork — otherwise every track sharing an MBID would hit the
+                // MusicBrainz API again (1 req/sec) to obtain a cover we already have.
+                val reusableByMbid = enrichedMetadataDao
+                    .findByMusicBrainzId(searchResult.recording.id)
+                    ?.takeIf { it.trackId != track.id && it.isCacheValid() }
+                    ?.takeIf { !forceRefresh || !it.albumArtUrl.isNullOrBlank() }
+                if (reusableByMbid != null) {
                     // Reuse existing metadata for different track with same MB ID
-                    Log.d(TAG, "Deduplication: reusing metadata from track ${existingByMbid.trackId}")
-                    val reusable = existingByMbid.copy(
+                    Log.d(TAG, "Deduplication: reusing metadata from track ${reusableByMbid.trackId}")
+                    val reusable = reusableByMbid.copy(
                         id = existingMetadata?.id ?: 0,
                         trackId = track.id,
                         cacheTimestamp = System.currentTimeMillis()
@@ -731,7 +737,10 @@ class MusicBrainzEnrichmentService @Inject constructor(
                 Log.d(TAG, "MusicBrainz: Preserving ${existingMetadata.albumArtSource} album art (higher priority than MUSICBRAINZ)")
             }
             
-            enrichedMetadataDao.upsertFromAutomaticEnrichment(metadata)
+            enrichedMetadataDao.upsertFromAutomaticEnrichment(
+                metadata = metadata,
+                preferred = coverArtSourcePreference.getPreferredSource(),
+            )
             Log.i(TAG, "Successfully enriched track ${track.id}: '${track.title}'")
             
             // The artist name comes from the player notification, not from MusicBrainz's artist

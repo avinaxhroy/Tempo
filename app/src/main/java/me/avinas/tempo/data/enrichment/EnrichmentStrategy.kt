@@ -255,7 +255,10 @@ class ITunesEnrichmentSource @Inject constructor(
                 finalMetadata = updated.copy(iTunesArtistImageUrl = primaryArtistImageUrl)
             }
             
-            metadataDao.upsertFromAutomaticEnrichment(finalMetadata)
+            metadataDao.upsertFromAutomaticEnrichment(
+                metadata = finalMetadata,
+                preferred = coverArtSourcePreference.getPreferredSource(),
+            )
             finalMetadata
         } else {
             null
@@ -387,7 +390,10 @@ class DeezerEnrichmentSource @Inject constructor(
             Log.d("EnrichmentSource", "Deezer: Replacing ${base.albumArtSource} album art with DEEZER source")
         }
 
-        metadataDao.upsertFromAutomaticEnrichment(updated)
+        metadataDao.upsertFromAutomaticEnrichment(
+            metadata = updated,
+            preferred = coverArtSourcePreference.getPreferredSource(),
+        )
         return updated
     }
 }
