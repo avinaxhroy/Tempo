@@ -26,7 +26,7 @@ class CoverArtSourcePreference @Inject constructor(
         /**
          * Sources the user may pick as preferred.
          *
-         * Spotify is deliberately excluded: its cover art is only available for tracks
+         * Spotify is excluded: its cover art is only available for tracks
          * already linked to a Spotify ID, which is a minority of a local library, so
          * offering it as a *preference* promises artwork most tracks can never get.
          * Spotify art is still accepted through the normal automatic priority order.

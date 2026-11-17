@@ -58,7 +58,7 @@ import androidx.compose.ui.res.stringResource
 import me.avinas.tempo.R
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import me.avinas.tempo.data.spotify.SpotifyJsonImportService
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import me.avinas.tempo.ui.components.GlassCard

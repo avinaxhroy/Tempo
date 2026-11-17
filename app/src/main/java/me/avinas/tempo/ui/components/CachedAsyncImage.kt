@@ -101,12 +101,19 @@ fun CachedAsyncImage(
     }
 
     // Keyed on the effective hardware flag and blur px so the request rebuilds
-    // when capture context or blur settings change.
+    // when capture context or blur settings change, and so a blurred decode can
+    // never be served the sharp bitmap another call site already cached.
     val imageRequest = remember(fixedUrl, cacheKey, targetSizePx, effectiveAllowHardware, blurRadiusPx) {
         ImageRequest.Builder(context)
             .data(fixedUrl)
             // Hardware and software bitmaps must not share a memory cache entry.
-            .memoryCacheKey(if (effectiveAllowHardware) cacheKey else "${cacheKey}_sw")
+            .memoryCacheKey(
+                buildString {
+                    append(cacheKey)
+                    if (!effectiveAllowHardware) append("_sw")
+                    if (blurRadiusPx != null && blurRadiusPx > 0f) append("_blur").append(blurRadiusPx.toInt())
+                }
+            )
             .diskCacheKey(cacheKey)
             .scale(Scale.FILL)
             .apply {
@@ -140,6 +147,21 @@ fun CachedAsyncImage(
     )
     
     val painterState = painter.state.value
+
+    // A capture view is drawn once and reused for the whole export, so the
+    // exporter has to know when this cover has landed rather than racing it
+    // (see CaptureImageLoads). Outside a capture view there is nothing to wait
+    // for, so the count stays unused.
+    val captureLoads = LocalCaptureImageLoads.current
+    if (captureLoads != null) {
+        DisposableEffect(captureLoads, painterState) {
+            val loading =
+                painterState is AsyncImagePainter.State.Loading ||
+                    painterState is AsyncImagePainter.State.Empty
+            if (loading) captureLoads.loading()
+            onDispose { if (loading) captureLoads.loaded() }
+        }
+    }
     
     LaunchedEffect(painterState) {
         when (painterState) {

@@ -8,6 +8,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,7 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import me.avinas.tempo.R
 import me.avinas.tempo.data.stats.TimeRange
@@ -388,57 +389,15 @@ fun SpotlightStoryHeroCard(
     storyLoading: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val cardShape = RoundedCornerShape(22.dp)
-    val cardBlendBrush = remember(isLocked) {
-        if (isLocked) {
-            Brush.linearGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = 0.03f),
-                    Color.White.copy(alpha = 0.01f)
-                )
-            )
-        } else {
-            Brush.linearGradient(
-                colors = listOf(
-                    TempoPrimary.copy(alpha = 0.14f),
-                    Color(0xFFA855F7).copy(alpha = 0.10f),
-                    Color(0xFFEC4899).copy(alpha = 0.06f)
-                )
-            )
-        }
-    }
-    val cardBorderBrush = remember(isLocked) {
-        if (isLocked) {
-            Brush.linearGradient(
-                colors = listOf(GlassBorderMedium, GlassBorderSoft)
-            )
-        } else {
-            Brush.linearGradient(
-                colors = listOf(
-                    TempoPrimary.copy(alpha = 0.45f),
-                    Color(0xFFA855F7).copy(alpha = 0.35f),
-                    Color(0xFFEC4899).copy(alpha = 0.22f)
-                )
-            )
-        }
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(cardShape)
-            .background(TempoDarkSurfaceElevated.copy(alpha = 0.94f))
-            .background(cardBlendBrush)
-            .border(0.8.dp, cardBorderBrush, cardShape)
-            .then(
-                if (!isLocked) Modifier.premiumClickable(onClick = onClick, pressedScale = 0.98f)
-                else Modifier
-            )
-            .padding(16.dp)
+    NeoSpotlightSurface(
+        modifier = modifier.fillMaxWidth(),
+        enabled = !isLocked,
+        onClick = if (isLocked) null else onClick,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 15.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             // Visual Story Avatar (Ring, Cover Preview, or Lock)
@@ -447,12 +406,12 @@ fun SpotlightStoryHeroCard(
                     .size(52.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isLocked) TempoDarkSurfaceSunken
+                        if (isLocked) TempoDarkSurfaceSunken.copy(alpha = 0f)
                         else Color(0xFFA855F7).copy(alpha = 0.2f)
                     )
                     .border(
                         1.dp,
-                        if (isLocked) SolidColor(GlassBorderSoft)
+                        if (isLocked) SolidColor(Color.White.copy(alpha = 0.12f))
                         else Brush.linearGradient(
                             listOf(TempoPrimary, Color(0xFFA855F7), Color(0xFFEC4899))
                         ),
@@ -486,17 +445,25 @@ fun SpotlightStoryHeroCard(
                 }
             }
 
-            // Headline & Description
+            // Headline & Description. The headline names the period, which is the reason
+            // to tap, so it must never be cut off: it shrinks to fit the space the card
+            // actually has instead of clipping a contract that grows per language.
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = if (isLocked) "Story Locked" else buttonText,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontFamily = DisplayFontFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp
+                        fontSize = 17.sp,
+                        lineHeight = 21.sp,
+                        letterSpacing = (-0.2).sp
                     ),
                     color = if (isLocked) TextSecondary else TextPrimary,
-                    maxLines = 1,
+                    autoSize = TextAutoSize.StepBased(
+                        minFontSize = 13.sp,
+                        maxFontSize = 17.sp
+                    ),
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(3.dp))
@@ -513,42 +480,9 @@ fun SpotlightStoryHeroCard(
                 )
             }
 
-            // Trailing Action Cue
+            // Trailing action cue
             if (!isLocked) {
-                val buttonBlendBrush = remember {
-                    Brush.linearGradient(
-                        colors = listOf(
-                            TempoPrimary.copy(alpha = 0.20f),
-                            Color(0xFFA855F7).copy(alpha = 0.22f),
-                            Color(0xFFEC4899).copy(alpha = 0.18f)
-                        )
-                    )
-                }
-                val buttonBorderBrush = remember {
-                    Brush.linearGradient(
-                        colors = listOf(
-                            TempoPrimary.copy(alpha = 0.48f),
-                            Color(0xFFA855F7).copy(alpha = 0.38f),
-                            Color(0xFFEC4899).copy(alpha = 0.30f)
-                        )
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(buttonBlendBrush)
-                        .border(0.8.dp, buttonBorderBrush, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.ArrowForwardIos,
-                        contentDescription = null,
-                        tint = TextPrimary,
-                        modifier = Modifier.size(12.dp)
-                    )
-                }
+                NeoSpotlightCta(size = 38.dp, iconSize = 12.dp)
             }
         }
     }

@@ -170,7 +170,7 @@ class YouTubeMusicImportWorker
                         }
                     }
 
-                val uriStrings = inputData.getStringArray(KEY_FILE_URIS)
+                val uriStrings = inputData.getNullableStringArray(KEY_FILE_URIS)?.filterNotNull()
                 if (uriStrings.isNullOrEmpty()) {
                     Log.e(TAG, "No file URIs provided")
                     reportImport(RunPhase.FAILED, records = 0, failure = FailureClass.UNKNOWN, startedAt = startedAt)

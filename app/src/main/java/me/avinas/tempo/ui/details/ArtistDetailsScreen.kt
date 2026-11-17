@@ -73,8 +73,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.palette.graphics.Palette
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import coil3.BitmapImage
 import coil3.imageLoader
 import coil3.request.ImageRequest
@@ -88,8 +90,8 @@ import me.avinas.tempo.ui.components.DeepOceanBackground
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.GlassCardVariant
 import me.avinas.tempo.ui.components.LocalHideStreaks
-import me.avinas.tempo.ui.components.SharePreviewDialog
 import me.avinas.tempo.ui.components.ArtistShareCard
+import me.avinas.tempo.ui.components.share.SingleCardShareSheet
 import me.avinas.tempo.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -126,7 +128,25 @@ fun ArtistDetailsScreen(
                 onNavigateToSong = onNavigateToSong,
                 onRefreshImage = { viewModel.refreshArtistImage() },
                 onShowRenameDialog = { viewModel.showRenameDialog() },
-                onShowSplitDialog = { viewModel.showSplitDialog() }
+                onShowSplitDialog = { viewModel.showSplitDialog() },
+                onEditCover = { viewModel.showCoverPicker() },
+                coverPickerSheet = {
+                    if (uiState.showCoverPicker) {
+                        CoverArtPickerSheet(
+                            state = uiState.coverPickerState,
+                            providers = me.avinas.tempo.data.enrichment.CoverArtPickerService.ARTIST_PROVIDERS,
+                            title = stringResource(R.string.details_change_artist_photo_title),
+                            body = stringResource(R.string.details_change_artist_photo_body),
+                            onSelect = viewModel::selectCover,
+                            onSelectProvider = viewModel::setSelectedCoverProvider,
+                            onGallerySelected = viewModel::selectCoverFromGallery,
+                            onResetAutomatic = viewModel::resetCoverToAutomatic,
+                            onRetry = { viewModel.retryCoverCandidates() },
+                            onRetryProvider = viewModel::retryCoverCandidates,
+                            onDismiss = viewModel::dismissCoverPicker,
+                        )
+                    }
+                },
             )
         } else {
             // Error state with retry
@@ -236,7 +256,9 @@ fun ArtistDetailsContent(
     onNavigateToSong: (Long) -> Unit,
     onRefreshImage: () -> Unit,
     onShowRenameDialog: () -> Unit = {},
-    onShowSplitDialog: () -> Unit = {}
+    onShowSplitDialog: () -> Unit = {},
+    onEditCover: () -> Unit = {},
+    coverPickerSheet: @Composable () -> Unit = {},
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
@@ -282,6 +304,8 @@ fun ArtistDetailsContent(
                     onRefreshImage = onRefreshImage,
                     isRefreshingImage = uiState.isRefreshingImage,
                     onShowRenameDialog = onShowRenameDialog,
+                    onEditCover = onEditCover,
+                    isManualCover = uiState.isManualCover,
                     onNamePositioned = { top ->
                         val collapsed = top <= headerBottomPx
                         if (collapsed != showCollapsedTitle) {
@@ -441,13 +465,15 @@ fun ArtistDetailsContent(
         }
 
         if (showShareDialog) {
-            SharePreviewDialog(
+            ArtistShareSheet(
+                artistDetails = artistDetails,
+                percentile = uiState.artistPercentile,
                 onDismiss = { showShareDialog = false },
-                contentToShare = { theme ->
-                    ArtistShareCard(artistDetails = artistDetails, percentile = uiState.artistPercentile, theme = theme)
-                }
             )
         }
+
+        // Artwork picker — the same sheet the song screen uses.
+        coverPickerSheet()
 
         // Artist Merge Dialog
         if (showMergeDialog) {
@@ -546,8 +572,7 @@ private fun FrostedHeaderButton(
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
-) {
-    Box(
+) {    Box(
         modifier = Modifier
             .size(40.dp)
             .clip(CircleShape)
@@ -569,6 +594,52 @@ private fun FrostedHeaderButton(
 // 1. Hero Stage
 // ──────────────────────────────────────────────────────────────
 
+/**
+ * Round control that floats over the portrait.
+ *
+ * Mirrors the frosted treatment of the hero so the two artwork actions read as
+ * one cluster rather than as separate buttons.
+ */
+@Composable
+private fun HeroOverlayButton(
+    icon: ImageVector,
+    contentDescription: String,
+    accent: Color,
+    onClick: () -> Unit,
+    isLoading: Boolean = false,
+) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .shadow(
+                elevation = 6.dp,
+                shape = CircleShape,
+                ambientColor = Color.Black.copy(alpha = 0.45f),
+                spotColor = Color.Black.copy(alpha = 0.55f),
+            )
+            .clip(CircleShape)
+            .background(TempoDarkSurfaceElevated.copy(alpha = 0.90f))
+            .border(1.dp, GlassBorderStrong, CircleShape)
+            .premiumClickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                color = accent,
+                strokeWidth = 2.dp
+            )
+        } else {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = TextPrimary,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
 @Composable
 fun ArtistHeroSection(
     artistDetails: ArtistDetails,
@@ -576,6 +647,8 @@ fun ArtistHeroSection(
     onRefreshImage: () -> Unit,
     isRefreshingImage: Boolean = false,
     onShowRenameDialog: () -> Unit = {},
+    onEditCover: () -> Unit = {},
+    isManualCover: Boolean = false,
     onNamePositioned: (Float) -> Unit = {},
 ) {
     Column(
@@ -653,38 +726,30 @@ fun ArtistHeroSection(
                     }
                 }
 
-                // Refresh image control (bottom-right overlay on the image)
-                Box(
+                // Artwork controls on the bottom edge of the portrait:
+                // refresh an automatic photo, or pick one by hand.
+                Row(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(14.dp)
-                        .size(36.dp)
-                        .shadow(
-                            elevation = 6.dp,
-                            shape = CircleShape,
-                            ambientColor = Color.Black.copy(alpha = 0.45f),
-                            spotColor = Color.Black.copy(alpha = 0.55f),
-                        )
-                        .clip(CircleShape)
-                        .background(TempoDarkSurfaceElevated.copy(alpha = 0.90f))
-                        .border(1.dp, GlassBorderStrong, CircleShape)
-                        .premiumClickable(onClick = onRefreshImage),
-                    contentAlignment = Alignment.Center,
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (isRefreshingImage) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = accent,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
+                    if (!isManualCover) {
+                        HeroOverlayButton(
+                            icon = Icons.Default.Refresh,
                             contentDescription = stringResource(R.string.details_refresh_artist_image),
-                            tint = TextPrimary,
-                            modifier = Modifier.size(16.dp),
+                            accent = accent,
+                            isLoading = isRefreshingImage,
+                            onClick = onRefreshImage,
                         )
                     }
+                    HeroOverlayButton(
+                        icon = Icons.Default.Edit,
+                        contentDescription = stringResource(R.string.details_change_artist_photo),
+                        accent = accent,
+                        onClick = onEditCover,
+                    )
                 }
             }
         }
@@ -1336,14 +1401,11 @@ private fun rememberArtistAccentColor(imageUrl: String?): Color {
         if (bitmap.config == android.graphics.Bitmap.Config.HARDWARE) {
             bitmap = bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
         }
-        Palette.from(bitmap).generate { palette ->
-            val color = palette?.let {
-                it.vibrantSwatch?.rgb
-                    ?: it.mutedSwatch?.rgb
-                    ?: it.dominantSwatch?.rgb
-            }?.let { conditionedAccent(Color(it)) } ?: TempoPrimary
-            accent = color
-        }
+        val palette = withContext(Dispatchers.Default) { Palette.from(bitmap).generate() }
+        val color = palette.vibrantSwatch?.rgb
+            ?: palette.mutedSwatch?.rgb
+            ?: palette.dominantSwatch?.rgb
+        accent = color?.let { conditionedAccent(Color(it)) } ?: TempoPrimary
     }
     return accent
 }
@@ -1402,5 +1464,32 @@ private fun ArtistDetailsFooter() {
 private fun formatRibbonDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+// ──────────────────────────────────────────────────────────────
+// Share Sheet
+// ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun ArtistShareSheet(
+    artistDetails: ArtistDetails,
+    percentile: Double?,
+    onDismiss: () -> Unit,
+) {
+    // The summary flag and its deck live in the shared single-card sheet: "does
+    // this card print its totals" is a property of the card being shown, not of
+    // the sheet showing it, and every single-subject screen asks it the same way.
+    SingleCardShareSheet(
+        artworkUrl = artistDetails.artist.imageUrl,
+        onDismiss = onDismiss,
+    ) { page, showSummary ->
+        ArtistShareCard(
+            artistDetails = artistDetails,
+            percentile = percentile,
+            card = page.card,
+            modifier = Modifier.fillMaxSize(),
+            showSummary = showSummary,
+        )
+    }
 }
 

@@ -130,7 +130,7 @@ class TrackResolver @Inject constructor(
             trackRepository.update(updated)
         }
 
-        // Artwork has a separate guarded write path. Generic full-row updates deliberately
+        // Artwork has a separate guarded write path. Generic full-row updates
         // preserve the currently stored artwork, so routing automatic backfill through
         // update() would silently discard a newly discovered cover.
         if (automaticArtworkCandidate != null) {

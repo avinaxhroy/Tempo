@@ -41,7 +41,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Periodic device backup worker.
  *
- * It has deliberately no network constraint and never waits for Google Drive.
+ * It has no network constraint and never waits for Google Drive.
  * A failure is retried a few times within the current period, then the run is
  * completed so a broken destination cannot prevent the next scheduled period
  * from trying again.

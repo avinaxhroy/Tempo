@@ -1,6 +1,7 @@
 package me.avinas.tempo.ui.components
 
-import android.graphics.Bitmap
+import android.text.format.DateFormat as AndroidDateFormat
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -8,7 +9,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Favorite
@@ -16,7 +16,6 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -26,10 +25,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -41,96 +40,30 @@ import me.avinas.tempo.data.local.entities.Badge
 import me.avinas.tempo.data.stats.ArtistDetails
 import me.avinas.tempo.data.stats.GamificationEngine
 import me.avinas.tempo.data.stats.TrackDetails
+import me.avinas.tempo.ui.components.share.ShareArtworkCardPadding
+import me.avinas.tempo.ui.components.share.ShareCardBrandingInset
+import me.avinas.tempo.ui.components.share.ShareCardSurface
+import me.avinas.tempo.ui.components.share.ShareCardTheme
+import me.avinas.tempo.ui.components.share.ShareIdentityPill
+import me.avinas.tempo.ui.components.share.ShareTrackList
+import me.avinas.tempo.ui.components.share.ShareTrackRow
+import me.avinas.tempo.ui.components.share.formatShareCount
+import me.avinas.tempo.ui.components.share.formatShareDuration
+import me.avinas.tempo.ui.components.share.SHARE_META_SEPARATOR
+import me.avinas.tempo.ui.components.share.ShareProceduralCardPadding
+import me.avinas.tempo.ui.components.share.ShareStatBand
+import me.avinas.tempo.ui.components.share.ShareStatCellData
+import me.avinas.tempo.ui.components.share.ShareStatDivider
+import me.avinas.tempo.ui.components.share.ShareStatusPill
 import me.avinas.tempo.ui.profile.BadgeEmblem
-import me.avinas.tempo.ui.profile.getCategoryLabel
-import me.avinas.tempo.ui.profile.getLevelTierAccent
 import me.avinas.tempo.ui.profile.getRarityColor
 import me.avinas.tempo.ui.profile.getUniqueBadgeColor
 import me.avinas.tempo.ui.theme.DisplayFontFamily
-import me.avinas.tempo.ui.theme.TempoDarkBackground
+import me.avinas.tempo.ui.theme.LevelTier
+import me.avinas.tempo.ui.theme.getLevelTierAccent
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-/**
- * Common background for share cards. Themed via [ShareThemePalette] so every
- * share surface (stats, song, artist) offers the same theme set and keeps
- * text readable on both dark and light backdrops.
- */
-@Composable
-fun ShareCardBackground(
-    imageUrl: String? = null,
-    backdropBitmap: Bitmap? = null,
-    customBackdrop: (@Composable BoxScope.() -> Unit)? = null,
-    palette: ShareThemePalette,
-    modifier: Modifier = Modifier,
-    content: @Composable BoxScope.() -> Unit,
-) {
-    Box(
-        modifier =
-            modifier
-                .background(brush = Brush.verticalGradient(palette.gradient)),
-    ) {
-        // Shared blur base or single custom canvas acting like image.
-        // ASCII and FLUTED_GLASS skip this layer because their own backdrops
-        // lay the same ShareBlurBase underneath their effect — still one blur
-        // per card, never a double overlay.
-        // On MINIMUM, DAYLIGHT and GRAIN (warm), they stay untouched as they have no relation with image.
-        // On FLUTED_GLASS, the backdropBitmap is refracted via the authentic renderFlutedGlass pass.
-        if (
-            palette.usesArtwork &&
-            palette.backdrop != ShareBackdropStyle.ASCII_ARTWORK &&
-            palette.backdrop != ShareBackdropStyle.FLUTED_GLASS
-        ) {
-            if (!imageUrl.isNullOrBlank()) {
-                ShareBlurBase(imageUrl = imageUrl)
-                // Contrast gradient overlay
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .background(brush = Brush.verticalGradient(palette.overlay)),
-                )
-            } else if (customBackdrop != null) {
-                // Single custom canva acting like image!
-                customBackdrop()
-                // Contrast gradient overlay
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .background(brush = Brush.verticalGradient(palette.overlay)),
-                )
-            }
-        }
-
-        // Theme-specific backdrop decoration (glow orbs, fluted glass, ascii, rings, sun wash, grain)
-        ShareThemeDecorations(
-            palette = palette,
-            imageUrl = imageUrl,
-            backdropBitmap = backdropBitmap,
-        )
-
-        content()
-
-        // Minimal Branding at Bottom
-        Column(
-            modifier =
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 36.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = stringResource(R.string.share_brand),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Black,
-                color = palette.branding,
-                letterSpacing = 4.sp,
-            )
-        }
-    }
-}
 
 /**
  * 9:16 Optimized Share Card for Artists
@@ -139,20 +72,42 @@ fun ShareCardBackground(
 fun ArtistShareCard(
     artistDetails: ArtistDetails,
     percentile: Double? = null,
-    theme: ShareTheme = ShareTheme.MIDNIGHT,
+    // How the card is printed: the theme on screen, the scene's clock and the
+    // artwork its colours are drawn from — one value, because a card cannot use
+    // any of the three without the others.
+    card: ShareCardTheme = ShareCardTheme.Default,
     modifier: Modifier = Modifier,
+    /**
+     * Whether to print the card's stat copy: the summary band's totals and the
+     * pills that claim a standing (the kicker at the top, the flex line under the
+     * band).
+     *
+     * A card with it on says "this is how much of my listening this artist is";
+     * with it off the card is the portrait, the fan badge and the songs — the
+     * version you send to someone who does not care about the totals. Every
+     * number the card argues with is in this one group, so there is no
+     * half-summary to disagree about later.
+     */
+    showSummary: Boolean = true,
 ) {
-    val palette = theme.palette
-    ShareCardBackground(
-        imageUrl = artistDetails.artist.imageUrl,
-        palette = palette,
-        modifier = modifier.aspectRatio(9f / 16f),
-    ) {
+    val shareLocale = LocalConfiguration.current.locales[0]
+    val monthYearPattern =
+        remember(shareLocale) { shareDatePattern(shareLocale, "MMMyyyy", SHARE_PATTERN_MONTH_YEAR) }
+    val yearPattern =
+        remember(shareLocale) { shareDatePattern(shareLocale, "yyyy", SHARE_PATTERN_YEAR) }
+    ShareCardSurface(
+        card = card,
+        art = artistDetails.artist.imageUrl.asShareArt(),
+        modifier = modifier,
+        // The single-subject cards leave a little more room under their last row
+        // than the ranking card: their footer is a subject line, not a table.
+        brandingBottomPadding = ShareCardBrandingInset,
+    ) { palette ->
         FitToHeight(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = 26.dp, bottom = 64.dp, start = 24.dp, end = 24.dp),
+                    .padding(ShareArtworkCardPadding),
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -163,26 +118,12 @@ fun ArtistShareCard(
                 val standingKicker =
                     remember(percentile, artistDetails.personalPlayCount) {
                         resolveArtistStandingKicker(percentile, artistDetails.personalPlayCount)
-                    }
+                    }?.resolve()
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier =
-                        Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(palette.surface)
-                            .border(1.dp, palette.divider, RoundedCornerShape(50))
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        text = standingKicker,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (palette.isDark) palette.accent else palette.textStrong,
-                        letterSpacing = 1.5.sp,
-                        fontSize = 10.sp,
-                    )
+                // Hidden with the summary off, and when the artist has no standing
+                // worth stating: the card already leads with the face and the name.
+                if (showSummary && standingKicker != null) {
+                    ShareStatusPill(text = standingKicker, palette = palette)
                 }
 
                 // Artist Image with Glow
@@ -274,7 +215,12 @@ fun ArtistShareCard(
                             val (badgeText, badgeEmoji, badgeColor) =
                                 if (percentile != null) {
                                     when {
-                                        percentile == 0.0 -> Triple("#1 Artist", "👑", Color(0xFFFFD700))
+                                        percentile == 0.0 ->
+                                            Triple(
+                                                stringResource(R.string.share_fan_status_number_one),
+                                                "👑",
+                                                Color(0xFFFFD700),
+                                            )
                                         percentile <= 1.0 -> Triple(stringResource(R.string.fan_status_top_1), "👑", Color(0xFFFFD700))
                                         percentile <= 5.0 -> Triple(stringResource(R.string.fan_status_top_5), "🌟", Color(0xFFF59E0B))
                                         percentile <= 10.0 -> Triple(stringResource(R.string.fan_status_top_10), "🔥", Color(0xFFEF4444))
@@ -349,9 +295,14 @@ fun ArtistShareCard(
                             firstListenedDate = artistDetails.firstListenedDate,
                             firstDiscoveryTimestamp = artistDetails.firstDiscovery?.firstListenTimestamp,
                             topGenre = artistDetails.topGenres.firstOrNull(),
+                            dateLocale = shareLocale,
+                            monthYearPattern = monthYearPattern,
+                            yearPattern = yearPattern,
                         )
-                    }
-                if (artistFlexPill != null) {
+                    }?.resolve()
+                // The streak / discovery line is a number dressed as a sentence, so
+                // it leaves with the band rather than staying on a "summary off" card.
+                if (showSummary && artistFlexPill != null) {
                     GlassCard(
                         shape = RoundedCornerShape(50),
                         backgroundColor = palette.surfaceStrong,
@@ -370,256 +321,48 @@ fun ArtistShareCard(
                     }
                 }
 
-                // Stats Grid (GlassCard) - 3 Columns: Plays, Time, Unique Songs
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    backgroundColor = palette.surface,
-                    shape = palette.cardShape,
-                ) {
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp, horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // Col 1: PLAYS
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 4.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.GraphicEq,
-                                    contentDescription = null,
-                                    tint = if (palette.isDark) Color(0xFFF472B6) else palette.accent,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "PLAYS",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = palette.textSecondary,
-                                    letterSpacing = palette.labelTracking ?: 1.5.sp,
-                                    fontSize = 9.sp,
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = artistDetails.personalPlayCount.toString(),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = palette.headlineWeight ?: FontWeight.Black,
-                                color = palette.textPrimary,
-                                fontSize = 20.sp,
-                            )
-                        }
+                val formattedTime = formatShareDuration(artistDetails.personalTotalTimeMinutes)
 
-                        // Vertical Divider with generous breathing room
-                        Box(
-                            modifier =
-                                Modifier
-                                    .padding(horizontal = 8.dp)
-                                    .height(26.dp)
-                                    .width(1.dp)
-                                    .background(palette.divider),
-                        )
-
-                        // Col 2: TIME
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 4.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.AccessTime,
-                                    contentDescription = null,
-                                    tint = if (palette.isDark) Color(0xFFC084FC) else palette.accent,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "TIME",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = palette.textSecondary,
-                                    letterSpacing = palette.labelTracking ?: 1.5.sp,
-                                    fontSize = 9.sp,
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            val formattedTime =
-                                if (artistDetails.personalTotalTimeMinutes >= 60) {
-                                    String.format(Locale.US, "%.1fh", artistDetails.personalTotalTimeMinutes / 60.0)
-                                } else {
-                                    "${artistDetails.personalTotalTimeMinutes}m"
-                                }
-                            Text(
-                                text = formattedTime,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = palette.headlineWeight ?: FontWeight.Black,
-                                color = palette.textPrimary,
-                                fontSize = 20.sp,
-                            )
-                        }
-
-                        // Vertical Divider with generous breathing room
-                        Box(
-                            modifier =
-                                Modifier
-                                    .padding(horizontal = 8.dp)
-                                    .height(26.dp)
-                                    .width(1.dp)
-                                    .background(palette.divider),
-                        )
-
-                        // Col 3: SONGS
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 4.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.MusicNote,
-                                    contentDescription = null,
-                                    tint = if (palette.isDark) Color(0xFF38BDF8) else palette.accent,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "SONGS",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = palette.textSecondary,
-                                    letterSpacing = palette.labelTracking ?: 1.5.sp,
-                                    fontSize = 9.sp,
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = artistDetails.uniqueTracksPlayed.toString(),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = palette.headlineWeight ?: FontWeight.Black,
-                                color = palette.textPrimary,
-                                fontSize = 20.sp,
-                            )
-                        }
-                    }
+                // The summary band: one group, so "off" means nothing here at all
+                // rather than a partial band. The card keeps the portrait, the
+                // fan badge and the top songs.
+                if (showSummary) {
+                    ShareStatBand(
+                        palette = palette,
+                        cells =
+                            listOf(
+                                ShareStatCellData(
+                                    icon = Icons.Default.GraphicEq,
+                                    label = stringResource(R.string.share_plays_label),
+                                    value = formatShareCount(artistDetails.personalPlayCount),
+                                ),
+                                ShareStatCellData(
+                                    icon = Icons.Default.AccessTime,
+                                    label = stringResource(R.string.share_time).uppercase(shareLocale),
+                                    value = formattedTime,
+                                ),
+                                ShareStatCellData(
+                                    icon = Icons.Default.MusicNote,
+                                    label = stringResource(R.string.share_songs_label),
+                                    value = formatShareCount(artistDetails.uniqueTracksPlayed),
+                                ),
+                            ),
+                    )
                 }
 
                 // Top Songs Section
                 if (artistDetails.topSongs.isNotEmpty()) {
-                    GlassCard(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, palette.divider, palette.cardShape),
-                        backgroundColor = palette.surfaceStrong,
-                        shape = palette.cardShape,
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(14.dp),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.share_top_songs),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = palette.textPrimary,
-                                fontWeight = palette.labelWeight ?: FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 6.dp),
-                            )
-
-                            artistDetails.topSongs.take(3).forEachIndexed { index, song ->
-                                if (index > 0) {
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(vertical = 3.dp),
-                                        color = palette.divider,
-                                        thickness = 0.5.dp,
-                                    )
-                                }
-                                Row(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 3.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    val badgeColors =
-                                        when (index) {
-                                            0 -> listOf(Color(0xFFFBBF24), Color(0xFFF59E0B))
-                                            1 -> listOf(Color(0xFFE2E8F0), Color(0xFF94A3B8))
-                                            else -> listOf(Color(0xFFCD7F32), Color(0xFFB45309))
-                                        }
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .size(20.dp)
-                                                .background(
-                                                    brush = Brush.linearGradient(colors = badgeColors),
-                                                    shape = palette.badgeShape,
-                                                ),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Text(
-                                            text = "${index + 1}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = palette.contrastingText(badgeColors.first()),
-                                            fontSize = 10.sp,
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = song.title,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = palette.textPrimary,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.share_plays_format, song.playCount),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = palette.textSecondary,
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    ShareTrackList(
+                        palette = palette,
+                        header = stringResource(R.string.share_top_songs),
+                        rows = artistDetails.topSongs.map { song ->
+                            ShareTrackRow(title = song.title, plays = song.playCount)
+                        },
+                    )
                 }
 
-                // Mini Equalizer Waveform Bars (Tactile music player aesthetic)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 2.dp),
-                ) {
-                    val barHeights = listOf(6.dp, 14.dp, 10.dp, 18.dp, 12.dp, 16.dp, 8.dp, 12.dp, 6.dp)
-                    barHeights.forEach { h ->
-                        Box(
-                            modifier =
-                                Modifier
-                                    .width(3.dp)
-                                    .height(h)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(
-                                        if (palette.isDark) {
-                                            palette.accent.copy(alpha = 0.5f)
-                                        } else {
-                                            palette.textSecondary.copy(alpha = 0.4f)
-                                        },
-                                    ),
-                        )
-                    }
-                }
+                // No equalizer strip here: the same nine bars on every card said
+                // nothing about this track, and the card already carries its own logo.
             }
         }
     }
@@ -631,7 +374,8 @@ fun ArtistShareCard(
 @Composable
 fun SongShareCard(
     trackDetails: TrackDetails,
-    theme: ShareTheme = ShareTheme.MIDNIGHT,
+    // How the card is printed; see [ArtistShareCard].
+    card: ShareCardTheme = ShareCardTheme.Default,
     modifier: Modifier = Modifier,
     genre: String? = null,
     mood: String? = null,
@@ -640,18 +384,27 @@ fun SongShareCard(
     completionRate: Float? = null,
     skipRate: Float? = null,
     releaseYear: Int? = null,
+    /** Whether to print the card's stat copy; see [ArtistShareCard]. */
+    showSummary: Boolean = true,
 ) {
-    val palette = theme.palette
-    ShareCardBackground(
-        imageUrl = trackDetails.track.albumArtUrl,
-        palette = palette,
-        modifier = modifier.aspectRatio(9f / 16f),
-    ) {
+    val shareLocale = LocalConfiguration.current.locales[0]
+    // A skeleton, not an English pattern: the platform decides whether the month comes
+    // before the year and how the two are joined in this language.
+    val shortMonthYearPattern =
+        remember(shareLocale) {
+            shareDatePattern(shareLocale, "MMMyy", SHARE_PATTERN_SHORT_MONTH_YEAR)
+        }
+    ShareCardSurface(
+        card = card,
+        art = trackDetails.track.albumArtUrl.asShareArt(),
+        modifier = modifier,
+        brandingBottomPadding = ShareCardBrandingInset,
+    ) { palette ->
         FitToHeight(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = 26.dp, bottom = 64.dp, start = 24.dp, end = 24.dp),
+                    .padding(ShareArtworkCardPadding),
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -667,30 +420,19 @@ fun SongShareCard(
                             completionRate = completionRate,
                             skipRate = skipRate,
                         )
-                    }
+                    }?.resolve()
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier =
-                        Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(palette.surface)
-                            .border(1.dp, palette.divider, RoundedCornerShape(50))
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        text = standingKicker,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (palette.isDark) palette.accent else palette.textStrong,
-                        letterSpacing = 1.5.sp,
-                        fontSize = 10.sp,
-                    )
+                // A track with no standing, or a card with its summary off, gets no
+                // pill; the cover is the opener.
+                if (showSummary && standingKicker != null) {
+                    ShareStatusPill(text = standingKicker, palette = palette)
                 }
 
-                // Hero Album Art with Glow & Favorite Badge
+                // Hero Album Art with Glow & Favorite Badge. Carries its own top gap
+                // because the cover is the subject, not the card's first line: with
+                // the summary off it is the opener, and it should not sit on the frame.
                 Box(
+                    modifier = Modifier.padding(top = 16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
@@ -783,19 +525,24 @@ fun SongShareCard(
                         fontSize = 14.sp,
                     )
 
-                    val albumYearText =
+                    val albumYearText: ShareValue? =
                         remember(trackDetails.track.album, releaseYear) {
                             val album = trackDetails.track.album?.takeIf { it.isNotBlank() }
                             when {
-                                album != null && releaseYear != null -> "$album • $releaseYear"
-                                album != null -> album
-                                releaseYear != null -> "Released $releaseYear"
+                                album != null && releaseYear != null ->
+                                    ShareValue.Resource(
+                                        ShareText(R.string.share_album_year_format, listOf(album, releaseYear)),
+                                    )
+                                album != null -> ShareValue.Formatted(album)
+                                releaseYear != null ->
+                                    ShareValue.Resource(ShareText(R.string.share_released_year, listOf(releaseYear)))
                                 else -> null
                             }
                         }
-                    if (albumYearText != null) {
+                    val albumYearLabel = albumYearText?.resolve()
+                    if (albumYearLabel != null) {
                         Text(
-                            text = albumYearText,
+                            text = albumYearLabel,
                             style = MaterialTheme.typography.bodySmall,
                             color = palette.textSecondary,
                             textAlign = TextAlign.Center,
@@ -814,160 +561,50 @@ fun SongShareCard(
                         trackDetails.peakRank,
                         completionRate,
                         trackDetails.isFavorite,
+                        shareLocale,
+                        shortMonthYearPattern,
                     ) {
                         resolveSongFlexStat(
                             firstPlayed = trackDetails.firstPlayed,
                             peakRank = trackDetails.peakRank,
                             completionRate = completionRate,
                             isFavorite = trackDetails.isFavorite,
+                            dateLocale = shareLocale,
+                            datePattern = shortMonthYearPattern,
                         )
                     }
 
-                // 3 Core Flex Stats Grid: Plays | Time | Standout Flex
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    backgroundColor = palette.surface,
-                    shape = palette.cardShape,
-                ) {
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp, horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // Col 1: PLAYS
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 4.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.GraphicEq,
-                                    contentDescription = null,
-                                    tint = if (palette.isDark) Color(0xFFF472B6) else palette.accent,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = stringResource(R.string.share_plays_label),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = palette.textSecondary,
-                                    letterSpacing = palette.labelTracking ?: 1.5.sp,
-                                    fontSize = 9.sp,
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = trackDetails.playCount.toString(),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = palette.headlineWeight ?: FontWeight.Black,
-                                color = palette.textPrimary,
-                                fontSize = 20.sp,
-                            )
-                        }
+                val formattedTime = formatShareDuration(trackDetails.totalTimeMinutes)
 
-                        // Vertical Divider with generous breathing room
-                        Box(
-                            modifier =
-                                Modifier
-                                    .padding(horizontal = 8.dp)
-                                    .height(26.dp)
-                                    .width(1.dp)
-                                    .background(palette.divider),
-                        )
-
-                        // Col 2: TIME
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 4.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.AccessTime,
-                                    contentDescription = null,
-                                    tint = if (palette.isDark) Color(0xFFC084FC) else palette.accent,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "TIME",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = palette.textSecondary,
-                                    letterSpacing = palette.labelTracking ?: 1.5.sp,
-                                    fontSize = 9.sp,
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            val formattedTime =
-                                if (trackDetails.totalTimeMinutes >= 60) {
-                                    String.format(Locale.US, "%.1fh", trackDetails.totalTimeMinutes / 60.0)
-                                } else {
-                                    "${trackDetails.totalTimeMinutes}m"
-                                }
-                            Text(
-                                text = formattedTime,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = palette.headlineWeight ?: FontWeight.Black,
-                                color = palette.textPrimary,
-                                fontSize = 20.sp,
-                            )
-                        }
-
-                        // Vertical Divider with generous breathing room
-                        Box(
-                            modifier =
-                                Modifier
-                                    .padding(horizontal = 8.dp)
-                                    .height(26.dp)
-                                    .width(1.dp)
-                                    .background(palette.divider),
-                        )
-
-                        // Col 3: THE FLEX (Discovery Date / Peak Rank / Finish Rate)
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 4.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = flexStat.icon,
-                                    contentDescription = null,
-                                    tint = if (palette.isDark) Color(0xFF38BDF8) else palette.accent,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = flexStat.label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = palette.textSecondary,
-                                    letterSpacing = palette.labelTracking ?: 1.5.sp,
-                                    fontSize = 9.sp,
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = flexStat.value,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = palette.headlineWeight ?: FontWeight.Black,
-                                color = palette.textPrimary,
-                                fontSize = 20.sp,
-                            )
-                        }
-                    }
+                // Same band, same meaning as the artist card: the totals, switched
+                // off together. See [ShareStatBand].
+                if (showSummary) {
+                    ShareStatBand(
+                        palette = palette,
+                        cells =
+                            listOf(
+                                ShareStatCellData(
+                                    icon = Icons.Default.GraphicEq,
+                                    label = stringResource(R.string.share_plays_label),
+                                    value = formatShareCount(trackDetails.playCount),
+                                ),
+                                ShareStatCellData(
+                                    icon = Icons.Default.AccessTime,
+                                    label = stringResource(R.string.share_time).uppercase(shareLocale),
+                                    value = formattedTime,
+                                ),
+                                ShareStatCellData(
+                                    icon = flexStat.icon,
+                                    label = stringResource(flexStat.label),
+                                    value = flexStat.value.resolve(),
+                                ),
+                            ),
+                    )
                 }
 
-                // Standout Flex Highlight Pill (Cherry-picked editorial flex)
+                // Standout Flex Highlight Pill (Cherry-picked editorial flex). Part
+                // of the summary group: signature and record lines are the numbers
+                // the toggle promises to remove.
                 val flexHighlight =
                     remember(peakBingeDay, habitualHour, skipRate, mood, genre) {
                         resolveSongFlexHighlight(
@@ -978,9 +615,9 @@ fun SongShareCard(
                             mood = mood,
                             genre = genre,
                         )
-                    }
+                    }?.resolve()
 
-                if (flexHighlight != null) {
+                if (showSummary && flexHighlight != null) {
                     GlassCard(
                         shape = RoundedCornerShape(50),
                         backgroundColor = palette.surfaceStrong,
@@ -999,38 +636,120 @@ fun SongShareCard(
                     }
                 }
 
-                // Mini Equalizer Waveform Bars (Tactile music player aesthetic)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 2.dp),
-                ) {
-                    val barHeights = listOf(6.dp, 14.dp, 10.dp, 18.dp, 12.dp, 16.dp, 8.dp, 12.dp, 6.dp)
-                    barHeights.forEach { h ->
-                        Box(
-                            modifier =
-                                Modifier
-                                    .width(3.dp)
-                                    .height(h)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(
-                                        if (palette.isDark) {
-                                            palette.accent.copy(alpha = 0.5f)
-                                        } else {
-                                            palette.textSecondary.copy(alpha = 0.4f)
-                                        },
-                                    ),
-                        )
-                    }
-                }
+                // Same rule as the artist card: no nine-bar strip. The bottom of
+                // this card is where a summary or a second stat belongs.
             }
         }
     }
 }
 
+/**
+ * A user-visible string that is still a resource reference: its id plus the positional
+ * arguments it interpolates. Card copy travels as one of these instead of as English
+ * text, so a card rasterized in Russian cannot contain a leftover English word, and a
+ * concept shared by two cards can only be spelled once.
+ */
+internal data class ShareText(
+    @StringRes val id: Int,
+    val args: List<Any> = emptyList(),
+)
+
+/** Resolves [ShareText] against the configuration of the card being drawn. */
+@Composable
+internal fun ShareText.resolve(): String =
+    if (args.isEmpty()) stringResource(id) else stringResource(id, *args.toTypedArray())
+
+/** A flex-stat figure: either a resource (with args) or an already-formatted value. */
+internal sealed interface ShareValue {
+    data class Resource(val text: ShareText) : ShareValue
+
+    data class Formatted(val text: String) : ShareValue
+}
+
+@Composable
+internal fun ShareValue.resolve(): String =
+    when (this) {
+        is ShareValue.Resource -> text.resolve()
+        is ShareValue.Formatted -> text
+    }
+
+/** Fallback patterns, used only when the platform has no locale-specific suggestion. */
+private const val SHARE_PATTERN_SHORT_MONTH_YEAR = "MMM ''yy"
+private const val SHARE_PATTERN_MONTH_YEAR = "MMM yyyy"
+private const val SHARE_PATTERN_YEAR = "yyyy"
+private const val SHARE_PATTERN_LONG_MONTH_YEAR = "MMMM yyyy"
+
+/**
+ * The locale's own ordering and punctuation for [skeleton] (an ICU skeleton such as
+ * "MMMyyyy"). The cards used to print English patterns like "MMM d, yyyy" in every
+ * language, which reads as a machine translation next to translated labels.
+ */
+internal fun shareDatePattern(
+    locale: Locale,
+    skeleton: String,
+    fallbackPattern: String,
+): String {
+    // A platform that has no ICU suggestion for this skeleton hands back null (so does the
+    // JVM stub in unit tests); the caller's own pattern is the fallback in that case.
+    val suggested = AndroidDateFormat.getBestDateTimePattern(locale, skeleton)
+    return if (suggested.isNullOrBlank()) fallbackPattern else suggested
+}
+
+/**
+ * Formats [timestamp] with an explicit [pattern] in [locale]. Kept pure — the pattern is
+ * always passed in — so unit tests never depend on the framework formatter stub.
+ */
+internal fun formatShareDate(timestamp: Long, pattern: String, locale: Locale): String =
+    SimpleDateFormat(pattern, locale).format(Date(timestamp))
+
+/** The meta separator between two facts in a header pill — see [SHARE_META_SEPARATOR]. */
+
+/**
+ * Badge categories are persisted as stable uppercase ids ("MILESTONE", "TIME", …). The
+ * in-app label comes from `ProfileScreen.getCategoryLabel`, which is English and also used
+ * in list rows, so the card owns its own mapping instead of localizing that shared label.
+ * Returns 0 (`Resources.ID_NULL`) for an unknown id; callers print the raw value.
+ */
+@StringRes
+internal fun badgeCategoryLabel(category: String): Int =
+    when (category) {
+        "MILESTONE" -> R.string.share_category_milestones
+        "TIME" -> R.string.share_category_time
+        "STREAK" -> R.string.share_category_streaks
+        "DISCOVERY" -> R.string.share_category_discovery
+        "ENGAGEMENT" -> R.string.share_category_engagement
+        "LEVEL" -> R.string.share_category_levels
+        else -> 0
+    }
+
+/**
+ * `GamificationEngine.BadgeRarity.label` is an English enum constant label shared with the
+ * in-app badge screens; the card maps the enum to its own resources so the exported image
+ * is localized without changing what the rest of the app prints.
+ */
+@StringRes
+internal fun badgeRarityLabel(rarity: GamificationEngine.BadgeRarity): Int =
+    when (rarity) {
+        GamificationEngine.BadgeRarity.COMMON -> R.string.share_rarity_common
+        GamificationEngine.BadgeRarity.RARE -> R.string.share_rarity_rare
+        GamificationEngine.BadgeRarity.EPIC -> R.string.share_rarity_epic
+        GamificationEngine.BadgeRarity.LEGENDARY -> R.string.share_rarity_legendary
+        GamificationEngine.BadgeRarity.MYTHIC -> R.string.share_rarity_mythic
+    }
+
+/**
+ * Level tier name shown on the milestone card.
+ *
+ * The thresholds behind it live in [LevelTier], together with the tier's colour,
+ * so the milestone card and the level-up pill cannot disagree about which tier a
+ * level is in or what it is called.
+ */
+@StringRes
+internal fun milestoneTierLabel(level: Int): Int = LevelTier.of(level).label
+
 internal data class SongFlexStat(
-    val label: String,
-    val value: String,
+    @StringRes val label: Int,
+    val value: ShareValue,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
 )
 
@@ -1039,15 +758,17 @@ internal fun resolveSongStandingKicker(
     playCount: Int,
     completionRate: Float?,
     skipRate: Float?,
-): String =
+): ShareText? =
     when {
-        peakRank == 1 -> "👑 #1 ALL-TIME TRACK"
-        peakRank != null && peakRank <= 5 -> "🌟 TOP $peakRank IN LIBRARY"
-        peakRank != null && peakRank <= 20 -> "🔥 TOP $peakRank ROTATION"
-        playCount >= 100 -> "⚡ CENTURY CLUB • 100+ SPINS"
-        playCount >= 50 -> "⚡ HEAVY ROTATION"
-        skipRate != null && skipRate < 0.05f && playCount >= 15 -> "🎧 ZERO SKIPS • DEEP ROTATION"
-        else -> "TEMPO • TRACK HIGHLIGHT"
+        peakRank == 1 -> ShareText(R.string.share_kicker_all_time_track)
+        peakRank != null && peakRank <= 5 -> ShareText(R.string.share_kicker_top_track_library, listOf(peakRank))
+        peakRank != null && peakRank <= 20 -> ShareText(R.string.share_kicker_top_track_rotation, listOf(peakRank))
+        playCount >= 100 -> ShareText(R.string.share_kicker_century_club_track)
+        playCount >= 50 -> ShareText(R.string.share_kicker_heavy_rotation)
+        skipRate != null && skipRate < 0.05f && playCount >= 15 -> ShareText(R.string.share_kicker_zero_skips)
+        // Nothing special to say, so no kicker. A generic "TEMPO • TRACK HIGHLIGHT"
+        // would push what is unique further down the card.
+        else -> null
     }
 
 internal fun resolveSongFlexStat(
@@ -1055,23 +776,44 @@ internal fun resolveSongFlexStat(
     peakRank: Int?,
     completionRate: Float?,
     isFavorite: Boolean,
+    dateLocale: Locale,
+    datePattern: String,
 ): SongFlexStat =
     when {
         firstPlayed != null && firstPlayed > 0L -> {
-            val sdf = SimpleDateFormat("MMM ''yy", Locale.getDefault())
-            SongFlexStat("SINCE", sdf.format(Date(firstPlayed)), Icons.Default.History)
+            SongFlexStat(
+                R.string.share_since_label,
+                ShareValue.Formatted(formatShareDate(firstPlayed, datePattern, dateLocale)),
+                Icons.Default.History,
+            )
         }
 
         peakRank != null -> {
-            SongFlexStat("PEAK", "#$peakRank", Icons.Default.EmojiEvents)
+            SongFlexStat(
+                R.string.share_peak_label,
+                ShareValue.Resource(ShareText(R.string.share_peak_rank_format, listOf(peakRank))),
+                Icons.Default.EmojiEvents,
+            )
         }
 
         completionRate != null -> {
-            SongFlexStat("FINISH", "${(completionRate * 100).toInt()}%", Icons.Default.CheckCircle)
+            SongFlexStat(
+                R.string.share_finish_label,
+                ShareValue.Resource(
+                    ShareText(R.string.share_percent_format, listOf((completionRate * 100).toInt())),
+                ),
+                Icons.Default.CheckCircle,
+            )
         }
 
         else -> {
-            SongFlexStat("STATUS", if (isFavorite) "Fav" else "Spun", Icons.Default.Star)
+            SongFlexStat(
+                R.string.share_status_label,
+                ShareValue.Resource(
+                    ShareText(if (isFavorite) R.string.share_status_favorite else R.string.share_status_spun),
+                ),
+                Icons.Default.Star,
+            )
         }
     }
 
@@ -1082,26 +824,26 @@ internal fun resolveSongFlexHighlight(
     playCount: Int,
     mood: String?,
     genre: String?,
-): String? =
+): ShareText? =
     when {
         peakBingeDay != null && peakBingeDay.second >= 4 -> {
-            "🔥 Binge Record: ${peakBingeDay.second} plays in a day"
+            ShareText(R.string.share_highlight_binge, listOf(peakBingeDay.second))
         }
 
         habitualHour != null -> {
-            "🌙 Signature ${habitualHour.lowercase()} soundtrack"
+            ShareText(R.string.share_highlight_habit, listOf(habitualHour.lowercase()))
         }
 
         skipRate != null && skipRate < 0.08f && playCount >= 10 -> {
-            "✨ 100% Loyalty • Never Skipped"
+            ShareText(R.string.share_highlight_loyalty)
         }
 
         mood != null -> {
-            "✨ Vibe: $mood"
+            ShareText(R.string.share_highlight_vibe, listOf(mood))
         }
 
         genre != null -> {
-            "🎧 $genre"
+            ShareText(R.string.share_highlight_genre, listOf(genre))
         }
 
         else -> {
@@ -1112,16 +854,17 @@ internal fun resolveSongFlexHighlight(
 internal fun resolveArtistStandingKicker(
     percentile: Double?,
     playCount: Int,
-): String =
+): ShareText? =
     when {
-        percentile != null && percentile == 0.0 && playCount >= 10 -> "👑 #1 ALL-TIME ARTIST"
-        percentile != null && percentile <= 1.0 && playCount >= 25 -> "👑 TOP 1% IN YOUR LIBRARY"
-        percentile != null && percentile <= 5.0 && playCount >= 20 -> "🌟 TOP 5% IN YOUR LIBRARY"
-        percentile != null && percentile <= 10.0 && playCount >= 15 -> "🔥 TOP 10% IN YOUR LIBRARY"
-        playCount >= 500 -> "⚡ CENTURY CLUB • 500+ SPINS"
-        playCount >= 200 -> "⚡ HEAVY ROTATION • 200+ SPINS"
-        playCount >= 50 -> "🎧 ROTATION REGULAR"
-        else -> "TEMPO • ARTIST SPOTLIGHT"
+        percentile != null && percentile == 0.0 && playCount >= 10 -> ShareText(R.string.share_kicker_all_time_artist)
+        percentile != null && percentile <= 1.0 && playCount >= 25 -> ShareText(R.string.share_kicker_top_1_percent)
+        percentile != null && percentile <= 5.0 && playCount >= 20 -> ShareText(R.string.share_kicker_top_5_percent)
+        percentile != null && percentile <= 10.0 && playCount >= 15 -> ShareText(R.string.share_kicker_top_10_percent)
+        playCount >= 500 -> ShareText(R.string.share_kicker_century_club_artist)
+        playCount >= 200 -> ShareText(R.string.share_kicker_heavy_rotation_artist)
+        playCount >= 50 -> ShareText(R.string.share_kicker_rotation_regular)
+        // Same rule as the song card: an artist with no standing has no kicker.
+        else -> null
     }
 
 internal fun resolveArtistFlexPill(
@@ -1129,24 +872,31 @@ internal fun resolveArtistFlexPill(
     firstListenedDate: Long?,
     firstDiscoveryTimestamp: Long?,
     topGenre: String? = null,
-): String? =
+    dateLocale: Locale,
+    monthYearPattern: String,
+    yearPattern: String,
+): ShareText? =
     when {
         listeningStreakDays >= 3 -> {
-            "🔥 $listeningStreakDays-day listening streak"
+            ShareText(R.string.share_artist_streak_days, listOf(listeningStreakDays))
         }
 
         firstListenedDate != null && firstListenedDate > 0L -> {
-            val sdf = SimpleDateFormat("MMM yyyy", Locale.getDefault())
-            "🎧 Listening since ${sdf.format(Date(firstListenedDate))}"
+            ShareText(
+                R.string.share_artist_listening_since,
+                listOf(formatShareDate(firstListenedDate, monthYearPattern, dateLocale)),
+            )
         }
 
         firstDiscoveryTimestamp != null && firstDiscoveryTimestamp > 0L -> {
-            val sdf = SimpleDateFormat("yyyy", Locale.getDefault())
-            "🎧 Discovered in ${sdf.format(Date(firstDiscoveryTimestamp))}"
+            ShareText(
+                R.string.share_artist_discovered_in,
+                listOf(formatShareDate(firstDiscoveryTimestamp, yearPattern, dateLocale)),
+            )
         }
 
         !topGenre.isNullOrBlank() -> {
-            "🎵 $topGenre"
+            ShareText(R.string.share_artist_top_genre, listOf(topGenre))
         }
 
         else -> {
@@ -1162,107 +912,76 @@ fun BadgeShareCard(
     badge: Badge,
     userName: String,
     profileImagePath: String? = null,
-    theme: ShareTheme = ShareTheme.MIDNIGHT,
+    // How the card is printed; see [ArtistShareCard]. A badge has no artwork, so
+    // a scene seeds its colours from the theme alone.
+    card: ShareCardTheme = ShareCardTheme.Default,
     modifier: Modifier = Modifier,
 ) {
-    val palette = theme.palette
+    val shareLocale = LocalConfiguration.current.locales[0]
+    // A skeleton, not an English pattern: the platform decides where the month sits
+    // relative to the year in this language.
+    val earnedMonthPattern =
+        remember(shareLocale) {
+            shareDatePattern(shareLocale, "MMMMyyyy", SHARE_PATTERN_LONG_MONTH_YEAR)
+        }
     val intrinsicColor = getUniqueBadgeColor(badge.badgeId)
     val rarity = GamificationEngine.getRarity(badge.badgeId)
     val rarityColor = getRarityColor(rarity)
+    val rarityLabel = stringResource(badgeRarityLabel(rarity))
     val categoryLabel =
-        remember(badge.category) {
-            getCategoryLabel(badge.category).uppercase(Locale.getDefault())
-        }
+        (
+            badgeCategoryLabel(badge.category).takeIf { it != 0 }?.let { stringResource(it) }
+                ?: badge.category
+        ).uppercase(shareLocale)
     val xpEarned = GamificationEngine.getBadgeXpContribution(badge.badgeId, badge.stars)
     val earnedDate =
-        remember(badge.earnedAt) {
+        remember(badge.earnedAt, badge.isEarned, shareLocale, earnedMonthPattern) {
             if (badge.isEarned && badge.earnedAt > 0L) {
-                SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(Date(badge.earnedAt))
+                ShareValue.Formatted(formatShareDate(badge.earnedAt, earnedMonthPattern, shareLocale))
             } else {
-                "Recent"
+                ShareValue.Resource(ShareText(R.string.share_recent))
             }
         }
 
+    // The badge plate the app draws *is* the artwork: handed in as a source so
+    // every art theme prints it as moonlight, glass, glyphs or dots, instead of
+    // each theme having to know whether the picture came from a URL or a canvas.
     val backdropBitmap =
         remember(badge.badgeId) {
             createBadgeBackdropBitmap(badge = badge)
         }
 
-    ShareCardBackground(
-        imageUrl = null,
-        backdropBitmap = backdropBitmap,
-        customBackdrop = {
-            BadgeCustomCanvas(badge = badge)
-        },
-        palette = palette,
-        modifier = modifier.aspectRatio(9f / 16f),
-    ) {
+    ShareCardSurface(
+        card = card,
+        art = ShareArtSource.BitmapSource(bitmap = backdropBitmap, key = "badge:${badge.badgeId}"),
+        modifier = modifier,
+        brandingBottomPadding = ShareCardBrandingInset,
+    ) { palette ->
         FitToHeight(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = 36.dp, bottom = 68.dp, start = 24.dp, end = 24.dp),
+                    .padding(ShareProceduralCardPadding),
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // Top Identity Pill: User profile stamp
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier =
-                        Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(palette.surface)
-                            .border(1.dp, palette.divider, RoundedCornerShape(50))
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
-                ) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background(intrinsicColor.copy(alpha = 0.25f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (!profileImagePath.isNullOrBlank()) {
-                            CachedAsyncImage(
-                                imageUrl = profileImagePath,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
-                                allowHardware = false,
-                            )
-                        } else {
-                            Text(
-                                text = userName.firstOrNull()?.toString()?.uppercase() ?: "U",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = palette.textPrimary,
-                            )
-                        }
-                    }
-                    Text(
-                        text = userName,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = palette.textPrimary,
-                    )
-                    Text(
-                        text = "·",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = palette.textSecondary,
-                    )
-                    Text(
-                        text = if (badge.isMaxed) "TROPHY MASTERED" else "TROPHY UNLOCKED",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (palette.isDark) intrinsicColor else palette.textStrong,
-                        letterSpacing = 1.sp,
-                    )
-                }
+                ShareIdentityPill(
+                    palette = palette,
+                    userName = userName,
+                    profileImagePath = profileImagePath,
+                    accent = intrinsicColor,
+                    label =
+                        stringResource(
+                            if (badge.isMaxed) {
+                                R.string.share_trophy_mastered
+                            } else {
+                                R.string.share_trophy_unlocked
+                            },
+                        ),
+                )
 
                 Spacer(modifier = Modifier.height(2.dp))
 
@@ -1310,7 +1029,7 @@ fun BadgeShareCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
-                        text = "✦ $categoryLabel DISCIPLINE",
+                        text = stringResource(R.string.share_badge_discipline, categoryLabel),
                         style =
                             MaterialTheme.typography.labelSmall.copy(
                                 fontSize = 11.sp,
@@ -1362,7 +1081,7 @@ fun BadgeShareCard(
                                 .padding(horizontal = 6.dp, vertical = 2.dp),
                     ) {
                         Text(
-                            text = rarity.label.uppercase(Locale.getDefault()),
+                            text = rarityLabel.uppercase(shareLocale),
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                             fontWeight = FontWeight.Black,
                             color = if (palette.isDark) rarityColor else palette.textStrong,
@@ -1370,7 +1089,7 @@ fun BadgeShareCard(
                         )
                     }
                     Text(
-                        text = "·",
+                        text = SHARE_META_SEPARATOR,
                         style = MaterialTheme.typography.labelSmall,
                         color = palette.textSecondary,
                     )
@@ -1406,14 +1125,19 @@ fun BadgeShareCard(
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(
-                                text = "TIER PROGRESS",
+                                text = stringResource(R.string.share_tier_progress),
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                 fontWeight = FontWeight.Bold,
                                 color = palette.textSecondary,
                                 letterSpacing = 1.2.sp,
                             )
                             Text(
-                                text = "${badge.progress} / ${badge.maxProgress}",
+                                text =
+                                    stringResource(
+                                        R.string.share_progress_format,
+                                        badge.progress,
+                                        badge.maxProgress,
+                                    ),
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 fontWeight = FontWeight.Bold,
                                 color = palette.textPrimary,
@@ -1465,80 +1189,85 @@ fun BadgeShareCard(
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(
-                                text = "RANK TIER",
+                                text = stringResource(R.string.share_rank_tier),
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 color = palette.textSecondary,
                                 letterSpacing = palette.labelTracking ?: 1.2.sp,
                             )
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = if (badge.isMaxed) "Master" else "Tier ${badge.stars}",
+                                text =
+                                    if (badge.isMaxed) {
+                                        stringResource(R.string.share_tier_master)
+                                    } else {
+                                        stringResource(R.string.share_tier_number, badge.stars)
+                                    },
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = palette.headlineWeight ?: FontWeight.Bold,
                                 color = if (badge.isMaxed && palette.isDark) intrinsicColor else palette.textPrimary,
                             )
                             Spacer(modifier = Modifier.height(1.dp))
                             Text(
-                                text = if (badge.isMaxed) "5 of 5 Stars" else "${badge.stars} of 5 Stars",
+                                text =
+                                    stringResource(
+                                        R.string.share_stars_of_five,
+                                        if (badge.isMaxed) 5 else badge.stars,
+                                    ),
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 color = palette.textSecondary,
                             )
                         }
 
-                        Box(
-                            modifier =
-                                Modifier
-                                    .height(32.dp)
-                                    .width(1.dp)
-                                    .background(palette.divider),
-                        )
+                        ShareStatDivider(palette = palette, height = 32.dp)
 
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(
-                                text = "XP VALUE",
+                                text = stringResource(R.string.share_xp_value),
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 color = palette.textSecondary,
                                 letterSpacing = palette.labelTracking ?: 1.2.sp,
                             )
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = if (xpEarned > 0) "+$xpEarned XP" else "+${rarity.xpPerStar * badge.stars.coerceAtLeast(1)} XP",
+                                text =
+                                    stringResource(
+                                        R.string.share_xp_amount,
+                                        if (xpEarned > 0) {
+                                            xpEarned
+                                        } else {
+                                            rarity.xpPerStar * badge.stars.coerceAtLeast(1)
+                                        },
+                                    ),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = palette.headlineWeight ?: FontWeight.Bold,
                                 color = if (palette.isDark) Color(0xFFFBBF24) else palette.textPrimary,
                             )
                             Spacer(modifier = Modifier.height(1.dp))
                             Text(
-                                text = "${rarity.label} Tier",
+                                text = stringResource(R.string.share_rarity_tier, rarityLabel),
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 color = palette.textSecondary,
                             )
                         }
 
-                        Box(
-                            modifier =
-                                Modifier
-                                    .height(32.dp)
-                                    .width(1.dp)
-                                    .background(palette.divider),
-                        )
+                        ShareStatDivider(palette = palette, height = 32.dp)
 
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.weight(1f),
                         ) {
                             Text(
-                                text = "ACHIEVED",
+                                text = stringResource(R.string.share_achieved),
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 color = palette.textSecondary,
                                 letterSpacing = palette.labelTracking ?: 1.2.sp,
                             )
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = earnedDate,
+                                text = earnedDate.resolve(),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = palette.headlineWeight ?: FontWeight.Bold,
                                 color = palette.textPrimary,
@@ -1546,7 +1275,7 @@ fun BadgeShareCard(
                             )
                             Spacer(modifier = Modifier.height(1.dp))
                             Text(
-                                text = "Archive Record",
+                                text = stringResource(R.string.share_archive_record),
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 color = palette.textSecondary,
                             )
@@ -1569,92 +1298,46 @@ fun MilestoneShareCard(
     profileImagePath: String? = null,
     totalXp: Long = 0,
     streak: Int = 0,
-    theme: ShareTheme = ShareTheme.MIDNIGHT,
+    // How the card is printed; see [ArtistShareCard].
+    card: ShareCardTheme = ShareCardTheme.Default,
     modifier: Modifier = Modifier,
 ) {
-    val palette = theme.palette
     val tierAccent = getLevelTierAccent(level)
+    val displayTitle =
+        title.ifBlank { stringResource(R.string.share_milestone_default_title) }
 
+    // Same contract as the badge card: the drawn plate is the artwork, so every
+    // art theme treats it like a cover.
     val backdropBitmap =
         remember(level) {
             createMilestoneBackdropBitmap(level = level)
         }
 
-    ShareCardBackground(
-        imageUrl = null,
-        backdropBitmap = backdropBitmap,
-        customBackdrop = {
-            MilestoneCustomCanvas(level = level)
-        },
-        palette = palette,
-        modifier = modifier.aspectRatio(9f / 16f),
-    ) {
+    ShareCardSurface(
+        card = card,
+        art = ShareArtSource.BitmapSource(bitmap = backdropBitmap, key = "milestone:$level"),
+        modifier = modifier,
+        brandingBottomPadding = ShareCardBrandingInset,
+    ) { palette ->
         FitToHeight(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(top = 36.dp, bottom = 68.dp, start = 24.dp, end = 24.dp),
+                    .padding(ShareProceduralCardPadding),
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                // Top Identity Pill
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier =
-                        Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(palette.surface)
-                            .border(1.dp, palette.divider, RoundedCornerShape(50))
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
-                ) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background(tierAccent.copy(alpha = 0.25f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (!profileImagePath.isNullOrBlank()) {
-                            CachedAsyncImage(
-                                imageUrl = profileImagePath,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
-                                allowHardware = false,
-                            )
-                        } else {
-                            Text(
-                                text = userName.firstOrNull()?.toString()?.uppercase() ?: "U",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = palette.textPrimary,
-                            )
-                        }
-                    }
-                    Text(
-                        text = userName,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = palette.textPrimary,
-                    )
-                    Text(
-                        text = "·",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = palette.textSecondary,
-                    )
-                    Text(
-                        text = "LEVEL PROMOTION",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (palette.isDark) tierAccent else palette.textStrong,
-                        letterSpacing = 1.2.sp,
-                    )
-                }
+                ShareIdentityPill(
+                    palette = palette,
+                    userName = userName,
+                    profileImagePath = profileImagePath,
+                    accent = tierAccent,
+                    label = stringResource(R.string.share_level_promotion),
+                    labelLetterSpacing = 1.2.sp,
+                )
 
                 Spacer(modifier = Modifier.height(10.dp))
 
@@ -1689,7 +1372,7 @@ fun MilestoneShareCard(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "LEVEL",
+                                text = stringResource(R.string.share_level_label),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Black,
                                 color = tierAccent,
@@ -1714,7 +1397,7 @@ fun MilestoneShareCard(
 
                 // Listener Title & Description
                 Text(
-                    text = title.ifBlank { "Dedicated Listener" },
+                    text = displayTitle,
                     style =
                         MaterialTheme.typography.headlineMedium.copy(
                             fontFamily = DisplayFontFamily,
@@ -1726,7 +1409,7 @@ fun MilestoneShareCard(
                 )
 
                 Text(
-                    text = "A milestone reached on the listening rhythm.",
+                    text = stringResource(R.string.share_milestone_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
                     color = palette.textSecondary,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -1748,7 +1431,7 @@ fun MilestoneShareCard(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "TOTAL XP",
+                                text = stringResource(R.string.share_total_xp),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = palette.textSecondary,
                                 letterSpacing = palette.labelTracking ?: 1.5.sp,
@@ -1763,24 +1446,23 @@ fun MilestoneShareCard(
                         }
 
                         if (!LocalHideStreaks.current) {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .height(30.dp)
-                                        .width(1.dp)
-                                        .background(palette.divider),
-                            )
+                            ShareStatDivider(palette = palette, height = 30.dp)
 
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "STREAK",
+                                    text = stringResource(R.string.share_streak_label),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = palette.textSecondary,
                                     letterSpacing = palette.labelTracking ?: 1.5.sp,
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = if (streak > 0) "$streak days" else "Active",
+                                    text =
+                                        if (streak > 0) {
+                                            stringResource(R.string.share_streak_days, streak)
+                                        } else {
+                                            stringResource(R.string.share_streak_active)
+                                        },
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = palette.headlineWeight ?: FontWeight.Bold,
                                     color = palette.textPrimary,
@@ -1788,34 +1470,18 @@ fun MilestoneShareCard(
                             }
                         }
 
-                        Box(
-                            modifier =
-                                Modifier
-                                    .height(30.dp)
-                                    .width(1.dp)
-                                    .background(palette.divider),
-                        )
+                        ShareStatDivider(palette = palette, height = 30.dp)
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "RANK TIER",
+                                text = stringResource(R.string.share_rank_tier),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = palette.textSecondary,
                                 letterSpacing = palette.labelTracking ?: 1.5.sp,
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text =
-                                    when {
-                                        level >= 100 -> "Mythic"
-                                        level >= 75 -> "Rose"
-                                        level >= 50 -> "Gold"
-                                        level >= 35 -> "Purple"
-                                        level >= 20 -> "Electric"
-                                        level >= 10 -> "Cyan"
-                                        level >= 5 -> "Emerald"
-                                        else -> "Studio"
-                                    },
+                                text = stringResource(milestoneTierLabel(level)),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = palette.headlineWeight ?: FontWeight.Bold,
                                 color = if (palette.isDark) tierAccent else palette.textPrimary,

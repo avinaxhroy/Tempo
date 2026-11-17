@@ -3,8 +3,10 @@ package me.avinas.tempo
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import coil3.ImageLoader
@@ -13,18 +15,18 @@ import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.avinas.tempo.data.analytics.AnalyticsConsent
 import me.avinas.tempo.data.analytics.AnalyticsGate
 import me.avinas.tempo.data.analytics.AnalyticsTracker
 import me.avinas.tempo.data.analytics.CrashSignatureRecorder
-import me.avinas.tempo.data.analytics.DbMigration
+import me.avinas.tempo.data.analytics.InstallOnce
 import me.avinas.tempo.data.analytics.StartupSlow
 import me.avinas.tempo.data.drive.BackupInterval
 import me.avinas.tempo.data.drive.BackupSettingsManager
 import me.avinas.tempo.data.drive.LocalBackupStorage
-import me.avinas.tempo.data.local.AppDatabase
 import me.avinas.tempo.data.local.dao.UserKnownArtistDao
 import me.avinas.tempo.data.local.dao.UserPreferencesDao
 import me.avinas.tempo.data.repository.AppPreferenceRepository
@@ -32,6 +34,7 @@ import me.avinas.tempo.service.TrackingServiceHeartbeat
 import me.avinas.tempo.ui.onboarding.dataStore
 import me.avinas.tempo.utils.ArtistParser
 import me.avinas.tempo.utils.FrameworkRaceGuard
+import me.avinas.tempo.utils.ShareUtils
 import me.avinas.tempo.worker.AnalyticsFlushWorker
 import me.avinas.tempo.worker.ChallengeWorker
 import me.avinas.tempo.worker.DriveBackupWorker
@@ -95,7 +98,7 @@ class TempoApplication :
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val lastSeenDbVersionKey = intPreferencesKey("last_seen_db_version")
+    private val installOnceReportedKey = booleanPreferencesKey("analytics_install_once")
 
     override val workManagerConfiguration: Configuration
         get() =
@@ -124,9 +127,52 @@ class TempoApplication :
         reconcileAutomaticBackupSchedules()
         scheduleBackgroundWorkDeferred()
         observeAnalyticsConsent()
+        observeShareCompletion()
 
         reportAppStarted(initStartedAt)
-        reportDatabaseVersionChange()
+        reportInstallOnce()
+    }
+
+    /**
+     * Records a share once the chooser reports a picked target.
+     *
+     * Opening the system share sheet is not a share: the user can back out, and a
+     * third-party target never reports a result. The reliable signal is the chooser's
+     * `EXTRA_CHOSEN_COMPONENT_INTENT_SENDER` callback. Mark `share_last_success` and
+     * clear the nudge's dismiss counter there, not when the sheet opens.
+     *
+     * Registered for the process, not per screen: shares start from stats, the home nudge and
+     * the spotlight canvases, and all of them should count. The receiver is not exported and
+     * the sender pending intent is package-scoped, so nothing else on the device can fake one.
+     */
+    private fun observeShareCompletion() {
+        runCatching {
+            ShareUtils.registerChosenTargetListener(
+                this,
+                ShareUtils.ChosenTargetReceiver { target ->
+                    // A null target means the chooser could not resolve one; the user still
+                    // picked something, but there is no evidence the share was delivered.
+                    if (target != null) {
+                        applicationScope.launch {
+                            runCatching {
+                                dataStore.edit { prefs ->
+                                    prefs[longPreferencesKey("share_last_success")] =
+                                        System.currentTimeMillis()
+                                    // A share is positive feedback: the "dismissed three times"
+                                    // rule should not outlive it, or someone who ignored the
+                                    // nudge twice could never see it again after sharing.
+                                    prefs[intPreferencesKey("share_nudge_dismiss_count")] = 0
+                                }
+                            }
+                        }
+                    }
+                },
+            )
+        }.onFailure { error ->
+            // Registration failing must never take start-up down; the worst case is that a
+            // share goes unrecorded.
+            android.util.Log.w("TempoApplication", "Share completion listener unavailable", error)
+        }
     }
 
     /**
@@ -178,27 +224,33 @@ class TempoApplication :
     }
 
     /**
-     * Reports when the on-disk schema version advances.
+     * Reports the install itself, once ever.
      *
-     * This is the honest signal available without instrumenting every Room migration
-     * individually, and it answers the question that actually matters when shipping one: how
-     * many users have run it. Only the version pair is reported — a migration's duration and
-     * success are not knowable from here, and guessing at them would put numbers in the
-     * dashboard that nothing measured.
+     * Every other event is per day or per outcome, which left two questions unanswerable: whether
+     * "active users fell" meant people left or merely that nobody new arrived, and which build a
+     * device was running when it first appeared. One event per install, ever, closes both — about
+     * as many events in total as the project has installs.
+     *
+     * The marker is written only after [AnalyticsTracker.canReport] agrees the event would be
+     * queued. Writing it without a send would consume the once-ever slot while nothing left the
+     * device, and a user who later turned reporting on would never be counted at all.
      */
-    private fun reportDatabaseVersionChange() {
+    private fun reportInstallOnce() {
         applicationScope.launch {
             try {
-                val lastSeen = dataStore.data.first()[lastSeenDbVersionKey]
-                if (lastSeen != null && lastSeen != AppDatabase.VERSION) {
-                    analyticsTracker.track(
-                        DbMigration(fromVersion = lastSeen, toVersion = AppDatabase.VERSION),
-                    )
-                }
-                dataStore.edit { it[lastSeenDbVersionKey] = AppDatabase.VERSION }
+                if (dataStore.data.first()[installOnceReportedKey] == true) return@launch
+                if (!analyticsTracker.canReport()) return@launch
+
+                analyticsTracker.track(
+                    InstallOnce(
+                        appVersion = BuildConfig.VERSION_NAME,
+                        androidApi = android.os.Build.VERSION.SDK_INT,
+                    ),
+                )
+                dataStore.edit { it[installOnceReportedKey] = true }
             } catch (e: Exception) {
                 // Bookkeeping must never affect start-up.
-                android.util.Log.w("TempoApplication", "Failed to record schema version", e)
+                android.util.Log.w("TempoApplication", "Failed to record install", e)
             }
         }
     }
@@ -267,7 +319,6 @@ class TempoApplication :
                     DriveBackupWorker.schedule(
                         this@TempoApplication,
                         settings.backupInterval.hours,
-                        settings.wifiOnly,
                     )
                 } else {
                     DriveBackupWorker.cancel(this@TempoApplication)
@@ -285,11 +336,12 @@ class TempoApplication :
     }
 
     private fun scheduleBackgroundWorkDeferred() {
-        backgroundExecutor.execute {
-            Thread.sleep(500)
-            Handler(Looper.getMainLooper()).post {
-                scheduleBackgroundWork()
-            }
+        // This used to hop back onto the main thread after the 500 ms deferral, which put a
+        // PackageManager binder call, WorkManager's lazy initialisation and eight enqueues inside
+        // the first-frame window. None of it needs the main thread.
+        applicationScope.launch {
+            delay(500)
+            scheduleBackgroundWork()
         }
     }
 

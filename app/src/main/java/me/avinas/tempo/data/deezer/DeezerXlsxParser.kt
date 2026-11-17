@@ -21,7 +21,7 @@ import org.xml.sax.helpers.DefaultHandler
  *
  * Deezer stores listening history in the worksheet named "10_listeningHistory".
  * Only the fields required by Tempo are read; IP address and device/platform
- * information are deliberately ignored.
+ * information are ignored.
  */
 object DeezerXlsxParser {
     private const val HISTORY_SHEET = "10_listeningHistory"

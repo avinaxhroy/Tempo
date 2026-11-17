@@ -8,5 +8,5 @@
     android:previewImage="@drawable/widget_preview_dashboard"
     android:targetCellWidth="4"
     android:targetCellHeight="2"
-    android:updatePeriodMillis="1800000"
+    android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />

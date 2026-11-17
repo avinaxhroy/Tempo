@@ -37,6 +37,8 @@
     <string name="widget_heatmap_desc">Визуализация ваших привычек прослушивания со временем</string>
     <string name="widget_milestone_desc">Отслеживайте достижения в прослушивании</string>
     <string name="widget_mix_desc">Ваш персональный музыкальный микс</string>
+    <string name="widget_today_total_desc">Время прослушивания, воспроизведения и изменение ко вчерашнему дню</string>
+    <string name="widget_rhythm_desc">Ваш ритм прослушивания в течение дня</string>
 
     <!-- Home components -->
     <string name="home_spotlight_title">В центре внимания</string>
@@ -56,12 +58,12 @@
     <string name="home_habits_title">Взгляд на ваши привычки</string>
     <string name="home_lvl">УР</string>
 
-    <!-- Rate App -->
     <string name="rate_enjoying">Нравится Tempo?</string>
-    <string name="rate_message">Если вам нравится приложение, пожалуйста, уделите минутку, чтобы оценить его. Это очень помогает нам развиваться!</string>
-    <string name="rate_now">Оценить</string>
-    <string name="rate_not_now">Не сейчас</string>
-    
+    <string name="rate_message">Ваши отзывы помогают нам улучшать приложение и находить новых любителей музыки.</string>
+    <string name="rate_badge_on_play">В Google Play</string>
+    <string name="rate_cta_review">Оценить в Play Маркете</string>
+    <string name="rate_maybe_later">Может, позже</string>
+    <string name="rate_close">Закрыть</string>
     <!-- Gamification / Level -->
     <string name="level_label">УРОВЕНЬ %1$d</string>
     <string name="level_xp">%1$d XP</string>
@@ -70,6 +72,17 @@
     <string name="level_up_new_level">Уровень %1$d</string>
     <string name="level_up_awesome">Отлично!</string>
     <string name="level_reached">Вы достигли Уровня %1$d</string>
+
+    <!-- Level tier names, shared by the milestone card and the level-up pill -->
+    <string name="level_tier_studio">Студия</string>
+    <string name="level_tier_emerald">Изумруд</string>
+    <string name="level_tier_cyan">Циан</string>
+    <string name="level_tier_electric">Электрик</string>
+    <string name="level_tier_purple">Пурпур</string>
+    <string name="level_tier_gold">Золото</string>
+    <string name="level_tier_rose">Роза</string>
+    <string name="level_tier_mythic">Мифик</string>
+    <string name="level_tier_pill">%1$s ТИР</string>
 
     <!-- Onboarding: Welcome screen -->
     <string name="welcome_headline_1">Каждое прослушивание,</string>
@@ -320,7 +333,6 @@
     <!-- Spotlight -->
     <string name="spotlight_title">В центре внимания</string>
     <string name="spotlight_share_story">Поделиться историей</string>
-    <string name="spotlight_share_instagram">Поделиться в Instagram Stories</string>
     <string name="spotlight_loading">Загрузка карточек…</string>
     <string name="spotlight_no_cards">Нет доступных карточек</string>
     <string name="spotlight_preparing">Подготовка вашей истории…</string>
@@ -378,11 +390,15 @@
     <string name="share_restored">Восстановлено из памяти</string>
 
     <!-- Share Preview Dialog & Share Cards (artist/song detail) -->
-    <string name="share_close">Закрыть</string>
-    <string name="share_failed">Не удалось поделиться изображением</string>
+    <string name="share_chooser_title">Поделиться Tempo</string>
     <string name="share_content_description">Поделиться</string>
     <string name="share_brand">TEMPO</string>
-    <string name="share_theme_label">Тема</string>
+    <string name="share_theme_midnight">Полночь</string>
+    <string name="share_theme_glass">Стекло</string>
+    <string name="share_theme_ascii">ASCII</string>
+    <string name="share_theme_minimum">Минимум</string>
+    <string name="share_theme_daylight">Дневной свет</string>
+    <string name="share_theme_dither">Дизеринг</string>
     <string name="share_total_time">ОБЩЕЕ ВРЕМЯ</string>
     <string name="share_unique_songs">УНИКАЛЬНЫЕ ПЕСНИ</string>
     <string name="share_top_songs">ТОП ПЕСЕН</string>
@@ -390,6 +406,100 @@
     <string name="share_country_format">📍 %1$s</string>
     <string name="share_plays_format">%1$d прослушиваний</string>
     <string name="share_min_format">%1$d мин</string>
+
+    <!-- Rasterized share cards (ShareCards.kt: artist / song / badge / milestone) -->
+    <string name="share_songs_label">ПЕСНИ</string>
+    <string name="share_fan_status_number_one">#1 исполнитель</string>
+    <string name="share_duration_hours_format">%1$.1f ч</string>
+    <string name="share_duration_minutes_format">%1$d мин</string>
+    <string name="share_album_year_format">%1$s • %2$d</string>
+    <string name="share_released_year">Выпущено в %1$d</string>
+    <string name="share_tracks_label">ТРЕКИ</string>
+    <string name="share_top_tracks">ГЛАВНЫЕ ТРЕКИ</string>
+    <string name="share_highlight_album_completion">✨ %1$d%% альбома прослушано до конца</string>
+
+    <!-- Standing kickers: album card -->
+    <string name="share_kicker_album_complete">💿 ПРОСЛУШАН ПОЛНОСТЬЮ</string>
+    <string name="share_kicker_album_century">⚡ КЛУБ СТА • 100+ ПРОСЛУШИВАНИЙ</string>
+    <string name="share_kicker_album_rotation">🎧 АЛЬБОМ В РОТАЦИИ</string>
+
+    <!-- Standing kickers: song card -->
+    <string name="share_kicker_all_time_track">👑 ТРЕК №1 ЗА ВСЁ ВРЕМЯ</string>
+    <string name="share_kicker_top_track_library">🌟 ТОП-%1$d В БИБЛИОТЕКЕ</string>
+    <string name="share_kicker_top_track_rotation">🔥 ТОП-%1$d В РОТАЦИИ</string>
+    <string name="share_kicker_century_club_track">⚡ КЛУБ СТА • 100+ ПРОСЛУШИВАНИЙ</string>
+    <string name="share_kicker_heavy_rotation">⚡ ЧАСТАЯ РОТАЦИЯ</string>
+    <string name="share_kicker_zero_skips">🎧 БЕЗ ПРОПУСКОВ • ГЛУБОКАЯ РОТАЦИЯ</string>
+
+    <!-- Standing kickers: artist card -->
+    <string name="share_kicker_all_time_artist">👑 АРТИСТ №1 ЗА ВСЁ ВРЕМЯ</string>
+    <string name="share_kicker_top_1_percent">👑 ТОП-1% В ВАШЕЙ БИБЛИОТЕКЕ</string>
+    <string name="share_kicker_top_5_percent">🌟 ТОП-5% В ВАШЕЙ БИБЛИОТЕКЕ</string>
+    <string name="share_kicker_top_10_percent">🔥 ТОП-10% В ВАШЕЙ БИБЛИОТЕКЕ</string>
+    <string name="share_kicker_century_club_artist">⚡ КЛУБ СТА • 500+ ПРОСЛУШИВАНИЙ</string>
+    <string name="share_kicker_heavy_rotation_artist">⚡ ЧАСТАЯ РОТАЦИЯ • 200+ ПРОСЛУШИВАНИЙ</string>
+    <string name="share_kicker_rotation_regular">🎧 ПОСТОЯННАЯ РОТАЦИЯ</string>
+
+    <!-- Flex stat: label, value, and editorial highlight -->
+    <string name="share_since_label">С</string>
+    <string name="share_peak_label">ПИК</string>
+    <string name="share_finish_label">ДОСЛУШАНО</string>
+    <string name="share_status_label">СТАТУС</string>
+    <string name="share_status_favorite">Избранное</string>
+    <string name="share_status_spun">В ротации</string>
+    <string name="share_peak_rank_format">#%1$d</string>
+    <string name="share_percent_format">%1$d%%</string>
+    <string name="share_highlight_binge">🔥 Рекорд: %1$d прослушиваний за день</string>
+    <string name="share_highlight_habit">🌙 Фирменный саундтрек: %1$s</string>
+    <string name="share_highlight_loyalty">✨ 100% верность • Без пропусков</string>
+    <string name="share_highlight_vibe">✨ Настроение: %1$s</string>
+    <string name="share_highlight_genre">🎧 %1$s</string>
+    <string name="share_artist_streak_days">🔥 %1$d дн. подряд</string>
+    <string name="share_artist_listening_since">🎧 Слушаете с %1$s</string>
+    <string name="share_artist_discovered_in">🎧 Открыт в %1$s</string>
+    <string name="share_artist_top_genre">🎵 %1$s</string>
+
+    <!-- Badge card -->
+    <string name="share_recent">Недавно</string>
+    <string name="share_trophy_mastered">ТРОФЕЙ МАСТЕРА</string>
+    <string name="share_trophy_unlocked">ТРОФЕЙ ОТКРЫТ</string>
+    <string name="share_badge_discipline">✦ ДИСЦИПЛИНА: %1$s</string>
+    <string name="share_tier_progress">ПРОГРЕСС УРОВНЯ</string>
+    <string name="share_progress_format">%1$d / %2$d</string>
+    <string name="share_rank_tier">РАНГ</string>
+    <string name="share_tier_master">Мастер</string>
+    <string name="share_tier_number">Уровень %1$d</string>
+    <string name="share_stars_of_five">%1$d из 5 звёзд</string>
+    <string name="share_xp_value">ЦЕННОСТЬ XP</string>
+    <string name="share_xp_amount">+%1$d XP</string>
+    <string name="share_rarity_tier">Редкость: %1$s</string>
+    <string name="share_achieved">ПОЛУЧЕНО</string>
+    <string name="share_archive_record">Запись в архиве</string>
+
+    <!-- Badge categories (stored as English constants in the database) -->
+    <string name="share_category_milestones">Вехи</string>
+    <string name="share_category_time">Время</string>
+    <string name="share_category_streaks">Серии</string>
+    <string name="share_category_discovery">Открытия</string>
+    <string name="share_category_engagement">Вовлечённость</string>
+    <string name="share_category_levels">Уровни</string>
+
+    <!-- Badge rarity -->
+    <string name="share_rarity_common">Обычный</string>
+    <string name="share_rarity_rare">Редкий</string>
+    <string name="share_rarity_epic">Эпический</string>
+    <string name="share_rarity_legendary">Легендарный</string>
+    <string name="share_rarity_mythic">Мифический</string>
+
+    <!-- Milestone card -->
+    <string name="share_level_promotion">ПОВЫШЕНИЕ УРОВНЯ</string>
+    <string name="share_level_label">УРОВЕНЬ</string>
+    <string name="share_milestone_default_title">Преданный слушатель</string>
+    <string name="share_milestone_subtitle">Веха, достигнутая в ритме прослушивания.</string>
+    <string name="share_total_xp">ВСЕГО XP</string>
+    <string name="share_streak_label">СЕРИЯ</string>
+    <string name="share_streak_days">%1$d дн.</string>
+    <string name="share_streak_active">Активно</string>
 
     <!-- Spotlight Reminder -->
     <string name="spotlight_reminder_view">Смотреть историю</string>
@@ -727,7 +837,14 @@
     <string name="spotlight_playtime_minutes">%1$d мин общего времени</string>
     <string name="spotlight_time_hours">%1$d ч %2$d мин</string>
     <string name="spotlight_time_minutes">%1$d мин</string>
+    <string name="share_time_less_than_minute">&lt;1 мин</string>
     <string name="spotlight_share_your_story">Поделитесь своей историей</string>
+    <string name="spotlight_story_watermark">Tempo Spotlight</string>
+    <string name="share_theme_story">История</string>
+    <string name="share_theme_story_caption">Собственный фон истории, как он играет</string>
+    <string name="spotlight_conclusion_items_label">Акценты</string>
+    <string name="spotlight_conclusion_items_spoken">Акцентов: %1$d</string>
+    <string name="spotlight_share_title">Поделиться историей</string>
     <string name="spotlight_top_track_setup_label">Ваш лучший трек</string>
 
     <!-- Stats Screen -->
@@ -749,22 +866,19 @@
     <string name="stats_share">Поделиться</string>
     <string name="stats_share_title">Поделиться статистикой</string>
     <string name="stats_share_close">Закрыть</string>
-    <string name="stats_share_button">Поделиться в Instagram Stories</string>
-    <string name="stats_share_count_label">Элементы</string>
-    <string name="stats_share_theme_label">Тема</string>
-    <string name="stats_share_layout_label">Шаблон</string>
-    <string name="stats_share_theme_midnight">Полночь</string>
-    <string name="stats_share_theme_rose">Роза</string>
-    <string name="stats_share_theme_aurora">Аврора</string>
-    <string name="stats_share_theme_mono">Монохром</string>
-    <string name="stats_share_theme_daylight">Дневной свет</string>
-    <string name="stats_share_theme_ocean">Океан</string>
+    <string name="stats_share_button">Поделиться</string>
+    <string name="stats_share_count_label">Позиции</string>
+    <string name="stats_share_layout_label">Вид</string>
     <string name="stats_share_layout_list">Список</string>
     <string name="stats_share_layout_podium">Подиум</string>
     <string name="stats_share_layout_grid">Сетка</string>
     <string name="stats_share_summary">Сводка</string>
     <string name="stats_share_on">Вкл</string>
     <string name="stats_share_off">Выкл</string>
+    <string name="stats_share_layout_spoken">Вид: %1$s</string>
+    <string name="stats_share_count_spoken">Позиций: %1$d</string>
+    <string name="stats_share_summary_spoken_on">Сводка: вкл</string>
+    <string name="stats_share_summary_spoken_off">Сводка: выкл</string>
     <string name="stats_share_rank_1">#1</string>
     <string name="stats_share_stat_time">ВРЕМЯ</string>
     <string name="stats_share_stat_plays">ВОСПР.</string>
@@ -777,6 +891,40 @@
     <string name="stats_share_period_this_month">В этом месяце</string>
     <string name="stats_share_period_this_year">В этом году</string>
     <string name="stats_share_period_all_time">За все время</string>
+    <string name="stats_share_motion_waves">Волны</string>
+    <string name="stats_share_motion_shapes">Фигуры</string>
+    <string name="stats_share_motion_glyphs">Глифы</string>
+    <string name="stats_share_motion_ether">Эфир</string>
+    <string name="stats_share_motion_pixels">Пиксели</string>
+    <string name="stats_share_motion_bars">Полосы</string>
+    <string name="stats_share_motion_halftone">Полутон</string>
+    <string name="stats_share_video_preparing">Записываем видео…</string>
+    <string name="stats_share_video_failed">Не удалось записать видео. Попробуйте статичную тему.</string>
+    <string name="stats_share_share_failed">Не удалось открыть меню «Поделиться». Попробуйте сохранить в галерею.</string>
+    <string name="stats_share_motion_caption_waves">Холмистый рельеф под низким горизонтом</string>
+    <string name="stats_share_motion_caption_shapes">Сетка, качающаяся медленными волнами</string>
+    <string name="stats_share_motion_caption_glyphs">Моноширинные символы, свет неровный</string>
+    <string name="stats_share_motion_caption_ether">Чернила, плывущие будто под водой</string>
+    <string name="stats_share_motion_caption_pixels">Дизеринг в мягкие квадраты</string>
+    <string name="stats_share_motion_caption_bars">Шкала уровня из тонких линий</string>
+    <string name="stats_share_motion_caption_halftone">Точки мелким зерном</string>
+    <string name="stats_share_motion_unavailable">Уйдёт снимком, а не видео</string>
+    <!-- Первый показ экрана «Поделиться статистикой»: три шага. -->
+    <string name="stats_share_tour_carousel_title">Листайте карточки</string>
+    <string name="stats_share_tour_carousel_body">Каждая тема — готовая карточка. Листайте в любую сторону и делитесь той, на которой остановились.</string>
+    <string name="stats_share_tour_deck_title">Настройте карточку</string>
+    <string name="stats_share_tour_deck_body">Элементы под карточкой. Любое нажатие сразу перерисовывает её выше.</string>
+    <string name="stats_share_tour_share_title">Отправить или сохранить</string>
+    <string name="stats_share_tour_share_body">Анимированные темы уходят как 15-секундное видео, статичные — как снимок. И то и другое можно сохранить в галерею.</string>
+    <string name="stats_share_tour_next">Далее</string>
+    <string name="stats_share_tour_done">Понятно</string>
+    <string name="stats_share_tour_skip">Пропустить</string>
+    <string name="stats_share_tour_replay">Показать подсказки</string>
+    <string name="stats_share_save">Сохранить в галерею</string>
+    <string name="stats_share_saved">Сохранено в галерею</string>
+    <string name="stats_share_save_failed">Не удалось сохранить в галерею. Проверьте место на устройстве.</string>
+    <string name="stats_share_save_denied">Для сохранения нужен доступ к памяти. Его можно включить в настройках.</string>
+    <string name="stats_share_capture_failed">Не удалось отрисовать карточку. Попробуйте другую тему.</string>
 
     <!-- History Screen -->
     <string name="history_filter_title">Фильтр истории</string>
@@ -1164,25 +1312,30 @@
     <string name="ui_search_hint">Поиск…</string>
     <string name="ui_no_results">Нет результатов.</string>
 
-    <!-- Constellation / InsightFeed -->
-    <string name="constellation_hint">НАЖМИТЕ ИЛИ ТАЩИТЕ ЗВЕЗДЫ ДЛЯ ОРБИТЫ И ДЕТАЛЕЙ</string>
-    <string name="constellation_active">АКТИВНАЯ ДИНАМИКА // %1$s</string>
-
-    <string name="insight_category_mood">ДИНАМИКА ПРОСЛУШИВАНИЯ // НАСТРОЕНИЕ</string>
-    <string name="insight_category_peak_time">ДИНАМИКА ПРОСЛУШИВАНИЯ // ПИКОВОЕ ВРЕМЯ</string>
-    <string name="insight_category_binge">ДИНАМИКА ПРОСЛУШИВАНИЯ // МАРАФОН</string>
-    <string name="insight_category_discovery">ДИНАМИКА ПРОСЛУШИВАНИЯ // ОТКРЫТИЯ</string>
-    <string name="insight_category_energy">ПАРАМЕТРЫ ЗВУКА // ЭНЕРГИЯ</string>
-    <string name="insight_category_danceability">ПАРАМЕТРЫ ЗВУКА // ТАНЦЕВАЛЬНОСТЬ</string>
-    <string name="insight_category_tempo">ПАРАМЕТРЫ ЗВУКА // ТЕМП</string>
-    <string name="insight_category_acousticness">ПАРАМЕТРЫ ЗВУКА // АКУСТИЧНОСТЬ</string>
-    <string name="insight_category_streak">ПРИВЫЧКИ ПРОСЛУШИВАНИЯ // СЕРИЯ</string>
-    <string name="insight_category_genre">ПРИВЫЧКИ ПРОСЛУШИВАНИЯ // ЖАНР</string>
-    <string name="insight_category_engagement">ПРИВЫЧКИ ПРОСЛУШИВАНИЯ // ВОВЛЕЧЕННОСТЬ</string>
-    <string name="insight_category_default">ИНСАЙТ // ДЕТАЛИ</string>
-    <string name="insight_close">Закрыть</string>
-    <string name="streak_hint">Слушайте музыку каждый день, чтобы поддерживать огонь!</string>
-    <string name="tempo_bpm_hint">Пульсация в синхронизации со средним темпом</string>
+    <!-- Insight cards -->
+    <string name="insight_mood_axis_energy">Энергия %1$d%%</string>
+    <string name="insight_mood_axis_valence">Позитив %1$d%%</string>
+    <string name="insight_artist_plays">%1$d прослушиваний · %2$s</string>
+    <string name="insight_binge_phrase">проигрываний подряд</string>
+    <string name="insight_binge_sitting">%1$s прослушивания</string>
+    <string name="insight_full_listens">дослушано до конца</string>
+    <string name="insight_skips">пропущено</string>
+    <string name="insight_completion_share">%1$d%% треков, которые вы начинаете, дослушиваются</string>
+    <string name="insight_streak_unit">дней подряд</string>
+    <string name="insight_streak_window">Последние 14 дней</string>
+    <string name="insight_streak_longest">Лучшая серия: %1$d дн.</string>
+    <string name="insight_peak_heading">Чаще всего вы слушаете около %1$s</string>
+    <string name="insight_sound_profile">Ваш звуковой профиль</string>
+    <string name="insight_trait_energy">Энергия</string>
+    <string name="insight_trait_danceability">Танцевальность</string>
+    <string name="insight_trait_acousticness">Акустичность</string>
+    <string name="insight_trait_tempo">Темп</string>
+    <string name="insight_profile_estimated">Оценка по средним значениям жанра</string>
+    <string name="insight_personality_anchor">%1$s · %2$d%% прослушиваний</string>
+    <string name="insight_node_mood">Настроение</string>
+    <string name="insight_node_new">%1$d новых</string>
+    <string name="insight_node_profile">Профиль</string>
+    <string name="constellation_hint">НАЖМИТЕ ИЛИ ПОТЯНИТЕ ЗВЕЗДУ, ЧТОБЫ ОТКРЫТЬ КАРТОЧКУ</string>
     <string name="period_today">сегодня</string>
     <string name="period_this_week">на этой неделе</string>
     <string name="period_this_month">в этом месяце</string>

@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter
 /**
  * Coarse, non-identifying context attached to every event.
  *
- * There is deliberately no device id, advertising id or account id here — and no field to put
+ * There is no device id, advertising id or account id here — and no field to put
  * one in. The pseudonymous install id travels separately, as the transport-level `distinct_id`,
  * so it can never end up inside an event's properties.
  */

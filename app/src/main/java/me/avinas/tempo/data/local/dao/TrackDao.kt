@@ -39,7 +39,7 @@ interface TrackDao {
 
     /**
      * Full-row Track updates are used for artist, album, duration and identifier
-     * maintenance. Artwork is deliberately NOT part of that contract: preserving
+     * maintenance. Artwork is not part of that contract: preserving
      * the currently stored URL prevents a stale Track snapshot from resurrecting an
      * old cover after the user changed or reset it.
      */
@@ -272,12 +272,10 @@ interface TrackDao {
      * Both `COLLATE NOCASE` arms are deliberate: dropping them would change matching semantics
      * and start creating duplicate tracks for case-only differences.
      *
-     * These comparisons are served by `index_tracks_title_lower`, a NOCASE index on `title`
-     * created by `MIGRATION_8_9`. Note that this index is **not** declared on the Track entity,
-     * so it exists only on databases that ran that migration — a fresh install builds its schema
-     * from the declared entity indices in `createAllTables` and never runs migrations, leaving
-     * these queries to fall back to a full scan of `tracks`. See docs/PERFORMANCE_AUDIT.md #1 for
-     * the measurement and the intended fix.
+     * These comparisons have **no supporting index**. Room's `@Index` cannot express a collation,
+     * so the NOCASE index on `title` that `MIGRATION_8_9` used to create could never be declared on
+     * the Track entity -- and an undeclared index makes Room's open-time validation fail, so the
+     * 58 -> 59 step drops it. Expect a scan of `tracks` here; see docs/PERFORMANCE_AUDIT.md #1.
      */
     @Query("""
         SELECT * FROM tracks 

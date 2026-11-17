@@ -14,11 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import me.avinas.tempo.data.analytics.AccessResult
 import me.avinas.tempo.data.analytics.AnalyticsTracker
-import me.avinas.tempo.data.analytics.BatteryExemptionResult
-import me.avinas.tempo.data.analytics.ExemptionResult
-import me.avinas.tempo.data.analytics.NotifAccessResult
 import me.avinas.tempo.data.analytics.OnboardingAction
 import me.avinas.tempo.data.analytics.OnboardingCompleted
 import me.avinas.tempo.data.analytics.OnboardingStep
@@ -71,6 +67,11 @@ class OnboardingViewModel @Inject constructor(
      *
      * The `action` is the interesting part: it separates people who read a screen from people
      * who skipped it, which is how a genuine drop-off — or a screen nobody reads — shows up.
+     *
+     * This is the only report setup produces. The permission and battery steps used to have
+     * events of their own, but `PERMISSION`+`NEXT` already means "access granted" and
+     * `PERMISSION`+`SKIP` already means "postponed" — the separate events restated the action
+     * they were sent alongside.
      */
     fun onStepLeft(step: OnboardingStepName, action: OnboardingAction, stepMillis: Long) {
         tracker.track(OnboardingStep(step = step, action = action, stepMillis = stepMillis))
@@ -79,22 +80,6 @@ class OnboardingViewModel @Inject constructor(
     /** How many screens were skipped and how long setup took overall. */
     fun onOnboardingFinished(skippedCount: Int, totalMillis: Long) {
         tracker.track(OnboardingCompleted(skippedCount = skippedCount, totalMillis = totalMillis))
-    }
-
-    /**
-     * Whether notification access was granted during setup, or deferred.
-     *
-     * `DEFERRED` is distinct from `DENIED` on purpose: a user who taps "Do it later" has not
-     * refused, and conflating the two would make the permission look rejected when it was
-     * merely postponed.
-     */
-    fun onNotifAccess(result: AccessResult) {
-        tracker.track(NotifAccessResult(result = result))
-    }
-
-    /** Whether the battery-optimisation exemption was applied or skipped. */
-    fun onBatteryExemption(result: ExemptionResult) {
-        tracker.track(BatteryExemptionResult(result))
     }
 
     fun markXiaomiGuidanceShown() {

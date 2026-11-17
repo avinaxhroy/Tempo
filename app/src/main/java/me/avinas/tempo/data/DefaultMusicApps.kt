@@ -218,7 +218,7 @@ object DefaultMusicApps {
      * tracked). An entry here is a correctness guarantee, so the Manage Apps screen shows these
      * as "Not supported" with no toggle rather than offering an Unblock that would not work.
      *
-     * Deliberately excluded: collaboration apps (Discord, Slack, Teams) and social video apps.
+     * Excluded: collaboration apps (Discord, Slack, Teams) and social video apps.
      * They do sometimes play real music, so they are left to the default-deny inbox where the
      * user can make the call.
      *
@@ -273,7 +273,7 @@ object DefaultMusicApps {
     /**
      * Long-tail blocklist: OEM video players, video-player clones and extra browsers.
      *
-     * Enforced by [AppTrackingPolicy] but deliberately NOT seeded into `app_preferences`.
+     * Enforced by [AppTrackingPolicy] but NOT seeded into `app_preferences`.
      * These are apps a user will never want tracked, so listing all ~90 of them in Manage Apps
      * would be noise; they are blocked silently rather than offered as a suggestion.
      *

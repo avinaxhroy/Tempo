@@ -36,6 +36,9 @@ class AnalyticsDailyLedger
         /** The last day a tracking-health report was sent for, or null if none ever was. */
         suspend fun healthDay(): Long? = dataStore.data.first()[healthDayKey]
 
+        /** The last day an enrichment failure was reported, or null if none ever was. */
+        suspend fun enrichmentFailureDay(): Long? = dataStore.data.first()[enrichmentFailureDayKey]
+
         /**
          * The last day the app's own UI was opened, or null if it never was.
          *
@@ -70,6 +73,10 @@ class AnalyticsDailyLedger
             dataStore.edit { it[healthDayKey] = day }
         }
 
+        suspend fun markEnrichmentFailureReported(day: Long) {
+            dataStore.edit { it[enrichmentFailureDayKey] = day }
+        }
+
         /**
          * Records that the UI was opened on [day], keeping the previous day alongside it.
          *
@@ -102,6 +109,7 @@ class AnalyticsDailyLedger
                 it.remove(uiOpenedDayKey)
                 it.remove(uiOpenedPrevDayKey)
                 it.remove(healthDayKey)
+                it.remove(enrichmentFailureDayKey)
             }
         }
 
@@ -111,5 +119,6 @@ class AnalyticsDailyLedger
             val uiOpenedDayKey = longPreferencesKey("analytics_ui_opened_day")
             val uiOpenedPrevDayKey = longPreferencesKey("analytics_ui_opened_prev_day")
             val healthDayKey = longPreferencesKey("analytics_health_day")
+            val enrichmentFailureDayKey = longPreferencesKey("analytics_enrichment_failure_day")
         }
     }

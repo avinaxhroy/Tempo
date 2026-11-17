@@ -37,6 +37,8 @@
     <string name="widget_heatmap_desc">Lásd a hallgatási mintáidat az idő múlásával</string>
     <string name="widget_milestone_desc">Kövesd nyomon a hallgatási mérföldköveidet</string>
     <string name="widget_mix_desc">A te személyre szabott zenei mixed</string>
+    <string name="widget_today_total_desc">A mai hallgatási idő, lejátszások és a tegnapihoz mért változás</string>
+    <string name="widget_rhythm_desc">A hallgatási ritmusod a nap folyamán</string>
 
     <!-- Home components -->
     <string name="home_spotlight_title">Tempo Reflektorfény</string>
@@ -56,12 +58,12 @@
     <string name="home_habits_title">Egy Pillantás a Szokásaidra</string>
     <string name="home_lvl">SZINT</string>
 
-    <!-- Rate App -->
     <string name="rate_enjoying">Tetszik a Tempo?</string>
-    <string name="rate_message">Ha szereted használni az alkalmazást, kérjük, szánj egy percet az értékelésre. Nagyon segít a növekedésünkben!</string>
-    <string name="rate_now">Értékelés Most</string>
-    <string name="rate_not_now">Most Nem</string>
-    
+    <string name="rate_message">A visszajelzésed segít, hogy jobb legyen az alkalmazás, és hogy még több zeneszeretőhöz eljusson.</string>
+    <string name="rate_badge_on_play">Google Playen</string>
+    <string name="rate_cta_review">Értékelés a Play Store-ban</string>
+    <string name="rate_maybe_later">Talán később</string>
+    <string name="rate_close">Bezárás</string>
     <!-- Gamification / Level -->
     <string name="level_label">SZINT %1$d</string>
     <string name="level_xp">%1$d XP</string>
@@ -303,7 +305,6 @@
     <!-- Spotlight -->
     <string name="spotlight_title">Reflektorfény</string>
     <string name="spotlight_share_story">Történet megosztása</string>
-    <string name="spotlight_share_instagram">Megosztás Instagram Történetbe</string>
     <string name="spotlight_loading">Kártyák Töltődnek…</string>
     <string name="spotlight_no_cards">Nem Érhető El Kártya</string>
     <string name="spotlight_preparing">A Történet Előkészítése…</string>

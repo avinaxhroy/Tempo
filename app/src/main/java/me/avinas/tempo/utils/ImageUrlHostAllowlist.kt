@@ -41,7 +41,7 @@ object ImageUrlHostAllowlist {
 
     /**
      * True when [url] is an http(s) URL whose host belongs to a known music-art CDN.
-     * Deliberately conservative: any URL that cannot be parsed unambiguously is rejected.
+     * Conservative: any URL that cannot be parsed unambiguously is rejected.
      */
     fun isAllowed(url: String): Boolean {
         val host = extractHost(url) ?: return false

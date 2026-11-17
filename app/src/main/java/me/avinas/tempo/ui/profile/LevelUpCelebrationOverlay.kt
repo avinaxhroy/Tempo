@@ -34,12 +34,14 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import me.avinas.tempo.R
 import me.avinas.tempo.ui.components.CelebrationParticlesCanvas
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.GlassCardVariant
@@ -330,16 +332,7 @@ fun LevelUpCelebrationOverlay(
                         .padding(horizontal = 14.dp, vertical = 5.dp)
                 ) {
                     Text(
-                        text = when {
-                            level >= 100 -> "MYTHIC TIER"
-                            level >= 75 -> "ROSE TIER"
-                            level >= 50 -> "GOLD TIER"
-                            level >= 35 -> "PURPLE TIER"
-                            level >= 20 -> "ELECTRIC TIER"
-                            level >= 10 -> "CYAN TIER"
-                            level >= 5 -> "EMERALD TIER"
-                            else -> "STUDIO TIER"
-                        },
+                        text = stringResource(R.string.level_tier_pill, stringResource(LevelTier.of(level).label).uppercase(Locale.getDefault())),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Black,
                         color = tierAccent,

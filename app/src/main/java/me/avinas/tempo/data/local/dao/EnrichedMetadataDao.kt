@@ -171,7 +171,7 @@ interface EnrichedMetadataDao {
         val rowIds = upsertAll(merged)
 
         // Keep Track mirrors aligned for batch imports too, without discarding a
-        // local file:// fallback that is deliberately stored outside metadata.
+        // local file:// fallback that is stored outside metadata.
         for (resolved in merged) {
             val currentTrackArtwork = getTrackAlbumArtUrlForArtwork(resolved.trackId)
             when {
@@ -287,7 +287,7 @@ interface EnrichedMetadataDao {
      * never part of this sweep:
      * - USER_SELECTED outranks every automatic provider, so re-enriching cannot change
      *   the cover and would only churn API calls against a row the user pinned;
-     * - USER_RESET is the tombstone that keeps artwork deliberately empty.
+     * - USER_RESET is the tombstone that keeps artwork Empty.
      * Rows already at [preferredSource] are skipped — nothing left to win there.
      *
      * Bounded on purpose: this runs from a single radio-button tap, so it must not
@@ -746,7 +746,7 @@ internal fun mergeAutomaticEnrichmentArtwork(
     }
 
     // An automatic task can hold a stale copy of USER_SELECTED after the user has
-    // deliberately returned to automatic selection. Never let that stale snapshot
+    // Returned to automatic selection. Never let that stale snapshot
     // re-create the manual lock.
     if (incoming.albumArtSource == AlbumArtSource.USER_SELECTED) {
         return preserveCurrentArtwork()

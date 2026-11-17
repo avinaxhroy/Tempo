@@ -216,11 +216,11 @@ object GamificationEngine {
     //
     // Each badge carries an explicit [fiveStarThreshold] — the raw progress needed for ★5.
     // Tiers ★2–★4 are interpolated geometrically between the ★1 unlock ([threshold]) and this
-    // target (see [starThresholds]). We deliberately do NOT scale a single global multiplier
+    // target (see [starThresholds]). We do not scale a single global multiplier
     // across all badges: a uniform ladder multiplies the base, so a large-base badge such as
     // plays_10000 (10,000 plays) would demand 500,000 plays (≈45 years) for ★5, and the LEVEL
     // badges would demand thousands of levels (level_100 ★5 → level 5,000 ≈ 400 years).
-    // Instead every badge now tops out at a deliberately reachable ceiling (≤ ~5 years of
+    // Instead every badge now tops out at a reachable ceiling (≤ ~5 years of
     // dedicated listening for the very hardest MYTHIC badge), so stars stay aspirational
     // without becoming impossible.
     val ALL_BADGE_DEFINITIONS: List<BadgeDefinition> = listOf(

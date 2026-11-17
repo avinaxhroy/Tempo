@@ -41,7 +41,7 @@ object AnalyticsGate {
     /**
      * Whether the Home notice should be on screen.
      *
-     * Driven by the dismissal flag, deliberately *not* by `disclosureSeen`. The card is what
+     * Driven by the dismissal flag, not by `disclosureSeen`. The card is what
      * marks the notice as seen, so gating its visibility on that same flag made it remove
      * itself in the frame it appeared — the user never got to read it, and the opt-out beside
      * it was unreachable. Rendering the notice opens the collection gate; acknowledging it is
@@ -93,7 +93,7 @@ class AnalyticsConsent
         /**
          * True once the user has acknowledged the Home notice.
          *
-         * Deliberately separate from [isDisclosureSeen]. Rendering the notice is what opens
+         * Separate from [isDisclosureSeen]. Rendering the notice is what opens
          * the collection gate, but the card itself must stay on screen until it is actually
          * acknowledged — driving visibility off `disclosureSeen` made the card remove itself
          * in the same frame it appeared, so nobody could read it or reach the opt-out beside

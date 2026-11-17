@@ -52,8 +52,8 @@ class AnalyticsDailyReporter
          */
         suspend fun markUiOpened(nowMillis: Long = System.currentTimeMillis()) {
             // A build that cannot report must not accumulate reporting state: no aggregate will
-            // ever read it, and `markUiOpened` is called on every resume. Consent is deliberately
-            // *not* consulted here — this only records that the UI was opened today, so a user
+            // ever read it, and `markUiOpened` is called on every resume. Consent is
+            // not consulted here — this only records that the UI was opened today, so a user
             // who switches reporting back on later the same day still gets an honest
             // `ui_opened` rather than a zero.
             if (!isConfigured()) return
@@ -96,7 +96,7 @@ class AnalyticsDailyReporter
                             // switches reporting back on would be missing from the active-user
                             // count — the undercount this ledger exists to prevent.
                             //
-                            // `reportedDay` is deliberately left unset: consent can change
+                            // `reportedDay` is left unset: consent can change
                             // within the same day, and this is the caller that must notice.
                             return@withLock
                         }

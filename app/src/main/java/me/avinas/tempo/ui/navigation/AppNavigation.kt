@@ -1,5 +1,17 @@
 package me.avinas.tempo.ui.navigation
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,8 +22,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -98,6 +111,8 @@ sealed class Screen(
 
     data object DeezerImport : Screen("deezer_import")
 
+    data object AppleMusicImport : Screen("apple_music_import")
+
     data object YouTubeMusicImport : Screen("youtube_music_import")
 
     data object MusicoletImport : Screen("musicolet_import")
@@ -117,6 +132,69 @@ sealed class Screen(
     }
 
     object Profile : Screen("profile")
+}
+
+/**
+ * One motion language for every screen change, in the same 8%-drift-plus-fade dialect onboarding
+ * uses (see TempoApp). NavHost's stock transition is a flat 700ms crossfade: slow enough to feel
+ * like lag, and directionless, so pushing into a detail screen read the same as backing out of it.
+ *
+ * A push drifts the incoming screen in from the end while the screen underneath recedes half as
+ * far and fades — depth without the full-width pager slide that fought each screen's own entrance.
+ * Popping mirrors it, so back always unwinds the way it came.
+ *
+ * Bottom tabs are lateral, not hierarchical: a fade-through (old out fast, new in behind it) keeps
+ * tab switches from implying a depth they don't have. System animator scale is left to Compose,
+ * which already collapses these to instant when the user turns animations off.
+ */
+private val TAB_ROUTES = setOf(Screen.Home.route, Screen.Stats.route, Screen.History.route)
+
+private const val DRIFT_IN = 0.08f
+private const val DRIFT_RECEDE = 0.04f
+private const val OPEN_MS = 300
+private const val CLOSE_MS = 240
+private const val TAB_FADE_MS = 210
+private const val TAB_CUT_MS = 90
+
+private fun NavBackStackEntry?.isTabRoute(): Boolean = this?.destination?.route?.let(TAB_ROUTES::contains) == true
+
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.isTabSwitch(): Boolean =
+    initialState.isTabRoute() && targetState.isTabRoute()
+
+private val screenEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
+    if (isTabSwitch()) {
+        fadeIn(tween(TAB_FADE_MS, delayMillis = TAB_CUT_MS))
+    } else {
+        slideInHorizontally(tween(OPEN_MS, easing = FastOutSlowInEasing)) { (it * DRIFT_IN).toInt() } +
+            fadeIn(tween(OPEN_MS, easing = FastOutSlowInEasing))
+    }
+}
+
+private val screenExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+    if (isTabSwitch()) {
+        fadeOut(tween(TAB_CUT_MS))
+    } else {
+        slideOutHorizontally(tween(CLOSE_MS, easing = FastOutSlowInEasing)) { -(it * DRIFT_RECEDE).toInt() } +
+            fadeOut(tween(CLOSE_MS))
+    }
+}
+
+private val screenPopEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
+    if (isTabSwitch()) {
+        fadeIn(tween(TAB_FADE_MS, delayMillis = TAB_CUT_MS))
+    } else {
+        slideInHorizontally(tween(OPEN_MS, easing = FastOutSlowInEasing)) { -(it * DRIFT_RECEDE).toInt() } +
+            fadeIn(tween(OPEN_MS, easing = FastOutSlowInEasing))
+    }
+}
+
+private val screenPopExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+    if (isTabSwitch()) {
+        fadeOut(tween(TAB_CUT_MS))
+    } else {
+        slideOutHorizontally(tween(CLOSE_MS, easing = FastOutSlowInEasing)) { (it * DRIFT_IN).toInt() } +
+            fadeOut(tween(CLOSE_MS))
+    }
 }
 
 @Composable
@@ -166,6 +244,10 @@ fun AppNavigation(
                     navController = navController,
                     startDestination = Screen.Home.route,
                     modifier = Modifier.fillMaxSize(),
+                    enterTransition = screenEnter,
+                    exitTransition = screenExit,
+                    popEnterTransition = screenPopEnter,
+                    popExitTransition = screenPopExit,
                 ) {
                     composable(Screen.Home.route) {
                         me.avinas.tempo.ui.home.HomeScreen(
@@ -251,6 +333,7 @@ fun AppNavigation(
                             onNavigateToLastFmImport = { navController.navigate(Screen.LastFmImport.route) },
                             onNavigateToSpotifyJsonImport = { navController.navigate(Screen.SpotifyJsonImport.route) },
                             onNavigateToDeezerImport = { navController.navigate(Screen.DeezerImport.route) },
+                            onNavigateToAppleMusicImport = { navController.navigate(Screen.AppleMusicImport.route) },
                             onNavigateToYouTubeMusicImport = { navController.navigate(Screen.YouTubeMusicImport.route) },
                             onNavigateToMusicoletImport = { navController.navigate(Screen.MusicoletImport.route) },
                             onNavigateToExtensionImport = { navController.navigate(Screen.ExtensionImport.route) },
@@ -292,6 +375,12 @@ fun AppNavigation(
 
                     composable(Screen.DeezerImport.route) {
                         me.avinas.tempo.ui.deezer.DeezerImportScreen(
+                            onNavigateBack = { navController.popBackStack() },
+                        )
+                    }
+
+                    composable(Screen.AppleMusicImport.route) {
+                        me.avinas.tempo.ui.applemusic.AppleMusicImportScreen(
                             onNavigateBack = { navController.popBackStack() },
                         )
                     }
@@ -475,7 +564,16 @@ fun AppNavigation(
                     }
                 }
 
-                if (showBottomBar) {
+                // The bar belongs to the tabbed shell, so it leaves and returns with the screen
+                // instead of vanishing on the same frame a detail screen starts to open.
+                AnimatedVisibility(
+                    visible = showBottomBar,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    enter = fadeIn(tween(220, delayMillis = 40, easing = FastOutSlowInEasing)) +
+                        slideInVertically(tween(220, delayMillis = 40, easing = FastOutSlowInEasing)) { it },
+                    exit = fadeOut(tween(180, easing = FastOutSlowInEasing)) +
+                        slideOutVertically(tween(180, easing = FastOutSlowInEasing)) { it },
+                ) {
                     me.avinas.tempo.ui.navigation.TempoBottomNavigation(
                         currentDestination = currentDestination,
                         onNavigateToHome = {
@@ -505,7 +603,6 @@ fun AppNavigation(
                                 restoreState = true
                             }
                         },
-                        modifier = Modifier.align(Alignment.BottomCenter),
                     )
                 }
             }

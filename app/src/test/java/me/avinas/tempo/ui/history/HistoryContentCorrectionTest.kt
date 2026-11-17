@@ -38,6 +38,7 @@ class HistoryContentCorrectionTest {
             else -> error(name)
         } },
         fake<ListeningRepository> { name, args -> when (name) {
+            "recentEvents" -> emptyFlow<Any>()
             "deleteByTrackId" -> { deletedPlays.add(args[0] as Long); Unit }
             else -> error(name)
         } },

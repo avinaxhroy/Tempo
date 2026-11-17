@@ -164,7 +164,7 @@ data class TopTrack(
      * to skip recomposition, so a rank mutated in place would never be seen as changed.
      * Ranks are assigned at construction (or via `copy`), never mutated after the fact.
      *
-     * Deliberately not annotated as ignored: Room treats a constructor parameter as supplied
+     * Not annotated as ignored: Room treats a constructor parameter as supplied
      * by the projection, and KSP rejects an ignore annotation on a property.
      */
     val rank: Int? = null,

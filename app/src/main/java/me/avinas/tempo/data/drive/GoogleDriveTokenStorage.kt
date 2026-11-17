@@ -3,15 +3,14 @@ package me.avinas.tempo.data.drive
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
+import me.avinas.tempo.data.security.SecurePrefs
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Stores Google Drive OAuth tokens in EncryptedSharedPreferences.
- * Keys and values are encrypted via Android Keystore.
+ * Stores Google Drive OAuth tokens in [SecurePrefs], i.e. values sealed with an Android Keystore
+ * AES-256/GCM key.
  */
 @Singleton
 class GoogleDriveTokenStorage @Inject constructor(
@@ -20,6 +19,7 @@ class GoogleDriveTokenStorage @Inject constructor(
     companion object {
         private const val TAG = "GoogleDriveTokenStorage"
         private const val PREFS_NAME = "google_drive_auth_prefs"
+        private const val KEY_ALIAS = "google_drive_tokens"
         
         // Token keys
         private const val KEY_ACCESS_TOKEN = "access_token"
@@ -39,22 +39,7 @@ class GoogleDriveTokenStorage @Inject constructor(
     }
     
     private val encryptedPrefs: SharedPreferences by lazy {
-        try {
-            val masterKey = MasterKey.Builder(context)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-            
-            EncryptedSharedPreferences.create(
-                context,
-                PREFS_NAME,
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to create encrypted token storage", e)
-            throw IllegalStateException("Secure Google Drive token storage is unavailable", e)
-        }
+        SecurePrefs.open(context, PREFS_NAME, KEY_ALIAS)
     }
     
 

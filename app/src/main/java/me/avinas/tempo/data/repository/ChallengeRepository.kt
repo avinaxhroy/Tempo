@@ -22,7 +22,6 @@ class ChallengeRepository
     constructor(
         private val gamificationDao: GamificationDao,
         private val statsDao: StatsDao,
-        private val gamificationRepository: GamificationRepository,
         private val appDatabase: AppDatabase,
     ) {
         companion object {
@@ -129,7 +128,6 @@ class ChallengeRepository
                     .atStartOfDay(ZoneId.systemDefault())
                     .toInstant()
                     .toEpochMilli()
-            var madeChanges = false
 
             // Wrap the whole refresh in a transaction so per-challenge updates are atomic
             // and a mid-loop failure can't leave a half-updated set.
@@ -204,16 +202,14 @@ class ChallengeRepository
                             )
 
                         gamificationDao.upsertChallenge(updated)
-                        madeChanges = true
                         Log.d(TAG, "Updated progress: ${challenge.title} -> $currentProgress / ${challenge.targetValue}")
                     }
                 }
             }
 
-            // If progress changed, make sure gamification levels sync to account for new data
-            if (madeChanges) {
-                gamificationRepository.recomputeXpAndLevel()
-            }
+            // XP/level sync is left to the caller: every current call site follows this
+            // with GamificationRepository.fullRefresh() (which recomputes XP once). Recomputing here
+            // too meant the same four full-history aggregates ran twice per refresh.
         }
 
         /**

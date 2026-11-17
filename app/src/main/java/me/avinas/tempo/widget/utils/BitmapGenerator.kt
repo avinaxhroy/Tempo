@@ -3,8 +3,10 @@ package me.avinas.tempo.widget.utils
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
@@ -16,6 +18,8 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import androidx.core.graphics.ColorUtils
+import me.avinas.tempo.R
+import java.util.Locale
 
 /**
  * Generates pixel-perfect bitmap renders for each Tempo widget,
@@ -207,8 +211,18 @@ object BitmapGenerator {
             textAlign = Paint.Align.CENTER
             isAntiAlias = true
         }
-        val clockText = "⏱ ${hoursListened} listened"
-        canvas.drawText(clockText, width / 2f, nameY + width * 0.1f, hoursTextPaint)
+        val clockText = "${hoursListened} listened"
+        val clockY = nameY + width * 0.1f
+        val clockIconSize = width * 0.06f
+        val clockTextW = hoursTextPaint.measureText(clockText)
+        val clockStartX = width / 2f - (clockIconSize + width * 0.02f + clockTextW) / 2f
+        drawIcon(
+            canvas, context, R.drawable.ic_widget_timer,
+            clockStartX, clockY - clockIconSize * 0.78f, clockIconSize,
+            ColorUtils.setAlphaComponent(TEAL_PRIMARY, 230),
+        )
+        hoursTextPaint.textAlign = Paint.Align.LEFT
+        canvas.drawText(clockText, clockStartX + clockIconSize + width * 0.02f, clockY, hoursTextPaint)
 
         return bitmap
     }
@@ -632,8 +646,10 @@ object BitmapGenerator {
             isAntiAlias = true
             letterSpacing = 0.05f
         }
-        val pillLabel = "✨ DIscovery"
-        val ptw = pillTextPaint.measureText(pillLabel)
+        val pillLabel = "Discovery"
+        val pillIconSize = pillH * 0.62f
+        val pillIconGap = width * 0.015f
+        val ptw = pillTextPaint.measureText(pillLabel) + pillIconSize + pillIconGap
         val pillRect = RectF(pad, pad, pad + ptw + width * 0.06f, pad + pillH)
         
         canvas.drawRoundRect(pillRect, pillH, pillH, pillBg)
@@ -646,22 +662,26 @@ object BitmapGenerator {
         }
         canvas.drawRoundRect(pillRect, pillH, pillH, pillBorder)
         
+        val pillTextX = pillRect.left + width * 0.03f
+        drawIcon(
+            canvas, context, R.drawable.ic_widget_sparkles,
+            pillTextX, pillRect.centerY() - pillIconSize / 2f, pillIconSize,
+            Color.parseColor("#E6E1E5"),
+        )
         canvas.drawText(
             pillLabel,
-            pillRect.left + width * 0.03f,
+            pillTextX + pillIconSize + pillIconGap,
             pillRect.centerY() - (pillTextPaint.descent() + pillTextPaint.ascent()) / 2,
             pillTextPaint
         )
 
         // 4. Arrow icon top-right
-        val arrowPaint = Paint().apply {
-            color = Color.parseColor("#D0BCFF")
-            textSize = width * 0.06f
-            textAlign = Paint.Align.CENTER
-            isAntiAlias = true
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        }
-        canvas.drawText("↗", width - pad - width * 0.02f, pad + pillH * 0.75f, arrowPaint)
+        val arrowSize = width * 0.06f
+        drawIcon(
+            canvas, context, R.drawable.ic_widget_trending_up,
+            width - pad - arrowSize, pad + pillH / 2 - arrowSize / 2, arrowSize,
+            Color.parseColor("#D0BCFF"),
+        )
 
         // 5. Insight text centered
         val insightPaint = Paint().apply {
@@ -973,19 +993,28 @@ object BitmapGenerator {
             isAntiAlias = true
         }
 
-        val displayBadge = if (isSpecialMilestone) "🏆 $badge" else "📈 $badge"
-        val badgeTW = badgeTextPaint.measureText(displayBadge)
+        val badgeIconSize = badgeTextPaint.textSize * 0.95f
+        val badgeGap = width * 0.012f
+        val badgeContentW = badgeIconSize + badgeGap + badgeTextPaint.measureText(badge)
         val badgePH = badgeTextPaint.textSize + width * 0.03f
-        val badgeLeft = (width - badgeTW) / 2 - width * 0.05f
-        val badgeRight = (width + badgeTW) / 2 + width * 0.05f
+        val badgeLeft = (width - badgeContentW) / 2 - width * 0.05f
+        val badgeRight = (width + badgeContentW) / 2 + width * 0.05f
         val badgeTop = height - pad - badgePH
         val badgeBottom = height - pad
         val badgeRect = RectF(badgeLeft, badgeTop, badgeRight, badgeBottom)
 
         canvas.drawRoundRect(badgeRect, badgePH, badgePH, actualBadgeBg)
         canvas.drawRoundRect(badgeRect, badgePH, badgePH, actualBadgeBorder)
+        val badgeContentLeft = (width - badgeContentW) / 2f
+        drawIcon(
+            canvas, context,
+            if (isSpecialMilestone) R.drawable.ic_widget_trophy else R.drawable.ic_widget_trending_up,
+            badgeContentLeft, badgeRect.centerY() - badgeIconSize / 2f, badgeIconSize,
+            badgeTextPaint.color,
+        )
+        badgeTextPaint.textAlign = Paint.Align.LEFT
         canvas.drawText(
-            displayBadge, width / 2f,
+            badge, badgeContentLeft + badgeIconSize + badgeGap,
             badgeRect.centerY() - (badgeTextPaint.descent() + badgeTextPaint.ascent()) / 2,
             badgeTextPaint
         )
@@ -1130,15 +1159,14 @@ object BitmapGenerator {
         
         // Draw just the text, maybe a small dot indicator?
         // Let's do: [^] +12%  •  Most active on Fridays
-        val arrowPaint = Paint().apply {
-             color = TEAL_PRIMARY
-             textSize = width * 0.035f
-             isAntiAlias = true
-        }
-        val arrow = if (mainGrowth.startsWith("+")) "↗" else "↘"
-        val aw = arrowPaint.measureText(arrow)
+        val arrowIconSize = width * 0.04f
+        val aw = arrowIconSize
         
-        canvas.drawText(arrow, pad, pillY + pillH/2 + arrowPaint.textSize/3, arrowPaint)
+        drawIcon(
+            canvas, context,
+            if (mainGrowth.startsWith("+")) R.drawable.ic_widget_trending_up else R.drawable.ic_widget_trending_down,
+            pad, pillY + pillH / 2 - arrowIconSize / 2, arrowIconSize, TEAL_PRIMARY,
+        )
         canvas.drawText(mainGrowth, pad + aw + width*0.01f, pillY + pillH/2 + pillTextPaint.textSize/3, pillTextPaint)
         
         if (contextText.isNotEmpty()) {
@@ -1237,22 +1265,739 @@ object BitmapGenerator {
     ): Bitmap {
         return generateDashboardCard(context, width, height, weeklyHours, weeklyGrowth, "", chartData, "No Data", null)
     }
-    // Draw a subtle noise/grain texture
-    private fun drawNoiseTexture(canvas: Canvas, width: Int, height: Int) {
-        val paint = Paint().apply {
-            color = Color.WHITE
-            alpha = 15 // Very subtle
-            style = Paint.Style.FILL
+    // ──────────────────────────────────────────────────────────────
+    // Widgets 8 & 9 — the two Today-screen cards
+    //
+    //   8. Total listening time: hero numeral, three-stat strip, day-over-day bar.
+    //   9. Listening rhythm: 24-hour bars, peak pill, quadrant totals.
+    //
+    // Both reflow for the shape a home screen actually hands them. The in-app
+    // cards are tall columns; at 4x2 the same stack squeezes every number below
+    // legibility, so the wide form moves the stat strip beside the numeral and
+    // the square form keeps the column.
+    // ──────────────────────────────────────────────────────────────
+
+    /** Neutral near-black card surface, matching the in-app Obsidian variant. */
+    private val CARD_SURFACE_TOP = Color.parseColor("#171B19")
+    private val CARD_SURFACE_BOTTOM = Color.parseColor("#090B0A")
+
+    /** "10 PM" from a 24-hour clock value — the peak pill's time label. */
+    private fun formatWidgetHourLabel(hour: Int): String {
+        val hourOfClock = when (val twelveHour = hour % 12) {
+            0 -> 12
+            else -> twelveHour
         }
-        val step = 4f
-        for (x in 0 until width step 4) {
-            for (y in 0 until height step 4) {
-                if ((x + y) % 3 == 0) { // Random-ish pattern
-                     // Use drawPoint or small circle (circle is smoother)
-                     canvas.drawCircle(x.toFloat(), y.toFloat(), 0.8f, paint)
+        return "$hourOfClock ${if (hour >= 12) "PM" else "AM"}"
+    }
+
+    private fun cardTextPaint(
+        textColor: Int,
+        size: Float,
+        family: String = "sans-serif",
+        style: Int = Typeface.NORMAL,
+        spacing: Float = 0f,
+        align: Paint.Align = Paint.Align.LEFT,
+    ): Paint = Paint().apply {
+        color = textColor
+        textSize = size
+        typeface = Typeface.create(family, style)
+        isAntiAlias = true
+        letterSpacing = spacing
+        textAlign = align
+    }
+
+    /** Card backdrop: vertical near-black wash, one accent bloom, film grain. */
+    private fun drawCardBackdrop(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        bloomX: Float,
+        bloomY: Float,
+    ) {
+        val bgPaint = Paint().apply {
+            shader = LinearGradient(
+                0f, 0f, 0f, height.toFloat(),
+                CARD_SURFACE_TOP, CARD_SURFACE_BOTTOM, Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
+
+        val bloomRadius = width * 0.7f
+        val bloomPaint = Paint().apply {
+            shader = RadialGradient(
+                bloomX, bloomY, bloomRadius,
+                ColorUtils.setAlphaComponent(TEAL_PRIMARY, 26),
+                Color.TRANSPARENT, Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawCircle(bloomX, bloomY, bloomRadius, bloomPaint)
+        drawNoiseTexture(canvas, width, height)
+    }
+
+    /** Trims `text` with an ellipsis so it never runs past `maxWidth`. */
+    private fun ellipsize(text: String, paint: Paint, maxWidth: Float): String {
+        if (maxWidth <= 0f || paint.measureText(text) <= maxWidth) return text
+        var trimmed = text
+        while (trimmed.length > 1 && paint.measureText("$trimmed…") > maxWidth) {
+            trimmed = trimmed.dropLast(1)
+        }
+        return "$trimmed…"
+    }
+
+    private fun drawDashedLine(
+        canvas: Canvas,
+        startX: Float,
+        endX: Float,
+        y: Float,
+        color: Int,
+        dashLength: Float,
+        gapLength: Float,
+        strokeWidth: Float,
+    ) {
+        val paint = Paint().apply {
+            this.color = color
+            style = Paint.Style.STROKE
+            this.strokeWidth = strokeWidth
+            isAntiAlias = true
+            pathEffect = DashPathEffect(floatArrayOf(dashLength, gapLength), 0f)
+        }
+        canvas.drawLine(startX, y, endX, y, paint)
+    }
+
+    /**
+     * Small trend marker for the day-over-day chip, drawn as a path rather than a
+     * glyph so it renders identically with every system font. [direction] is 1 for
+     * up, -1 for down and 0 for flat.
+     */
+    private fun drawTrendMark(canvas: Canvas, cx: Float, cy: Float, size: Float, direction: Int, color: Int) {
+        val half = size * 0.42f
+        val paint = Paint().apply { this.color = color; isAntiAlias = true }
+        if (direction == 0) {
+            // Flat: a plain arrow shaft with a small head, like the in-app flat chip.
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = (size * 0.16f).coerceAtLeast(1.2f)
+            paint.strokeCap = Paint.Cap.ROUND
+            canvas.drawLine(cx - half, cy, cx + half - size * 0.22f, cy, paint)
+            paint.style = Paint.Style.FILL
+            canvas.drawPath(
+                Path().apply {
+                    moveTo(cx + half, cy)
+                    lineTo(cx + half - size * 0.34f, cy - half * 0.62f)
+                    lineTo(cx + half - size * 0.34f, cy + half * 0.62f)
+                    close()
+                },
+                paint
+            )
+            return
+        }
+        val path = Path().apply {
+            if (direction > 0) {
+                moveTo(cx, cy - half)
+                lineTo(cx + half, cy + half)
+                lineTo(cx - half, cy + half)
+            } else {
+                moveTo(cx, cy + half)
+                lineTo(cx + half, cy - half)
+                lineTo(cx - half, cy - half)
+            }
+            close()
+        }
+        canvas.drawPath(path, paint)
+    }
+
+    /** Sun or crescent, so the peak pill carries its day/night cue without an emoji. */
+    private fun drawDayNightMark(canvas: Canvas, cx: Float, cy: Float, radius: Float, day: Boolean, color: Int) {
+        val paint = Paint().apply { this.color = color; isAntiAlias = true }
+        if (day) {
+            canvas.drawCircle(cx, cy, radius * 0.55f, paint)
+            val rayPaint = Paint().apply {
+                this.color = color
+                this.strokeWidth = radius * 0.16f
+                isAntiAlias = true
+                strokeCap = Paint.Cap.ROUND
+            }
+            for (index in 0 until 8) {
+                val angle = Math.toRadians(index * 45.0)
+                val cos = kotlin.math.cos(angle).toFloat()
+                val sin = kotlin.math.sin(angle).toFloat()
+                canvas.drawLine(
+                    cx + cos * radius * 0.72f, cy + sin * radius * 0.72f,
+                    cx + cos * radius, cy + sin * radius,
+                    rayPaint
+                )
+            }
+        } else {
+            val crescent = Path().apply { addCircle(cx, cy, radius * 0.92f, Path.Direction.CW) }
+            val bite = Path().apply { addCircle(cx + radius * 0.55f, cy - radius * 0.42f, radius * 0.86f, Path.Direction.CW) }
+            crescent.op(bite, Path.Op.DIFFERENCE)
+            canvas.drawPath(crescent, paint)
+        }
+    }
+
+    /**
+     * Today's total listening time as a widget card.
+     *
+     * [todayShort] / [yesterdayShort] are display strings such as "1.1h" and "8m"; the raw
+     * millisecond totals drive the proportional comparison bar, because rounding to minutes
+     * first would flatten small days into a full-width bar.
+     */
+    fun generateTodayTotalCard(
+        context: Context,
+        width: Int,
+        height: Int,
+        heroTime: String,
+        playCount: Int,
+        trackCount: Int,
+        albumCount: Int,
+        artistCount: Int,
+        avgSession: String,
+        todayShort: String,
+        yesterdayShort: String,
+        growthPercent: Float,
+        todayMs: Long,
+        yesterdayMs: Long,
+    ): Bitmap {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        drawCardBackdrop(canvas, width, height, width * 0.16f, height * 0.02f)
+
+        val pad = (minOf(width, height) * 0.10f).coerceIn(12f, 52f)
+        val contentW = (width - pad * 2f).coerceAtLeast(1f)
+        val wide = width >= height * 1.7f
+
+        val accent = TEAL_PRIMARY
+        val mutedInk = ColorUtils.setAlphaComponent(ON_SURFACE, 150)
+        val faintInk = ColorUtils.setAlphaComponent(ON_SURFACE, 105)
+        val hairInk = ColorUtils.setAlphaComponent(ON_SURFACE, 30)
+
+        // Type scale — derived from the widget's own width so a 2x2 and a 6x6
+        // both look deliberate instead of one being a scaled photograph of the other.
+        val kickerSize = (width * 0.030f).coerceIn(9f, 26f)
+        val chipSize = (width * 0.026f).coerceIn(8f, 22f)
+        val subSize = (width * 0.030f).coerceIn(9f, 24f)
+        val statLabelSize = (width * 0.023f).coerceIn(7.5f, 20f)
+        val statValueSize = (width * 0.048f).coerceIn(13f, 38f)
+        val axisSize = (width * 0.024f).coerceIn(7.5f, 20f)
+
+        // ── Bottom band: today vs yesterday, anchored to the card's foot
+        val barHeight = (height * 0.020f).coerceIn(5f, 12f)
+        val axisBaseline = height - pad
+        val barBottom = axisBaseline - axisSize * 1.25f
+        val showsComparison = todayMs > 0L || yesterdayMs > 0L
+        val bodyBottom = if (showsComparison) barBottom - barHeight - pad * 0.45f else height - pad
+
+        // ── Top row: kicker on the left, day-over-day chip on the right
+        val kickerPaint = cardTextPaint(mutedInk, kickerSize, "sans-serif-medium", Typeface.NORMAL, 0.16f)
+        val topCenterY = pad + kickerSize * 0.55f
+        val dotRadius = kickerSize * 0.20f
+        val kickerTextX = pad + dotRadius * 2f + kickerSize * 0.40f
+        val kickerLabel = "TOTAL LISTENING TIME"
+        val kickerW = kickerTextX - pad + kickerPaint.measureText(kickerLabel)
+
+        // Mirrors the in-app DayOverDayChip: a sub-half-percent move reads as flat
+        // ("Same as yesterday"), falls are muted rather than accented.
+        val growthDirection = when {
+            growthPercent > 0.5f -> 1
+            growthPercent < -0.5f -> -1
+            else -> 0
+        }
+        val chipInk = if (growthDirection > 0) accent else ColorUtils.setAlphaComponent(ON_SURFACE, 185)
+        val growthLabel = if (growthDirection == 0) {
+            "Same as yesterday"
+        } else {
+            String.format(Locale.US, "%+.0f%%", growthPercent)
+        }
+        val chipPaint = cardTextPaint(chipInk, chipSize, "sans-serif-medium", Typeface.BOLD)
+        val chipGlyphW = chipSize * 1.05f
+        val chipPadH = chipSize * 0.85f
+        val chipH = (chipSize * 2.05f).coerceAtMost(height * 0.22f)
+        val chipRoom = contentW - kickerW - pad * 0.5f
+        val chipFullLabel = if (growthDirection == 0) growthLabel else "$growthLabel vs yesterday"
+        val chipLabel = when {
+            chipPaint.measureText(chipFullLabel) + chipGlyphW + chipPadH * 2f <= chipRoom -> chipFullLabel
+            growthDirection != 0 &&
+                chipPaint.measureText(growthLabel) + chipGlyphW + chipPadH * 2f <= chipRoom -> growthLabel
+            else -> ""
+        }
+        val showsChip = chipLabel.isNotEmpty()
+        val chipW = chipPaint.measureText(chipLabel) + chipGlyphW + chipPadH * 2f
+        val chipRect = RectF(width - pad - chipW, topCenterY - chipH / 2f, width - pad, topCenterY + chipH / 2f)
+
+        if (showsChip) {
+            canvas.drawRoundRect(
+                chipRect, chipH / 2f, chipH / 2f,
+                Paint().apply { color = ColorUtils.setAlphaComponent(chipInk, 30); isAntiAlias = true }
+            )
+            canvas.drawRoundRect(
+                chipRect, chipH / 2f, chipH / 2f,
+                Paint().apply {
+                    this.color = ColorUtils.setAlphaComponent(chipInk, 95)
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1.4f
+                    isAntiAlias = true
+                }
+            )
+            drawTrendMark(
+                canvas,
+                chipRect.left + chipPadH + chipGlyphW * 0.35f,
+                chipRect.centerY(),
+                chipSize * 0.62f,
+                direction = growthDirection,
+                color = chipInk
+            )
+            canvas.drawText(
+                chipLabel,
+                chipRect.left + chipPadH + chipGlyphW,
+                chipRect.centerY() + chipSize * 0.35f,
+                chipPaint
+            )
+        }
+
+        canvas.drawCircle(pad + dotRadius, topCenterY - kickerSize * 0.05f, dotRadius, Paint().apply { color = accent; isAntiAlias = true })
+        canvas.drawText(kickerLabel, kickerTextX, topCenterY + kickerSize * 0.35f, kickerPaint)
+
+        // ── Hero numeral
+        val topBlockBottom = pad + maxOf(kickerSize * 1.15f, chipH)
+        val heroPreferred = if (wide) height * 0.30f else height * 0.28f
+        val heroPaint = cardTextPaint(ON_SURFACE, heroPreferred.coerceAtLeast(16f), "serif", Typeface.BOLD, -0.01f)
+        val heroMaxW = if (wide) contentW * 0.46f else contentW
+        var heroGuard = 0
+        while (heroPaint.measureText(heroTime) > heroMaxW && heroPaint.textSize > 12f && heroGuard < 90) {
+            heroPaint.textSize *= 0.94f
+            heroGuard++
+        }
+        val heroBaseline = topBlockBottom + heroPaint.textSize * 0.92f
+        canvas.drawText(heroTime, pad, heroBaseline, heroPaint)
+
+        val subPaint = cardTextPaint(faintInk, subSize, "sans-serif")
+        val playsLine = when {
+            playCount <= 0 -> "No plays recorded yet today"
+            playCount == 1 -> "1 play recorded across today"
+            else -> "$playCount plays recorded across today"
+        }
+        val subBaseline = heroBaseline + subSize * 1.45f
+        canvas.drawText(ellipsize(playsLine, subPaint, contentW), pad, subBaseline, subPaint)
+
+        // ── Stat strip
+        val stats = listOf(
+            Triple("TRACKS", "$trackCount", if (albumCount == 1) "1 album" else "$albumCount albums"),
+            Triple("ARTISTS", "$artistCount", "unique"),
+            Triple("AVG SESSION", avgSession, "per listen"),
+        )
+        val hairPaint = Paint().apply {
+            color = hairInk
+            strokeWidth = 1.2f
+            isAntiAlias = true
+        }
+
+        if (wide) {
+            // Numeral left, stats stacked right — a single-line list stays readable
+            // where three narrow columns would clip "AVG SESSION" to "AVG…".
+            val dividerX = pad + contentW * 0.52f
+            canvas.drawLine(dividerX, topBlockBottom, dividerX, bodyBottom, hairPaint)
+
+            val rightX = dividerX + pad * 0.55f
+            val rightW = (width - pad - rightX).coerceAtLeast(1f)
+            val rowsTop = topBlockBottom
+            val rowH = ((bodyBottom - rowsTop) / 3f).coerceAtLeast(1f)
+            stats.forEachIndexed { index, stat ->
+                val rowTop = rowsTop + rowH * index
+                val labelPaint = cardTextPaint(faintInk, statLabelSize, "sans-serif-medium", Typeface.NORMAL, 0.18f)
+                val labelBaseline = rowTop + statLabelSize * 1.15f
+                canvas.drawText(ellipsize(stat.first, labelPaint, rightW), rightX, labelBaseline, labelPaint)
+
+                val valueSize = statValueSize.coerceAtMost(rowH * 0.42f).coerceAtLeast(9f)
+                val valuePaint = cardTextPaint(
+                    if (stat.first == "AVG SESSION") accent else ON_SURFACE,
+                    valueSize, "serif", Typeface.BOLD
+                )
+                val valueBaseline = labelBaseline + valueSize * 0.95f + pad * 0.18f
+                val valueText = ellipsize(stat.second, valuePaint, rightW * 0.6f)
+                canvas.drawText(valueText, rightX, valueBaseline, valuePaint)
+
+                val subPaintInline = cardTextPaint(faintInk, subSize * 0.82f, "sans-serif")
+                val subX = rightX + valuePaint.measureText(valueText) + pad * 0.28f
+                if (subX < width - pad) {
+                    canvas.drawText(
+                        ellipsize(stat.third, subPaintInline, width - pad - subX),
+                        subX,
+                        valueBaseline - valueSize * 0.06f,
+                        subPaintInline
+                    )
+                }
+            }
+        } else {
+            // Column layout: hairline, three columns split by vertical rules.
+            val dividerY = subBaseline + subSize * 0.85f
+            canvas.drawLine(pad, dividerY, width - pad, dividerY, hairPaint)
+
+            val statsTop = dividerY + pad * 0.30f
+            val bandH = bodyBottom - statsTop
+            val needed = statLabelSize + statValueSize * 0.95f
+            if (bandH > needed) {
+                val colW = contentW / 3f
+                stats.forEachIndexed { index, stat ->
+                    val colX = pad + colW * index
+                    if (index > 0) {
+                        canvas.drawLine(colX, statsTop, colX, bodyBottom, hairPaint)
+                    }
+                    val cellX = colX + (if (index == 0) 0f else pad * 0.35f)
+                    val cellW = colW - pad * 0.35f
+                    val labelPaint = cardTextPaint(faintInk, statLabelSize, "sans-serif-medium", Typeface.NORMAL, 0.18f)
+                    val labelBaseline = statsTop + statLabelSize * 1.15f
+                    canvas.drawText(ellipsize(stat.first, labelPaint, cellW), cellX, labelBaseline, labelPaint)
+
+                    val valueSize = statValueSize.coerceAtMost(bandH * 0.45f).coerceAtLeast(9f)
+                    val valuePaint = cardTextPaint(
+                        if (stat.first == "AVG SESSION") accent else ON_SURFACE,
+                        valueSize, "serif", Typeface.BOLD
+                    )
+                    val valueBaseline = labelBaseline + valueSize * 0.95f + pad * 0.12f
+                    val valueText = ellipsize(stat.second, valuePaint, cellW * 0.62f)
+                    canvas.drawText(valueText, cellX, valueBaseline, valuePaint)
+
+                    val subPaintInline = cardTextPaint(faintInk, subSize * 0.78f, "sans-serif")
+                    val subX = cellX + valuePaint.measureText(valueText) + pad * 0.20f
+                    if (subX < colX + colW - pad * 0.2f) {
+                        canvas.drawText(
+                            ellipsize(stat.third, subPaintInline, colX + colW - subX),
+                            subX,
+                            valueBaseline - valueSize * 0.04f,
+                            subPaintInline
+                        )
+                    }
                 }
             }
         }
+
+        // ── Day-over-day bar: proportion comes from raw milliseconds so a light day
+        //    still reads as a light day rather than rounding up to a full track.
+        if (showsComparison) {
+            val track = RectF(pad, barBottom - barHeight, width - pad, barBottom)
+            canvas.drawRoundRect(
+                track, barHeight / 2f, barHeight / 2f,
+                Paint().apply { color = ColorUtils.setAlphaComponent(ON_SURFACE, 32); isAntiAlias = true }
+            )
+
+            val total = todayMs + yesterdayMs
+            if (total > 0L) {
+                val fraction = (todayMs.toFloat() / total).coerceIn(0.04f, 0.96f)
+                val fillRight = track.left + track.width() * fraction
+                val fillPaint = Paint().apply {
+                    shader = LinearGradient(
+                        track.left, 0f, fillRight, 0f,
+                        ColorUtils.setAlphaComponent(accent, 185), accent, Shader.TileMode.CLAMP
+                    )
+                    isAntiAlias = true
+                }
+                canvas.drawRoundRect(
+                    RectF(track.left, track.top, fillRight, track.bottom),
+                    barHeight / 2f, barHeight / 2f, fillPaint
+                )
+            }
+
+            val todayPaint = cardTextPaint(accent, axisSize, "sans-serif-medium", Typeface.BOLD, 0.10f)
+            val yesterdayPaint = cardTextPaint(
+                ColorUtils.setAlphaComponent(ON_SURFACE, 95),
+                axisSize, "sans-serif-medium", Typeface.BOLD, 0.10f, Paint.Align.RIGHT
+            )
+            val axisDotRadius = axisSize * 0.20f
+            canvas.drawCircle(
+                pad + axisDotRadius, axisBaseline - axisSize * 0.32f, axisDotRadius,
+                Paint().apply { color = accent; isAntiAlias = true }
+            )
+            canvas.drawText(
+                "TODAY · $todayShort",
+                pad + axisDotRadius * 2f + axisSize * 0.38f,
+                axisBaseline,
+                todayPaint
+            )
+            canvas.drawText("YESTERDAY · $yesterdayShort", width - pad, axisBaseline, yesterdayPaint)
+        }
+
+        return bitmap
+    }
+
+    /**
+     * Listening rhythm as a widget card: 24 hourly bars over a dashed baseline, the peak
+     * hour called out in the pill, and the four day-quadrant totals underneath.
+     *
+     * [hourlyPlays] is expected to hold 24 entries (hour 0..23); a short list is padded
+     * with zeros rather than throwing, because a stale preference write from an older
+     * build should never take the widget down.
+     */
+    fun generateListeningRhythmCard(
+        context: Context,
+        width: Int,
+        height: Int,
+        hourlyPlays: List<Int>,
+        currentHour: Int,
+    ): Bitmap {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        drawCardBackdrop(canvas, width, height, width * 0.88f, height * 0.96f)
+
+        val pad = (minOf(width, height) * 0.10f).coerceIn(12f, 52f)
+        val contentW = (width - pad * 2f).coerceAtLeast(1f)
+
+        val kickerSize = (width * 0.030f).coerceIn(9f, 26f)
+        val pillSize = (width * 0.026f).coerceIn(8f, 22f)
+        val axisSize = (width * 0.024f).coerceIn(7.5f, 19f)
+        val quadLabelSize = (width * 0.021f).coerceIn(7f, 17f)
+        val quadValueSize = (width * 0.040f).coerceIn(11f, 30f)
+
+        val plays = (0..23).map { hourlyPlays.getOrElse(it) { 0 }.coerceAtLeast(0) }
+        val maxPlays = (plays.maxOrNull() ?: 0).coerceAtLeast(1)
+        val peakHour = (0..23).filter { plays[it] > 0 }.maxByOrNull { plays[it] }
+        val totalPlays = plays.sum()
+
+        val mutedInk = ColorUtils.setAlphaComponent(ON_SURFACE, 150)
+        val faintInk = ColorUtils.setAlphaComponent(ON_SURFACE, 105)
+        val ghostInk = ColorUtils.setAlphaComponent(ON_SURFACE, 80)
+        val accent = TEAL_PRIMARY
+
+        // ── Top row: section kicker left, peak pill right
+        val topCenterY = pad + kickerSize * 0.55f
+        val pillH = (pillSize * 2.1f).coerceAtMost(height * 0.24f)
+        val topBlockBottom = pad + maxOf(kickerSize * 1.2f, pillH)
+
+        val pillPaint = cardTextPaint(TERTIARY_PINK, pillSize, "sans-serif-medium", Typeface.BOLD)
+        val peakLabel = peakHour?.let {
+            "${formatWidgetHourLabel(it)} · ${plays[it]} ${if (plays[it] == 1) "play" else "plays"}"
+        }
+        val pillGlyphW = pillSize * 1.3f
+        val pillPadH = pillSize * 0.85f
+        val pillW = if (peakLabel != null) pillPaint.measureText(peakLabel) + pillGlyphW + pillPadH * 2f else 0f
+        val pillMaxW = contentW * 0.58f
+
+        if (peakLabel != null && pillW <= pillMaxW) {
+            val pillRect = RectF(width - pad - pillW, topCenterY - pillH / 2f, width - pad, topCenterY + pillH / 2f)
+            canvas.drawRoundRect(
+                pillRect, pillH / 2f, pillH / 2f,
+                Paint().apply { color = ColorUtils.setAlphaComponent(TERTIARY_PINK, 34); isAntiAlias = true }
+            )
+            canvas.drawRoundRect(
+                pillRect, pillH / 2f, pillH / 2f,
+                Paint().apply {
+                    this.color = ColorUtils.setAlphaComponent(TERTIARY_PINK, 95)
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1.4f
+                    isAntiAlias = true
+                }
+            )
+            drawDayNightMark(
+                canvas,
+                pillRect.left + pillPadH + pillGlyphW * 0.42f,
+                pillRect.centerY(),
+                pillSize * 0.52f,
+                day = peakHour in 6..17,
+                color = TERTIARY_PINK
+            )
+            canvas.drawText(
+                ellipsize(peakLabel, pillPaint, pillMaxW - pillGlyphW - pillPadH * 2f),
+                pillRect.left + pillPadH + pillGlyphW,
+                pillRect.centerY() + pillSize * 0.35f,
+                pillPaint
+            )
+        }
+
+        // Section numeral + rule + label, dropping the numeral when the row is cramped.
+        val kickerPaint = cardTextPaint(mutedInk, kickerSize, "sans-serif-medium", Typeface.NORMAL, 0.16f)
+        val numeralW = kickerPaint.measureText("01")
+        val labelW = kickerPaint.measureText("LISTENING RHYTHM")
+        val showsNumeral = numeralW + labelW + kickerSize * 3.4f <= contentW - (if (pillW <= pillMaxW) pillW else 0f) - pad * 0.5f
+        var kickerX = pad
+        if (showsNumeral) {
+            canvas.drawText(
+                "01", kickerX, topCenterY + kickerSize * 0.35f,
+                cardTextPaint(ColorUtils.setAlphaComponent(ON_SURFACE, 200), kickerSize, "sans-serif-medium", Typeface.BOLD, 0.16f)
+            )
+            kickerX += numeralW + kickerSize * 0.75f
+            canvas.drawLine(
+                kickerX, topCenterY, kickerX + kickerSize * 1.1f, topCenterY,
+                Paint().apply {
+                    this.color = ColorUtils.setAlphaComponent(ON_SURFACE, 60)
+                    strokeWidth = 1.2f
+                    isAntiAlias = true
+                }
+            )
+            kickerX += kickerSize * 1.1f + kickerSize * 0.75f
+        }
+        canvas.drawText("LISTENING RHYTHM", kickerX, topCenterY + kickerSize * 0.35f, kickerPaint)
+
+        // ── Vertical bands: quadrant strip and axis row are measured from the foot up
+        val quadH = (height * 0.20f).coerceIn(24f, 62f)
+        val roomForQuads = height - topBlockBottom - pad - axisSize * 2.2f - height * 0.24f
+        val showsQuads = roomForQuads >= quadH
+        val axisBaseline = height - pad - (if (showsQuads) quadH + pad * 0.45f else 0f)
+        val chartBottom = axisBaseline - axisSize * 1.35f
+        val chartTop = topBlockBottom + pad * 0.30f
+        val chartH = (chartBottom - chartTop).coerceAtLeast(8f)
+
+        val gap = (contentW * 0.006f).coerceIn(1.2f, 5f)
+        val barW = ((contentW - gap * 23f) / 24f).coerceAtLeast(1.5f)
+        val barCorner = minOf(barW * 0.45f, 3.5f)
+
+        drawDashedLine(
+            canvas, pad, width - pad, chartBottom,
+            ColorUtils.setAlphaComponent(ON_SURFACE, 46),
+            barW * 0.85f, barW * 0.85f, (height * 0.005f).coerceIn(1f, 2.2f)
+        )
+
+        for (hour in 0..23) {
+            val barX = pad + hour * (barW + gap)
+            val barRect = RectF(barX, chartBottom, barX + barW, chartBottom)
+            val hourPlays = plays[hour]
+            val stubPaint = Paint().apply {
+                this.color = ColorUtils.setAlphaComponent(ON_SURFACE, 22)
+                isAntiAlias = true
+            }
+
+            if (hourPlays <= 0) {
+                barRect.top = chartBottom - 2.5f
+                canvas.drawRoundRect(barRect, 1f, 1f, stubPaint)
+                continue
+            }
+
+            val ratio = hourPlays.toFloat() / maxPlays
+            barRect.top = chartBottom - (chartH * ratio).coerceAtLeast(4f)
+            val barColor = when {
+                hour == peakHour -> TERTIARY_PINK
+                hour == currentHour -> DYNAMIC_ON_CONTAINER
+                else -> ColorUtils.setAlphaComponent(TEAL_PRIMARY, (95 + 125 * ratio).toInt().coerceIn(0, 255))
+            }
+            val barPaint = Paint().apply {
+                this.color = barColor
+                isAntiAlias = true
+            }
+            canvas.drawRoundRect(barRect, barCorner, barCorner, barPaint)
+            // Square the foot so bars sit on the baseline instead of floating on
+            // rounded corners that visually lift them off it.
+            canvas.drawRect(barRect.left, chartBottom - barCorner, barRect.right, chartBottom, barPaint)
+        }
+
+        if (totalPlays == 0) {
+            val hintPaint = cardTextPaint(ghostInk, axisSize * 1.05f, "sans-serif", Typeface.NORMAL, 0f, Paint.Align.CENTER)
+            canvas.drawText(
+                "No listening recorded yet today",
+                width / 2f,
+                chartTop + chartH * 0.45f,
+                hintPaint
+            )
+        }
+
+        // ── 6-hour axis ticks
+        val axisPaint = cardTextPaint(ColorUtils.setAlphaComponent(ON_SURFACE, 95), axisSize, "sans-serif-medium", Typeface.BOLD, 0.10f)
+        fun hourCenterX(hour: Int): Float = pad + hour * (barW + gap) + barW / 2f
+        canvas.drawText("12 AM", pad, axisBaseline, axisPaint)
+        canvas.drawText(
+            "6 AM", hourCenterX(6), axisBaseline,
+            cardTextPaint(ColorUtils.setAlphaComponent(ON_SURFACE, 95), axisSize, "sans-serif-medium", Typeface.BOLD, 0.10f, Paint.Align.CENTER)
+        )
+        canvas.drawText(
+            "12 PM", hourCenterX(12), axisBaseline,
+            cardTextPaint(ColorUtils.setAlphaComponent(ON_SURFACE, 95), axisSize, "sans-serif-medium", Typeface.BOLD, 0.10f, Paint.Align.CENTER)
+        )
+        canvas.drawText(
+            "6 PM", width - pad, axisBaseline,
+            cardTextPaint(ColorUtils.setAlphaComponent(ON_SURFACE, 95), axisSize, "sans-serif-medium", Typeface.BOLD, 0.10f, Paint.Align.RIGHT)
+        )
+
+        // ── Quadrant totals
+        if (showsQuads) {
+            val bandTop = axisBaseline + pad * 0.45f
+            val band = RectF(pad, bandTop, width - pad, bandTop + quadH)
+            val bandRadius = minOf(quadH * 0.28f, contentW * 0.02f).coerceAtLeast(6f)
+            canvas.drawRoundRect(
+                band, bandRadius, bandRadius,
+                Paint().apply { color = ColorUtils.setAlphaComponent(ON_SURFACE, 16); isAntiAlias = true }
+            )
+            canvas.drawRoundRect(
+                band, bandRadius, bandRadius,
+                Paint().apply {
+                    this.color = ColorUtils.setAlphaComponent(ON_SURFACE, 26)
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1.2f
+                    isAntiAlias = true
+                }
+            )
+
+            val quadrants = listOf(
+                "NIGHT" to (0..5).sumOf { plays[it] },
+                "MORNING" to (6..11).sumOf { plays[it] },
+                "AFTERNOON" to (12..17).sumOf { plays[it] },
+                "EVENING" to (18..23).sumOf { plays[it] },
+            )
+            val cellW = band.width() / 4f
+            quadrants.forEachIndexed { index, (label, value) ->
+                val centerX = band.left + cellW * index + cellW / 2f
+                val labelPaint = cardTextPaint(
+                    ghostInk, quadLabelSize, "sans-serif-medium", Typeface.BOLD, 0.16f, Paint.Align.CENTER
+                )
+                canvas.drawText(
+                    ellipsize(label, labelPaint, cellW - pad * 0.2f),
+                    centerX,
+                    band.top + quadH * 0.36f,
+                    labelPaint
+                )
+                val valuePaint = cardTextPaint(
+                    if (value > 0) ON_SURFACE else ColorUtils.setAlphaComponent(ON_SURFACE, 70),
+                    quadValueSize.coerceAtMost(quadH * 0.34f).coerceAtLeast(9f),
+                    "serif", Typeface.BOLD, 0f, Paint.Align.CENTER
+                )
+                canvas.drawText("$value", centerX, band.top + quadH * 0.82f, valuePaint)
+            }
+        }
+
+        return bitmap
+    }
+
+    // 48 px tile: divisible by both 4 (dot spacing) and 3 (the (x+y)%3 pattern), so tiling it
+    // reproduces the old per-pixel loop on the same absolute coordinates.
+    // ponytail: dots on a 48 px seam render as half-dots (sub-pixel at 0.8 px radius); fine for grain.
+    private val noiseTile: Bitmap by lazy {
+        val size = 48
+        Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also { tile ->
+            val canvas = Canvas(tile)
+            val paint = Paint().apply {
+                color = Color.WHITE
+                alpha = 15 // Very subtle
+                style = Paint.Style.FILL
+            }
+            for (x in 0 until size step 4) {
+                for (y in 0 until size step 4) {
+                    if ((x + y) % 3 == 0) canvas.drawCircle(x.toFloat(), y.toFloat(), 0.8f, paint)
+                }
+            }
+        }
+    }
+
+    // Draw a subtle noise/grain texture: one tiled draw instead of ~5k drawCircle per card.
+    private fun drawNoiseTexture(canvas: Canvas, width: Int, height: Int) {
+        val paint = Paint().apply {
+            shader = BitmapShader(noiseTile, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+        }
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+    }
+
+    /**
+     * Draws a tinted vector icon at [left],[top]. Emoji glyphs used to stand in for these; a
+     * device whose emoji font lacks a glyph renders tofu, and the glyph colour ignores the
+     * card's palette.
+     */
+    private fun drawIcon(
+        canvas: Canvas,
+        context: Context,
+        resId: Int,
+        left: Float,
+        top: Float,
+        size: Float,
+        tint: Int,
+    ) {
+        val icon = context.getDrawable(resId) ?: return
+        icon.setBounds(left.toInt(), top.toInt(), (left + size).toInt(), (top + size).toInt())
+        icon.setTint(tint)
+        icon.draw(canvas)
     }
 
     /**

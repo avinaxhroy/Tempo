@@ -77,7 +77,7 @@ interface EnrichedMetadataRepository {
 
     /**
      * Count NOT_FOUND tracks still inside the 7-day re-enrichment block — i.e. songs
-     * that "Enrich All" will deliberately skip this time. For UI feedback.
+     * that "Enrich All" will Skip this time. For UI feedback.
      */
     suspend fun countNotFoundBlockedFromRequeue(): Int
 

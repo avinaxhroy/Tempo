@@ -554,7 +554,7 @@ class Migration55To58Test {
 
     /**
      * One listening_events row. The default source is a dotted, non-import package so seeding
-     * treats it as a real app unless a test deliberately passes one that should be rejected.
+     * treats it as a real app unless a test Passes one that should be rejected.
      */
     private fun insertEvent(
         source: String = "com.spotify.music",

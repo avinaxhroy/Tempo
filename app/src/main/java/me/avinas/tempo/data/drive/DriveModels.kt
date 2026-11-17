@@ -69,3 +69,25 @@ enum class BackupStatus {
     FAILED,
     IN_PROGRESS
 }
+
+/**
+ * Wording for a failed backup notification or snackbar. Each failure type gets its
+ * own title, because "Backup failed" tells the user nothing about whether they must
+ * sign in, free storage, wait, or reconnect.
+ */
+data class DriveFailureNotice(val title: String, val message: String)
+
+/**
+ * Maps a failure to notification/snackbar wording. [fallback] is used when the
+ * exception carries no message of its own (or is not a Drive exception at all).
+ */
+fun Throwable?.toDriveFailureNotice(fallback: String): DriveFailureNotice {
+    val title = when (this) {
+        is DriveException.Auth -> "Drive Backup Needs Sign-In"
+        is DriveException.Corrupt -> "Drive Backup Verification Failed"
+        is DriveException.Network -> "Drive Backup Failed — Offline"
+        else -> "Drive Backup Failed"
+    }
+    val message = this?.message?.takeIf { it.isNotBlank() } ?: fallback
+    return DriveFailureNotice(title, message)
+}

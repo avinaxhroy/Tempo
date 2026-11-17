@@ -37,6 +37,8 @@
     <string name="widget_heatmap_desc">Visualize your listening patterns over time</string>
     <string name="widget_milestone_desc">Track your listening milestones</string>
     <string name="widget_mix_desc">Your personalized music mix</string>
+    <string name="widget_today_total_desc">Today\'s listening time, plays and day-over-day change</string>
+    <string name="widget_rhythm_desc">Your listening rhythm across the day</string>
 
     <!-- Home components -->
     <string name="home_spotlight_title">Tempo Spotlight</string>
@@ -58,9 +60,11 @@
 
     <!-- Rate App -->
     <string name="rate_enjoying">Enjoying Tempo?</string>
-    <string name="rate_message">If you like using the app, please take a moment to rate it. It really helps us grow!</string>
-    <string name="rate_now">Rate Now</string>
-    <string name="rate_not_now">Not Now</string>
+    <string name="rate_message">Your feedback helps us improve the app and reach more music lovers like you.</string>
+    <string name="rate_badge_on_play">On Google Play</string>
+    <string name="rate_cta_review">Review on Play Store</string>
+    <string name="rate_maybe_later">Maybe later</string>
+    <string name="rate_close">Close</string>
     
     <!-- Gamification / Level -->
     <string name="level_label">LEVEL %1$d</string>
@@ -70,6 +74,17 @@
     <string name="level_up_new_level">Level %1$d</string>
     <string name="level_up_awesome">Awesome!</string>
     <string name="level_reached">You reached Level %1$d</string>
+
+    <!-- Level tier names, shared by the milestone card and the level-up pill -->
+    <string name="level_tier_studio">Studio</string>
+    <string name="level_tier_emerald">Emerald</string>
+    <string name="level_tier_cyan">Cyan</string>
+    <string name="level_tier_electric">Electric</string>
+    <string name="level_tier_purple">Purple</string>
+    <string name="level_tier_gold">Gold</string>
+    <string name="level_tier_rose">Rose</string>
+    <string name="level_tier_mythic">Mythic</string>
+    <string name="level_tier_pill">%1$s TIER</string>
 
     <!-- Onboarding: Welcome screen -->
     <string name="welcome_headline_1">Every listen,</string>
@@ -345,7 +360,6 @@
     <!-- Spotlight -->
     <string name="spotlight_title">Spotlight</string>
     <string name="spotlight_share_story">Share Story</string>
-    <string name="spotlight_share_instagram">Share to Instagram Stories</string>
     <string name="spotlight_loading">Loading your cards…</string>
     <string name="spotlight_no_cards">No cards available</string>
     <string name="spotlight_preparing">Preparing your story…</string>
@@ -353,6 +367,17 @@
     <string name="spotlight_view_story">View Story</string>
     <string name="spotlight_view_story_for">View the story for %1$s</string>
     <string name="spotlight_your_music">Your Music %1$s</string>
+
+    <!-- Spotlight recap prompt -->
+    <string name="spotlight_recap_headline_weekly">Your week, on repeat.</string>
+    <string name="spotlight_recap_headline_monthly">Your month, bar by bar.</string>
+    <string name="spotlight_recap_headline_yearly">Your year, note by note.</string>
+    <string name="spotlight_recap_subtitle">Your favorite tracks, top artists and listening highlights are ready.</string>
+    <string name="spotlight_recap_cta_weekly">Explore your week</string>
+    <string name="spotlight_recap_cta_monthly">Explore your month</string>
+    <string name="spotlight_recap_cta_yearly">Explore your year</string>
+    <string name="spotlight_recap_maybe_later">Maybe later</string>
+    <string name="spotlight_recap_close">Close</string>
 
     <!-- Spotlight story pages -->
     <string name="spotlight_top_songs">TOP SONGS</string>
@@ -404,15 +429,12 @@
     <string name="share_restored">Restored from memory</string>
 
     <!-- Share Preview Dialog & Share Cards (artist/song detail) -->
-    <string name="share_close">Close</string>
-    <string name="share_failed">Failed to share image</string>
+    <string name="share_chooser_title">Share Tempo</string>
     <string name="share_content_description">Share</string>
     <string name="share_brand">TEMPO</string>
-    <string name="share_theme_label">Theme</string>
     <!-- Subtle share nudge (opens the artist share preview directly; kept understated) -->
     <string name="share_nudge_caption_weekly">Your week in music</string>
     <string name="share_nudge_caption_monthly">Your month in music</string>
-    <string name="share_nudge_hint">SHARE YOUR STATS</string>
     <string name="share_total_time">TOTAL TIME</string>
     <string name="share_unique_songs">UNIQUE SONGS</string>
     <string name="share_top_songs">TOP SONGS</string>
@@ -420,6 +442,102 @@
     <string name="share_country_format">📍 %1$s</string>
     <string name="share_plays_format">%1$d plays</string>
     <string name="share_min_format">%1$d min</string>
+
+    <!-- Rasterized share cards (ShareCards.kt: artist / song / badge / milestone) -->
+    <string name="share_songs_label">SONGS</string>
+    <string name="share_fan_status_number_one">#1 Artist</string>
+    <string name="share_duration_hours_format">%1$.1fh</string>
+    <string name="share_duration_minutes_format">%1$dm</string>
+    <!-- Keeping a column's width: past a hundred hours the minutes are noise. -->
+    <string name="share_time_hours_format">%1$dh</string>
+    <string name="share_album_year_format">%1$s • %2$d</string>
+    <string name="share_released_year">Released %1$d</string>
+    <string name="share_tracks_label">TRACKS</string>
+    <string name="share_top_tracks">TOP TRACKS</string>
+    <string name="share_highlight_album_completion">✨ %1$d%% of the record, played through</string>
+
+    <!-- Standing kickers: album card -->
+    <string name="share_kicker_album_complete">💿 PLAYED THROUGH</string>
+    <string name="share_kicker_album_century">⚡ CENTURY CLUB • 100+ SPINS</string>
+    <string name="share_kicker_album_rotation">🎧 ALBUM IN ROTATION</string>
+
+    <!-- Standing kickers: song card -->
+    <string name="share_kicker_all_time_track">👑 #1 ALL-TIME TRACK</string>
+    <string name="share_kicker_top_track_library">🌟 TOP %1$d IN LIBRARY</string>
+    <string name="share_kicker_top_track_rotation">🔥 TOP %1$d ROTATION</string>
+    <string name="share_kicker_century_club_track">⚡ CENTURY CLUB • 100+ SPINS</string>
+    <string name="share_kicker_heavy_rotation">⚡ HEAVY ROTATION</string>
+    <string name="share_kicker_zero_skips">🎧 ZERO SKIPS • DEEP ROTATION</string>
+
+    <!-- Standing kickers: artist card -->
+    <string name="share_kicker_all_time_artist">👑 #1 ALL-TIME ARTIST</string>
+    <string name="share_kicker_top_1_percent">👑 TOP 1% IN YOUR LIBRARY</string>
+    <string name="share_kicker_top_5_percent">🌟 TOP 5% IN YOUR LIBRARY</string>
+    <string name="share_kicker_top_10_percent">🔥 TOP 10% IN YOUR LIBRARY</string>
+    <string name="share_kicker_century_club_artist">⚡ CENTURY CLUB • 500+ SPINS</string>
+    <string name="share_kicker_heavy_rotation_artist">⚡ HEAVY ROTATION • 200+ SPINS</string>
+    <string name="share_kicker_rotation_regular">🎧 ROTATION REGULAR</string>
+
+    <!-- Flex stat: label, value, and editorial highlight -->
+    <string name="share_since_label">SINCE</string>
+    <string name="share_peak_label">PEAK</string>
+    <string name="share_finish_label">FINISH</string>
+    <string name="share_status_label">STATUS</string>
+    <string name="share_status_favorite">Fav</string>
+    <string name="share_status_spun">Spun</string>
+    <string name="share_peak_rank_format">#%1$d</string>
+    <string name="share_percent_format">%1$d%%</string>
+    <string name="share_highlight_binge">🔥 Binge Record: %1$d plays in a day</string>
+    <string name="share_highlight_habit">🌙 Signature %1$s soundtrack</string>
+    <string name="share_highlight_loyalty">✨ 100% Loyalty • Never Skipped</string>
+    <string name="share_highlight_vibe">✨ Vibe: %1$s</string>
+    <string name="share_highlight_genre">🎧 %1$s</string>
+    <string name="share_artist_streak_days">🔥 %1$d-day listening streak</string>
+    <string name="share_artist_listening_since">🎧 Listening since %1$s</string>
+    <string name="share_artist_discovered_in">🎧 Discovered in %1$s</string>
+    <string name="share_artist_top_genre">🎵 %1$s</string>
+
+    <!-- Badge card -->
+    <string name="share_recent">Recent</string>
+    <string name="share_trophy_mastered">TROPHY MASTERED</string>
+    <string name="share_trophy_unlocked">TROPHY UNLOCKED</string>
+    <string name="share_badge_discipline">✦ %1$s DISCIPLINE</string>
+    <string name="share_tier_progress">TIER PROGRESS</string>
+    <string name="share_progress_format">%1$d / %2$d</string>
+    <string name="share_rank_tier">RANK TIER</string>
+    <string name="share_tier_master">Master</string>
+    <string name="share_tier_number">Tier %1$d</string>
+    <string name="share_stars_of_five">%1$d of 5 Stars</string>
+    <string name="share_xp_value">XP VALUE</string>
+    <string name="share_xp_amount">+%1$d XP</string>
+    <string name="share_rarity_tier">%1$s Tier</string>
+    <string name="share_achieved">ACHIEVED</string>
+    <string name="share_archive_record">Archive Record</string>
+
+    <!-- Badge categories (stored as English constants in the database) -->
+    <string name="share_category_milestones">Milestones</string>
+    <string name="share_category_time">Time</string>
+    <string name="share_category_streaks">Streaks</string>
+    <string name="share_category_discovery">Discovery</string>
+    <string name="share_category_engagement">Engagement</string>
+    <string name="share_category_levels">Levels</string>
+
+    <!-- Badge rarity -->
+    <string name="share_rarity_common">Common</string>
+    <string name="share_rarity_rare">Rare</string>
+    <string name="share_rarity_epic">Epic</string>
+    <string name="share_rarity_legendary">Legendary</string>
+    <string name="share_rarity_mythic">Mythic</string>
+
+    <!-- Milestone card -->
+    <string name="share_level_promotion">LEVEL PROMOTION</string>
+    <string name="share_level_label">LEVEL</string>
+    <string name="share_milestone_default_title">Dedicated Listener</string>
+    <string name="share_milestone_subtitle">A milestone reached on the listening rhythm.</string>
+    <string name="share_total_xp">TOTAL XP</string>
+    <string name="share_streak_label">STREAK</string>
+    <string name="share_streak_days">%1$d days</string>
+    <string name="share_streak_active">Active</string>
 
     <!-- Spotlight Reminder -->
     <string name="spotlight_reminder_view">View Story</string>
@@ -853,7 +971,17 @@
     <string name="spotlight_playtime_minutes">%1$dm total playtime</string>
     <string name="spotlight_time_hours">%1$dh %2$dm</string>
     <string name="spotlight_time_minutes">%1$dm</string>
+    <!-- Anything under a minute, on a share card that leaves the app. -->
+    <string name="share_time_less_than_minute">&lt;1m</string>
     <string name="spotlight_share_your_story">Share Your Story</string>
+    <string name="spotlight_story_watermark">Tempo Spotlight</string>
+    <!-- The story's first share choice: its own animated backdrop, not a card theme. -->
+    <string name="share_theme_story">Story</string>
+    <string name="share_theme_story_caption">Your story\'s own backdrop, kept as it plays</string>
+    <!-- Conclusion page: how many artists and songs the closing slide lists. -->
+    <string name="spotlight_conclusion_items_label">Highlights</string>
+    <string name="spotlight_conclusion_items_spoken">Highlights: %1$d</string>
+    <string name="spotlight_share_title">Share Story</string>
     <string name="spotlight_top_track_setup_label">Your Top Track</string>
 
     <!-- Stats Screen -->
@@ -891,22 +1019,28 @@
     <string name="stats_share">Share</string>
     <string name="stats_share_title">Share Stats</string>
     <string name="stats_share_close">Close</string>
-    <string name="stats_share_button">Share to Instagram Stories</string>
+    <string name="stats_share_button">Share</string>
     <string name="stats_share_count_label">Items</string>
-    <string name="stats_share_theme_label">Theme</string>
+    <string name="share_theme_midnight">Midnight</string>
+    <string name="share_theme_glass">Glass</string>
+    <string name="share_theme_ascii">ASCII</string>
+    <string name="share_theme_minimum">Minimum</string>
+    <string name="share_theme_daylight">Daylight</string>
+    <string name="share_theme_dither">Dither</string>
     <string name="stats_share_layout_label">Layout</string>
-    <string name="stats_share_theme_midnight">Midnight</string>
-    <string name="stats_share_theme_rose">Rose</string>
-    <string name="stats_share_theme_aurora">Aurora</string>
-    <string name="stats_share_theme_mono">Mono</string>
-    <string name="stats_share_theme_daylight">Daylight</string>
-    <string name="stats_share_theme_ocean">Ocean</string>
     <string name="stats_share_layout_list">List</string>
     <string name="stats_share_layout_podium">Podium</string>
     <string name="stats_share_layout_grid">Grid</string>
     <string name="stats_share_summary">Summary</string>
     <string name="stats_share_on">On</string>
     <string name="stats_share_off">Off</string>
+    <!-- Spoken only. The deck's label sits in its own node, so a cell that says
+         "3" or "On" has to carry the thing it sets, or a screen reader user
+         hears a number with no subject. -->
+    <string name="stats_share_layout_spoken">Layout: %1$s</string>
+    <string name="stats_share_count_spoken">Items: %1$d</string>
+    <string name="stats_share_summary_spoken_on">Summary: on</string>
+    <string name="stats_share_summary_spoken_off">Summary: off</string>
     <string name="stats_share_rank_1">#1</string>
     <string name="stats_share_stat_time">TIME</string>
     <string name="stats_share_stat_plays">PLAYS</string>
@@ -919,6 +1053,42 @@
     <string name="stats_share_period_this_month">This Month</string>
     <string name="stats_share_period_this_year">This Year</string>
     <string name="stats_share_period_all_time">All Time</string>
+    <string name="stats_share_motion_waves">Waves</string>
+    <string name="stats_share_motion_shapes">Shapes</string>
+    <string name="stats_share_motion_glyphs">Glyphs</string>
+    <string name="stats_share_motion_ether">Ether</string>
+    <string name="stats_share_motion_pixels">Pixels</string>
+    <string name="stats_share_motion_bars">Bars</string>
+    <string name="stats_share_motion_halftone">Halftone</string>
+    <string name="stats_share_video_preparing">Rendering your video…</string>
+    <string name="stats_share_video_failed">Couldn\'t render the video. Try a still theme.</string>
+    <string name="stats_share_share_failed">Couldn\'t open the share sheet. Try saving it instead.</string>
+    <!-- Motion picker captions: one line each, describing what the scene draws. -->
+    <string name="stats_share_motion_caption_waves">Rolling terrain under a low horizon</string>
+    <string name="stats_share_motion_caption_shapes">A grid swaying in slow waves</string>
+    <string name="stats_share_motion_caption_glyphs">Monospace glyphs, lit unevenly</string>
+    <string name="stats_share_motion_caption_ether">Ink drifting like it\'s underwater</string>
+    <string name="stats_share_motion_caption_pixels">Dithered into soft squares</string>
+    <string name="stats_share_motion_caption_bars">A level meter engraved in thin lines</string>
+    <string name="stats_share_motion_caption_halftone">Dots in a fine grain</string>
+    <string name="stats_share_motion_unavailable">Shares as a still, not a video</string>
+    <!-- First-run tour of the share sheet. Three steps, one surface each. -->
+    <string name="stats_share_tour_carousel_title">Swipe the cards</string>
+    <string name="stats_share_tour_carousel_body">Each theme is a finished card. Swipe either way, then share the one you land on.</string>
+    <string name="stats_share_tour_deck_title">Shape the card</string>
+    <string name="stats_share_tour_deck_body">The controls under the card. Each tap redraws it above.</string>
+    <string name="stats_share_tour_share_title">Share or save</string>
+    <string name="stats_share_tour_share_body">Moving themes share as a 15-second video, still themes as an image. Either saves to your gallery.</string>
+    <string name="stats_share_tour_next">Next</string>
+    <string name="stats_share_tour_done">Got it</string>
+    <string name="stats_share_tour_skip">Skip</string>
+    <string name="stats_share_tour_replay">Show tips again</string>
+    <string name="stats_share_save">Save to gallery</string>
+    <!-- Toast after a card or story video is written to Pictures/ or Movies/. -->
+    <string name="stats_share_saved">Saved to your gallery</string>
+    <string name="stats_share_save_failed">Couldn\'t save to your gallery. Check your storage.</string>
+    <string name="stats_share_save_denied">Saving needs storage access. You can allow it in Settings.</string>
+    <string name="stats_share_capture_failed">Couldn\'t draw the card. Try another theme.</string>
 
     <!-- History Screen -->
     <string name="history_filter_title">Filter History</string>
@@ -1023,6 +1193,9 @@
 
     <string name="details_refresh_artist_image">Refresh Artist Image</string>
     <string name="details_rename_artist">Rename Artist</string>
+    <string name="details_change_artist_photo">Change photo</string>
+    <string name="details_change_artist_photo_title">Choose a photo</string>
+    <string name="details_change_artist_photo_body">Compare photos from multiple services or pick one from your gallery. Your choice stays locked until you change it or return to automatic selection.</string>
 
     <string name="details_discovery_insight">Discovery Insight</string>
     <string name="details_discovery_part1">"You first discovered "</string>
@@ -1277,6 +1450,7 @@
     <!-- Song details · editorial pass (all user-visible screen copy) -->
     <string name="details_action_back">Back</string>
     <string name="details_action_share_card">Share song card</string>
+    <string name="details_action_share_album_card">Share album card</string>
     <string name="details_action_song_options">Song options</string>
     <string name="details_action_close">Close</string>
     <string name="details_cover_artwork_cd">Cover for %1$s</string>
@@ -1436,25 +1610,30 @@
     <string name="ui_search_hint">Search…</string>
     <string name="ui_no_results">No results.</string>
 
-    <!-- Constellation / InsightFeed -->
-    <string name="constellation_hint">TAP OR DRAG STARS TO ORBIT &amp; DETAIL</string>
-    <string name="constellation_active">ACTIVE DYNAMICS // %1$s</string>
-
-    <string name="insight_category_mood">LISTENING DYNAMICS // MOOD</string>
-    <string name="insight_category_peak_time">LISTENING DYNAMICS // PEAK TIME</string>
-    <string name="insight_category_binge">LISTENING DYNAMICS // BINGE SESSION</string>
-    <string name="insight_category_discovery">LISTENING DYNAMICS // DISCOVERY</string>
-    <string name="insight_category_energy">AUDIO ATTRIBUTES // ENERGY</string>
-    <string name="insight_category_danceability">AUDIO ATTRIBUTES // DANCEABILITY</string>
-    <string name="insight_category_tempo">AUDIO ATTRIBUTES // TEMPO</string>
-    <string name="insight_category_acousticness">AUDIO ATTRIBUTES // ACOUSTICNESS</string>
-    <string name="insight_category_streak">LISTENING HABITS // STREAK</string>
-    <string name="insight_category_genre">LISTENING HABITS // GENRE</string>
-    <string name="insight_category_engagement">LISTENING HABITS // ENGAGEMENT</string>
-    <string name="insight_category_default">INSIGHT // DETAIL</string>
-    <string name="insight_close">Close</string>
-    <string name="streak_hint">Keep listening daily to grow the fire!</string>
-    <string name="tempo_bpm_hint">Pulsing in sync with average tempo</string>
+    <!-- Insight cards -->
+    <string name="insight_mood_axis_energy">Energy %1$d%%</string>
+    <string name="insight_mood_axis_valence">Positivity %1$d%%</string>
+    <string name="insight_artist_plays">%1$d plays · %2$s</string>
+    <string name="insight_binge_phrase">plays in one sitting</string>
+    <string name="insight_binge_sitting">%1$s of listening</string>
+    <string name="insight_full_listens">played start to finish</string>
+    <string name="insight_skips">skipped</string>
+    <string name="insight_completion_share">%1$d%% of tracks you start get finished</string>
+    <string name="insight_streak_unit">days in a row</string>
+    <string name="insight_streak_window">Last 14 days</string>
+    <string name="insight_streak_longest">Longest run: %1$d days</string>
+    <string name="insight_peak_heading">You listen most around %1$s</string>
+    <string name="insight_sound_profile">Your sound profile</string>
+    <string name="insight_trait_energy">Energy</string>
+    <string name="insight_trait_danceability">Danceability</string>
+    <string name="insight_trait_acousticness">Acousticness</string>
+    <string name="insight_trait_tempo">Tempo</string>
+    <string name="insight_profile_estimated">Estimated from genre averages</string>
+    <string name="insight_personality_anchor">%1$s · %2$d%% of your plays</string>
+    <string name="insight_node_mood">Mood</string>
+    <string name="insight_node_new">%1$d new</string>
+    <string name="insight_node_profile">Profile</string>
+    <string name="constellation_hint">TAP OR DRAG A STAR TO OPEN ITS CARD</string>
     <string name="period_today">today</string>
     <string name="period_this_week">this week</string>
     <string name="period_this_month">this month</string>
@@ -1549,6 +1728,57 @@
     <string name="details_cover_load_error">Failed to load cover art</string>
     <string name="details_cover_save_error">Failed to save cover art</string>
     <string name="details_cover_restore_auto_error">Failed to restore automatic artwork</string>
+
+    <!-- Apple Music data export import -->
+    <string name="settings_import_apple_music">Import Apple Music Data Export</string>
+    <string name="settings_import_apple_music_desc">Import listening history from your Apple privacy data export ZIP</string>
+    <string name="apple_music_import_intro_title">Import from Apple Data Export</string>
+    <string name="apple_music_import_intro_desc">Apple never exposes playback history through an API, so Tempo reads the export Apple sends you from privacy.apple.com.</string>
+    <string name="apple_music_import_select_file">Select export file</string>
+    <string name="apple_music_import_file_selected">File selected</string>
+    <string name="apple_music_import_clear">Clear</string>
+    <string name="apple_music_import_start">Start import</string>
+    <string name="apple_music_import_how_to_title">How to get your export</string>
+    <string name="apple_music_import_multipart_note">Apple may split the export into several parts. Import the one that contains the music activity — the others hold App Store data and are skipped.</string>
+    <string name="apple_music_import_backup_notice">Back up your data first, in Settings → Backup &amp; Restore. Apple Music import has not been tested with a real export yet.</string>
+    <string name="apple_music_import_short_plays_note">Apple does not record an artist on each play, so Tempo matches plays against your library and play-history files. Unmatched tracks are filled in later by enrichment. Short plays are imported as skips.</string>
+    <string name="apple_music_import_importing">Importing Apple Music history</string>
+    <string name="apple_music_import_reading">Reading %1$s…</string>
+    <string name="apple_music_import_progress">%1$d of %2$d plays — %3$d tracks, %4$d events</string>
+    <string name="apple_music_import_preparing">Preparing import…</string>
+    <string name="apple_music_import_background_hint">You can leave this screen. The import keeps running and notifies you when it finishes.</string>
+    <string name="apple_music_import_cancel">Cancel import</string>
+    <string name="apple_music_import_complete">Import complete</string>
+    <string name="apple_music_import_events_imported">%1$d listening events added</string>
+    <string name="apple_music_import_new_tracks">%1$d new tracks discovered</string>
+    <string name="apple_music_import_duplicates_skipped">%1$d plays already in your history</string>
+    <string name="apple_music_import_short_skipped">%1$d short plays imported as skips</string>
+    <string name="apple_music_import_malformed_skipped">%1$d rows could not be read</string>
+    <string name="apple_music_import_artist_recovered">%1$d plays matched to an artist</string>
+    <string name="apple_music_import_warnings">%1$d warnings</string>
+    <string name="apple_music_import_warning_artist">Some plays could not be matched to an artist.</string>
+    <string name="apple_music_import_warning_event">A listening event could not be saved.</string>
+    <string name="apple_music_import_warning_row">A play-history row was skipped.</string>
+    <string name="apple_music_import_warning_more">…and more</string>
+    <string name="apple_music_import_warning_unknown">A non-fatal issue occurred during the import.</string>
+    <string name="apple_music_import_failed">Import failed</string>
+    <string name="apple_music_import_error_missing_history">This file does not contain Apple Music play activity. Request "Apple Media Services information" from privacy.apple.com and select that ZIP.</string>
+    <string name="apple_music_import_error_unsupported_columns">This export uses a column layout Tempo does not recognise. Please report it.</string>
+    <string name="apple_music_import_error_too_large">This export is too large to import.</string>
+    <string name="apple_music_import_error_invalid_zip">This file is not a readable ZIP archive.</string>
+    <string name="apple_music_import_error_out_of_memory">Not enough memory to read this export. Try importing a smaller part.</string>
+    <string name="apple_music_import_error_no_file">No file was selected.</string>
+    <string name="apple_music_import_error_invalid_uri">The selected file could not be opened. Try picking it again.</string>
+    <string name="apple_music_import_error_generic">Apple Music import failed.</string>
+    <string name="apple_music_import_try_again">Try again</string>
+    <string name="apple_music_import_done">Done</string>
+    <string name="apple_music_import_another">Import another file</string>
+    <string name="apple_music_import_error_no_entries">No Apple Music plays were found in this export.</string>
+    <string name="apple_music_import_error_cancelled">The Apple Music import was cancelled.</string>
+    <string name="apple_music_import_notification_channel_name">Apple Music Data Import</string>
+    <string name="apple_music_import_notification_channel_desc">Progress notifications for Apple Music data export import</string>
+    <string name="apple_music_import_notification_title">Importing Apple Music Data</string>
+    <string name="apple_music_import_notification_progress">Importing %1$d/%2$d plays</string>
 
     <!-- Preferred album artwork source -->
     <string name="settings_cover_source_title">Preferred cover source</string>

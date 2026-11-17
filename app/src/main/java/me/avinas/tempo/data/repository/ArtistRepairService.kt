@@ -38,7 +38,7 @@ import javax.inject.Singleton
  *    standard linking pipeline on them. This automatically separates tracks
  *    that were wrongly folded into a collapsed artist.
  *
- * Deliberately NOT done here:
+ * NOT done here:
  * - Tracks whose raw artist string was already overwritten by the buggy linker
  *   (string now equals the collapsed artist's name) cannot be distinguished
  *   from legitimately-owned tracks by any reliable local signal. External

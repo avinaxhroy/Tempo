@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.roborazzi)
 }
 
 // Load local.properties for API keys
@@ -20,12 +21,12 @@ val localProperties =
 // Declared once so archiveReleaseMapping below names the archived mapping file after the
 // exact version it deobfuscates. Without the matching mapping.txt a release stack trace
 // cannot be read back, so these two must never drift apart.
-val appVersionCode = 4815
-val appVersionName = "4.8.15"
+val appVersionCode = 4830
+val appVersionName = "4.8.3"
 
 android {
     namespace = "me.avinas.tempo"
-    compileSdk = 36
+    compileSdk = 37
 
     signingConfigs {
         create("release") {
@@ -53,6 +54,12 @@ android {
         // throwing "not mocked" for framework calls that don't affect test logic.
         testOptions {
             unitTests.isReturnDefaultValues = true
+            // Roborazzi renders composables on the JVM through Robolectric, which
+            // needs the merged resources (theme attrs, bundled fonts) and manifest.
+            unitTests.isIncludeAndroidResources = true
+            unitTests.all {
+                it.systemProperty("robolectric.graphicsMode", "NATIVE")
+            }
         }
 
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"${localProperties.getProperty("SPOTIFY_CLIENT_ID", "")}\"")
@@ -132,7 +139,12 @@ android {
         }
         jniLibs {
             useLegacyPackaging = false
-            keepDebugSymbols += listOf("libandroidx.graphics.path.so", "libimage_processing_util_jni.so")
+            // The app builds no native code: every .so here comes prebuilt inside an AAR. AGP
+            // matches these patterns against the archive path ("lib/<abi>/<file>.so"), so plain
+            // file names never match and the strip task warns every release. Keeping **/*.so
+            // says outright that the shipped libraries go out as their authors built them, which
+            // also avoids requiring a multi-GB NDK install just to run stripReleaseDebugSymbols.
+            keepDebugSymbols += "**/*.so"
         }
     }
 
@@ -233,11 +245,9 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
 
     implementation(libs.navigation.compose)
-    implementation(libs.hilt.navigation.compose)
+    implementation(libs.hilt.lifecycle.viewmodel.compose)
 
     implementation(libs.datastore.preferences)
-
-    implementation(libs.security.crypto)
 
     implementation(libs.moshi.kotlin)
     ksp(libs.moshi.codegen)
@@ -270,6 +280,13 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.sqlite.jdbc)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.coil.test)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.espresso.core)
 

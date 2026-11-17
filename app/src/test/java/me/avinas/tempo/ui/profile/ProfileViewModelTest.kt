@@ -3,6 +3,7 @@ package me.avinas.tempo.ui.profile
 import me.avinas.tempo.data.local.entities.Badge
 import me.avinas.tempo.data.local.entities.UserLevel
 import me.avinas.tempo.data.stats.GamificationEngine
+import me.avinas.tempo.ui.theme.getLevelTierAccent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

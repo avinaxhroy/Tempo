@@ -4,7 +4,7 @@ import androidx.compose.ui.geometry.Size
 import me.avinas.tempo.data.local.entities.Badge
 import me.avinas.tempo.data.stats.GamificationEngine
 import me.avinas.tempo.ui.profile.BadgeSilhouettes
-import me.avinas.tempo.ui.profile.getLevelTierAccent
+import me.avinas.tempo.ui.theme.getLevelTierAccent
 import me.avinas.tempo.ui.profile.getRarityColor
 import me.avinas.tempo.ui.profile.getRarityMetal
 import me.avinas.tempo.ui.profile.getUniqueBadgeColor

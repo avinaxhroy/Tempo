@@ -4,6 +4,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import me.avinas.tempo.R
@@ -17,6 +18,16 @@ val AppFontFamily = FontFamily(
 )
 
 val DisplayFontFamily = FontFamily.Serif
+
+/**
+ * Editorial italic serif reserved for full-bleed recap surfaces (the Spotlight
+ * story prompt). Instrument Serif is a display face: it only ships one weight,
+ * so it is set large and never bolded. Everything else keeps Plus Jakarta or
+ * the system [DisplayFontFamily].
+ */
+val StorySerifFamily = FontFamily(
+    Font(R.font.instrument_serif_italic, FontWeight.Normal, FontStyle.Italic)
+)
 
 val Typography = Typography(
     displayLarge = TextStyle(

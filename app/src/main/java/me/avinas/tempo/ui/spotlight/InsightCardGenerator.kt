@@ -20,6 +20,7 @@ import me.avinas.tempo.data.stats.PaginatedResult
 import me.avinas.tempo.data.stats.TimeRange
 import me.avinas.tempo.data.stats.TopGenre
 import me.avinas.tempo.data.stats.TopTrack
+import me.avinas.tempo.domain.insights.MusicalPersonality
 import me.avinas.tempo.data.stats.GamificationEngine
 import javax.inject.Inject
 import android.content.Context
@@ -1317,11 +1318,13 @@ class InsightCardGenerator @Inject constructor(
                 totalMinutes = totalMinutes,
                 personalityType = personalityResult.second.first,
                 personalityKey = personalityResult.first,
-                topArtists = topArtistsList.take(5).map { 
-                    SpotlightStoryPage.Conclusion.ArtistEntry(it.artist, it.imageUrl) 
+                // The closing slide prints three, five or ten entries; the page trims to
+                // the chosen count, so the data has to carry the widest deck.
+                topArtists = topArtistsList.take(10).map {
+                    SpotlightStoryPage.Conclusion.ArtistEntry(it.artist, it.imageUrl)
                 },
-                topSongs = topTracksList.take(5).map { 
-                    SpotlightStoryPage.Conclusion.SongEntry(it.title, it.albumArtUrl) 
+                topSongs = topTracksList.take(10).map {
+                    SpotlightStoryPage.Conclusion.SongEntry(it.title, it.albumArtUrl)
                 },
                 topGenres = topGenres.take(3).map { it.genre },
                 timeRange = timeRange,
@@ -1407,49 +1410,17 @@ class InsightCardGenerator @Inject constructor(
         newArtistCount: Int = 0,
         varietyScore: Double = 0.0
     ): Pair<String, Triple<String, String, String>> {
-        // 1. Genre-Based Personalities (Prioritize strong genre affinity)
-        val mainGenre = topGenres.firstOrNull()?.lowercase() ?: ""
-        
-        if (mainGenre.isNotEmpty()) {
-            val genrePersonality = when {
-                mainGenre.contains("hip hop") || mainGenre.contains("rap") -> "Hip Hop Head"
-                mainGenre.contains("pop") -> "Pop Icon"
-                mainGenre.contains("rock") || mainGenre.contains("punk") -> "Rock Star"
-                mainGenre.contains("metal") -> "Metalhead"
-                mainGenre.contains("r&b") || mainGenre.contains("soul") -> "R&B Soul"
-                mainGenre.contains("jazz") || mainGenre.contains("blues") -> "Jazz Cat"
-                mainGenre.contains("electronic") || mainGenre.contains("house") || mainGenre.contains("techno") || mainGenre.contains("edm") -> "Electronic Voyager"
-                mainGenre.contains("classical") || mainGenre.contains("orchestra") -> "Maestro"
-                mainGenre.contains("indie") || mainGenre.contains("alternative") -> "Indie Spirit"
-                else -> null
-            }
-            
-            if (genrePersonality != null) {
-                return genrePersonality to getDynamicPersonalityText(genrePersonality)
-            }
-        }
-
-        // 2. Audio-Feature Personalities (If no strong genre match)
-        val key = when {
-            // High Energy + Happy
-            energy >= 0.7f && valence >= 0.6f && danceability >= 0.6f -> "Party Starter"
-            // High Energy + Dark/Intense
-            energy >= 0.7f && valence < 0.4f -> "Intense Soul"
-            // Low Energy + Happy/Calm
-            energy < 0.4f && valence >= 0.6f -> "Peaceful Optimist"
-            // Low Energy + Dark/Sad
-            energy < 0.4f && valence < 0.4f -> "Deep Thinker"
-            // High Danceability
-            danceability >= 0.7f -> "Dance Floor Regular"
-            // Balanced
-            energy >= 0.4f && energy <= 0.7f && valence >= 0.4f && valence <= 0.7f -> "Balanced Enthusiast"
-            // 3. Discovery/Explorer (Requires High Variety + Discovery)
-            // Variety Score (Entropy): typically 0.0 to 3.0+. > 2.0 implies listening to many artists evenly.
-            varietyScore > 2.0 && newArtistCount > 25 -> "The Explorer"
-            // 4. Default Fallback
-            else -> "The Melophile"
-        }
-        return key to getDynamicPersonalityText(key)
+        // Genre affinity, then audio features, then discovery — the same rules the Insights feed
+        // uses, so one listening history never yields two different personalities.
+        val personality = MusicalPersonality.classify(
+            energy = energy,
+            valence = valence,
+            danceability = danceability,
+            topGenres = topGenres,
+            newArtistCount = newArtistCount,
+            varietyScore = varietyScore,
+        )
+        return personality.stableKey to getDynamicPersonalityText(personality.stableKey)
     }
 
     private fun getDynamicPersonalityText(type: String): Triple<String, String, String> {

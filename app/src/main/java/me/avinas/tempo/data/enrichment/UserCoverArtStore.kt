@@ -59,7 +59,7 @@ class UserCoverArtStore @Inject constructor(
      */
     suspend fun saveGalleryCover(trackId: Long, source: Uri): String = withContext(Dispatchers.IO) {
         try {
-            store(trackId, source)
+            store(userCoverFilePrefix(trackId), source)
         } catch (e: Exception) {
             // One log site for every failure mode; callers only need to know it failed.
             Log.w(TAG, "Could not store gallery cover for track $trackId", e)
@@ -67,7 +67,23 @@ class UserCoverArtStore @Inject constructor(
         }
     }
 
-    private fun store(trackId: Long, source: Uri): String {
+    /**
+     * Copy [source] into managed storage as [artistId]'s portrait.
+     *
+     * Same encoding and directory as [saveGalleryCover]; only the file-name prefix
+     * differs, so a track and an artist that happen to share a numeric id cannot
+     * overwrite or claim each other's artwork.
+     */
+    suspend fun saveGalleryArtistCover(artistId: Long, source: Uri): String = withContext(Dispatchers.IO) {
+        try {
+            store(artistCoverFilePrefix(artistId), source)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not store gallery portrait for artist $artistId", e)
+            throw e
+        }
+    }
+
+    private fun store(filePrefix: String, source: Uri): String {
         val decoded = decodeScaled(source) ?: error("Could not read selected image")
         val scaled = scaleToMaxEdge(decoded, MAX_EDGE_PX)
         if (scaled !== decoded) decoded.recycle()
@@ -87,7 +103,7 @@ class UserCoverArtStore @Inject constructor(
         if (!dir.exists() && !dir.mkdirs()) {
             error("Could not prepare artwork storage")
         }
-        val file = File(dir, userCoverFileName(trackId, contentHash(bytes)))
+        val file = File(dir, "${filePrefix}${contentHash(bytes)}.jpg")
         file.writeBytes(bytes)
         return "file://${file.absolutePath}"
     }
@@ -170,8 +186,14 @@ class UserCoverArtStore @Inject constructor(
 /** Stable prefix marking a gallery cover owned by [trackId]. */
 internal fun userCoverFilePrefix(trackId: Long): String = "user_cover_${trackId}_"
 
+/** Stable prefix marking a gallery portrait owned by [artistId]. */
+internal fun artistCoverFilePrefix(artistId: Long): String = "user_artist_cover_${artistId}_"
+
 internal fun userCoverFileName(trackId: Long, contentHash: String): String =
     "${userCoverFilePrefix(trackId)}$contentHash.jpg"
+
+internal fun artistCoverFileName(artistId: Long, contentHash: String): String =
+    "${artistCoverFilePrefix(artistId)}$contentHash.jpg"
 
 /**
  * Short content hash used in the stored file name.
@@ -195,4 +217,15 @@ internal fun contentHash(bytes: ByteArray): String =
 internal fun isUserCoverArtUrl(url: String?, trackId: Long): Boolean {
     if (url.isNullOrBlank() || !url.startsWith("file://")) return false
     return File(url.removePrefix("file://")).name.startsWith(userCoverFilePrefix(trackId))
+}
+
+/**
+ * True when [url] names a gallery portrait this store saved for [artistId].
+ *
+ * The artist prefix is distinct from [userCoverFilePrefix], so a track whose id
+ * equals [artistId] can never be mistaken for the artist's portrait.
+ */
+internal fun isUserArtistCoverArtUrl(url: String?, artistId: Long): Boolean {
+    if (url.isNullOrBlank() || !url.startsWith("file://")) return false
+    return File(url.removePrefix("file://")).name.startsWith(artistCoverFilePrefix(artistId))
 }

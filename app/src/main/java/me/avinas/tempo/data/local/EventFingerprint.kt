@@ -47,7 +47,10 @@ object EventFingerprint {
         playDuration: Long,
         endTimestamp: Long?
     ): String {
-        val md = SHA_256.get()
+        // ThreadLocal.get() is annotated @Nullable in the Android SDK even though the
+        // initialValue() override below can never return null; fall back to a fresh
+        // instance instead of asserting non-null.
+        val md = SHA_256.get() ?: MessageDigest.getInstance("SHA-256")
         // digest() resets the instance on completion; the explicit reset() keeps reuse
         // correct even if a previous call left it mid-update.
         md.reset()

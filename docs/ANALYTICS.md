@@ -37,7 +37,7 @@ Full policy: [PRIVACY.md](../PRIVACY.md).
 
 Numbers go out as ranges, not exact figures. Counts use `0`, `1-5`, `6-25`, `26-100`, `100+`. Durations use `<1s`, `1-5s`, `5-30s`, `30s+`. Sizes use `0`, `<1MB`, `1-10MB`, `10-100MB`, `100MB+`. Ranges avoid fingerprinting and keep dashboards stable as libraries grow.
 
-Everything else is a fixed name from a closed list. There is no free-text field a track title could pass through. The exceptions are small `0`/`1` flags, the app version string, and the two database version numbers in `db_migration`.
+Everything else is a fixed name from a closed list. There is no free-text field a track title could pass through. The exceptions are small `0`/`1` flags, the app version string, and the coarse Android-version band on `install_once`.
 
 | Event | What it tells us |
 |---|---|
@@ -45,18 +45,26 @@ Everything else is a fixed name from a closed list. There is no free-text field 
 | `feature_first_used` | The first time each feature is used — once ever, never again. Answers which features are unused without counting every tap |
 | `onboarding_step` | Where setup stalls: step name, next/skip/back, time range on step |
 | `onboarding_completed` | Setup completion: skipped-step range, total time range |
-| `notif_access` | Whether notification access was granted or postponed. "Do it later" is deliberately reported as postponed rather than refused, because the screen cannot tell the two apart |
-| `battery_exemption` | Battery-optimisation exemption result |
+| `install_once` | That Tempo was installed, once ever: the version it arrived on and a coarse Android-version band. The only event that separates "people left" from "nobody new arrived" |
 | `daily_activity` | That Tempo was used at all today, and whether music detection was already down when it was. Once a day, and the only thing "daily active users" is counted from |
 | `tracking_health` | That music detection stopped and Tempo brought it back: how long it had been down, what triggered the check, and how forceful the recovery was. Once a day at most, however many times it happened |
 | `listening_activity` | Daily totals only, never per track: listen-count range, app-count range, and whether the app's own screens were opened that day |
-| `db_migration` | On-device database schema moved from one version to another |
 | `import_run` | Import result for Last.fm, Spotify, YouTube Music, Deezer, Musicolet, or the browser-extension export: phase, record range, failure category, time range |
-| `enrichment_run` | Whether a metadata enrichment sweep worked — once per run, not once per source tried: what started it, how much backlog it cleared, and the failure category if it failed |
+| `enrichment_failure` | That a metadata enrichment sweep failed, once a day at most and never for a sweep that worked: what started it, how much backlog was waiting, the failure category, time range |
 | `backup_run` | Backup result for local or Drive: success flag, size and time ranges |
 | `crash` | Fatal crash signature: obfuscated class name, one obfuscated line, app version |
 
 Failure reasons use a closed list: `IO`, `PARSE`, `NETWORK`, `DATABASE`, `PERMISSION`, `OUT_OF_MEMORY`, `CANCELLED`, `UNKNOWN`. Never an error message or stack trace.
+
+### How often an event may be sent
+
+> An event is sent at most once per install per day, or on a rare terminal outcome. Never once per run of a background job.
+
+The bound is not about tidiness. A per-invocation event multiplies by the number of times Android wakes the job, which the developer does not control: `app_started` was sent on every process start and became 28% of all traffic for a value that never varied; `tracking_gap` was sent on every health check and produced 192 events per device per day; `enrichment_run` was sent on every sweep — every app start, every hourly tick, every per-track refresh — and became 94% of all traffic, two thirds of it reporting that a run cleared nothing.
+
+That volume is not merely wasteful. It exhausted the free monthly quota, and events past the cap are dropped permanently at the server. The noise crowds out the signal: the last two months of data end mid-day because the quota ran out, and what was lost included the crashes and activity numbers worth keeping.
+
+So an event is justified by a decision it changes, and it is sized to the rate that decision needs. Daily is enough for everything here. Anything a developer would want per-run belongs in logs and the in-app diagnostics screen, not in an event.
 
 ## Crash reports
 

@@ -41,14 +41,9 @@ object AnalyticsCatalog {
                 properties = listOf("skipped", "total_dur"),
             ),
             AnalyticsCatalogEntry(
-                event = "notif_access",
-                what = "Whether notification access was granted, so failures can be diagnosed.",
-                properties = listOf("result"),
-            ),
-            AnalyticsCatalogEntry(
-                event = "battery_exemption",
-                what = "Whether battery optimisation was exempted.",
-                properties = listOf("result"),
+                event = "install_once",
+                what = "That the app was installed, once ever: the version it arrived on and a coarse Android-version band. The only event describing the install rather than a day, and it is what makes a release attributable.",
+                properties = listOf("app_version", "android_api"),
             ),
             AnalyticsCatalogEntry(
                 event = "tracking_health",
@@ -66,19 +61,14 @@ object AnalyticsCatalog {
                 properties = listOf("listens", "apps", "ui_opened"),
             ),
             AnalyticsCatalogEntry(
-                event = "db_migration",
-                what = "That the on-disk database schema advanced, and from which version.",
-                properties = listOf("from_v", "to_v"),
-            ),
-            AnalyticsCatalogEntry(
                 event = "import_run",
                 what = "Whether a history import worked, and the category of failure if not.",
                 properties = listOf("provider", "phase", "records", "dur", "error_class"),
             ),
             AnalyticsCatalogEntry(
-                event = "enrichment_run",
-                what = "Whether a metadata enrichment sweep worked — once per run, not per source tried: what started it, how much of the backlog it cleared, and the failure category if it failed.",
-                properties = listOf("trigger", "phase", "backlog", "cleared", "dur", "error_class"),
+                event = "enrichment_failure",
+                what = "That a metadata enrichment sweep failed — once a day at most, and never for a sweep that worked: what started it, how large the backlog was, and the failure category.",
+                properties = listOf("trigger", "backlog", "error_class", "dur"),
             ),
             AnalyticsCatalogEntry(
                 event = "backup_run",

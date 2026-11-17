@@ -19,7 +19,7 @@ import androidx.room.PrimaryKey
  * as "Detected — not tracked" with a one-tap Allow, which turns the allowlist from a dead end
  * into a review queue.
  *
- * Display names are deliberately NOT stored: the package label is resolved from PackageManager
+ * Display names are not stored: the package label is resolved from PackageManager
  * at render time so it stays correct after an app is renamed or updated.
  */
 @Entity(

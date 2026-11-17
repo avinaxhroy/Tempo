@@ -44,9 +44,14 @@ class StatsUiStateTest {
             uniqueTracks = 5
         )
 
-        assertTrue(track is StatItem)
-        assertTrue(artist is StatItem)
-        assertTrue(album is StatItem)
+        // Membership in the sealed interface is a compile-time fact; assert that each
+        // model stays reachable through StatItem and serves its derived contract.
+        assertEquals(TopTrack::class, track::class)
+        assertEquals(TopArtist::class, artist::class)
+        assertEquals(TopAlbum::class, album::class)
+        assertEquals(4L, (track as TopTrack).totalTimeMinutes)
+        assertEquals(1.0 / 6.0, (artist as TopArtist).totalTimeHours, 1e-9)
+        assertEquals(5L, (album as TopAlbum).totalTimeMinutes)
     }
 
     @Test

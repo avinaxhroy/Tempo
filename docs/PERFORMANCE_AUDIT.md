@@ -98,7 +98,7 @@ in-composition sorting anywhere in `ui/`.
 Filled in as each fix lands. Each entry records: what changed, why that approach, what was
 verified, and any deliberate deviation from the audit's suggestion.
 
-### #1 — Track lookup index (REVISED, then FIXED without a migration)
+### #1 — Track lookup index (REVERTED — it crashed the app; dropped on the way to schema 59)
 
 **The audit's original claim was wrong, and investigating it properly found a different bug.**
 
@@ -182,8 +182,30 @@ Cost and safety, both checked rather than assumed:
   `SEARCH tracks USING INDEX index_tracks_title_lower (title=?)`.
 - Wrapped in try/catch: a missing *optimisation* index must never stop the database from opening.
 
-A `58 -> 59` migration remains the tidier long-term home once the squash lands; the callback is
-kept because it is correct regardless of which schema an install is on.
+**Reversal.** The paragraph above was wrong, and the way it was wrong is worth recording. It
+argued that an undeclared extra index cannot interfere with validation because `checkIdentity`
+runs before `onOpen`. That is true of the callback, and irrelevant: the index was *also* created by
+`MIGRATION_8_9` inside the upgrade path, so on the next upgrade it was already present when
+`onValidateSchema` ran. Room compares the **whole** index set — `TableInfo.equals` treats an extra
+index as a mismatch exactly like a missing one — and the app died on open with:
+
+```
+IllegalStateException: Migration didn't properly handle: tracks(...)
+    at androidx.room.BaseRoomConnectionManager.onMigrate(RoomConnectionManager.kt:215)
+```
+
+thrown from whatever happened to touch the database first (here, `GamificationWorker`). A crash on
+open, not a slow query. The callback was also self-defeating: it re-created on every open the very
+index that the next upgrade would fail on.
+
+So the index is gone: `MIGRATION_8_9` no longer creates it, `MIGRATION_58_59` drops it where an
+older build already did (`DROP INDEX IF EXISTS`, re-enterable, a no-op on fresh installs), and
+`ensureTrackLookupIndex` is removed from the `onOpen` callback. Schema 59 had not shipped, so the
+drop lives inside it rather than in a new version — there is no 59 to migrate from in the wild. The
+lookup measured below goes back to a scan (~1 ms per miss on 50k tracks). That is the correct
+trade: an index no entity can declare is an index that fails validation, and a validating schema is
+worth more than a scan. Any future attempt has to change how the lookup matches (e.g. a stored
+normalised `title_lower` column that *can* be indexed), not re-add a bare `CREATE INDEX`.
 
 **Also done (zero-risk):** corrected the misleading KDoc in `TrackDao.kt` that asserted
 `COLLATE NOCASE` "allows SQLite to utilize existing title/artist indexes" — that sentence is what
@@ -675,6 +697,75 @@ sharing an id overwrite each other in the shade:
 All 17 IDs in the project are now unique. A central registry would prevent recurrence, but that
 touches ~15 files for no behavioural gain, so each site instead carries a comment naming the id it
 had to avoid.
+
+---
+
+# Round 2 — full sweep, 17 fixes applied
+
+**Method.** Six read-only subagents audited disjoint domains in parallel (Compose UI, Room/DAO,
+tracking service, workers + widgets, network/import, browser extension). Each was told to read this
+document first, to not re-litigate the "verified healthy" list above, and to cite `file:line` it had
+personally read. I then re-read every hit I intended to fix, traced its callers, and applied only
+changes whose behaviour is provably identical. **No device or emulator is available**, so severities
+below come from mechanism × invocation frequency, not frame timings — same caveat as round 1.
+
+## Fixed
+
+| # | Where | Problem | Fix |
+|:--|:--|:--|:--|
+| 20 | `service/TrackingServiceHeartbeat.kt` | `markMediaSessionCallback` / `markNotificationCallback` did a `SharedPreferences.edit().apply()` **on the main thread on every media callback** — dozens per track. | 5 s write throttle (`CALLBACK_WRITE_INTERVAL_MS`) shared by both markers. Readers (`ServiceHealthWorker`) sample every 5 min and tolerate 30 min staleness, so the throttle is invisible to health logic. |
+| 21 | `service/MusicTrackingService.kt` (`onDestroy`) | `addOnActiveSessionsChangedListener` was given an anonymous lambda and **never removed** — the service leaked a MediaSessionManager callback for the life of the process. | Listener held in a field, removed in `onDestroy` before `serviceScope.cancel()`. |
+| 22 | `service/MusicTrackingService.kt` (notification path) | `extractArtistFromTitle(rawTitle)` called **twice** in one expression (3 regex matches each). | Hoisted to a local. |
+| 23 | `service/MusicTrackingService.kt` (`isPlaceholderArtist`) | Allocated a fresh 19-element `listOf` per call, up to 6× per track parse. | Constant `PLACEHOLDER_ARTISTS` set. |
+| 24 | `data/repository/RoomStatsRepository.kt` (`observeListeningOverview`) | Room table invalidation fired a **full aggregate bundle per inserted listening event**, with no debounce and no cancellation — a burst queued N uncancellable computations. This was left open in round 1 (see the note near #17). | `.debounce(250).mapLatest { … }`. `mapLatest` cancels superseded work; the compute is read-only so cancellation is safe. Fixes all four collectors at the source. |
+| 25 | `ui/history/HistoryViewModel.kt` | Collected `observeListeningOverview(TimeRange.ALL_TIME)` and **threw the value away** just to learn "something changed" — each emission paid 5 whole-table aggregates plus a full `listening_events` scan. | Collects `listeningRepository.recentEvents(1)` instead: identical Room invalidation, bounded read. Not deleted, because imports/deletes write events without emitting `RefreshCoordinator.refreshEvents`. |
+| 26 | `ui/spotlight/SpotlightViewModel.kt` | Same flow, unconflated, driving a full `getInsights()` per emission. | `.conflate()` — zero added latency, drops stale intermediate frames. |
+| 27 | `data/repository/ChallengeRepository.kt` (`refreshChallengeProgress`) | Ended with `if (madeChanges) recomputeXpAndLevel()`, duplicating the `fullRefresh()` that **all four call sites** already perform — up to 3× the 4-aggregate XP recompute per play. | Recompute removed; callers own it (documented in-place). Dangling `madeChanges` and the now-unused constructor dependency removed. |
+| 28 | `ui/spotlight/SpotlightStoryScreen.kt` | Story progress segments read `Animatable.value` **in composition**, so the restartable scope was the whole screen: ~900 full-screen recompositions per 15 s slide. | Extracted `StoryProgressRow` taking `progress: () -> Float` and drawing the fill in `drawBehind` — the animation now only invalidates the draw phase. |
+| 29 | `ui/components/EmptyState.kt` (`PulsingRadar`) | `.scale()`/`.background(alpha)` read an infinite-transition value in composition → 60 fps recomposition of the empty state forever. | `graphicsLayer` + `drawBehind`, no recomposition. |
+| 30 | `ui/components/CoachMark.kt` | `rememberInfiniteTransition` + `animateFloat` whose value was never read (only use was commented out) → frame callback for zero pixels. | Deleted. |
+| 31 | `data/enrichment/SpotifyEnrichmentService.kt` | `processedArtistIds` was only populated on success, so a portrait miss was re-fetched (with rate-limit delay) once per track by that artist in the same batch. | Marked before the fetch. |
+| 32 | `data/youtube/YouTubeMusicImportService.kt` | `parseHtmlTimestamp` compiled **4 regexes and 13 `DateTimeFormatter`s per entry** — ~1.7M compilations for a 100k-row export, plus an exception per non-matching format. | Hoisted to file-level `val`s (immutable and thread-safe). |
+| 33 | `data/youtube/YouTubeMusicImportService.kt` | Single-file HTML import read the whole file with `readUtf8()` and **no cap** (the 80 MB guard only covered ZIP entries), then held ~3 copies → OOM on a large export. | Capped read via `readByteArray(MAX_HTML_BYTES + 1)` with an actionable error pointing at the JSON export. Cap kept at 80 MB. |
+| 34 | `worker/GamificationWorker.kt` | `enqueueImmediateRefresh` used plain `enqueue` with no unique name, fired on **every process start**; each run recomputed all XP/badges (~18 full-history aggregates). | `enqueueUniqueWork(KEEP)` + `batteryNotLow`. |
+| 35 | `TempoApplication.kt` | Startup did `Thread.sleep(500)` on an executor, then hopped to the **main thread** to enqueue eight workers + WorkManager init + a PackageManager binder call — inside the first-frame window. | Coroutine on `applicationScope` with `delay(500)`; nothing needs the main thread. |
+| 36 | `browser-extension/src/background/websocket.ts` | The heartbeat's `sendSigned({type:'ping'})` refreshed `_lastRealTrafficAt`, so the 5-minute idle-suspend check **could never fire** — the service worker was pinned resident at 3,456 pings/day. | Clock advances only for non-ping payloads; the 95%-idle path in the comment is now reachable. |
+| 37 | `browser-extension/src/content/media-probe.ts` | A `{childList, subtree}` observer ran a **synchronous `querySelector('audio, video')` per inserted node** on every mutation, on all 31 matched origins (YouTube live chat is hundreds/sec). | Nodes are queued and coalesced into one scan per 100 ms (cap 256), with the existing 500 ms poll re-arm unchanged. |
+
+**A gotcha worth recording:** the hoisted timestamp constants (#32) were first declared in the class's
+`companion object` and read back as **null at call time** on the JVM — `NullPointerException: Cannot
+invoke "kotlin.text.Regex.replace(...)" because "<local4>" is null`. Caught only because the existing
+test `YouTubeMusicImportZipDetectionTest` exercised the localized-ZIP path: 1100 tests, 1 failure.
+Moving the constants to file level fixed it. Hoisting patterns is not risk-free — compile it *and* run
+the suite.
+
+## Found, deliberately not changed
+
+Every item here is a real cost; none is worth the behaviour risk it would carry today.
+
+| Where | Why not |
+|:--|:--|
+| `res/xml/widget_info.xml:11` `updatePeriodMillis="10800000"` | The subagent's "duplicate 3-hour WorkManager driver" claim is **false** — `schedulePeriodicWidgetUpdate` has no call site anywhere. `updatePeriodMillis` is the widget's *only* refresh driver, so zeroing it would stop widgets updating. |
+| `worker/WidgetWorker.kt:43-253` | Computes the union of every widget type's data (13 aggregates, 2 image decodes) regardless of which widgets are placed; `hasAnyWidgetPlaced()` exists but is never consulted by the worker. Placement-gating is the right fix but changes what a freshly-placed widget shows. |
+| `widget/TempoAppWidget.kt:242`, `TempoTodayTotalWidget.kt:47-63`, +3 more | Full ARGB_8888 bitmaps allocated in composition with no render cache. Widget rendering needs a device to validate. |
+| `ui/profile/ProfileScreen.kt:2001` | `borderColor` pulse read in composition (60 fps recomposition of the badge card). Moving it to `drawWithCache` requires re-parenting `GlassCard`'s border — visual-regression risk without a screenshot harness. |
+| `ui/settings/SupportedAppsScreen.kt:261` +5 lists | Six lists are one eager non-recycling `LazyColumn` item each. Needs a structural rewrite to `items(key=)`. |
+| `data/enrichment/ITunesEnrichmentService.kt:521-564` | Artist portraits are retried forever for artists that have none (no attempt column), and the page is fetched twice with different UAs. Correct fix is a schema column. |
+| `data/remote/interceptors/RetryInterceptor.kt:66,86` | `Thread.sleep` + retry for **any** method, so a 5 MB POST is re-uploaded. Restricting to GET/HEAD would remove transient-5xx retries for POSTs. |
+| `data/enrichment/UserCoverArtStore.kt` | Written artwork is never pruned (~1 GB at 20k tracks). A sweep must not delete referenced art — needs a reference query first. |
+| `ReccoBeatsApi.kt:62-65`, `SpotifyApi.kt:82` | Batch endpoints exist with **zero call sites**; the enrich loop still does one track per request + 200 ms sleeps. Enabling it needs a live smoke test. |
+| `StatsDao.kt:696-703`, `RoomStatsRepository.kt:2689-2697`, `2702-2728` | Unbounded date-strip scan, N leading-wildcard `LIKE` scans, and unbounded async fan-out. Each needs a DAO signature change or a semantics-preserving rewrite. |
+
+## Verification
+
+- `./gradlew :app:compileDebugKotlin --rerun-tasks` → BUILD SUCCESSFUL (forced, not `UP-TO-DATE`).
+- `./gradlew :app:testDebugUnitTest` → **1100 tests, 0 failures, 0 errors** (128 suites, XML results
+  aggregated). Two of my own regressions were caught and fixed here: a `Fake` in
+  `HistoryContentCorrectionTest.kt` needed `recentEvents` (my #25 changed which API the view model
+  calls), and the companion-object null above (#32).
+- `browser-extension`: `npx tsc --noEmit` clean.
+- Not verified: any on-device runtime effect. No emulator, no macrobenchmark. The `baseline profile`
+  gap at the top of this document is still open for the same reason.
 
 
 

@@ -43,6 +43,7 @@ import androidx.glance.text.TextStyle
 import me.avinas.tempo.MainActivity
 import me.avinas.tempo.R
 import me.avinas.tempo.widget.theme.TempoWidgetColors
+import me.avinas.tempo.widget.theme.TempoWidgetTheme
 import me.avinas.tempo.widget.utils.WidgetHub
 
 class TempoAppWidget : GlanceAppWidget() {
@@ -55,7 +56,10 @@ class TempoAppWidget : GlanceAppWidget() {
             val prefs = currentState<Preferences>()
             val size = LocalSize.current
             
-            GlanceTheme {
+            // The card colours are hardcoded dark; the bare GlanceTheme followed the system, so
+            // in light mode its onSurface/onSurfaceVariant text was near-black on this dark
+            // background and colors.surface put a near-white panel behind white chart text.
+            TempoWidgetTheme {
                 // Outer Box handles the main click
                 Box(
                     modifier = GlanceModifier
@@ -88,7 +92,7 @@ class TempoAppWidget : GlanceAppWidget() {
 
     @Composable
     private fun SmallWidgetContent(prefs: Preferences) {
-        val totalTime = prefs[stringPreferencesKey(WidgetHub.PREF_WEEKLY_HOURS)] ?: "--"
+        val totalTime = prefs[stringPreferencesKey(WidgetHub.PREF_WEEKLY_HOURS)]?.let { "${it}h" } ?: "--"
         
         Column(
             modifier = GlanceModifier.fillMaxSize(),
@@ -114,7 +118,7 @@ class TempoAppWidget : GlanceAppWidget() {
             }
             Spacer(modifier = GlanceModifier.height(4.dp))
                 Text(
-                    text = "${totalTime}h",
+                    text = totalTime,
                     style = TextStyle(
                         color = ColorProvider(TempoWidgetColors.Primary),
                         fontSize = 24.sp,
@@ -127,7 +131,7 @@ class TempoAppWidget : GlanceAppWidget() {
     @Composable
     private fun MediumWidgetContent(prefs: Preferences, availableHeight: androidx.compose.ui.unit.Dp) {
         val chartDataStr = prefs[stringPreferencesKey(WidgetHub.PREF_WEEKLY_CHART_DATA)] ?: ""
-        val totalTime = prefs[stringPreferencesKey(WidgetHub.PREF_WEEKLY_HOURS)] ?: "--"
+        val totalTime = prefs[stringPreferencesKey(WidgetHub.PREF_WEEKLY_HOURS)]?.let { "${it}h" } ?: "--"
         val chartData = if (chartDataStr.isNotEmpty()) {
             chartDataStr.split(",").map { it.toFloatOrNull() ?: 0f }
         } else emptyList()
@@ -149,7 +153,7 @@ class TempoAppWidget : GlanceAppWidget() {
                     )
                 )
                 Text(
-                    text = "${totalTime}h", 
+                    text = totalTime, 
                     style = TextStyle(
                         color = GlanceTheme.colors.onSurface,
                         fontSize = 22.sp,
@@ -175,12 +179,9 @@ class TempoAppWidget : GlanceAppWidget() {
                         .cornerRadius(12.dp)
                         .padding(8.dp)
                  ) {
-                     // Calculate chart height (approx available minus padding)
-                     // or just pass availableHeight? Box fills max height, so pass availableHeight or a fraction
-                     // Since parent Box fillMaxHeight of Row, it has the Row's height.
-                     // The Row fills MaxSize of Widget.
-                     // So we can use availableHeight.
-                     BarChart(data = chartData, maxHeight = availableHeight, modifier = GlanceModifier.fillMaxSize())
+                     // availableHeight is the whole widget; the outer 16dp padding and this box's
+                     // own 8dp padding sit inside it, so a bar sized to it overflowed the card.
+                     BarChart(data = chartData, maxHeight = (availableHeight - 48.dp).coerceAtLeast(8.dp), modifier = GlanceModifier.fillMaxSize())
                  }
             }
         }
@@ -188,10 +189,10 @@ class TempoAppWidget : GlanceAppWidget() {
 
     @Composable
     private fun LargeWidgetContent(prefs: Preferences, availableHeight: androidx.compose.ui.unit.Dp) {
-        val totalTime = prefs[stringPreferencesKey(WidgetHub.PREF_WEEKLY_HOURS)] ?: "--"
+        val totalTime = prefs[stringPreferencesKey(WidgetHub.PREF_WEEKLY_HOURS)]?.let { "${it}h" } ?: "--"
         val growth = prefs[stringPreferencesKey(WidgetHub.PREF_WEEKLY_GROWTH)] ?: "--"
         val topArtist = prefs[stringPreferencesKey(WidgetHub.PREF_TOP_ARTIST_NAME)] ?: "No Data"
-        val artistImagePath = prefs[stringPreferencesKey(WidgetHub.PREF_TOP_ARTIST_IMAGE)]
+        val artistImagePath = prefs[stringPreferencesKey(WidgetHub.PREF_TOP_ARTIST_IMAGE)]?.takeIf { it.isNotEmpty() }
         
         val chartDataStr = prefs[stringPreferencesKey(WidgetHub.PREF_WEEKLY_CHART_DATA)] ?: ""
         val chartData = if (chartDataStr.isNotEmpty()) {
@@ -206,7 +207,7 @@ class TempoAppWidget : GlanceAppWidget() {
             ) {
                  Column(modifier = GlanceModifier.defaultWeight()) {
                      Text("This Week's Listening", style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp))
-                     Text("${totalTime}h", style = TextStyle(color = GlanceTheme.colors.primary, fontSize = 28.sp, fontWeight = FontWeight.Bold))
+                     Text(totalTime, style = TextStyle(color = GlanceTheme.colors.primary, fontSize = 28.sp, fontWeight = FontWeight.Bold))
                  }
                  
                  // Growth percentage
@@ -215,7 +216,13 @@ class TempoAppWidget : GlanceAppWidget() {
                          text = growth,
                          style = TextStyle(color = GlanceTheme.colors.secondary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                      )
-                     Text(" \uD83D\uDCC8", style = TextStyle(fontSize = 16.sp)) // Chart emoji
+                     Spacer(modifier = GlanceModifier.width(4.dp))
+                     // Icon instead of an emoji: emoji rendering depends on the launcher font.
+                     Image(
+                         provider = ImageProvider(R.drawable.ic_widget_trending_up),
+                         contentDescription = null,
+                         modifier = GlanceModifier.size(18.dp),
+                     )
                  }
             }
             

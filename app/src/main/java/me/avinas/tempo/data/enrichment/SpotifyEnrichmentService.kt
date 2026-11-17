@@ -1091,11 +1091,13 @@ class SpotifyEnrichmentService @Inject constructor(
         for (metadata in tracksNeedingImages) {
             val artistId = metadata.spotifyArtistId ?: continue
             if (artistId in processedArtistIds) continue
-            
+            // Mark before fetching: a miss (no portrait on Spotify) must not be retried for every
+            // other track by the same artist in this batch, which the post-fetch add allowed.
+            processedArtistIds.add(artistId)
+
             val imageUrl = fetchAndCacheArtistImage(artistId)
             if (imageUrl != null) {
                 fetchedCount++
-                processedArtistIds.add(artistId)
             }
             
             // Small delay to be nice to the API

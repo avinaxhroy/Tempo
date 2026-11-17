@@ -442,7 +442,18 @@ private fun BoxScope.TakeoutReplayOverlay(alpha: Float) {
 /** The walkthrough as a dismissible overlay — for places with no room for
  *  the inline tutorial (the restore screen's YouTube card). */
 @Composable
-fun TakeoutGuideDialog(onDismiss: () -> Unit) {
+fun TakeoutGuideDialog(onDismiss: () -> Unit) =
+    TutorialGuideDialog(title = "How to get your file from Google Takeout", onDismiss = onDismiss) {
+        TakeoutTutorial()
+    }
+
+/** Shared shell for "how do I get my export" dialogs — each importer supplies its own title and tutorial. */
+@Composable
+fun TutorialGuideDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit,
+) {
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -474,7 +485,7 @@ fun TakeoutGuideDialog(onDismiss: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "How to get your file from Google Takeout",
+                        text = title,
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
@@ -488,7 +499,7 @@ fun TakeoutGuideDialog(onDismiss: () -> Unit) {
                         )
                     }
                 }
-                TakeoutTutorial()
+                content()
             }
         }
     }

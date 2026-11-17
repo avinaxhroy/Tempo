@@ -11,7 +11,7 @@ import androidx.core.content.edit
  * Duration gates remain in a dedicated SharedPreferences file because the notification and
  * MediaSession callbacks need to read their latest value synchronously on a hot path. This
  * class is therefore the single source of truth only for duration rules; manual content
- * overrides deliberately use ManualContentMark/Room instead of a second preference store.
+ * overrides Use ManualContentMark/Room instead of a second preference store.
  */
 class TrackingRulesPreferences internal constructor(private val prefs: SharedPreferences) {
     constructor(context: Context) : this(

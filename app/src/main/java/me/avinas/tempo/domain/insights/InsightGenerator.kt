@@ -1,192 +1,243 @@
 package me.avinas.tempo.domain.insights
 
-import me.avinas.tempo.data.stats.*
-import me.avinas.tempo.R
+import me.avinas.tempo.data.stats.BingeSession
+import me.avinas.tempo.data.stats.DiscoveryTrend
+import me.avinas.tempo.data.stats.EngagementStats
+import me.avinas.tempo.data.stats.HourlyDistribution
+import me.avinas.tempo.data.stats.InsightCardData
+import me.avinas.tempo.data.stats.InsightPayload
+import me.avinas.tempo.data.stats.InsightType
+import me.avinas.tempo.data.stats.AudioTrait
+import me.avinas.tempo.data.stats.AudioTraitKey
+import me.avinas.tempo.data.stats.ListeningStreak
+import me.avinas.tempo.data.stats.MoodAggregates
+import me.avinas.tempo.data.stats.TopArtist
+import me.avinas.tempo.data.stats.TopGenre
+import me.avinas.tempo.utils.TempoCopyEngine
 import javax.inject.Inject
-import java.util.Calendar
 
 /**
- * Generates human-readable insights from raw statistics.
+ * Everything the insight cards may draw on, gathered in one place because the cards no longer
+ * share a single numeric field: the mood plot needs two axes, the timeline needs the days
+ * themselves, the artist card needs artwork.
+ */
+data class InsightInputs(
+    val moodStats: MoodAggregates?,
+    val bingeSessions: List<BingeSession>,
+    val discoveryTrends: List<DiscoveryTrend>,
+    val hourlyDistribution: List<HourlyDistribution>,
+    val listeningStreak: ListeningStreak?,
+    /** One entry per day, oldest first, true when that day had a play. */
+    val recentListeningDays: List<Boolean> = emptyList(),
+    val topGenres: List<TopGenre> = emptyList(),
+    val topArtist: TopArtist? = null,
+    val engagementStats: EngagementStats? = null,
+    val totalPlayCount: Int = 0,
+    val varietyScore: Double = 0.0,
+    val newArtistCount: Int = 0,
+)
+
+/**
+ * Turns aggregates into cards.
+ *
+ * One card per payload shape, so the feed can pick a distinct layout for each: the generator's
+ * job is to decide *which* measurements are worth showing and hand each a payload the renderer
+ * can draw without inventing anything. Insights whose data is missing are not emitted at all
+ * rather than padded with placeholders.
  */
 class InsightGenerator @Inject constructor() {
 
-    fun generateInsights(
-        moodStats: MoodAggregates?,
-        bingeSessions: List<BingeSession>,
-        discoveryTrends: List<DiscoveryTrend>,
-        hourlyDistribution: List<HourlyDistribution>,
-        dayOfWeekDistribution: List<DayOfWeekDistribution>,
-        listeningStreak: ListeningStreak?,
-        topGenres: List<TopGenre>,
-        engagementStats: EngagementStats?,
-        timeRange: TimeRange
-    ): List<InsightCardData> {
+    fun generateInsights(inputs: InsightInputs): List<InsightCardData> {
         val insights = mutableListOf<InsightCardData>()
+        val mood = inputs.moodStats
 
-        // 1. Mood Insights
-        moodStats?.let { mood ->
-            val valence = mood.avg_valence ?: return@let
-            val energy = mood.avg_energy ?: return@let
-            
-            // Subtle indicator for estimated data - only show if >30% is estimated
-            val estimatedPercent = if (mood.sample_size > 0) (mood.estimated_sample_size * 100) / mood.sample_size else 0
-            val estimatedNote = if (estimatedPercent > 30) " • via genre" else ""
-            
-            val moodTitle = me.avinas.tempo.utils.TempoCopyEngine.getMoodTitle(valence, energy)
-            val description = me.avinas.tempo.utils.TempoCopyEngine.getMoodDescription(energy, valence) + estimatedNote
-            
-            insights.add(InsightCardData(
-                title = moodTitle,
-                description = description,
-                type = InsightType.MOOD,
-                score = 0.9,
-                payload = InsightPayload.MoodData(valence, energy)
-            ))
-
-            // Extra Mood Insights
-            if (energy >= 0.7f) {
-                insights.add(InsightCardData(
-                    title = "High Energy Mode! ⚡",
-                    description = "Average energy level: ${(energy * 100).toInt()}%$estimatedNote",
-                    type = InsightType.ENERGY,
-                    score = 0.65,
-                    payload = InsightPayload.FeatureValue(InsightType.ENERGY, energy)
-                ))
+        // 1. Listening personality — the summary card, expressed as type rather than a chart.
+        val genres = inputs.topGenres.map { it.genre }
+        val hasPersonalityData = mood?.avg_energy != null || genres.isNotEmpty()
+        if (hasPersonalityData) {
+            val personality = MusicalPersonality.classify(
+                energy = mood?.avg_energy ?: 0.5f,
+                valence = mood?.avg_valence ?: 0.5f,
+                danceability = mood?.avg_danceability ?: 0.5f,
+                topGenres = genres,
+                newArtistCount = inputs.newArtistCount,
+                varietyScore = inputs.varietyScore,
+            )
+            val topGenre = inputs.topGenres.firstOrNull()
+            val share = if (topGenre != null && inputs.totalPlayCount > 0) {
+                (topGenre.playCount * 100) / inputs.totalPlayCount
+            } else {
+                null
             }
+            insights.add(
+                InsightCardData(
+                    title = personality.stableKey,
+                    description = "",
+                    type = InsightType.PERSONALITY,
+                    score = 0.95,
+                    payload = InsightPayload.PersonalityData(
+                        personality = personality,
+                        genre = topGenre?.genre,
+                        genreSharePercent = share,
+                    ),
+                ),
+            )
+        }
 
-            val danceability = mood.avg_danceability ?: 0f
-            if (danceability > 0.5f) {
-                insights.add(InsightCardData(
-                    title = "Ready to Dance! 💃",
-                    description = "Your playlist is ${(danceability * 100).toInt()}% danceable$estimatedNote",
-                    type = InsightType.DANCEABILITY,
-                    score = 0.65,
-                    payload = InsightPayload.FeatureValue(InsightType.DANCEABILITY, danceability)
-                ))
-            }
+        // 2. Mood — a point in a two-axis field (valence against energy).
+        if (mood?.avg_valence != null && mood.avg_energy != null) {
+            val valence = mood.avg_valence
+            val energy = mood.avg_energy
+            insights.add(
+                InsightCardData(
+                    title = TempoCopyEngine.getMoodTitle(valence, energy),
+                    description = TempoCopyEngine.getMoodDescription(energy, valence),
+                    type = InsightType.MOOD,
+                    score = 0.9,
+                    payload = InsightPayload.MoodData(valence, energy),
+                ),
+            )
+        }
 
-            val tempo = mood.avg_tempo
-            // Only show Tempo insight if we have real audio data (not estimated)
-            if (tempo != null && tempo > 0 && mood.isFullyVerified) {
-                 val tempoTitle = when {
-                    tempo >= 140 -> "Fast & furious 🏎️"
-                    tempo >= 120 -> "Upbeat tempo 🎶"
-                    tempo >= 100 -> "Moderate groove 🎵"
-                    tempo >= 80 -> "Relaxed pace 🎧"
-                    else -> "Slow & steady 🐢"
-                }
-                insights.add(InsightCardData(
-                    title = tempoTitle,
-                    description = "Average tempo: ${tempo.toInt()} BPM",
-                    type = InsightType.TEMPO,
-                    score = 0.6,
-                    payload = InsightPayload.TempoValue(tempo)
-                ))
-            }
-
-            val acousticness = mood.avg_acousticness ?: 0f
-            if (acousticness > 0.5f) {
-                 insights.add(InsightCardData(
-                    title = "Acoustic Soul 🎸",
-                    description = "${(acousticness * 100).toInt()}% of your music is acoustic$estimatedNote",
-                    type = InsightType.ACOUSTICNESS,
-                    score = 0.65,
-                    payload = InsightPayload.FeatureValue(InsightType.ACOUSTICNESS, acousticness)
-                ))
+        // 3. Most-played artist — artwork leads, numbers support.
+        inputs.topArtist?.let { artist ->
+            if (!artist.imageUrl.isNullOrBlank() && artist.playCount > 0) {
+                insights.add(
+                    InsightCardData(
+                        title = artist.artist,
+                        description = "",
+                        type = InsightType.TOP_ARTIST,
+                        score = 0.88,
+                        payload = InsightPayload.TopArtistData(
+                            artist = artist.artist,
+                            playCount = artist.playCount,
+                            totalTimeMs = artist.totalTimeMs,
+                            imageUrl = artist.imageUrl,
+                        ),
+                    ),
+                )
             }
         }
 
-        // 2. Binge Listening
-        if (bingeSessions.isNotEmpty()) {
-            val topBinge = bingeSessions.first()
-            insights.add(InsightCardData(
-                title = me.avinas.tempo.utils.TempoCopyEngine.getBingeTitle(topBinge.artist),
-                description = me.avinas.tempo.utils.TempoCopyEngine.getBingeDescription(topBinge.artist, topBinge.session_play_count),
-                type = InsightType.BINGE,
-                score = 0.85,
-                payload = InsightPayload.BingeData(topBinge.artist, topBinge.session_play_count, topBinge.session_duration_ms)
-            ))
+        // 4. Binge session — numbers large enough to read as a headline.
+        inputs.bingeSessions.firstOrNull()?.let { session ->
+            if (session.session_play_count > 1) {
+                insights.add(
+                    InsightCardData(
+                        title = TempoCopyEngine.getBingeTitle(session.artist),
+                        description = "",
+                        type = InsightType.BINGE,
+                        score = 0.85,
+                        payload = InsightPayload.BingeData(
+                            artist = session.artist,
+                            playCount = session.session_play_count,
+                            durationMs = session.session_duration_ms,
+                        ),
+                    ),
+                )
+            }
         }
 
-        // 3. Discovery Trend
-        if (discoveryTrends.isNotEmpty()) {
-            val currentMonth = discoveryTrends.first()
-            insights.add(InsightCardData(
-                title = me.avinas.tempo.utils.TempoCopyEngine.getDiscoveryTitle(),
-                description = me.avinas.tempo.utils.TempoCopyEngine.getDiscoveryDescription(currentMonth.new_artists_count),
-                type = InsightType.DISCOVERY,
-                score = 0.7,
-                payload = InsightPayload.DiscoveryData(currentMonth.new_artists_count, discoveryTrends)
-            ))
+        // 5. Streak — the days themselves, drawn as a calendar strip.
+        inputs.listeningStreak?.let { streak ->
+            if (streak.currentStreakDays >= 3) {
+                insights.add(
+                    InsightCardData(
+                        title = TempoCopyEngine.getStreakTitle(streak.currentStreakDays),
+                        description = "",
+                        type = InsightType.STREAK,
+                        score = 0.8,
+                        payload = InsightPayload.StreakData(
+                            days = streak.currentStreakDays,
+                            longestDays = streak.longestStreakDays,
+                            totalActiveDays = streak.totalActiveDays,
+                            recentDays = inputs.recentListeningDays,
+                        ),
+                    ),
+                )
+            }
         }
 
-        // 4. Peak Listening Time
-        val peakHour = hourlyDistribution.maxByOrNull { it.playCount }
-        peakHour?.let {
-            val hour = it.hour
-            val timeOfDay = when(hour) {
+        // 6. Sound profile — every measured audio attribute, one row each.
+        val traits = buildList {
+            mood?.avg_energy?.let { add(AudioTrait(AudioTraitKey.ENERGY, it)) }
+            mood?.avg_danceability?.let { add(AudioTrait(AudioTraitKey.DANCEABILITY, it)) }
+            mood?.avg_acousticness?.let { add(AudioTrait(AudioTraitKey.ACOUSTICNESS, it)) }
+        }
+        val tempo = mood?.avg_tempo?.takeIf { it > 0f }
+        if (traits.isNotEmpty() || tempo != null) {
+            insights.add(
+                InsightCardData(
+                    title = "Sound profile",
+                    description = "",
+                    type = InsightType.AUDIO_PROFILE,
+                    score = 0.72,
+                    payload = InsightPayload.AudioProfileData(
+                        traits = traits,
+                        tempoBpm = tempo?.takeIf { mood.isFullyVerified },
+                        estimated = mood != null && !mood.isFullyVerified,
+                    ),
+                ),
+            )
+        }
+
+        // 7. Discovery — new artists per month. One month is a number, not a trend, and the
+        // numbers card already owns single figures, so two months is the minimum.
+        if (inputs.discoveryTrends.size >= 2) {
+            val currentMonth = inputs.discoveryTrends.first()
+            insights.add(
+                InsightCardData(
+                    title = TempoCopyEngine.getDiscoveryTitle(),
+                    description = TempoCopyEngine.getDiscoveryDescription(currentMonth.new_artists_count),
+                    type = InsightType.DISCOVERY,
+                    score = 0.7,
+                    payload = InsightPayload.DiscoveryData(
+                        newArtistsCount = currentMonth.new_artists_count,
+                        trends = inputs.discoveryTrends,
+                    ),
+                ),
+            )
+        }
+
+        // 8. Engagement — how completely tracks get played.
+        inputs.engagementStats?.let { stats ->
+            if (stats.averageCompletionRate > 80.0 || stats.skipRate > 0.3) {
+                val completionist = stats.averageCompletionRate > 80.0
+                insights.add(
+                    InsightCardData(
+                        title = TempoCopyEngine.getEngagementTitle(if (completionist) "Completionist" else "Skipper"),
+                        description = "",
+                        type = InsightType.ENGAGEMENT,
+                        score = 0.68,
+                        payload = InsightPayload.EngagementData(
+                            completionRate = stats.averageCompletionRate,
+                            fullListens = stats.fullListensCount,
+                            skips = stats.skipsCount,
+                            skipRate = stats.skipRate,
+                        ),
+                    ),
+                )
+            }
+        }
+
+        // 9. Peak hour — the shape of the listening day.
+        inputs.hourlyDistribution.maxByOrNull { it.playCount }?.let { peak ->
+            val hour = peak.hour
+            val timeOfDay = when (hour) {
                 in 5..11 -> "Morning Person"
                 in 12..16 -> "Afternoon Listener"
                 in 17..21 -> "Evening Vibe"
                 else -> "Night Owl"
             }
-            
-            val hourFormatted = if (hour > 12) "${hour-12} PM" else if (hour == 0 || hour == 24) "12 AM" else "$hour AM"
-            
-            insights.add(InsightCardData(
-                title = me.avinas.tempo.utils.TempoCopyEngine.getPeakTimeTitle(timeOfDay),
-                description = me.avinas.tempo.utils.TempoCopyEngine.getPeakTimeDescription(hourFormatted),
-                type = InsightType.PEAK_TIME,
-                score = 0.6,
-                payload = InsightPayload.PeakTimeData(hour, hourlyDistribution)
-            ))
-        }
-
-        // 5. Listening Streak
-        listeningStreak?.let { streak ->
-            if (streak.currentStreakDays >= 3) {
-                 insights.add(InsightCardData(
-                    title = me.avinas.tempo.utils.TempoCopyEngine.getStreakTitle(streak.currentStreakDays),
-                    description = me.avinas.tempo.utils.TempoCopyEngine.getStreakDescription(streak.currentStreakDays),
-                    type = InsightType.STREAK,
-                    score = 0.8,
-                    payload = InsightPayload.StreakData(streak.currentStreakDays)
-                ))
-            }
-        }
-
-        // 6. Top Genre
-        if (topGenres.isNotEmpty()) {
-            val topGenre = topGenres.first()
-            insights.add(InsightCardData(
-                title = me.avinas.tempo.utils.TempoCopyEngine.getGenreTitle(topGenre.genre),
-                description = me.avinas.tempo.utils.TempoCopyEngine.getGenreDescription(topGenre.genre),
-                type = InsightType.GENRE,
-                score = 0.75,
-                payload = InsightPayload.GenreData(topGenre.genre)
-            ))
-        }
-
-        // 7. Engagement Style
-        engagementStats?.let { stats ->
-            // Completionist?
-            if (stats.averageCompletionRate > 80.0) {
-                 insights.add(InsightCardData(
-                    title = me.avinas.tempo.utils.TempoCopyEngine.getEngagementTitle("Completionist"),
-                    description = me.avinas.tempo.utils.TempoCopyEngine.getEngagementDescription("Completionist", stats.averageCompletionRate.toInt()),
-                    type = InsightType.ENGAGEMENT,
-                    score = 0.7,
-                    payload = InsightPayload.FeatureValue(InsightType.ENGAGEMENT, stats.averageCompletionRate.toFloat() / 100f)
-                ))
-            } else if (stats.skipRate > 0.3) {
-                 insights.add(InsightCardData(
-                    title = me.avinas.tempo.utils.TempoCopyEngine.getEngagementTitle("Skipper"),
-                    description = me.avinas.tempo.utils.TempoCopyEngine.getEngagementDescription("Skipper", (stats.skipRate * 100).toInt()),
-                    type = InsightType.ENGAGEMENT,
-                    score = 0.7,
-                    payload = InsightPayload.FeatureValue(InsightType.ENGAGEMENT, -stats.skipRate.toFloat())
-                ))
-            }
+            insights.add(
+                InsightCardData(
+                    title = TempoCopyEngine.getPeakTimeTitle(timeOfDay),
+                    description = "",
+                    type = InsightType.PEAK_TIME,
+                    score = 0.65,
+                    payload = InsightPayload.PeakTimeData(hour, inputs.hourlyDistribution),
+                ),
+            )
         }
 
         return insights.sortedByDescending { it.score }

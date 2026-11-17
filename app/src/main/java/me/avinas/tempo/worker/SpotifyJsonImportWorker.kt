@@ -124,7 +124,7 @@ class SpotifyJsonImportWorker @AssistedInject constructor(
 
         showProgressNotification("Preparing import...", 0, 100)
 
-        val uriStrings = inputData.getStringArray(KEY_FILE_URIS)
+        val uriStrings = inputData.getNullableStringArray(KEY_FILE_URIS)?.filterNotNull()
         if (uriStrings.isNullOrEmpty()) {
             Log.e(TAG, "No file URIs provided")
             return@withContext Result.failure(workDataOf(KEY_ERROR_MESSAGE to "No files selected"))

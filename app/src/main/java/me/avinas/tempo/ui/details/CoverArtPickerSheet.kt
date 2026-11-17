@@ -90,10 +90,29 @@ internal fun resolveCoverPickerColumnCount(maxWidthDp: Float): Int =
         else -> 2
     }
 
+/**
+ * The subset of UI state the picker needs, independent of what the artwork belongs to.
+ *
+ * Songs and artists share one sheet, so the sheet reads this instead of a
+ * screen-specific state object. Adding a new artwork surface means adding a
+ * [CoverPickerUiState] field to that screen's state, not another sheet.
+ */
+@androidx.compose.runtime.Immutable
+internal data class CoverPickerUiState(
+    val selectedProvider: CoverArtProvider? = null,
+    val candidates: List<CoverArtCandidate> = emptyList(),
+    val providerStatuses: Map<CoverArtProvider, CoverArtLookupStatus> = emptyMap(),
+    val error: String? = null,
+    val isLoadingCandidates: Boolean = false,
+    val isSaving: Boolean = false,
+    val isResetting: Boolean = false,
+    val isManual: Boolean = false,
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun CoverArtPickerSheet(
-    state: SongDetailsUiState,
+    state: CoverPickerUiState,
     onSelect: (CoverArtCandidate) -> Unit,
     onSelectProvider: (CoverArtProvider) -> Unit = {},
     onGallerySelected: (Uri) -> Unit = {},
@@ -101,18 +120,21 @@ internal fun CoverArtPickerSheet(
     onRetry: () -> Unit,
     onRetryProvider: ((CoverArtProvider) -> Unit)? = null,
     onDismiss: () -> Unit,
+    providers: List<CoverArtProvider> = CoverArtPickerService.REMOTE_PROVIDERS,
+    title: String = stringResource(R.string.details_change_cover_title),
+    body: String = stringResource(R.string.details_change_cover_body),
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val selectedProvider = reconcileCoverPickerSelection(
-        selectedProvider = state.selectedCoverProvider,
-        candidates = state.coverCandidates,
+        selectedProvider = state.selectedProvider,
+        candidates = state.candidates,
     )
-    val selected = state.coverCandidates.firstOrNull { it.provider == selectedProvider }
-    val providers = buildList {
-        if (state.coverCandidates.any { it.provider == CoverArtProvider.CURRENT }) {
+    val selected = state.candidates.firstOrNull { it.provider == selectedProvider }
+    val visibleProviders = buildList {
+        if (state.candidates.any { it.provider == CoverArtProvider.CURRENT }) {
             add(CoverArtProvider.CURRENT)
         }
-        addAll(CoverArtPickerService.REMOTE_PROVIDERS)
+        addAll(providers)
     }
 
     val configuration = LocalConfiguration.current
@@ -128,7 +150,7 @@ internal fun CoverArtPickerSheet(
     ) { uri: Uri? ->
         uri?.let(onGallerySelected)
     }
-    val coverChangeEnabled = !state.isSavingCover && !state.isResettingCover
+    val coverChangeEnabled = !state.isSaving && !state.isResetting
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -148,14 +170,14 @@ internal fun CoverArtPickerSheet(
                     .verticalScroll(rememberScrollState()),
             ) {
                 Text(
-                    text = stringResource(R.string.details_change_cover_title),
+                    text = title,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary,
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = stringResource(R.string.details_change_cover_body),
+                    text = body,
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                 )
@@ -186,7 +208,7 @@ internal fun CoverArtPickerSheet(
                     modifier = Modifier.padding(top = 6.dp),
                 )
 
-                if (state.isManualCover) {
+                if (state.isManual) {
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = stringResource(R.string.details_cover_manual),
@@ -260,12 +282,12 @@ internal fun CoverArtPickerSheet(
                         verticalArrangement = Arrangement.spacedBy(spacing),
                         maxItemsInEachRow = columns,
                     ) {
-                        providers.forEach { provider ->
-                            val candidate = state.coverCandidates.firstOrNull { it.provider == provider }
+                        visibleProviders.forEach { provider ->
+                            val candidate = state.candidates.firstOrNull { it.provider == provider }
                             val status = if (provider == CoverArtProvider.CURRENT) {
                                 if (candidate != null) CoverArtLookupStatus.FOUND else CoverArtLookupStatus.NOT_FOUND
                             } else {
-                                state.coverProviderStatuses[provider] ?: CoverArtLookupStatus.LOADING
+                                state.providerStatuses[provider] ?: CoverArtLookupStatus.LOADING
                             }
                             CoverProviderCard(
                                 provider = provider,
@@ -273,9 +295,9 @@ internal fun CoverArtPickerSheet(
                                 status = status,
                                 selected = selectedProvider == provider && candidate != null,
                                 onClick = {
-                                    if (candidate != null && !state.isSavingCover && !state.isResettingCover) {
+                                    if (candidate != null && !state.isSaving && !state.isResetting) {
                                         onSelectProvider(provider)
-                                    } else if (status == CoverArtLookupStatus.ERROR && !state.isLoadingCoverCandidates) {
+                                    } else if (status == CoverArtLookupStatus.ERROR && !state.isLoadingCandidates) {
                                         if (onRetryProvider != null) {
                                             onRetryProvider(provider)
                                         } else {
@@ -292,11 +314,11 @@ internal fun CoverArtPickerSheet(
                     }
                 }
 
-                val hasProviderError = state.coverProviderStatuses.values
+                val hasProviderError = state.providerStatuses.values
                     .any { it == CoverArtLookupStatus.ERROR }
-                if (state.coverPickerError != null || hasProviderError) {
+                if (state.error != null || hasProviderError) {
                     Spacer(modifier = Modifier.height(14.dp))
-                    state.coverPickerError?.let { error ->
+                    state.error?.let { error ->
                         Text(
                             text = error,
                             style = MaterialTheme.typography.bodySmall,
@@ -305,7 +327,7 @@ internal fun CoverArtPickerSheet(
                     }
                     TextButton(
                         onClick = onRetry,
-                        enabled = !state.isLoadingCoverCandidates && !state.isSavingCover && !state.isResettingCover,
+                        enabled = !state.isLoadingCandidates && !state.isSaving && !state.isResetting,
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Refresh,
@@ -324,7 +346,7 @@ internal fun CoverArtPickerSheet(
                 enabled = selected != null && coverChangeEnabled && !isPreviewImageError,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                if (state.isSavingCover) {
+                if (state.isSaving) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
@@ -334,7 +356,7 @@ internal fun CoverArtPickerSheet(
                 }
             }
 
-            if (state.isManualCover) {
+            if (state.isManual) {
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(color = GlassBorderSoft)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -344,7 +366,7 @@ internal fun CoverArtPickerSheet(
                     modifier = Modifier.fillMaxWidth(),
                     border = BorderStroke(1.dp, GlassBorderMedium),
                 ) {
-                    if (state.isResettingCover) {
+                    if (state.isResetting) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
                             strokeWidth = 2.dp,

@@ -1,12 +1,14 @@
 package me.avinas.tempo.ui.stats
 
 import me.avinas.tempo.data.stats.TopAlbum
+import me.avinas.tempo.ui.components.share.ShareItemCount
 import me.avinas.tempo.data.stats.TopArtist
 import me.avinas.tempo.data.stats.TopTrack
 import me.avinas.tempo.ui.components.ShareBackdropStyle
 import me.avinas.tempo.ui.components.ShareTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -49,9 +51,13 @@ class StatsSharePerformanceTest {
         val info = statsItemInfo(artist)
         assertNotNull(info)
         assertEquals("Daft Punk", info?.title)
-        assertEquals("120 plays", info?.subtitle)
-        assertEquals("https://example.com/artist.jpg", info?.imageUrl)
+        // An artist has no second name of its own, so the card prints the play
+        // count instead — resolved from resources at render time (this string is
+        // rasterised into the exported PNG, so it cannot be English here). The
+        // data layer therefore carries null rather than "120 plays".
+        assertNull(info?.subtitle)
         assertEquals(120, info?.plays)
+        assertEquals("https://example.com/artist.jpg", info?.imageUrl)
         assertEquals(600_000L, info?.timeMs)
     }
 
@@ -90,14 +96,14 @@ class StatsSharePerformanceTest {
             )
         }
 
-        val top3 = items.asSequence().mapNotNull { statsItemInfo(it) }.take(StatsShareCount.TOP_3.count).toList()
+        val top3 = items.asSequence().mapNotNull { statsItemInfo(it) }.take(ShareItemCount.TOP_3.count).toList()
         assertEquals(3, top3.size)
         assertEquals("Track 1", top3[0].title)
 
-        val top5 = items.asSequence().mapNotNull { statsItemInfo(it) }.take(StatsShareCount.TOP_5.count).toList()
+        val top5 = items.asSequence().mapNotNull { statsItemInfo(it) }.take(ShareItemCount.TOP_5.count).toList()
         assertEquals(5, top5.size)
 
-        val top10 = items.asSequence().mapNotNull { statsItemInfo(it) }.take(StatsShareCount.TOP_10.count).toList()
+        val top10 = items.asSequence().mapNotNull { statsItemInfo(it) }.take(ShareItemCount.TOP_10.count).toList()
         assertEquals(10, top10.size)
     }
 
@@ -124,6 +130,6 @@ class StatsSharePerformanceTest {
         }
         assertEquals(ShareBackdropStyle.FLUTED_GLASS, ShareTheme.GLASS.palette.backdrop)
         assertEquals(ShareBackdropStyle.ASCII_ARTWORK, ShareTheme.ASCII.palette.backdrop)
-        assertEquals(ShareBackdropStyle.GRAIN_GRADIENT, ShareTheme.GRAIN.palette.backdrop)
+        assertEquals(ShareBackdropStyle.DITHER_FIELD, ShareTheme.DITHER.palette.backdrop)
     }
 }

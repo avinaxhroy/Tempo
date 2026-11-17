@@ -43,13 +43,14 @@ class ServiceHealthWorker @AssistedInject constructor(
     companion object {
         private const val TAG = "ServiceHealthWorker"
         private const val WORK_NAME = "service_health_check"
+        private const val WORK_NAME_ON_OPEN = "service_health_check_on_open"
         private const val NOTIFICATION_CHANNEL_ID = "service_health_worker"
         private const val NOTIFICATION_ID = 3007 // Distinct from ChallengeWorker (3005) and NotificationWorker challenge (3006)
 
         /**
          * Schedule periodic health checks for the tracking service.
          *
-         * The interval is deliberately matched to
+         * The interval is matched to
          * [TrackingServiceHeartbeat.HEARTBEAT_STALE_MS] (30 minutes): a heartbeat is only ever
          * considered stale once it is that old, so checking every 15 minutes — the platform
          * minimum, which this used to do — woke the whole process twice as often as the check
@@ -87,6 +88,33 @@ class ServiceHealthWorker @AssistedInject constructor(
             )
 
             Log.i(TAG, "Service health check scheduled")
+        }
+
+        /**
+         * Run the health check once, now.
+         *
+         * The periodic cadence is what bounds the kill window while the app is never opened; it
+         * also means a listener killed by an aggressive OEM stays dead for up to half an hour
+         * after the user is already looking at the app. Opening the app is the one moment where
+         * that repair is free: the process is up, the device is awake, and the user is about to
+         * notice the missing history.
+         *
+         * A one-time request under its own name rather than [schedule]: re-enqueueing
+         * the periodic work clears its cadence and would push the next real check out by a full
+         * interval.
+         */
+        fun enqueueCheckNow(context: Context) {
+            // No constraints: this is a few local reads plus, at worst, one rebind, and it only
+            // ever runs because the app is already in the foreground.
+            val workRequest = OneTimeWorkRequestBuilder<ServiceHealthWorker>().build()
+
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                WORK_NAME_ON_OPEN,
+                // KEEP: two resumes in quick succession must not stack up checks behind each other.
+                ExistingWorkPolicy.KEEP,
+                workRequest
+            )
+            Log.d(TAG, "Service health check requested (app opened)")
         }
 
         fun cancel(context: Context) {

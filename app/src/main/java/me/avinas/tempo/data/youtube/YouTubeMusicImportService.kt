@@ -41,6 +41,28 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.coroutineContext
 
+// Hoisted so per-entry HTML imports don't recompile patterns/formatters for every row.
+private val HTML_TAG_REGEX = Regex("<[^>]+>")
+private val HTML_YEAR_REGEX = Regex(".*\\d{4}.*")
+private val WHITESPACE_REGEX = Regex("\\s+")
+private val TZ_SUFFIX_REGEX = Regex("\\s+[A-Z]{2,5}$")
+private val HTML_TIMESTAMP_FORMATS =
+    listOf(
+        DateTimeFormatter.ofPattern("MMM d, yyyy, h:mm:ss a", Locale.US),
+        DateTimeFormatter.ofPattern("MMM d, yyyy, H:mm:ss", Locale.US),
+        DateTimeFormatter.ofPattern("MMM d, yyyy, h:mm a", Locale.US),
+        DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US),
+        DateTimeFormatter.ofPattern("d MMM yyyy, H:mm:ss", Locale.US),
+        DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm:ss", Locale.US),
+        DateTimeFormatter.ofPattern("d MMM. yyyy, H:mm:ss", Locale.US),
+        DateTimeFormatter.ofPattern("d MMM. yyyy, HH:mm:ss", Locale.US),
+        DateTimeFormatter.ofPattern("d. MMM yyyy, HH:mm:ss", Locale.GERMANY),
+        DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm:ss", Locale.FRANCE),
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US),
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.US),
+        DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US),
+    )
+
 @Singleton
 class YouTubeMusicImportService
     @Inject
@@ -629,8 +651,22 @@ class YouTubeMusicImportService
             if (firstChars.startsWith("<!DOCTYPE", ignoreCase = true) ||
                 firstChars.startsWith("<html", ignoreCase = true)
             ) {
-                val htmlContent = source.readUtf8()
-                return parseHtmlString(htmlContent, fileName)
+                // The HTML parser needs the whole document in memory, and this path is reached by
+                // dropping a bare watch-history.html on the import screen — where nothing else
+                // bounds the size. `request` stops buffering at the cap instead of materialising
+                // whatever the file happens to be (readByteArray would throw at EOF, not truncate).
+                if (source.request(MAX_HTML_BYTES + 1)) {
+                    return ParseResult(
+                        parsed = emptyList(),
+                        errors =
+                            listOf(
+                                "$fileName is larger than ${MAX_HTML_BYTES / (1024 * 1024)} MB — " +
+                                    "this HTML export is too large to import. Use the JSON export instead.",
+                            ),
+                        nonMusicSkipped = 0,
+                    )
+                }
+                return parseHtmlString(source.readUtf8(), fileName)
             }
 
             return parseJsonFromSource(source, fileName)
@@ -1651,42 +1687,23 @@ class YouTubeMusicImportService
         }
 
         private fun parseHtmlTimestamp(text: String): Long {
-            val cleanText = text.replace(Regex("<[^>]+>"), "\n").trim()
+            val cleanText = text.replace(HTML_TAG_REGEX, "\n").trim()
             val lines = cleanText.split("\n").map { it.trim() }.filter { it.isNotBlank() }
-            val timestampText = lines.lastOrNull { it.matches(Regex(".*\\d{4}.*")) } ?: return 0L
+            val timestampText = lines.lastOrNull { it.matches(HTML_YEAR_REGEX) } ?: return 0L
 
-            var cleanedTs = timestampText.trim().replace(Regex("\\s+"), " ")
+            var cleanedTs = timestampText.trim().replace(WHITESPACE_REGEX, " ")
 
             // Strip trailing timezone abbreviation (e.g. "IST", "PST", "EST", "CET", "CEST", "GMT")
             // YouTube Takeout HTML timestamps can include locale-specific TZ abbreviations
-            cleanedTs = cleanedTs.replace(Regex("\\s+[A-Z]{2,5}$"), "")
+            cleanedTs = cleanedTs.replace(TZ_SUFFIX_REGEX, "")
 
-            val formats =
-                listOf(
-                    "MMM d, yyyy, h:mm:ss a" to Locale.US,
-                    "MMM d, yyyy, H:mm:ss" to Locale.US,
-                    "MMM d, yyyy, h:mm a" to Locale.US,
-                    "MMM d, yyyy" to Locale.US,
-                    "d MMM yyyy, H:mm:ss" to Locale.US,
-                    "d MMM yyyy, HH:mm:ss" to Locale.US,
-                    "d MMM. yyyy, H:mm:ss" to Locale.US,
-                    "d MMM. yyyy, HH:mm:ss" to Locale.US,
-                    "d. MMM yyyy, HH:mm:ss" to Locale.GERMANY,
-                    "d MMM yyyy, HH:mm:ss" to Locale.FRANCE,
-                    "yyyy-MM-dd HH:mm:ss" to Locale.US,
-                    "yyyy-MM-dd HH:mm" to Locale.US,
-                    "yyyy-MM-dd" to Locale.US,
-                )
-
-            for ((pattern, locale) in formats) {
+            for (format in HTML_TIMESTAMP_FORMATS) {
                 try {
-                    val format = DateTimeFormatter.ofPattern(pattern, locale)
                     val ldt = LocalDateTime.parse(cleanedTs, format)
                     return ldt.atZone(ZoneId.of("UTC")).toInstant().toEpochMilli()
                 } catch (_: DateTimeParseException) {
                 }
             }
-
             Log.w(TAG, "Could not parse HTML timestamp: $timestampText")
             return 0L
         }

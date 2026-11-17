@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.*
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.*
@@ -54,13 +55,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import me.avinas.tempo.R
 import me.avinas.tempo.data.enrichment.MusicBrainzEnrichmentService
 import me.avinas.tempo.data.local.entities.Track
 import me.avinas.tempo.data.stats.AlbumDetails
 import me.avinas.tempo.data.stats.TrackWithStats
 import me.avinas.tempo.ui.components.AlbumArtImage
+import me.avinas.tempo.ui.components.AlbumShareCard
 import me.avinas.tempo.ui.components.ArtAtmosphereLayer
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import me.avinas.tempo.ui.components.GlassCard
@@ -76,6 +78,7 @@ import me.avinas.tempo.ui.components.TempoDialogBody
 import me.avinas.tempo.ui.components.TempoDialogDangerButton
 import me.avinas.tempo.ui.components.TempoDialogSecondaryButton
 import me.avinas.tempo.ui.components.TempoIcons
+import me.avinas.tempo.ui.components.share.SingleCardShareSheet
 import java.util.Locale
 
 @Composable
@@ -199,6 +202,7 @@ private fun AlbumDetailsContent(
     var dominantColor by remember { mutableStateOf<Color>(TempoPrimary) }
     var showMenu by remember { mutableStateOf(false) }
     var showMergeDialog by remember { mutableStateOf(false) }
+    var showShareDialog by remember { mutableStateOf(false) }
 
     // Collapsed header title appears when the hero title itself scrolls under
     // the top bar — anchored to its live position, not a scroll-pixel guess.
@@ -355,6 +359,14 @@ private fun AlbumDetailsContent(
                     onDismissRequest = { showMenu = false }
                 ) {
                     TempoDropdownMenuItem(
+                        title = stringResource(R.string.details_action_share_album_card),
+                        leadingIcon = Icons.Rounded.Share,
+                        onClick = {
+                            showMenu = false
+                            showShareDialog = true
+                        }
+                    )
+                    TempoDropdownMenuItem(
                         title = stringResource(R.string.details_merge_album),
                         leadingIcon = TempoIcons.MergeStreams,
                         onClick = {
@@ -363,6 +375,13 @@ private fun AlbumDetailsContent(
                         }
                     )
                 }
+            }
+
+            if (showShareDialog) {
+                AlbumShareSheet(
+                    albumDetails = albumDetails,
+                    onDismiss = { showShareDialog = false },
+                )
             }
 
             if (showMergeDialog) {
@@ -1168,4 +1187,30 @@ private fun formatDuration(ms: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "%d:%02d".format(minutes, seconds)
+}
+
+/**
+ * The album's share sheet.
+ *
+ * Same sheet as the song, artist and badge cards — carousel, themes, motion,
+ * save and share — so an album card cannot drift into looking like a different
+ * feature. The summary switch comes from [SingleCardShareSheet], like every
+ * other single-subject card.
+ */
+@Composable
+private fun AlbumShareSheet(
+    albumDetails: AlbumDetails,
+    onDismiss: () -> Unit,
+) {
+    SingleCardShareSheet(
+        artworkUrl = albumDetails.album.artworkUrl,
+        onDismiss = onDismiss,
+    ) { page, showSummary ->
+        AlbumShareCard(
+            albumDetails = albumDetails,
+            card = page.card,
+            modifier = Modifier.fillMaxSize(),
+            showSummary = showSummary,
+        )
+    }
 }

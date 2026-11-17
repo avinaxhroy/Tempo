@@ -1,11 +1,8 @@
 package me.avinas.tempo.widget
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Context
 import android.graphics.Bitmap
-import android.os.Build
-import androidx.core.app.NotificationCompat
+import android.util.Log
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
@@ -13,9 +10,8 @@ import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.appwidget.updateAll
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
-import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
-import coil3.ImageLoader
+import coil3.SingletonImageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.size.Precision
@@ -23,13 +19,14 @@ import coil3.size.Size
 import coil3.toBitmap
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import me.avinas.tempo.R
 import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.data.stats.TimeRange
-import me.avinas.tempo.utils.ForegroundNotificationGuard
 import me.avinas.tempo.widget.utils.WidgetHub
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Locale
 
 @HiltWorker
 class WidgetWorker
@@ -41,8 +38,6 @@ class WidgetWorker
     ) : CoroutineWorker(context, workerParams) {
         companion object {
             private const val TAG = "WidgetWorker"
-            private const val NOTIFICATION_CHANNEL_ID = "widget_worker"
-            private const val NOTIFICATION_ID = 3008
         }
 
         override suspend fun doWork(): Result =
@@ -67,7 +62,7 @@ class WidgetWorker
 
                 // Format Time
                 val totalHours = weeklyOverview.totalListeningTimeMs / 1000.0 / 60.0 / 60.0
-                val hoursString = String.format("%.1f", totalHours)
+                val hoursString = String.format(Locale.US, "%.1f", totalHours)
 
                 // Chart Data (daily listening times for bar chart)
                 val chartData = dailyStats.reversed().map { it.totalTimeMs.toFloat() }.joinToString(",")
@@ -111,7 +106,18 @@ class WidgetWorker
 
                 // Format Time
                 val todayHours = todayOverview.totalListeningTimeMs / 1000.0 / 60.0 / 60.0
-                val todayHoursString = String.format("%.1f", todayHours)
+                val todayHoursString = String.format(Locale.US, "%.1f", todayHours)
+
+                // Strings for the Today cards. Formatted here rather than in the renderer
+                // because the widget composable runs on the launcher's update budget and
+                // should not be branching over millisecond edge cases per draw.
+                val todayHeroTime = formatHeroTime(todayOverview.totalListeningTimeMs)
+                val todayShortTime = formatShortDuration(todayOverview.totalListeningTimeMs)
+                val yesterdayShortTime = formatShortDuration(yesterdayComparison.previousPeriodTimeMs)
+                val todayAvgSession = formatShortDuration(todayOverview.averageSessionDurationMs)
+                val hourlyPlays = (0..23).joinToString(",") { hour ->
+                    (hourlyStats.find { it.hour == hour }?.playCount ?: 0).toString()
+                }
 
                 // Chart Data (Hourly)
                 // Zero-fill missing hours across the 24-hour chart window
@@ -139,15 +145,21 @@ class WidgetWorker
                 // 3. Top Genres with Percentages (for Heatmap treemap)
                 val topGenres = statsRepository.getTopGenres(TimeRange.THIS_WEEK, limit = 5)
                 val totalGenrePlays = topGenres.sumOf { it.playCount }.coerceAtLeast(1)
+                // org.json escapes genre names; string interpolation did not, so a genre with a
+                // quote or backslash produced JSON the heatmap could not parse.
                 val genreJson =
-                    if (topGenres.isNotEmpty()) {
-                        topGenres.joinToString(",", "[", "]") {
-                            val percent = (it.playCount * 100) / totalGenrePlays
-                            """{"genre":"${it.genre}","count":${it.playCount},"percent":$percent}"""
-                        }
-                    } else {
-                        "[]"
-                    }
+                    JSONArray()
+                        .apply {
+                            topGenres.forEach {
+                                put(
+                                    JSONObject().apply {
+                                        put("genre", it.genre)
+                                        put("count", it.playCount)
+                                        put("percent", (it.playCount * 100) / totalGenrePlays)
+                                    },
+                                )
+                            }
+                        }.toString()
 
                 // 4. Milestone Data (Top Track with real insights)
                 val topTracks = statsRepository.getTopTracks(TimeRange.THIS_WEEK, pageSize = 1)
@@ -165,12 +177,11 @@ class WidgetWorker
                     milestonePlayCount = topTrack.playCount.toString()
 
                     // Compute milestone badge
+                    // The badge glyph is drawn as a real icon by BitmapGenerator; the two
+                    // "Stream!" tiers used to differ only by emoji, so they are one tier now.
                     milestoneBadge =
                         when {
-                            topTrack.playCount >= 1000 -> "🏆 ${topTrack.playCount}th Stream!"
-                            topTrack.playCount >= 500 -> "🏆 ${topTrack.playCount}th Stream!"
-                            topTrack.playCount >= 100 -> "🏆 ${topTrack.playCount}th Stream!"
-                            topTrack.playCount >= 50 -> "🔥 ${topTrack.playCount}th Stream!"
+                            topTrack.playCount >= 50 -> "${ordinal(topTrack.playCount)} Stream!"
                             else -> "#1 Most Played This Week"
                         }
 
@@ -192,7 +203,7 @@ class WidgetWorker
                 if (mostExploredArtist != null) {
                     discoveryArtistName = mostExploredArtist.artist
                     discoveryTracksCount = mostExploredArtist.uniqueTracksPlayed.toString()
-                    val artistTimeHours = String.format("%.1f", mostExploredArtist.totalPlays * 3.5 / 60.0) // approx hours
+                    val artistTimeHours = String.format(Locale.US, "%.1f", mostExploredArtist.totalPlays * 3.5 / 60.0) // approx hours
                     discoveryHours = "${artistTimeHours}h"
 
                     // Get percentile
@@ -237,6 +248,8 @@ class WidgetWorker
                         TempoHeatmapWidget::class.java,
                         TempoMilestoneWidget::class.java,
                         TempoMixWidget::class.java,
+                        TempoTodayTotalWidget::class.java,
+                        TempoListeningRhythmWidget::class.java,
                     )
 
                 for (widgetClass in allWidgetClasses) {
@@ -261,11 +274,27 @@ class WidgetWorker
                             setStr(WidgetHub.PREF_TODAY_GROWTH, todayGrowthString)
                             setStr(WidgetHub.PREF_TODAY_CHART_DATA, todayChartData)
 
+                            // Today cards (Total listening time + Listening rhythm)
+                            setStr(WidgetHub.PREF_TODAY_HERO_TIME, todayHeroTime)
+                            setStr(WidgetHub.PREF_TODAY_PLAY_COUNT, todayOverview.totalPlayCount.toString())
+                            setStr(WidgetHub.PREF_TODAY_TRACK_COUNT, todayOverview.uniqueTracksCount.toString())
+                            setStr(WidgetHub.PREF_TODAY_ALBUM_COUNT, todayOverview.uniqueAlbumsCount.toString())
+                            setStr(WidgetHub.PREF_TODAY_ARTIST_COUNT, todayOverview.uniqueArtistsCount.toString())
+                            setStr(WidgetHub.PREF_TODAY_AVG_SESSION, todayAvgSession)
+                            setStr(WidgetHub.PREF_TODAY_SHORT_TIME, todayShortTime)
+                            setStr(WidgetHub.PREF_TODAY_TOTAL_MS, todayOverview.totalListeningTimeMs.toString())
+                            setStr(WidgetHub.PREF_YESTERDAY_SHORT_TIME, yesterdayShortTime)
+                            setStr(WidgetHub.PREF_YESTERDAY_TOTAL_MS, yesterdayComparison.previousPeriodTimeMs.toString())
+                            setStr(WidgetHub.PREF_TODAY_GROWTH_PERCENT, todayGrowthPercent.toString())
+                            setStr(WidgetHub.PREF_TODAY_HOURLY_PLAYS, hourlyPlays)
+
                             // Artist spotlight
                             setStr(WidgetHub.PREF_TOP_ARTIST_NAME, topArtist?.artist ?: "No Data")
                             setStr(WidgetHub.PREF_TOP_ARTIST_HOURS, "${artistHours}h")
                             setStr(WidgetHub.PREF_TOP_ARTIST_TRACKS, (topArtist?.uniqueTracks ?: 0).toString())
-                            if (artistImagePath != null) setStr(WidgetHub.PREF_TOP_ARTIST_IMAGE, artistImagePath)
+                            // Always written: an absent path clears the previous artwork, otherwise
+                            // the card keeps showing a stale artist image forever.
+                            setStr(WidgetHub.PREF_TOP_ARTIST_IMAGE, artistImagePath ?: "")
 
                             // Genres
                             setStr(WidgetHub.PREF_TOP_GENRES_JSON, genreJson)
@@ -277,7 +306,7 @@ class WidgetWorker
                             setStr(WidgetHub.PREF_MILESTONE_ARTIST_NAME, milestoneArtistName)
                             setStr(WidgetHub.PREF_MILESTONE_PLAY_COUNT, milestonePlayCount)
                             setStr(WidgetHub.PREF_MILESTONE_BADGE, milestoneBadge)
-                            if (milestoneImage != null) setStr(WidgetHub.PREF_MILESTONE_IMAGE, milestoneImage)
+                            setStr(WidgetHub.PREF_MILESTONE_IMAGE, milestoneImage ?: "")
 
                             // Discovery (real insights)
                             setStr(WidgetHub.PREF_DISCOVERY_TEXT, discoveryText)
@@ -294,36 +323,66 @@ class WidgetWorker
                     }
                 }
 
-                // Refresh only the widget types that are actually on the home screen.
-                //
-                // This worker previously called updateAll() on all seven types every run. The
-                // preferences above are read back via currentState<Preferences>() inside each
-                // widget's provideGlance, so a widget that is not placed has nothing to display
-                // and no one to display it to — its updateAll walked an empty id list (re-querying
-                // AppWidgetManager per widget) for no effect. Refreshing just the placed ones also
-                // keeps future unplaced-widget work out of this path.
-                val appWidgetManager = android.appwidget.AppWidgetManager.getInstance(context)
-                suspend fun refreshIfPlaced(widget: androidx.glance.appwidget.GlanceAppWidget, provider: Class<*>) {
-                    val placed =
-                        appWidgetManager
-                            ?.getAppWidgetIds(android.content.ComponentName(context, provider))
-                            ?.isNotEmpty() == true
-                    if (placed) widget.updateAll(context)
+                // Refresh only the widget types actually on the home screen: the state written
+                // above is read back by each widget's provideGlance, so an unplaced widget has
+                // nothing to show. getGlanceIds maps a GlanceAppWidget class to the ids of the
+                // receivers serving it; AppWidgetManager.getAppWidgetIds takes component names,
+                // so passing the GlanceAppWidget classes there always returned empty and nothing
+                // redrew after the stats were written.
+                suspend fun refreshIfPlaced(widget: GlanceAppWidget) {
+                    if (manager.getGlanceIds(widget::class.java).isNotEmpty()) widget.updateAll(context)
                 }
 
-                refreshIfPlaced(TempoAppWidget(), TempoAppWidget::class.java)
-                refreshIfPlaced(TempoArtistWidget(), TempoArtistWidget::class.java)
-                refreshIfPlaced(TempoDashboardWidget(), TempoDashboardWidget::class.java)
-                refreshIfPlaced(TempoDiscoveryWidget(), TempoDiscoveryWidget::class.java)
-                refreshIfPlaced(TempoHeatmapWidget(), TempoHeatmapWidget::class.java)
-                refreshIfPlaced(TempoMilestoneWidget(), TempoMilestoneWidget::class.java)
-                refreshIfPlaced(TempoMixWidget(), TempoMixWidget::class.java)
+                refreshIfPlaced(TempoAppWidget())
+                refreshIfPlaced(TempoArtistWidget())
+                refreshIfPlaced(TempoDashboardWidget())
+                refreshIfPlaced(TempoDiscoveryWidget())
+                refreshIfPlaced(TempoHeatmapWidget())
+                refreshIfPlaced(TempoMilestoneWidget())
+                refreshIfPlaced(TempoMixWidget())
+                refreshIfPlaced(TempoTodayTotalWidget())
+                refreshIfPlaced(TempoListeningRhythmWidget())
 
                 Result.success()
             } catch (e: Exception) {
-                e.printStackTrace()
-                Result.retry()
+                Log.e(TAG, "Widget update failed", e)
+                if (runAttemptCount < 3) Result.retry() else Result.failure()
             }
+
+        /** "101st", "23rd", "13th" — the badge used to print "101th". */
+        private fun ordinal(n: Int): String =
+            when {
+                n % 100 in 11..13 -> "${n}th"
+                n % 10 == 1 -> "${n}st"
+                n % 10 == 2 -> "${n}nd"
+                n % 10 == 3 -> "${n}rd"
+                else -> "${n}th"
+            }
+
+        /** Hero numeral form for today's total: "1h 3m", "41m", "38s". */
+        private fun formatHeroTime(ms: Long): String {
+            val totalMinutes = ms / 60_000
+            val hours = totalMinutes / 60
+            val minutes = totalMinutes % 60
+            return when {
+                ms <= 0L -> "0m"
+                hours == 0L && minutes == 0L -> "${ms / 1000}s"
+                hours == 0L -> "${minutes}m"
+                minutes == 0L -> "${hours}h"
+                else -> "${hours}h ${minutes}m"
+            }
+        }
+
+        /** Compact form for the comparison labels: "38m", "1.1h". */
+        private fun formatShortDuration(ms: Long): String {
+            val minutes = ms / 60_000
+            return when {
+                ms <= 0L -> "0m"
+                minutes < 1 -> "<1m"
+                minutes < 60 -> "${minutes}m"
+                else -> String.format(java.util.Locale.US, "%.1fh", minutes / 60.0)
+            }
+        }
 
         private suspend fun downloadImage(
             context: Context,
@@ -339,7 +398,9 @@ class WidgetWorker
                 return file.absolutePath
             }
 
-            val loader = ImageLoader(context)
+            // Shared app loader: a fresh ImageLoader per download opened its own OkHttp client
+            // plus memory/disk caches, up to twice per run, and was never shut down.
+            val loader = SingletonImageLoader.get(context)
             val request =
                 ImageRequest
                     .Builder(context)
@@ -359,37 +420,5 @@ class WidgetWorker
                 prefs.edit().putString(fileName, url).apply()
                 file.absolutePath
             }
-        }
-
-        override suspend fun getForegroundInfo(): ForegroundInfo {
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val channel =
-                    NotificationChannel(
-                        NOTIFICATION_CHANNEL_ID,
-                        "Widget Updates",
-                        NotificationManager.IMPORTANCE_LOW,
-                    )
-                notificationManager.createNotificationChannel(channel)
-            }
-
-            val notification =
-                NotificationCompat
-                    .Builder(context, NOTIFICATION_CHANNEL_ID)
-                    .setSmallIcon(R.drawable.ic_notification)
-                    .setContentTitle("Tempo Widget")
-                    .setContentText("Updating stats...")
-                    .setPriority(NotificationCompat.PRIORITY_LOW)
-                    .setOngoing(true)
-                    .build()
-
-            return ForegroundNotificationGuard.postableForegroundInfo(
-                context = context,
-                notificationId = NOTIFICATION_ID,
-                requestedChannelId = NOTIFICATION_CHANNEL_ID,
-                notification = notification,
-                logTag = TAG,
-            )
         }
     }

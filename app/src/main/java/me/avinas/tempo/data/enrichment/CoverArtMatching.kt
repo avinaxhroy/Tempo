@@ -108,7 +108,7 @@ private fun explicitCoverVersionKinds(title: String): Set<String> {
  * Exact normalized titles always match. A prefix match is accepted only when the
  * extra suffix clearly describes a version of the same recording (for example
  * "2011 remaster", "live", or "radio edit"). Ordinary longer titles such as
- * "Stay High" or "Homecoming" are deliberately rejected.
+ * "Stay High" or "Homecoming" are rejected.
  */
 internal fun isSafeCoverTrackTitleMatch(
     expectedTitle: String,

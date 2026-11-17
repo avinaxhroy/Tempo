@@ -234,6 +234,38 @@ class DeezerEnrichmentService @Inject constructor(
         }
     }
 
+    /**
+     * Search Deezer for an artist portrait.
+     *
+     * Only the artist name goes into the query, and the returned name is matched
+     * back against it: Deezer's search will happily answer a request for "Drake"
+     * with "Drake Bell", and a portrait of the wrong person is worse than none.
+     */
+    suspend fun searchArtistImage(artist: String): String? {
+        if (me.avinas.tempo.utils.ArtistParser.isUnknownArtist(artist)) return null
+
+        val cleanArtist = sanitizeDeezerSearchValue(artist)
+        if (cleanArtist.isBlank()) return null
+
+        return try {
+            delay(RATE_LIMIT_DELAY_MS)
+            val response = deezerApi.searchArtists(cleanArtist)
+            if (!response.isSuccessful) return null
+
+            val match = response.body()?.data?.firstOrNull { candidate ->
+                isSafeCoverArtistMatch(expectedArtist = artist, candidateArtist = candidate.name)
+            } ?: return null
+
+            Log.i(TAG, "Found Deezer artist portrait for '$artist'")
+            match.pictureXl ?: match.pictureBig ?: match.pictureMedium
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Deezer artist search error", e)
+            null
+        }
+    }
+
     private suspend fun searchLoose(artist: String, track: String, album: String?): DeezerTrack? {
         return try {
             delay(RATE_LIMIT_DELAY_MS)
@@ -273,7 +305,7 @@ private val WHITESPACE_RUN = Regex("""\s+""")
 
 /**
  * Strict matching for preferred covers; never take Deezer's first result simply
- * because it has a preview. This deliberately does not alter legacy preview lookup.
+ * because it has a preview. This Does not alter legacy preview lookup.
  */
 internal fun findPreferredDeezerArtwork(
     results: List<DeezerTrack>,

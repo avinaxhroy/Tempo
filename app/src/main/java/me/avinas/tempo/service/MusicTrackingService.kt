@@ -52,6 +52,7 @@ import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.data.repository.TrackAliasRepository
 import me.avinas.tempo.data.repository.TrackRepository
 import me.avinas.tempo.receiver.BatteryStateReceiver
+import me.avinas.tempo.utils.AlbumNameResolver
 import me.avinas.tempo.utils.BatteryUtils
 import me.avinas.tempo.utils.ForegroundNotificationGuard
 import me.avinas.tempo.utils.TrackCandidate
@@ -226,6 +227,10 @@ class MusicTrackingService : NotificationListenerService() {
 
         // Placeholder and album detection patterns - pre-compiled for performance
         private val NUMERIC_ONLY_PATTERN = Regex("^\\d+$")
+        private val PLACEHOLDER_ARTISTS = setOf(
+            "unknown", "unknown artist", "<unknown>", "various artists", "various",
+            "n/a", "na", "none", "null", "", " ", "artist", "track", "music", "audio", "media",
+        )
         private val YEAR_PATTERN = Regex(".*\\(\\d{4}\\).*") // Contains year like "(2023)"
         private val REMASTER_PATTERN = Regex(".*\\d{4}.*remaster.*") // Remaster with year
     }
@@ -396,25 +401,8 @@ class MusicTrackingService : NotificationListenerService() {
      */
     private fun isPlaceholderArtist(artist: String): Boolean {
         val lower = artist.lowercase()
-        return lower in
-            listOf(
-                "unknown",
-                "unknown artist",
-                "<unknown>",
-                "various artists",
-                "various",
-                "n/a",
-                "na",
-                "none",
-                "null",
-                "",
-                " ",
-                "artist",
-                "track",
-                "music",
-                "audio",
-                "media",
-            ) || lower.startsWith("track ") || lower.matches(NUMERIC_ONLY_PATTERN)
+        return lower in PLACEHOLDER_ARTISTS ||
+            lower.startsWith("track ") || lower.matches(NUMERIC_ONLY_PATTERN)
     }
 
     /**
@@ -1612,7 +1600,7 @@ class MusicTrackingService : NotificationListenerService() {
      * sources, so corrections take effect without waiting for the next player event.
      */
     private suspend fun reevaluateActiveContent() {
-        playbackStates.values.toList().forEach { session ->
+        playbackStates.values.snapshotElements().forEach { session ->
             val rejectedByTrackingRule =
                 shouldRejectByTrackingRules(
                     session.packageName,
@@ -1638,7 +1626,7 @@ class MusicTrackingService : NotificationListenerService() {
 
         withContext(Dispatchers.Main) {
             rescanActiveMediaSessions()
-            activeControllers.values.toList().forEach { controller ->
+            activeControllers.values.snapshotElements().forEach { controller ->
                 try {
                     processMediaControllerState(controller)
                 } catch (e: Exception) {
@@ -2002,7 +1990,7 @@ class MusicTrackingService : NotificationListenerService() {
      * A legitimately paused track survives both: its media notification is still posted, and once
      * it has played past the minimum it is no longer eligible under rule 1.
      *
-     * Deliberately one-shot and event-driven. The recurring backstop is the service heartbeat,
+     * One-shot and event-driven. The recurring backstop is the service heartbeat,
      * which already ticks every five minutes, so this adds no second long-lived timer: a session
      * is swept shortly after activity stops, and again on each heartbeat if anything survives.
      * Re-arming happens only from [updateServiceLifecycle], never from the sweep itself.
@@ -2027,7 +2015,18 @@ class MusicTrackingService : NotificationListenerService() {
      * session evicted for being too short to count is discarded, because the save path would
      * reject it anyway.
      */
-    private fun reapStrandedSessions(): Boolean {
+    private fun reapStrandedSessions(): Boolean =
+        // Both callers are fire-and-forget coroutines on serviceScope, where an escaping
+        // exception is fatal to the process instead of being contained. The sweep is only a
+        // backstop, so a failed pass must leave the sessions alone and let the next tick retry.
+        try {
+            sweepStrandedSessions()
+        } catch (e: Exception) {
+            Log.w(TAG, "Stranded-session sweep failed; keeping sessions for the next heartbeat", e)
+            false
+        }
+
+    private fun sweepStrandedSessions(): Boolean {
         if (playbackStates.isEmpty()) return false
 
         val now = System.currentTimeMillis()
@@ -2039,7 +2038,7 @@ class MusicTrackingService : NotificationListenerService() {
         var postedPackages: Set<String>? = null
         var reaped = false
 
-        playbackStates.toMap().forEach { (packageName, session) ->
+        playbackStates.snapshotEntries().forEach { (packageName, session) ->
             val reason =
                 StrandedSessionRules.reapReason(
                     snapshot =
@@ -2087,13 +2086,27 @@ class MusicTrackingService : NotificationListenerService() {
     /**
      * Package names that currently have a posted notification.
      *
-     * Returns null when the listener is disconnected: the answer is unknown, and assuming "gone"
-     * would evict sessions during a listener outage.
+     * Returns null whenever the answer is unknown — the listener is disconnected, or the system
+     * rejected the query — because assuming "gone" would evict every session at once during a
+     * listener outage.
      */
     private fun postedNotificationPackages(): Set<String>? {
         if (!isListenerConnected) return null
-        val posted = activeNotifications ?: return null
-        return posted.mapTo(mutableSetOf()) { it.packageName }
+        // Reading active notifications is a binder call into the notification manager, which
+        // validates this listener's service token and throws SecurityException once that token
+        // is no longer registered (Android 15+: ManagedServices.checkServiceTokenLocked).
+        // onListenerDisconnected can arrive late, or never if the process was frozen, so a
+        // connected flag alone does not make the query safe. The answer is then "unknown", not
+        // "no notifications posted": returning null keeps every session instead of evicting a
+        // live one, which is exactly what a rebind must not do.
+        val posted =
+            try {
+                activeNotifications
+            } catch (e: SecurityException) {
+                Log.w(TAG, "Notification listener token rejected; posted notifications unknown", e)
+                null
+            }
+        return posted?.mapTo(mutableSetOf()) { it.packageName }
     }
 
     /**
@@ -2104,10 +2117,8 @@ class MusicTrackingService : NotificationListenerService() {
         // ConcurrentHashMap provides weakly consistent iteration that won't throw
         // ConcurrentModificationException. Create a copy to avoid issues with
         // entries being removed during iteration.
-        val controllerSnapshot: List<Pair<String, MediaController>>
-        synchronized(activeControllers) {
-            controllerSnapshot = activeControllers.toList()
-        }
+        val controllerSnapshot: List<Pair<String, MediaController>> =
+            activeControllers.snapshotEntries()
 
         controllerSnapshot.forEach { (packageName, controller) ->
             try {
@@ -2136,7 +2147,7 @@ class MusicTrackingService : NotificationListenerService() {
     private suspend fun saveSessionsToPersistence() {
         try {
             // Create a snapshot to avoid ConcurrentModificationException
-            val statesSnapshot = playbackStates.toMap()
+            val statesSnapshot = playbackStates.snapshotEntries()
             // Persist sessions even before their trackId is resolved — title/artist
             // are enough to recover the play after a kill, and recovery resolves the
             // track lazily. Dropping these sessions used to lose plays entirely.
@@ -2300,7 +2311,7 @@ class MusicTrackingService : NotificationListenerService() {
         // A removed notification frequently arrives without the transport category and
         // EXTRA_MEDIA_SESSION that made it look like media when it was posted. Re-running that
         // check here therefore returned false, the removal was skipped, and the session stayed in
-        // playbackStates forever. Because updateServiceLifecycle() deliberately keeps showing the
+        // playbackStates forever. Because updateServiceLifecycle() Keeps showing the
         // last paused session, that stranded entry pinned the foreground notification to a
         // finished Viber voice note — surviving even a force-stop of the source app, which is
         // exactly what users reported.
@@ -2384,22 +2395,27 @@ class MusicTrackingService : NotificationListenerService() {
         val artist = extractArtistFromNotification(extras, rawTitle)
 
         // Clean title if it contains embedded artist (e.g., "Song - Artist")
+        val titleArtist = extractArtistFromTitle(rawTitle)
         val title =
-            if (artist != "Unknown Artist" && artist != extractArtistFromTitle(rawTitle)) {
+            if (artist != "Unknown Artist" && artist != titleArtist) {
                 rawTitle // Artist came from elsewhere, keep title as-is
-            } else if (extractArtistFromTitle(rawTitle) != null) {
+            } else if (titleArtist != null) {
                 cleanTitleIfNeeded(rawTitle) // Artist extracted from title, clean it
             } else {
                 rawTitle
             }
 
         val album =
-            extras
-                .getCharSequence(EXTRA_SUB_TEXT)
-                ?.toString()
-                ?.trim()
-                ?.takeIf { !it.equals(artist, ignoreCase = true) } // Don't use SUB_TEXT if it's the artist
-                ?: extras.getCharSequence(EXTRA_INFO_TEXT)?.toString()?.trim()
+            AlbumNameResolver.clean(
+                extras
+                    .getCharSequence(EXTRA_SUB_TEXT)
+                    ?.toString()
+                    ?.trim()
+                    ?.takeIf { !it.equals(artist, ignoreCase = true) } // Don't use SUB_TEXT if it's the artist
+                    ?: extras.getCharSequence(EXTRA_INFO_TEXT)?.toString()?.trim(),
+                title,
+                artist,
+            )
 
         // Manual video/non-music override: never track this content, even from an
         // otherwise enabled music app (e.g. a podcast episode on a music app).
@@ -2670,11 +2686,16 @@ class MusicTrackingService : NotificationListenerService() {
             me.avinas.tempo.utils.ArtistParser
                 .cleanTrackTitle(title)
 
+        // Whatever arrived in the album slot is untrusted: notification sub-text/info-text often
+        // carries the artist, the app name or a placeholder, and a track's album is written once.
+        // Resolve it here so every branch below stores a real release name or nothing at all.
+        val resolvedAlbum = AlbumNameResolver.clean(album, title, artist)
+
         val exactMatch = trackRepository.findByTitleAndArtist(title, artist)
 
         if (exactMatch != null) {
             Log.d(TAG, "Found exact match for track ${exactMatch.id}: '$title' by '$artist'")
-            return handleExistingTrack(exactMatch, artist, album)
+            return handleExistingTrack(exactMatch, artist, resolvedAlbum)
         }
 
         val alias = trackAliasRepository.findAlias(title, artist)
@@ -2682,7 +2703,7 @@ class MusicTrackingService : NotificationListenerService() {
             val targetTrack = trackRepository.getById(alias.targetTrackId).first()
             if (targetTrack != null) {
                 Log.i(TAG, "Smart Alias found: '$title' -> mapped to '${targetTrack.title}' (ID: ${targetTrack.id})")
-                return handleExistingTrack(targetTrack, artist, album)
+                return handleExistingTrack(targetTrack, artist, resolvedAlbum)
             } else {
                 Log.w(TAG, "Orphaned alias found for '$title', ignoring")
             }
@@ -2691,7 +2712,7 @@ class MusicTrackingService : NotificationListenerService() {
         val fuzzyArtistMatch = trackRepository.findByTitleAndArtistFuzzy(title, artist)
         if (fuzzyArtistMatch != null) {
             Log.d(TAG, "Found fuzzy artist match for track ${fuzzyArtistMatch.id}: '$title' by '$artist'")
-            return handleExistingTrack(fuzzyArtistMatch, artist, album)
+            return handleExistingTrack(fuzzyArtistMatch, artist, resolvedAlbum)
         }
 
         val titleCandidates = trackRepository.findCandidatesByTitle(title)
@@ -2704,7 +2725,7 @@ class MusicTrackingService : NotificationListenerService() {
 
         if (cleanTitleMatch != null) {
             Log.d(TAG, "Found clean title match for track ${cleanTitleMatch.id}: '$title' by '$artist'")
-            return handleExistingTrack(cleanTitleMatch, artist, album)
+            return handleExistingTrack(cleanTitleMatch, artist, resolvedAlbum)
         }
 
         val now = System.currentTimeMillis()
@@ -2744,11 +2765,11 @@ class MusicTrackingService : NotificationListenerService() {
                     "Found fuzzy match for track ${existingTrack.id}: '$title' by '$artist' " +
                         "(score: ${String.format(java.util.Locale.US, "%.2f", result.overallScore)}, type: ${result.matchType})",
                 )
-                return handleExistingTrack(existingTrack, artist, album)
+                return handleExistingTrack(existingTrack, artist, resolvedAlbum)
             }
         }
 
-        return insertNewTrack(title, artist, album, metadata)
+        return insertNewTrack(title, artist, resolvedAlbum, metadata)
     }
 
     /**
@@ -2790,6 +2811,24 @@ class MusicTrackingService : NotificationListenerService() {
                     Log.w(TAG, "Failed to link artists for existing track ${existingTrack.id}", e)
                 }
             }
+        }
+
+        // The album was previously write-once: whatever the first notification said stuck
+        // forever, so a track first seen with a blank/garbage album stayed in the wrong album
+        // even after the player exposed the real one. Adopt a better album now that we have
+        // one, but never let a worse source overwrite a valid album.
+        val resolvedAlbum =
+            AlbumNameResolver.choose(
+                existing = existingTrack.album,
+                candidate = newAlbum,
+                title = existingTrack.title,
+                artist = existingTrack.artist,
+            )
+        if (resolvedAlbum != null && resolvedAlbum != existingTrack.album) {
+            Log.i(TAG, "Updating album for track ${existingTrack.id}: '${existingTrack.album}' -> '$resolvedAlbum'")
+            val updatedTrack = existingTrack.copy(album = resolvedAlbum)
+            trackRepository.update(updatedTrack)
+            return updatedTrack
         }
 
         return existingTrack
@@ -3025,7 +3064,13 @@ class MusicTrackingService : NotificationListenerService() {
                 if (track != null && track.albumArtUrl.isNullOrBlank()) {
                     val updatedTrack =
                         track.copy(
-                            album = track.album.takeUnless { it.isNullOrBlank() } ?: updatedLocalMetadata.album,
+                            album =
+                                AlbumNameResolver.choose(
+                                    existing = track.album,
+                                    candidate = updatedLocalMetadata.album,
+                                    title = track.title,
+                                    artist = track.artist,
+                                ),
                             duration = track.duration ?: updatedLocalMetadata.durationMs,
                         )
                     trackRepository.update(updatedTrack)
@@ -3519,6 +3564,9 @@ class MusicTrackingService : NotificationListenerService() {
     @Volatile
     private var isMediaSessionManagerInitialized = false
 
+    // Held so it can be unregistered in onDestroy; a locally created lambda cannot be.
+    private var activeSessionsChangedListener: MediaSessionManager.OnActiveSessionsChangedListener? = null
+
     private fun initializeMediaSessionManager() {
         if (isMediaSessionManagerInitialized) {
             Log.d(TAG, "MediaSessionManager already initialized, skipping")
@@ -3529,10 +3577,11 @@ class MusicTrackingService : NotificationListenerService() {
             mediaSessionManager = getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
 
             val componentName = ComponentName(this, MusicTrackingService::class.java)
-            mediaSessionManager?.addOnActiveSessionsChangedListener(
-                { controllers -> onActiveSessionsChanged(controllers) },
-                componentName,
-            )
+            val listener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
+                onActiveSessionsChanged(controllers)
+            }
+            activeSessionsChangedListener = listener
+            mediaSessionManager?.addOnActiveSessionsChangedListener(listener, componentName)
 
             isMediaSessionManagerInitialized = true
 
@@ -3808,7 +3857,7 @@ class MusicTrackingService : NotificationListenerService() {
                 rawTitle
             }
 
-        val album = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM)
+        val album = AlbumNameResolver.clean(metadata.getString(MediaMetadata.METADATA_KEY_ALBUM), title, artist)
         val duration = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)
 
         if (shouldRejectByTrackingRules(packageName, title, artist, duration)) {
@@ -4485,10 +4534,8 @@ class MusicTrackingService : NotificationListenerService() {
         isMediaSessionManagerInitialized = false
 
         // Cleanup MediaSession callbacks so no new position updates land mid-flush
-        val controllerSnapshot: List<Pair<String, MediaController>>
-        synchronized(activeControllers) {
-            controllerSnapshot = activeControllers.toList()
-        }
+        val controllerSnapshot: List<Pair<String, MediaController>> =
+            activeControllers.snapshotEntries()
         controllerSnapshot.forEach { (packageName, controller) ->
             val callback = packageSpecificCallbacks[packageName] ?: sharedCallback
             try {
@@ -4508,7 +4555,7 @@ class MusicTrackingService : NotificationListenerService() {
         // dropping the last batch of listening events on EVERY clean destroy
         // (reboot, app update, service restart). That directly under-counts plays.
         // We block here (bounded) so accrued listening time always reaches the DB.
-        val playbackSnapshot = playbackStates.values.toList()
+        val playbackSnapshot = playbackStates.values.snapshotElements()
         val flushed =
             try {
                 runBlocking(Dispatchers.IO) {
@@ -4552,6 +4599,16 @@ class MusicTrackingService : NotificationListenerService() {
 
         heartbeatJob?.cancel()
         heartbeatJob = null
+        // Unregister before the scope dies — a listener left registered on the system service keeps
+        // the destroyed instance reachable and keeps delivering callbacks into a cancelled scope.
+        activeSessionsChangedListener?.let { listener ->
+            try {
+                mediaSessionManager?.removeOnActiveSessionsChangedListener(listener)
+            } catch (e: Exception) {
+                Log.w(TAG, "Error removing active sessions listener", e)
+            }
+        }
+        activeSessionsChangedListener = null
         TrackingServiceHeartbeat.markListenerDisconnected(this)
         serviceScope.cancel()
         super.onDestroy()
@@ -4619,10 +4676,33 @@ data class ServiceHealth(
  *
  * A session can outlive its app: the app is killed or retracts its notification and the removal
  * callback either never arrives or arrives stripped of the metadata that made it recognizable as
- * media. Because a paused session is deliberately kept on screen (so pausing music does not blank
+ * media. Because a paused session is kept on screen (so pausing music does not blank
  * the notification), that stranded entry then pinned the permanent notification to a finished
  * item — for hours, and surviving a force-stop of the source app. These rules are the backstop.
  */
+/**
+ * Weakly consistent snapshot of a map's entries, safe to take while other threads mutate it.
+ *
+ * The stdlib cannot be used for this. `Map.toMap()` special-cases a one-element source by
+ * reading it twice: `size`, then the only element through the iterator. A ConcurrentHashMap
+ * that empties in between therefore throws `NoSuchElementException` from the second read
+ * (`MapsKt.toSingletonMap`). That was a real crash — the stranded-session reaper hit it on the
+ * heartbeat path — so snapshots here take a single iterator pass instead, which a
+ * ConcurrentHashMap iterator tolerates by design.
+ */
+internal fun <K, V> Map<K, V>.snapshotEntries(): List<Pair<K, V>> {
+    val snapshot = ArrayList<Pair<K, V>>(size)
+    for (entry in entries) snapshot += entry.key to entry.value
+    return snapshot
+}
+
+/**
+ * Weakly consistent snapshot of a collection's elements, with the same guarantee as
+ * [snapshotEntries]. `Collection.toList()` has the identical one-element double read, and a
+ * ConcurrentHashMap's value and entry views are plain [Collection]s, so they are exposed to it.
+ */
+internal fun <T> Collection<T>.snapshotElements(): List<T> = ArrayList(this)
+
 internal object StrandedSessionRules {
 
     /** Why a session was evicted. */

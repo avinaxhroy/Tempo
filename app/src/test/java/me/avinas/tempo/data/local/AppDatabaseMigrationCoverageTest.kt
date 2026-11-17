@@ -53,9 +53,13 @@ class AppDatabaseMigrationCoverageTest {
             1,
             AppDatabase.ALL_MIGRATIONS.count { it.startVersion == 55 },
         )
+        // Out of 55 the squash lands on 58, which 4.8.15 built but never shipped; 58 -> 59 is
+        // then its own step, the one that adds `artists.image_art_source` and drops the
+        // undeclared tracks index. The two together still have to reach the current schema,
+        // which the chain check above asserts.
         assertEquals(
             "the migration out of 55 must carry the unreleased 56-58 work",
-            AppDatabase.VERSION,
+            58,
             AppDatabase.ALL_MIGRATIONS.first { it.startVersion == 55 }.endVersion,
         )
     }

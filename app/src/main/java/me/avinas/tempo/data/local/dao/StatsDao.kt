@@ -4,10 +4,22 @@ import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Embedded
 import androidx.room.Query
+import androidx.room.RoomWarnings
 import me.avinas.tempo.data.local.LocalTimeSql
 import me.avinas.tempo.data.stats.*
 
-/** Listening statistics, aggregated in SQL rather than in Kotlin. */
+/**
+ * Listening statistics, aggregated in SQL rather than in Kotlin.
+ *
+ * QUERY_MISMATCH is suppressed for the whole DAO: every row type here (`TopTrack`,
+ * `TopArtist`, `TopAlbum`) carries a `rank` property that no query returns. Rank is a
+ * search-only, in-memory value assigned with `copy()` after the query runs, so the
+ * projection warning is structural, not a mistake. `@Ignore` on the property is not an
+ * option — Room's KSP processor rejects a constructor `val` marked ignored ("Entities and
+ * data classes must have a usable public constructor"), which is why the warning is
+ * silenced here instead.
+ */
+@SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
 @Dao
 interface StatsDao {
     // Combined Stats Query (Single Round Trip)
@@ -432,7 +444,7 @@ interface StatsDao {
         """
         SELECT DISTINCT 
             t.album,
-            t.artist,
+            COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
             COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
             COUNT(le.id) as play_count,
             SUM(le.playDuration) as total_time_ms,
@@ -466,7 +478,7 @@ interface StatsDao {
         """
         SELECT 
             t.album,
-            t.artist,
+            COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
             COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
             COUNT(le.id) as play_count,
             SUM(le.playDuration) as total_time_ms,
@@ -477,7 +489,7 @@ interface StatsDao {
         WHERE le.timestamp >= :startTime AND le.timestamp <= :endTime
         AND t.album IS NOT NULL AND t.album != ''
         AND (em.release_type IS NULL OR em.release_type NOT IN ('Single', 'single'))
-        GROUP BY t.album, t.artist
+        GROUP BY t.album, COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist)
         HAVING COUNT(DISTINCT t.id) > 1
         ORDER BY play_count DESC, total_time_ms DESC
         LIMIT :limit OFFSET :offset
@@ -1758,7 +1770,7 @@ interface StatsDao {
         """
         SELECT 
             t.album,
-            t.artist,
+            COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
             COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
             COUNT(le.id) as play_count,
             SUM(le.playDuration) as total_time_ms,
@@ -1986,7 +1998,7 @@ interface StatsDao {
         """
         SELECT 
             t.album,
-            t.artist,
+            COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
             COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
             COUNT(le.id) as play_count,
             SUM(le.playDuration) as total_time_ms,
@@ -2143,7 +2155,7 @@ interface StatsDao {
         """
         SELECT 
             t.album,
-            t.artist,
+            COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
             COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
             COUNT(le.id) as play_count,
             SUM(le.playDuration) as total_time_ms,
@@ -2342,7 +2354,7 @@ interface StatsDao {
         """
         SELECT 
             t.album,
-            t.artist,
+            COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
             COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
             COUNT(le.id) as play_count,
             SUM(le.playDuration) as total_time_ms,
@@ -2355,7 +2367,7 @@ interface StatsDao {
         AND (em.release_type IS NULL OR em.release_type NOT IN ('Single', 'single'))
         AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
         AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
-        GROUP BY t.album, t.artist
+        GROUP BY t.album, COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist)
         HAVING COUNT(DISTINCT t.id) > 1
         ORDER BY play_count DESC, total_time_ms DESC
         LIMIT :limit OFFSET :offset
@@ -2374,7 +2386,7 @@ interface StatsDao {
         """
         SELECT 
             t.album,
-            t.artist,
+            COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
             COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
             COUNT(le.id) as play_count,
             SUM(le.playDuration) as total_time_ms,
@@ -2387,7 +2399,7 @@ interface StatsDao {
         AND (em.release_type IS NULL OR em.release_type NOT IN ('Single', 'single'))
         AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
         AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
-        GROUP BY t.album, t.artist
+        GROUP BY t.album, COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist)
         HAVING COUNT(DISTINCT t.id) > 1
         ORDER BY play_count DESC, total_time_ms DESC
         LIMIT :limit OFFSET :offset
@@ -2406,7 +2418,7 @@ interface StatsDao {
         """
         SELECT 
             t.album,
-            t.artist,
+            COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
             COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
             COUNT(le.id) as play_count,
             SUM(le.playDuration) as total_time_ms,
@@ -2419,7 +2431,7 @@ interface StatsDao {
         AND (em.release_type IS NULL OR em.release_type NOT IN ('Single', 'single'))
         AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
         AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
-        GROUP BY t.album, t.artist
+        GROUP BY t.album, COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist)
         HAVING COUNT(DISTINCT t.id) > 1
         ORDER BY total_time_ms DESC, play_count DESC
         LIMIT :limit OFFSET :offset
@@ -2440,7 +2452,7 @@ interface StatsDao {
         WITH stats AS (
             SELECT 
                 t.album,
-                t.artist,
+                COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
                 COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
                 COUNT(le.id) as play_count,
                 SUM(le.playDuration) as total_time_ms,
@@ -2453,7 +2465,7 @@ interface StatsDao {
             AND (em.release_type IS NULL OR em.release_type NOT IN ('Single', 'single'))
             AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
             AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
-            GROUP BY t.album, t.artist
+            GROUP BY t.album, COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist)
             HAVING COUNT(DISTINCT t.id) > 1
         ),
         max_values AS (
@@ -2489,15 +2501,21 @@ interface StatsDao {
 
     @Query(
         """
-        SELECT COUNT(DISTINCT t.album) 
-        FROM listening_events le
-        INNER JOIN tracks t ON le.track_id = t.id
-        LEFT JOIN enriched_metadata em ON t.id = em.track_id
-        WHERE le.timestamp >= :startTime AND le.timestamp <= :endTime
-        AND t.album IS NOT NULL
-        AND (em.release_type IS NULL OR LOWER(em.release_type) != 'single')
-        AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
-        AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
+        SELECT COUNT(*) FROM (
+            SELECT 
+                t.album,
+                COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist
+            FROM listening_events le
+            INNER JOIN tracks t ON le.track_id = t.id
+            LEFT JOIN enriched_metadata em ON t.id = em.track_id
+            WHERE le.timestamp >= :startTime AND le.timestamp <= :endTime
+            AND t.album IS NOT NULL AND t.album != ''
+            AND (em.release_type IS NULL OR em.release_type NOT IN ('Single', 'single'))
+            AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
+            AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
+            GROUP BY t.album, COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist)
+            HAVING COUNT(DISTINCT t.id) > 1
+        )
     """,
     )
     suspend fun getUniqueAlbumsCountFiltered(
@@ -2729,7 +2747,7 @@ interface StatsDao {
         WITH stats AS (
             SELECT 
                 t.album,
-                t.artist,
+                COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
                 COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
                 COUNT(le.id) as play_count,
                 SUM(le.playDuration) as total_time_ms,
@@ -2742,7 +2760,7 @@ interface StatsDao {
             AND (em.release_type IS NULL OR em.release_type NOT IN ('Single', 'single'))
             AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
             AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
-            GROUP BY t.album, t.artist
+            GROUP BY t.album, COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist)
             HAVING COUNT(DISTINCT t.id) > 1
         ),
         top_matches AS (
@@ -2780,7 +2798,7 @@ interface StatsDao {
         WITH stats AS (
             SELECT 
                 t.album,
-                t.artist,
+                COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
                 COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
                 COUNT(le.id) as play_count,
                 SUM(le.playDuration) as total_time_ms,
@@ -2793,7 +2811,7 @@ interface StatsDao {
             AND (em.release_type IS NULL OR em.release_type NOT IN ('Single', 'single'))
             AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
             AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
-            GROUP BY t.album, t.artist
+            GROUP BY t.album, COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist)
             HAVING COUNT(DISTINCT t.id) > 1
         ),
         top_matches AS (
@@ -2831,7 +2849,7 @@ interface StatsDao {
         WITH stats AS (
             SELECT 
                 t.album,
-                t.artist,
+                COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
                 COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
                 COUNT(le.id) as play_count,
                 SUM(le.playDuration) as total_time_ms,
@@ -2844,7 +2862,7 @@ interface StatsDao {
             AND (em.release_type IS NULL OR em.release_type NOT IN ('Single', 'single'))
             AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
             AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
-            GROUP BY t.album, t.artist
+            GROUP BY t.album, COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist)
             HAVING COUNT(DISTINCT t.id) > 1
         ),
         top_matches AS (
@@ -2882,7 +2900,7 @@ interface StatsDao {
         WITH stats AS (
             SELECT 
                 t.album,
-                t.artist,
+                COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist) as artist,
                 COALESCE(MAX(NULLIF(em.album_art_url, '')), MAX(NULLIF(t.album_art_url, ''))) as album_art_url,
                 COUNT(le.id) as play_count,
                 SUM(le.playDuration) as total_time_ms,
@@ -2895,7 +2913,7 @@ interface StatsDao {
             AND (em.release_type IS NULL OR em.release_type NOT IN ('Single', 'single'))
             AND (:filterPodcasts = 0 OR t.content_type IS NULL OR t.content_type != 'PODCAST')
             AND (:filterAudiobooks = 0 OR t.content_type IS NULL OR t.content_type != 'AUDIOBOOK')
-            GROUP BY t.album, t.artist
+            GROUP BY t.album, COALESCE((SELECT ar.name FROM artists ar WHERE ar.id = t.primary_artist_id), t.artist)
             HAVING COUNT(DISTINCT t.id) > 1
         ),
         max_values AS (

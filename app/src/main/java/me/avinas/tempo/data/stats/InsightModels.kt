@@ -2,6 +2,7 @@ package me.avinas.tempo.data.stats
 
 import me.avinas.tempo.data.local.entities.Badge
 import me.avinas.tempo.data.local.entities.UserLevel
+import me.avinas.tempo.domain.insights.MusicalPersonality
 
 data class BingeSession(
     val artist: String,
@@ -43,6 +44,10 @@ data class InsightCardData(
     val payload: InsightPayload = InsightPayload.TextOnly
 )
 
+/**
+ * The rendered shape of an insight is decided by its payload, not its type: each payload carries
+ * the measurements its card needs, and exactly one card layout claims each payload variant.
+ */
 sealed class InsightPayload {
     object TextOnly : InsightPayload()
     
@@ -52,11 +57,13 @@ sealed class InsightPayload {
         val recentBadges: List<Badge> = emptyList()
     ) : InsightPayload()
 
+    /** Average valence (positivity) and energy, both 0f..1f. Plotted as a point in a 2-axis field. */
     data class MoodData(
         val valence: Float,
         val energy: Float
     ) : InsightPayload()
 
+    /** Plays per clock hour, used to draw the 24-column listening distribution. */
     data class PeakTimeData(
         val peakHour: Int,
         val hourlyDistribution: List<HourlyDistribution>
@@ -73,24 +80,58 @@ sealed class InsightPayload {
         val trends: List<DiscoveryTrend>
     ) : InsightPayload()
 
+    /**
+     * Streak length plus the days actually listened to, so the card can draw a real calendar
+     * strip instead of repeating the number in seven identical pips.
+     *
+     * @param recentDays one entry per day, oldest first, true when that day had a play.
+     */
     data class StreakData(
-        val days: Int
+        val days: Int,
+        val longestDays: Int = 0,
+        val totalActiveDays: Int = 0,
+        val recentDays: List<Boolean> = emptyList()
     ) : InsightPayload()
 
-    data class GenreData(
-        val genre: String
+    /** The most-played artist for the range, with artwork when the library has any. */
+    data class TopArtistData(
+        val artist: String,
+        val playCount: Int,
+        val totalTimeMs: Long,
+        val imageUrl: String? = null
     ) : InsightPayload()
 
-    data class FeatureValue(
-        val type: InsightType,
-        val value: Float
+    /** One row per audio feature that has a measured value. */
+    data class AudioProfileData(
+        val traits: List<AudioTrait>,
+        val tempoBpm: Float? = null,
+        /** True when some values are inferred from genre/tags rather than measured. */
+        val estimated: Boolean = false
     ) : InsightPayload()
 
-    data class TempoValue(
-        val bpm: Float
+    data class PersonalityData(
+        val personality: MusicalPersonality,
+        val genre: String? = null,
+        val genreSharePercent: Int? = null
+    ) : InsightPayload()
+
+    data class EngagementData(
+        val completionRate: Double,
+        val fullListens: Int,
+        val skips: Int,
+        val skipRate: Double
     ) : InsightPayload()
 }
 
+/** One measured audio attribute. [value] is 0f..1f for percentage traits. */
+data class AudioTrait(
+    val key: AudioTraitKey,
+    val value: Float
+)
+
+enum class AudioTraitKey { ENERGY, DANCEABILITY, ACOUSTICNESS }
+
 enum class InsightType {
-    MOOD, DISCOVERY, BINGE, GENRE, PEAK_TIME, LOYALTY, ENERGY, DANCEABILITY, TEMPO, ACOUSTICNESS, STREAK, ENGAGEMENT, RATE_APP
+    MOOD, DISCOVERY, BINGE, GENRE, PEAK_TIME, LOYALTY, ENERGY, DANCEABILITY, TEMPO, ACOUSTICNESS,
+    STREAK, ENGAGEMENT, RATE_APP, TOP_ARTIST, AUDIO_PROFILE, PERSONALITY
 }

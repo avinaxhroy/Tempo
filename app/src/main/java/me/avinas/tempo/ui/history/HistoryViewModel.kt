@@ -143,7 +143,11 @@ class HistoryViewModel @Inject constructor(
     
     private fun observeDataChanges() {
         viewModelScope.launch {
-            statsRepository.observeListeningOverview(TimeRange.ALL_TIME)
+            // The overview's *value* was never used here — only its emissions, as a "rows changed"
+            // signal. Collecting the overview made every write pay a full ALL_TIME aggregate
+            // (five-table aggregates + a scan of every event ever). The bounded trigger flow has the
+            // same Room invalidation semantics for a single index-served row read.
+            listeningRepository.recentEvents(1)
                 .collect { _ ->
                     // Refresh history when new listening events are added
                     // Only refresh if we are on the first page to avoid jumping

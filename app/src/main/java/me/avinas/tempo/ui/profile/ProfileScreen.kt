@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -41,10 +42,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -56,14 +59,15 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -81,7 +85,7 @@ import me.avinas.tempo.ui.components.FrostedIconButton
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.GlassCardVariant
 import me.avinas.tempo.ui.components.MilestoneShareCard
-import me.avinas.tempo.ui.components.SharePreviewDialog
+import me.avinas.tempo.ui.components.share.ShareCardSheet
 import me.avinas.tempo.ui.theme.*
 import java.text.SimpleDateFormat
 import java.time.LocalDate
@@ -95,33 +99,6 @@ import kotlin.math.sin
 // Widest the scrolling content ever gets — expanded widths (tablets, landscape,
 // foldables) keep a readable measure instead of stretching cards edge to edge.
 private val ProfileMaxContentWidth = 660.dp
-
-// ── Level tier palette — connects visual radiance directly to listener rank ──
-internal fun getLevelTierAccent(level: Int): Color =
-    when {
-        level >= 100 -> Color(0xFFEC4899)
-
-        // Mythic Pink
-        level >= 75 -> Color(0xFFF43F5E)
-
-        // Rose
-        level >= 50 -> TempoWarningBright
-
-        // Gold (#FBBF24)
-        level >= 35 -> Color(0xFFA855F7)
-
-        // Purple
-        level >= 20 -> TempoInfo
-
-        // Electric Blue (#3B82F6)
-        level >= 10 -> TempoAccent
-
-        // Cyan (#5EEAD4)
-        level >= 5 -> TempoSuccessBright
-
-        // Emerald (#4ADE80)
-        else -> TempoPrimary // Studio Teal (#2FDBB8)
-    }
 
 // ── Category & difficulty identity — data colormaps, not chrome tokens ──
 internal fun getCategoryColor(category: String): Color =
@@ -842,32 +819,24 @@ fun ProfileScreen(
             }
 
             if (shareBadgeTarget != null) {
-                SharePreviewDialog(
+                BadgeShareSheet(
+                    badge = shareBadgeTarget!!,
+                    userName = uiState.userName,
+                    profileImagePath = uiState.profileImagePath,
                     onDismiss = { shareBadgeTarget = null },
-                ) { theme ->
-                    BadgeShareCard(
-                        badge = shareBadgeTarget!!,
-                        userName = uiState.userName,
-                        profileImagePath = uiState.profileImagePath,
-                        theme = theme,
-                    )
-                }
+                )
             }
 
             if (showMilestoneShare) {
-                SharePreviewDialog(
+                MilestoneShareSheet(
+                    level = uiState.userLevel.currentLevel,
+                    title = uiState.userTitle,
+                    userName = uiState.userName,
+                    profileImagePath = uiState.profileImagePath,
+                    totalXp = uiState.userLevel.totalXp,
+                    streak = uiState.userLevel.currentStreak,
                     onDismiss = { showMilestoneShare = false },
-                ) { theme ->
-                    MilestoneShareCard(
-                        level = uiState.userLevel.currentLevel,
-                        title = uiState.userTitle,
-                        userName = uiState.userName,
-                        profileImagePath = uiState.profileImagePath,
-                        totalXp = uiState.userLevel.totalXp,
-                        streak = uiState.userLevel.currentStreak,
-                        theme = theme,
-                    )
-                }
+                )
             }
         }
     }
@@ -1362,62 +1331,188 @@ private fun StreakRiskBanner(
 }
 
 // ──────────────────────────────────────────────────────────────
-// Segmented Tab Switcher
+// Segmented tab switcher
+//
+// A recessed tray with one key that slides between the slots. Light comes from
+// the top-left: the near wall casts onto the floor, the far wall catches bounce.
+// The key gets a bright top edge, a dark bottom edge and its own shadow. The
+// selected label sits on the key; the idle ones sit in the tray.
 // ──────────────────────────────────────────────────────────────
 
+/** Tray floor — matte plastic, darkest at the wall turned away from the light. */
+private val TrayFloorTop = Color(0xFF060909)
+private val TrayFloorMid = Color(0xFF0C1413)
+private val TrayFloorBottom = Color(0xFF131F1C)
+
+/** Key body — the same plastic, one step closer to the light. */
+private val ToggleKeyTop = Color(0xFF2C403A)
+private val ToggleKeyMid = Color(0xFF1B2B27)
+private val ToggleKeyBottom = Color(0xFF101917)
+
+/** Contact ink: the bed the key stands on, and the tray's silhouette. */
+private val ToggleInk = Color(0xFF030605)
+
 @Composable
-private fun TabSwitcher(
+internal fun TabSwitcher(
     tabs: List<String>,
     selectedTab: Int,
     onTabSelected: (Int) -> Unit,
 ) {
-    BoxWithConstraints(
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    // The key travels with weight, not with an easing curve: a damped spring
+    // overshoots nothing, it just arrives like something with mass.
+    val keySlot by animateFloatAsState(
+        targetValue = selectedTab.toFloat(),
+        animationSpec = spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow),
+        label = "tabKeySlot",
+    )
+    // Cast on the key vs. cut into the tray.
+    val castShadow =
+        remember(density) {
+            with(density) { Shadow(ToggleInk.copy(alpha = 0.90f), Offset(0f, 1.dp.toPx()), 2.dp.toPx()) }
+        }
+    val cutShadow =
+        remember(density) {
+            with(density) { Shadow(Color.White.copy(alpha = 0.07f), Offset(0f, 1.dp.toPx()), 1.dp.toPx()) }
+        }
+
+    Box(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(TempoDarkSurfaceSunken)
-                .border(0.8.dp, GlassBorderSoft, RoundedCornerShape(16.dp))
-                .padding(4.dp),
+                .clip(RoundedCornerShape(18.dp)),
     ) {
-        val tabWidth = maxWidth / tabs.size
-        val indicatorPosition by animateFloatAsState(
-            targetValue = selectedTab.toFloat(),
-            animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-            label = "tabIndicator",
-        )
-        Box(modifier = Modifier.matchParentSize()) {
-            Box(
-                modifier =
-                    Modifier
-                        .offset {
-                            IntOffset(
-                                x = (tabWidth.toPx() * indicatorPosition).roundToInt(),
-                                y = 0,
-                            )
-                        }.width(tabWidth)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(TempoPrimary.copy(alpha = 0.16f))
-                        .border(0.8.dp, TempoPrimary.copy(alpha = 0.42f), RoundedCornerShape(12.dp)),
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val trayRadius = 18.dp.toPx()
+            val gutter = 4.dp.toPx()
+            val keyRadius = 14.dp.toPx()
+            val keyWidth = (size.width - gutter * 2f) / tabs.size
+            val keyHeight = size.height - gutter * 2f
+            val keyX = gutter + keyWidth * keySlot
+            val keyY = gutter
+
+            // Tray floor.
+            drawRoundRect(
+                brush =
+                    Brush.verticalGradient(
+                        0f to TrayFloorTop,
+                        0.55f to TrayFloorMid,
+                        1f to TrayFloorBottom,
+                    ),
+                cornerRadius = CornerRadius(trayRadius, trayRadius),
+            )
+            // Wall shadow on the floor and bounce on the far wall. One full-height
+            // pass so corners never double up.
+            drawRoundRect(
+                brush =
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.62f),
+                        0.30f to Color.Black.copy(alpha = 0.18f),
+                        0.46f to Color.Transparent,
+                        0.84f to Color.Transparent,
+                        1f to Color.White.copy(alpha = 0.10f),
+                    ),
+                cornerRadius = CornerRadius(trayRadius, trayRadius),
+            )
+            // Tray rim: dark where the wall faces the light, bright at the lip.
+            drawRoundRect(
+                brush =
+                    Brush.verticalGradient(
+                        0f to ToggleInk.copy(alpha = 0.80f),
+                        0.55f to ToggleInk.copy(alpha = 0.30f),
+                        1f to Color.White.copy(alpha = 0.09f),
+                    ),
+                topLeft = Offset(0.5.dp.toPx(), 0.5.dp.toPx()),
+                size = Size(size.width - 1.dp.toPx(), size.height - 1.dp.toPx()),
+                cornerRadius = CornerRadius(trayRadius, trayRadius),
+                style = Stroke(width = 1.dp.toPx()),
+            )
+            // Contact shadow: the key stands off the floor, and because the light
+            //    comes from the top-left the ink pools down and to the right of it.
+            drawRoundRect(
+                color = ToggleInk.copy(alpha = 0.45f),
+                topLeft = Offset(keyX + 2.5.dp.toPx(), keyY + 3.dp.toPx()),
+                size = Size(keyWidth - 1.dp.toPx(), keyHeight),
+                cornerRadius = CornerRadius(keyRadius, keyRadius),
+            )
+            drawRoundRect(
+                color = ToggleInk.copy(alpha = 0.55f),
+                topLeft = Offset(keyX + 1.dp.toPx(), keyY + 1.5.dp.toPx()),
+                size = Size(keyWidth - 1.dp.toPx(), keyHeight + 1.dp.toPx()),
+                cornerRadius = CornerRadius(keyRadius, keyRadius),
+            )
+            // 5. Key face.
+            drawRoundRect(
+                brush =
+                    Brush.verticalGradient(
+                        0f to ToggleKeyTop,
+                        0.42f to ToggleKeyMid,
+                        1f to ToggleKeyBottom,
+                    ),
+                topLeft = Offset(keyX, keyY),
+                size = Size(keyWidth, keyHeight),
+                cornerRadius = CornerRadius(keyRadius, keyRadius),
+            )
+            // 6. Light raking across the crown from the top-left corner.
+            drawRoundRect(
+                brush =
+                    Brush.linearGradient(
+                        colors = listOf(Color.White.copy(alpha = 0.16f), Color.Transparent),
+                        start = Offset(keyX, keyY),
+                        end = Offset(keyX + keyWidth * 0.7f, keyY + keyHeight),
+                    ),
+                topLeft = Offset(keyX, keyY),
+                size = Size(keyWidth, keyHeight),
+                cornerRadius = CornerRadius(keyRadius, keyRadius),
+            )
+            // 7. Moulding line: lit at the crown, inked at the lip.
+            drawRoundRect(
+                brush =
+                    Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = 0.42f),
+                        0.26f to Color.White.copy(alpha = 0.07f),
+                        0.60f to ToggleInk.copy(alpha = 0.12f),
+                        1f to ToggleInk.copy(alpha = 0.60f),
+                    ),
+                topLeft = Offset(keyX + 0.5.dp.toPx(), keyY + 0.5.dp.toPx()),
+                size = Size(keyWidth - 1.dp.toPx(), keyHeight - 1.dp.toPx()),
+                cornerRadius = CornerRadius(keyRadius, keyRadius),
+                style = Stroke(width = 1.dp.toPx()),
             )
         }
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(4.dp),
+        ) {
             tabs.forEachIndexed { index, title ->
                 val selected = selectedTab == index
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (selected) TextPrimary else TextTertiary,
+                    style =
+                        MaterialTheme.typography.titleSmall.copy(
+                            shadow = if (selected) castShadow else cutShadow,
+                        ),
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (selected) Color(0xFFF0FBF7) else Color(0xFF78847F),
                     maxLines = 1,
                     textAlign = TextAlign.Center,
                     modifier =
                         Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onTabSelected(index) }
-                            .padding(vertical = 11.dp, horizontal = 8.dp),
+                            .selectable(
+                                selected = selected,
+                                interactionSource = null,
+                                indication = null,
+                                role = Role.Tab,
+                            ) {
+                                if (!selected) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
+                                onTabSelected(index)
+                            }.padding(vertical = 11.dp, horizontal = 8.dp),
                 )
             }
         }
@@ -2862,6 +2957,54 @@ fun CompactLevelRing(
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = TextPrimary,
+        )
+    }
+}
+
+// ── Share sheets — badge and milestone exports ──
+
+@Composable
+private fun BadgeShareSheet(
+    badge: Badge,
+    userName: String,
+    profileImagePath: String?,
+    onDismiss: () -> Unit,
+) {
+    // No artworkUrls on purpose: the backdrop is a procedural badge canvas, so an
+    // animated scene seeds its colours from the theme's own palette.
+    ShareCardSheet(onDismiss = onDismiss) { page ->
+        BadgeShareCard(
+            badge = badge,
+            userName = userName,
+            profileImagePath = profileImagePath,
+            card = page.card,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+@Composable
+private fun MilestoneShareSheet(
+    level: Int,
+    title: String,
+    userName: String,
+    profileImagePath: String?,
+    totalXp: Long,
+    streak: Int,
+    onDismiss: () -> Unit,
+) {
+    // No artworkUrls on purpose: the backdrop is a procedural milestone canvas, so
+    // an animated scene seeds its colours from the theme's own palette.
+    ShareCardSheet(onDismiss = onDismiss) { page ->
+        MilestoneShareCard(
+            level = level,
+            title = title,
+            userName = userName,
+            profileImagePath = profileImagePath,
+            totalXp = totalXp,
+            streak = streak,
+            card = page.card,
+            modifier = Modifier.fillMaxSize(),
         )
     }
 }

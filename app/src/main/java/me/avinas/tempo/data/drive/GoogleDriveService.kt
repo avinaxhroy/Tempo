@@ -33,6 +33,9 @@ sealed class DriveException(message: String, cause: Throwable? = null) : Excepti
     class Auth(message: String = "Authorization failed", cause: Throwable? = null) : DriveException(message, cause)
     class Network(message: String = "Network error", cause: Throwable? = null) : DriveException(message, cause)
     class Server(message: String, cause: Throwable? = null) : DriveException(message, cause)
+
+    /** Bytes did not match Drive's own metadata. Retrying cannot fix a corrupt backup. */
+    class Corrupt(message: String, cause: Throwable? = null) : DriveException(message, cause)
     class Unknown(message: String, cause: Throwable? = null) : DriveException(message, cause)
 }
 
@@ -155,6 +158,7 @@ class GoogleDriveService @Inject constructor(
     private suspend fun <T> executeWithRetry(
         transientRetryCount: Int = 0,
         authRetryCount: Int = 0,
+        notFoundRetryCount: Int = 0,
         block: suspend (Drive) -> T
     ): T {
         val client = getDriveClient() ?: throw DriveException.Auth(
@@ -166,7 +170,17 @@ class GoogleDriveService @Inject constructor(
         } catch (e: GoogleJsonResponseException) {
             when (e.statusCode) {
                 401 -> {
-                    Log.w(TAG, "Authorization failed (401) - attempting refresh")
+                    val errorReason = e.details?.errors?.firstOrNull()?.reason
+                    val detail = e.details?.message ?: e.statusMessage ?: e.message
+                    // The reason is what distinguishes "the grant was revoked" from
+                    // "the token was minted for another account/client", and it is the
+                    // only clue we get for a failure that is specific to one account.
+                    Log.w(
+                        TAG,
+                        "Authorization failed (401) for account " +
+                            "${authManager.currentAccount.value?.email}: " +
+                            "reason=$errorReason detail=$detail"
+                    )
                     clearDriveClient(client.accessToken)
                     
                     if (authRetryCount < 1 &&
@@ -179,7 +193,13 @@ class GoogleDriveService @Inject constructor(
                             block = block
                         )
                     } else {
-                        throw DriveException.Auth("Session expired. Please sign in again.", e)
+                        // Definitive: a token minted seconds ago was rejected as well.
+                        // Stop reporting the account as connected.
+                        authManager.markSessionRejected()
+                        throw DriveException.Auth(
+                            buildAuthFailureMessage(errorReason, detail),
+                            e
+                        )
                     }
                 }
                 403 -> {
@@ -263,9 +283,23 @@ class GoogleDriveService @Inject constructor(
                     )
                 }
                 404 -> {
-                    // Resource may have been deleted externally, clear cached folder ID
+                    // The "Tempo Backups" folder (or the file itself) was deleted
+                    // outside the app. Drop the cached folder id and retry once: the
+                    // block re-runs getOrCreateBackupFolder(), which recreates it.
                     backupFolderId = null
-                    throw DriveException.Server("Resource not found. Please try again.", e)
+                    if (notFoundRetryCount < 1) {
+                        Log.w(TAG, "Drive resource missing; recreating the backup folder and retrying")
+                        return executeWithRetry(
+                            transientRetryCount = transientRetryCount,
+                            authRetryCount = authRetryCount,
+                            notFoundRetryCount = notFoundRetryCount + 1,
+                            block = block
+                        )
+                    }
+                    throw DriveException.Server(
+                        "The backup file or folder no longer exists in Google Drive.",
+                        e
+                    )
                 }
                 408, 429, 500, 502, 503, 504 -> {
                     // Rate-limited or transient server error — retry with backoff.
@@ -308,6 +342,22 @@ class GoogleDriveService @Inject constructor(
         } catch (e: Exception) {
             if (e is DriveException) throw e
             throw DriveException.Unknown("Unexpected error: ${e.message}", e)
+        }
+    }
+
+    /**
+     * "Session expired" plus Google's own reason. The reason is the only way to tell
+     * a revoked grant (sign in again) from a scope problem (re-consent) or from the
+     * wrong account being authorized, so it belongs in front of the user, not only
+     * in logcat.
+     */
+    private fun buildAuthFailureMessage(reason: String?, detail: String?): String {
+        val note = reason?.takeIf { it.isNotBlank() }
+            ?: detail?.takeIf { it.isNotBlank() }?.take(80)
+        return if (note == null) {
+            "Session expired. Please sign in again."
+        } else {
+            "Session expired. Please sign in again. (Google: $note)"
         }
     }
 
@@ -489,16 +539,15 @@ class GoogleDriveService @Inject constructor(
                 // Verify Drive stored every byte. A mismatch means the upload was
                 // silently truncated: delete the bad copy so it can never be
                 // restored or occupy one of the MAX_BACKUPS retention slots, then
-                // fail (executeWithRetry re-uploads from scratch on transient IO
-                // errors).
+                // fail with Corrupt — re-uploading the same bytes cannot fix it.
                 val uploadedSize = uploadedFile.getSize()?.toLong()
                 val uploadedMd5 = uploadedFile.md5Checksum
                 if (uploadedSize != sourceSize ||
                     !uploadedMd5.equals(sourceMd5, ignoreCase = true)
                 ) {
                     runCatching { service.files().delete(uploadedFile.id).execute() }
-                    throw IOException(
-                        "Upload verification failed: Drive did not store the exact backup bytes"
+                    throw DriveException.Corrupt(
+                        "Google Drive did not store the exact backup bytes. Please try backing up again."
                     )
                 }
 
@@ -610,7 +659,11 @@ class GoogleDriveService @Inject constructor(
                     if (file.length() != expectedSize ||
                         !md5Hex(file).equals(expectedMd5, ignoreCase = true)
                     ) {
-                        throw IOException("Downloaded backup failed its integrity check")
+                        // Corruption is not transient: retrying would only download the
+                        // same bad bytes again and misreport it as a network problem.
+                        throw DriveException.Corrupt(
+                            "This backup is damaged and cannot be restored. Please try another backup."
+                        )
                     }
 
                     progressCallback?.invoke(1.0f)
@@ -673,8 +726,11 @@ class GoogleDriveService @Inject constructor(
                 // Delete oldest backups beyond MAX_BACKUPS
                 val toDelete = backups.drop(MAX_BACKUPS)
                 toDelete.forEach { backup ->
-                    deleteBackup(backup.fileId)
-                    Log.d(TAG, "Deleted old backup: ${backup.fileName}")
+                    if (deleteBackup(backup.fileId)) {
+                        Log.i(TAG, "Deleted old backup: ${backup.fileName}")
+                    } else {
+                        Log.w(TAG, "Could not delete old backup: ${backup.fileName}")
+                    }
                 }
             }
         } catch (e: CancellationException) {

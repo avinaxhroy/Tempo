@@ -21,11 +21,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import me.avinas.tempo.data.analytics.AccessResult
-import me.avinas.tempo.data.analytics.ExemptionResult
 import me.avinas.tempo.data.analytics.OnboardingAction
 import me.avinas.tempo.data.analytics.OnboardingStepName
 import me.avinas.tempo.ui.navigation.AppNavigation
@@ -41,6 +39,7 @@ import me.avinas.tempo.ui.onboarding.WelcomeScreen
 import me.avinas.tempo.ui.permissions.PermissionScreen
 import me.avinas.tempo.ui.theme.TempoTheme
 import me.avinas.tempo.utils.OemBackgroundHelper
+import me.avinas.tempo.worker.LastFmSyncWorker
 import me.avinas.tempo.worker.ServiceHealthWorker
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -106,7 +105,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * Records that the user brought Tempo's UI to the foreground today.
      *
-     * Deliberately `onResume` and not `onCreate`. The tracking service is a foreground service,
+     * `onResume` and not `onCreate`. The tracking service is a foreground service,
      * so this process outlives the activity for hours or days — `onCreate` therefore fires once
      * per *process*, not once per app open. A user who reopens Tempo from Recents the next
      * morning, with the process still alive, would never reach `onCreate` and would be missing
@@ -118,6 +117,15 @@ class MainActivity : AppCompatActivity() {
      */
     override fun onResume() {
         super.onResume()
+        // Recover plays missed while an aggressive OEM had this process killed. Last.fm is the
+        // only surviving record of them - the listener cannot report what it never saw. The work
+        // decides for itself whether a gap exists: one request when there is one, nothing when
+        // there is not, and no wakeup either way because the app is already awake.
+        // The periodic health check only bounds the dead window to 30 minutes; while the user is
+        // in the app that wait is pointless. Same check, run once now: it rebinds a listener the
+        // OEM killed, or does nothing at all when the heartbeat is healthy.
+        ServiceHealthWorker.enqueueCheckNow(this)
+        LastFmSyncWorker.enqueueCatchUp(this)
         lifecycleScope.launch {
             analyticsDailyReporter.markUiOpened()
             analyticsDailyReporter.reportPresenceIfDue()
@@ -286,13 +294,9 @@ fun TempoApp(
                 OnboardingStep.PERMISSION -> {
                     PermissionScreen(
                         onPermissionGranted = {
-                            viewModel.onNotifAccess(AccessResult.GRANTED)
                             goTo(OnboardingStep.BATTERY, OnboardingAction.NEXT)
                         },
                         onSkip = {
-                            // "Do it later" is not a refusal — reporting it as DENIED would
-                            // make the permission look rejected when it was postponed.
-                            viewModel.onNotifAccess(AccessResult.DEFERRED)
                             goTo(OnboardingStep.BATTERY, OnboardingAction.SKIP)
                         }
                     )
@@ -300,11 +304,9 @@ fun TempoApp(
                 OnboardingStep.BATTERY -> {
                     BatteryOptimizationScreen(
                         onOptimize = {
-                            viewModel.onBatteryExemption(ExemptionResult.GRANTED)
                             goTo(OnboardingStep.RESTORE, OnboardingAction.NEXT)
                         },
                         onSkip = {
-                            viewModel.onBatteryExemption(ExemptionResult.SKIPPED)
                             goTo(OnboardingStep.RESTORE, OnboardingAction.SKIP)
                         },
                         onBack = {

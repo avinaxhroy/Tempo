@@ -73,7 +73,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -392,7 +392,7 @@ fun SupportedAppsScreen(
                         }
 
                         // Voice notes, dialers and recorders. These are rejected in code and
-                        // deliberately have no toggle: offering "Block" would imply tracking is
+                        // Have no toggle: offering "Block" would imply tracking is
                         // an option, and the reason users could not find Viber or Signal here at
                         // all was that code-only lists never rendered.
                         if (uiState.neverTrackedApps.isNotEmpty()) {

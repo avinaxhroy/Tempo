@@ -104,7 +104,7 @@ class LastFmImportService
 
             // Batch size for active event inserts.
             //
-            // Deliberately >= PAGE_SIZE (200). This threshold exists only as a safety net against
+            // >= PAGE_SIZE (200). This threshold exists only as a safety net against
             // unbounded buffering; the real flush point is the unconditional end-of-page flush,
             // which is what bounds data loss on cancellation (see the comment there). At 80 the
             // threshold fired *twice* for every 200-row page — at 80 and 160 — so each page cost

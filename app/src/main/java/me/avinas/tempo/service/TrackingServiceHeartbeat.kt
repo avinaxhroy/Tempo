@@ -26,6 +26,27 @@ object TrackingServiceHeartbeat {
     const val DISCONNECTED_GRACE_MS = 60 * 1000L
     const val FORCE_RESTART_AFTER_REBIND_MS = 10 * 60 * 1000L
 
+    /**
+     * Media/notification callbacks fire dozens of times per track. Readers only sample these
+     * timestamps once per [HEARTBEAT_INTERVAL_MS] and treat them as stale only after
+     * [HEARTBEAT_STALE_MS], so one write every few seconds is indistinguishable to them while
+     * saving a SharedPreferences commit on every callback.
+     */
+    private const val CALLBACK_WRITE_INTERVAL_MS = 5_000L
+
+    @Volatile
+    private var lastCallbackWriteAt = 0L
+
+    private fun shouldWriteCallback(now: Long): Boolean = synchronized(this) {
+        val last = lastCallbackWriteAt
+        if (last != 0L && now - last < CALLBACK_WRITE_INTERVAL_MS) {
+            false
+        } else {
+            lastCallbackWriteAt = now
+            true
+        }
+    }
+
     fun markServiceCreated(context: Context, now: Long = System.currentTimeMillis()) {
         prefs(context).edit()
             .putLong(KEY_LAST_SERVICE_CREATED_AT, now)
@@ -56,6 +77,7 @@ object TrackingServiceHeartbeat {
     }
 
     fun markNotificationCallback(context: Context, now: Long = System.currentTimeMillis()) {
+        if (!shouldWriteCallback(now)) return
         prefs(context).edit()
             .putLong(KEY_LAST_NOTIFICATION_CALLBACK_AT, now)
             .putLong(KEY_LAST_SERVICE_ALIVE_AT, now)
@@ -63,6 +85,7 @@ object TrackingServiceHeartbeat {
     }
 
     fun markMediaSessionCallback(context: Context, now: Long = System.currentTimeMillis()) {
+        if (!shouldWriteCallback(now)) return
         prefs(context).edit()
             .putLong(KEY_LAST_MEDIA_SESSION_CALLBACK_AT, now)
             .putLong(KEY_LAST_SERVICE_ALIVE_AT, now)

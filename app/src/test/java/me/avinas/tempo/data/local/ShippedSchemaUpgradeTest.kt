@@ -89,6 +89,15 @@ class ShippedSchemaUpgradeTest(private val startVersion: Int) {
         connection = DriverManager.getConnection("jdbc:sqlite::memory:")
 
         start.createIn(connection)
+        // Every install that ever ran the 8 -> 9 step carries this index on `tracks`, and no
+        // version of the entity can declare it: Room's @Index has no collation, so
+        // `title COLLATE NOCASE` cannot be named there. Room compares the whole index set when
+        // it validates, so the leftover is the "Migration didn't properly handle: tracks"
+        // crash this fixture has to reproduce. Created for every start schema, because the
+        // drop has to hold for an install coming from any of them.
+        connection.createStatement().use {
+            it.execute("CREATE INDEX IF NOT EXISTS index_tracks_title_lower ON tracks(title COLLATE NOCASE)")
+        }
         seedLibrary()
         before = snapshot()
         beforeById = start.tableNames.associateWith { imagesById(it) }
@@ -371,6 +380,22 @@ class ShippedSchemaUpgradeTest(private val startVersion: Int) {
     }
 
     @Test
+    fun `the undeclared tracks title index is gone when the upgrade is done`() {
+        upgrade()
+
+        // The entity cannot declare `title COLLATE NOCASE`, so the index is not part of the
+        // schema this build compiles. Leaving it behind is exactly what fails Room's
+        // validation with "Migration didn't properly handle: tracks"; see
+        // docs/PERFORMANCE_AUDIT.md #1. The table-by-table comparison above catches it too,
+        // but this names the culprit when it comes back.
+        assertTrue(
+            "index_tracks_title_lower survived the upgrade and would fail Room's validation",
+            LiveDatabase(connection).tables["tracks"]?.indices.orEmpty()
+                .none { it.name == "index_tracks_title_lower" },
+        )
+    }
+
+    @Test
     fun `the upgraded database is intact and has no dangling references`() {
         upgrade()
 
@@ -387,12 +412,15 @@ class ShippedSchemaUpgradeTest(private val startVersion: Int) {
         upgrade()
         val afterFirstRun = endState()
 
-        // A process killed during the squashed 55 -> 58 step re-enters it: the CREATE and ALTER
-        // statements have to tolerate running twice, the seed must not double, and the backfill
-        // must not move an offset that is already stamped.
-        AppDatabase.MIGRATION_55_58.migrate(proxyDatabase())
+        // A process killed during the last step re-enters it: the CREATE and ALTER statements
+        // have to tolerate running twice, the seed must not double, and the backfill must not
+        // move an offset that is already stamped. The last step is the one an interrupted open
+        // actually re-runs -- Room replays the whole path, but every earlier step is guarded by
+        // its own probe, so the step that failed is the one whose idempotence is in question.
+        // For an install on 58 that is 58 -> 59, whose DROP INDEX IF EXISTS must stay a no-op.
+        migrationsFrom(startVersion).last().migrate(proxyDatabase())
 
-        assertEquals("re-entering the last migration changed the database", afterFirstRun, endState())
+        assertEquals("re-entering the migration path changed the database", afterFirstRun, endState())
     }
 
     // ---- Harness -----------------------------------------------------------
@@ -434,7 +462,8 @@ class ShippedSchemaUpgradeTest(private val startVersion: Int) {
      * default the migration just wrote would pass even if that default were wrong. Each entry is
      * the release's intent, written out by hand from the entity that declares it -- streaks stay
      * visible after the update, pausing on low battery stays on, banked challenge XP starts empty,
-     * and the pairing token version starts at zero. Anything not listed was added as a nullable
+     * the pairing token version starts at zero, and an artist nobody has picked a portrait for
+ * keeps the NONE source. Anything not listed was added as a nullable
      * column and must therefore be NULL: a stray value there is a value from nowhere.
      */
     private val intendedAddedValues =
@@ -443,6 +472,7 @@ class ShippedSchemaUpgradeTest(private val startVersion: Int) {
             "user_preferences.hideStreaks" to 0L,
             "user_level.banked_challenge_xp" to 0L,
             "desktop_pairing_sessions.token_version" to 0L,
+            "artists.image_art_source" to "NONE",
         )
 
     /** Columns whose post-upgrade value is asserted somewhere else, or by a different rule. */
@@ -520,6 +550,8 @@ class ShippedSchemaUpgradeTest(private val startVersion: Int) {
             "offsets=" + scalarLong("SELECT COUNT(*) FROM listening_events WHERE tz_offset_minutes IS NULL"),
             "inbox=" + scalarLong("SELECT COUNT(*) FROM detected_apps"),
             "identity=" + LiveDatabase(connection).identityHash(),
+            "indices(tracks)=" +
+                LiveDatabase(connection).tables["tracks"]?.indices?.map { it.name }?.sorted(),
             "columns(listening_events)=" + columnNames("listening_events"),
             "columns(user_preferences)=" + columnNames("user_preferences"),
         ).joinToString("\n")
@@ -1329,7 +1361,8 @@ class ShippedSchemaUpgradeTest(private val startVersion: Int) {
      */
     private fun insert(table: String, values: Map<String, Any?>) {
         val info = tableInfo(table) ?: return
-        val provided = values.filterKeys { it in info.keys }
+        val provided = values.filterKeys { it in info.keys }.toMutableMap()
+        provideZoneOffset(table, provided)
         val missingRequired =
             info.filterValues { it.notNull && it.defaultValue == null && it.name !in provided.keys }
 
@@ -1359,6 +1392,33 @@ class ShippedSchemaUpgradeTest(private val startVersion: Int) {
             }
             ps.executeUpdate()
         }
+    }
+
+    /**
+     * A play written from schema 58 on carries the zone it happened in. The fixture is spelled
+     * against the current schema and names no offset, so an install that already has the column
+     * would otherwise be seeded with NULLs no phone ever wrote -- and the 58 -> 59 step does not
+     * backfill, because a 58 install is meant to hold real offsets already. Installs below 58
+     * never reach this branch: the column is not in their table, so the migration's own
+     * backfill stays the thing under test for them.
+     */
+    private fun provideZoneOffset(table: String, values: MutableMap<String, Any?>) {
+        if (table != "listening_events") return
+        val columns = tableInfo(table).orEmpty()
+        if ("tz_offset_minutes" !in columns || "tz_offset_minutes" in values) return
+        val timestamp = values["timestamp"] as? Long ?: return
+        values["tz_offset_minutes"] = zoneOffsetMinutesAt(timestamp)
+    }
+
+    /**
+     * The offset `'localtime'` resolves for [timestamp], in the minutes the column stores -- the
+     * same number the 55 -> 58 backfill derives from `'localtime'`, so a 58 install's rows and a
+     * migrated one's rows hold the same kind of value.
+     */
+    private fun zoneOffsetMinutesAt(timestamp: Long): Long {
+        val instant = java.time.Instant.ofEpochMilli(timestamp)
+        val offset = java.time.ZoneId.systemDefault().rules.getOffset(instant)
+        return (offset.totalSeconds / 60).toLong()
     }
 
     private data class ColumnInfo(

@@ -12,9 +12,12 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
 import me.avinas.tempo.R
+import me.avinas.tempo.data.analytics.AnalyticsDaily
+import me.avinas.tempo.data.analytics.AnalyticsDailyLedger
 import me.avinas.tempo.data.analytics.AnalyticsTracker
-import me.avinas.tempo.data.analytics.EnrichmentRun
+import me.avinas.tempo.data.analytics.EnrichmentFailure
 import me.avinas.tempo.data.analytics.EnrichmentTrigger
+import me.avinas.tempo.data.analytics.FailureClass
 import me.avinas.tempo.data.analytics.FailureClassifier
 import me.avinas.tempo.data.analytics.RunPhase
 import me.avinas.tempo.data.enrichment.CoverArtSourcePreference
@@ -34,6 +37,7 @@ import me.avinas.tempo.data.local.entities.EnrichmentStatus
 import me.avinas.tempo.data.repository.EnrichedMetadataRepository
 import me.avinas.tempo.data.repository.StatsRepository
 import me.avinas.tempo.ui.onboarding.dataStore
+import me.avinas.tempo.utils.AlbumNameResolver
 import me.avinas.tempo.utils.ArtistParser
 import me.avinas.tempo.utils.ForegroundNotificationGuard
 import me.avinas.tempo.worker.LastFmImportWorker
@@ -73,6 +77,7 @@ class EnrichmentWorker
         private val enrichedMetadataRepository: EnrichedMetadataRepository,
         private val analyticsTracker: AnalyticsTracker,
         private val coverArtSourcePreference: me.avinas.tempo.data.enrichment.CoverArtSourcePreference,
+        private val analyticsDailyLedger: AnalyticsDailyLedger,
     ) : CoroutineWorker(appContext, workerParams) {
         private val strategies: List<EnrichmentSource> =
             listOf(
@@ -353,9 +358,6 @@ class EnrichmentWorker
                     specificTrackId != null -> EnrichmentTrigger.SINGLE_TRACK
                     else -> EnrichmentTrigger.BATCH
                 }
-            // Read once, before the work, so the reduction can be derived afterwards. Taken
-            // after the deferral guards above, so a run that did nothing reports nothing.
-            val backlogBefore = pendingEnrichmentCount()
 
             return try {
                 // First, link any unlinked artists (fixes imported tracks without artist relationships)
@@ -390,7 +392,12 @@ class EnrichmentWorker
                     Log.d(TAG, "Notified UI of metadata update for track $specificTrackId")
                 }
 
-                reportEnrichmentRun(trigger, RunPhase.COMPLETED, backlogBefore, startedAt)
+                // Success reports nothing. A sweep that worked is the expected state, and it
+                // used to be reported once per worker invocation — every app start, every hourly
+                // periodic tick, every per-track refresh. That was ~50,000 events a day, 94% of
+                // the project's traffic, and two thirds of it said the batch cleared nothing.
+                // Volume like that is not free: it exhausted the monthly cap and the queued
+                // events that did describe the product were dropped on the server.
                 Result.success()
             } catch (e: Exception) {
                 Log.e(TAG, "Enrichment work failed", e)
@@ -399,10 +406,8 @@ class EnrichmentWorker
                     // and reporting each attempt would triple-count one failure.
                     Result.retry()
                 } else {
-                    reportEnrichmentRun(
+                    reportEnrichmentFailure(
                         trigger = trigger,
-                        phase = RunPhase.FAILED,
-                        backlogBefore = backlogBefore,
                         startedAt = startedAt,
                         failure = FailureClassifier.of(e),
                     )
@@ -418,30 +423,38 @@ class EnrichmentWorker
             }.getOrDefault(0)
 
         /**
-         * Reports one enrichment run.
+         * Reports an enrichment failure, **at most once per install per day**.
          *
-         * `cleared` is derived from the backlog before and after rather than counted per track,
-         * so it cannot disagree with what the database holds.
+         * The throttle is the point. A device whose enrichment is broken fails on every wake,
+         * and there are many wakes: an install that cannot reach the network retries hourly, at
+         * every app start and after every import. Without this, one broken device would report
+         * that failure hundreds of times a day and read as hundreds of broken devices — the
+         * exact defect that made `tracking_gap` useless before it was throttled the same way.
+         *
+         * Marking happens only after [AnalyticsTracker.canReport] agrees the event would be
+         * queued. A marker written without a send would consume the day's slot while nothing
+         * left the device, and the first real failure after reporting was switched back on
+         * would be silently dropped.
          */
-        private suspend fun reportEnrichmentRun(
+        private suspend fun reportEnrichmentFailure(
             trigger: EnrichmentTrigger,
-            phase: RunPhase,
-            backlogBefore: Int,
             startedAt: Long,
-            failure: me.avinas.tempo.data.analytics.FailureClass? = null,
+            failure: FailureClass?,
         ) {
             runCatching {
-                val backlogAfter = pendingEnrichmentCount()
+                val today = AnalyticsDaily.dayOf(System.currentTimeMillis())
+                if (!AnalyticsDaily.isUnreported(analyticsDailyLedger.enrichmentFailureDay(), today)) return@runCatching
+                if (!analyticsTracker.canReport()) return@runCatching
+
                 analyticsTracker.track(
-                    EnrichmentRun(
+                    EnrichmentFailure(
                         trigger = trigger,
-                        phase = phase,
-                        backlog = backlogAfter,
-                        cleared = (backlogBefore - backlogAfter).coerceAtLeast(0),
+                        backlog = pendingEnrichmentCount(),
+                        failure = failure ?: FailureClass.UNKNOWN,
                         durationMillis = System.currentTimeMillis() - startedAt,
-                        failure = failure,
                     ),
                 )
+                analyticsDailyLedger.markEnrichmentFailureReported(today)
             }
         }
 
@@ -478,7 +491,13 @@ class EnrichmentWorker
                         val fixedArtUrl = MusicBrainzEnrichmentService.fixHttpUrl(metadata.albumArtUrl)
                         val updatedTrack =
                             track.copy(
-                                album = if (track.album.isNullOrBlank()) metadata.albumTitle else track.album,
+                                album =
+                                    AlbumNameResolver.choose(
+                                        existing = track.album,
+                                        candidate = metadata.albumTitle,
+                                        title = track.title,
+                                        artist = track.artist,
+                                    ),
                             )
                         trackDao.updatePreservingManualArtwork(updatedTrack)
                         trackDao.updateAutomaticAlbumArtUrl(metadata.trackId, fixedArtUrl)
@@ -643,8 +662,15 @@ class EnrichmentWorker
                         Log.i(TAG, "Propagating enriched album art to Track $trackId: $fixedArtUrl")
                         val updatedTrack =
                             currentTrack.copy(
-                                // Also update album name if track is missing it
-                                album = if (currentTrack.album.isNullOrBlank()) finalMetadata.albumTitle else currentTrack.album,
+                                // Also adopt an album name when the track has none, or only
+                                // has a placeholder the player leaked into the album slot.
+                                album =
+                                    AlbumNameResolver.choose(
+                                        existing = currentTrack.album,
+                                        candidate = finalMetadata.albumTitle,
+                                        title = currentTrack.title,
+                                        artist = currentTrack.artist,
+                                    ),
                             )
                         trackDao.updatePreservingManualArtwork(updatedTrack)
                         trackDao.updateAutomaticAlbumArtUrl(trackId, fixedArtUrl)

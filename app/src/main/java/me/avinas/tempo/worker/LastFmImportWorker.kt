@@ -21,6 +21,7 @@ import me.avinas.tempo.MainActivity
 import me.avinas.tempo.R
 import me.avinas.tempo.data.lastfm.LastFmImportService
 import me.avinas.tempo.data.local.dao.LastFmImportMetadataDao
+import me.avinas.tempo.data.local.dao.ListeningEventDao
 import me.avinas.tempo.data.local.dao.UserPreferencesDao
 import me.avinas.tempo.data.local.entities.LastFmImportMetadata
 import me.avinas.tempo.utils.ForegroundNotificationGuard
@@ -384,7 +385,7 @@ class LastFmImportWorker
         /**
          * Close out an import row that never got anywhere, so it cannot masquerade as resumable.
          *
-         * A row with real progress is deliberately left IN_PROGRESS: the next attempt resumes it
+         * A row with real progress is left IN_PROGRESS: the next attempt resumes it
          * from the page it reached and carries its recorded counters into the report, which beats
          * re-walking the whole history from the newest page. Only a row with no pages and no
          * imported data has nothing worth resuming.
@@ -565,9 +566,54 @@ class LastFmSyncWorker
         private val lastFmImportService: LastFmImportService,
         private val importMetadataDao: LastFmImportMetadataDao,
         private val userPreferencesDao: UserPreferencesDao,
+        private val listeningEventDao: ListeningEventDao,
     ) : CoroutineWorker(appContext, workerParams) {
         companion object {
             private const val TAG = "LastFmSyncWorker"
+
+            /**
+             * Unique-work name for a foreground catch-up run. Keep it different from the periodic
+             * chain's name: enqueueing unique work under that name would replace the user's
+             * schedule instead of adding a run.
+             */
+            private const val CATCH_UP_WORK = "lastfm_catchup_on_open"
+
+            /** Input flag marking a run that the app foregrounding asked for. */
+            private const val KEY_FOREGROUND_CATCH_UP = "foreground_catch_up"
+
+            /**
+             * How stale the newest local event must be before a foreground run believes something
+             * was missed. A typical track is 3–4 minutes, so an event inside this window means the
+             * listener was working; there is nothing to recover, and skipping also avoids flashing
+             * the import UI at someone who is just using the app.
+             */
+            private const val CATCH_UP_GAP_MS = 30 * 60_000L
+
+            /**
+             * Sync now because the app is in the foreground.
+             *
+             * This is the only recovery path for a phone that killed the process: the notification
+             * listener cannot record what it never saw, so missed plays only come back from
+             * Last.fm. The app being visible is the cheapest trigger: no wakeup, alarm,
+             * foreground service or extra permission. [ExistingWorkPolicy.KEEP] stops rapid
+             * app switching from stacking work, and an idle catch-up costs one request.
+             */
+            fun enqueueCatchUp(context: Context) {
+                val request =
+                    OneTimeWorkRequestBuilder<LastFmSyncWorker>()
+                        .setConstraints(
+                            Constraints
+                                .Builder()
+                                .setRequiredNetworkType(NetworkType.CONNECTED)
+                                .setRequiresBatteryNotLow(true)
+                                .build(),
+                        ).setInputData(workDataOf(KEY_FOREGROUND_CATCH_UP to true))
+                        .build()
+
+                WorkManager
+                    .getInstance(context)
+                    .enqueueUniqueWork(CATCH_UP_WORK, ExistingWorkPolicy.KEEP, request)
+            }
         }
 
         override suspend fun doWork(): Result {
@@ -583,6 +629,18 @@ class LastFmSyncWorker
                 Log.d(TAG, "Sync frequency set to NONE, cancelling")
                 LastFmImportWorker.cancelIncrementalSync(applicationContext)
                 return Result.success()
+            }
+
+            // Foreground runs are speculative, so only the sighting of a gap justifies them. The
+            // periodic run keeps syncing unconditionally: it also covers plays scrobbled from
+            // another device while this phone was recording something else.
+            if (inputData.getBoolean(KEY_FOREGROUND_CATCH_UP, false)) {
+                val newestEvent = listeningEventDao.getLatestEventTimestamp()
+                val gap = newestEvent?.let { System.currentTimeMillis() - it }
+                if (gap == null || gap < CATCH_UP_GAP_MS) {
+                    Log.d(TAG, "No tracking gap suspected (last event ${gap?.div(60_000)} min ago)")
+                    return Result.success()
+                }
             }
 
             Log.i(TAG, "Running incremental Last.fm sync for $username")

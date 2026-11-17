@@ -11,7 +11,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import me.avinas.tempo.data.local.dao.ListeningEventDao
 import me.avinas.tempo.data.profile.ProfileIdentityManager
+import me.avinas.tempo.data.repository.SortBy
 import me.avinas.tempo.data.repository.StatsRepository
+import me.avinas.tempo.data.stats.ListeningOverview
 import me.avinas.tempo.data.stats.TimeRange
 import me.avinas.tempo.data.stats.InsightCardData
 import me.avinas.tempo.data.stats.InsightType
@@ -69,7 +71,7 @@ class HomeViewModel @Inject constructor(
      * every other query in the app. Four permits keeps at most one burst's worth of
      * statements in flight, matching the executor.
      *
-     * Deliberately a field (shared across loads) rather than scoped to one
+     * A field (shared across loads) rather than scoped to one
      * coroutineScope: [refresh] can run [fetchData] while a debounced reactive load is
      * still winding down, and a cancelled load releases its permits asynchronously, so
      * a per-load semaphore would allow double the concurrency in that overlap window.
@@ -754,8 +756,11 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * Resets the dismiss counter so the nudge can return after the normal cooldown,
-     * and records the share.
+     * Hides the nudge because its share sheet was handed off.
+     *
+     * Nothing is recorded here: opening the sheet is not sharing, and a user who backs out of
+     * it must not lose the dismiss counter. `TempoApplication` owns the one write per real
+     * share, from the chooser's picked-target callback.
      */
     fun onShareNudgeShared() {
         _flagsState.update {
@@ -766,11 +771,36 @@ class HomeViewModel @Inject constructor(
                 shareNudgeOverview = null
             )
         }
-        viewModelScope.launch {
-            context.dataStore.edit { prefs ->
-                prefs[intPreferencesKey("share_nudge_dismiss_count")] = 0
-                prefs[longPreferencesKey("share_last_success")] = System.currentTimeMillis()
-            }
+    }
+
+    /**
+     * Raise the recap prompt with everything it needs to render in one pass:
+     * the period's headline numbers and the five sleeves it fans out.
+     */
+    private suspend fun armSpotlightReminder(
+        type: me.avinas.tempo.ui.components.SpotlightReminderType,
+        timeRange: TimeRange
+    ) {
+        // Only sleeve art: the prompt teases the period, the story reveals it.
+        val topTracks = runCatching {
+            statsRepository.getTopTracks(
+                timeRange = timeRange,
+                sortBy = SortBy.PLAY_COUNT,
+                page = 0,
+                pageSize = 5,
+                withLeeway = true
+            ).items
+        }.getOrElse { emptyList() }
+
+        _flagsState.update {
+            it.copy(
+                showSpotlightReminder = true,
+                reminderTimeRange = timeRange,
+                reminderType = type,
+                reminderPreview = me.avinas.tempo.ui.components.SpotlightReminderPreview(
+                    artUrls = topTracks.mapNotNull { track -> track.albumArtUrl }.distinct()
+                )
+            )
         }
     }
 
@@ -798,13 +828,10 @@ class HomeViewModel @Inject constructor(
                 android.util.Log.d("HomeViewModel", "Monthly data: totalPlayCount=${overview.totalPlayCount}")
                 if (overview.totalPlayCount > 0) {
                     android.util.Log.i("HomeViewModel", "✅ Showing MONTHLY Spotlight reminder")
-                    _flagsState.update {
-                        it.copy(
-                            showSpotlightReminder = true,
-                            reminderTimeRange = TimeRange.THIS_MONTH,
-                            reminderType = me.avinas.tempo.ui.components.SpotlightReminderType.MONTHLY
-                        )
-                    }
+                    armSpotlightReminder(
+                        type = me.avinas.tempo.ui.components.SpotlightReminderType.MONTHLY,
+                        timeRange = TimeRange.THIS_MONTH
+                    )
                     return@launch
                 } else {
                     android.util.Log.d("HomeViewModel", "❌ Skipping monthly reminder: no data for THIS_MONTH")
@@ -821,13 +848,10 @@ class HomeViewModel @Inject constructor(
                 android.util.Log.d("HomeViewModel", "Yearly data: totalPlayCount=${overview.totalPlayCount}")
                 if (overview.totalPlayCount > 0) {
                     android.util.Log.i("HomeViewModel", "✅ Showing YEARLY Spotlight reminder")
-                    _flagsState.update {
-                        it.copy(
-                            showSpotlightReminder = true,
-                            reminderTimeRange = TimeRange.THIS_YEAR,
-                            reminderType = me.avinas.tempo.ui.components.SpotlightReminderType.YEARLY
-                        )
-                    }
+                    armSpotlightReminder(
+                        type = me.avinas.tempo.ui.components.SpotlightReminderType.YEARLY,
+                        timeRange = TimeRange.THIS_YEAR
+                    )
                     return@launch
                 } else {
                     android.util.Log.d("HomeViewModel", "❌ Skipping yearly reminder: no data for THIS_YEAR")
@@ -844,13 +868,10 @@ class HomeViewModel @Inject constructor(
                 android.util.Log.d("HomeViewModel", "Weekly data: totalPlayCount=${overview.totalPlayCount}")
                 if (overview.totalPlayCount > 0) {
                     android.util.Log.i("HomeViewModel", "✅ Showing WEEKLY Spotlight reminder")
-                    _flagsState.update {
-                        it.copy(
-                            showSpotlightReminder = true,
-                            reminderTimeRange = TimeRange.THIS_WEEK,
-                            reminderType = me.avinas.tempo.ui.components.SpotlightReminderType.WEEKLY
-                        )
-                    }
+                    armSpotlightReminder(
+                        type = me.avinas.tempo.ui.components.SpotlightReminderType.WEEKLY,
+                        timeRange = TimeRange.THIS_WEEK
+                    )
                 } else {
                     android.util.Log.d("HomeViewModel", "❌ Skipping weekly reminder: no data for THIS_WEEK")
                 }
@@ -884,7 +905,8 @@ class HomeViewModel @Inject constructor(
                 it.copy(
                     showSpotlightReminder = false,
                     reminderTimeRange = null,
-                    reminderType = null
+                    reminderType = null,
+                    reminderPreview = null
                 )
             }
         }
@@ -960,5 +982,6 @@ data class HomeFlags(
     val showSpotlightReminder: Boolean = false,
     val reminderTimeRange: TimeRange? = null,
     val reminderType: me.avinas.tempo.ui.components.SpotlightReminderType? = null,
+    val reminderPreview: me.avinas.tempo.ui.components.SpotlightReminderPreview? = null,
     val spotlightStoryViewed: Boolean = false
 )

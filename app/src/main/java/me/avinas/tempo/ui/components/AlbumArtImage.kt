@@ -15,6 +15,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import androidx.palette.graphics.Palette
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import coil3.BitmapImage
 import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
@@ -166,15 +168,18 @@ fun AlbumArtImage(
                         } else {
                             it
                         }
-                    Palette.from(software).generate { palette ->
-                        // Palette can come back empty for flat/low-saturation
-                        // art (e.g. white covers) - fall back to the bitmap's
-                        // average color so callbacks ALWAYS fire.
-                        val dominant = palette?.dominantSwatch?.rgb ?: averageColor(software)
-                        onPaletteExtracted?.invoke(Color(dominant))
-                        // The bitmap always goes to the canvas, palette or not.
-                        onArtworkReady?.invoke(software, palette)
-                    }
+                    // Palette walks every pixel; generating it synchronously keeps
+                    // it inside this effect instead of bouncing through a callback,
+                    // and Default keeps that walk off the main thread.
+                    val palette =
+                        withContext(Dispatchers.Default) { Palette.from(software).generate() }
+                    // Palette can come back empty for flat/low-saturation
+                    // art (e.g. white covers) - fall back to the bitmap's
+                    // average color so callbacks ALWAYS fire.
+                    val dominant = palette.dominantSwatch?.rgb ?: averageColor(software)
+                    onPaletteExtracted?.invoke(Color(dominant))
+                    // The bitmap always goes to the canvas, palette or not.
+                    onArtworkReady?.invoke(software, palette)
                 }
             }
         }

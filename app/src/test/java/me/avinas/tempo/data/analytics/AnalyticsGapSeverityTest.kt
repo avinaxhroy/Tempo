@@ -8,6 +8,10 @@ import org.junit.Test
  * Gap severity is the field that was silently useless before: it reused the generic duration
  * buckets, whose largest value is `30s+`, while the shortest gap the health worker can detect
  * is thirty minutes. Every value it ever produced was therefore identical.
+ *
+ * It now has three inhabited bands. `UNDER_30M` and `UNDER_6H` were removed because nothing can
+ * produce them — the watchdog's resolution starts at thirty minutes, and its own threshold sits
+ * at two hours — and a bucket nothing can fall into is a constant wearing a dimension's name.
  */
 class AnalyticsGapSeverityTest {
 
@@ -21,16 +25,13 @@ class AnalyticsGapSeverityTest {
 
     @Test
     fun `each boundary falls into the bucket it names`() {
-        assertEquals(TrackingGapSeverity.UNDER_30M, AnalyticsBucket.gap(0L))
-        assertEquals(TrackingGapSeverity.UNDER_30M, AnalyticsBucket.gap(29 * minute))
-
+        // Below the two-hour watchdog threshold: the listener recovered on its own, or the gap
+        // is shorter than the detection resolution. Not an incident.
+        assertEquals(TrackingGapSeverity.UNDER_2H, AnalyticsBucket.gap(0L))
         assertEquals(TrackingGapSeverity.UNDER_2H, AnalyticsBucket.gap(30 * minute))
         assertEquals(TrackingGapSeverity.UNDER_2H, AnalyticsBucket.gap(2 * hour - 1))
 
-        assertEquals(TrackingGapSeverity.UNDER_6H, AnalyticsBucket.gap(2 * hour))
-        assertEquals(TrackingGapSeverity.UNDER_6H, AnalyticsBucket.gap(6 * hour - 1))
-
-        assertEquals(TrackingGapSeverity.UNDER_24H, AnalyticsBucket.gap(6 * hour))
+        assertEquals(TrackingGapSeverity.UNDER_24H, AnalyticsBucket.gap(2 * hour))
         assertEquals(TrackingGapSeverity.UNDER_24H, AnalyticsBucket.gap(24 * hour - 1))
 
         assertEquals(TrackingGapSeverity.OVER_24H, AnalyticsBucket.gap(24 * hour))

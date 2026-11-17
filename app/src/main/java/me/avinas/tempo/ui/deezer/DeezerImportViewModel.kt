@@ -116,8 +116,8 @@ class DeezerImportViewModel @Inject constructor(
                                     totalEntries = info.outputData.getInt(DeezerImportWorker.KEY_TOTAL_ENTRIES, 0),
                                     errors =
                                         info.outputData
-                                            .getStringArray(DeezerImportWorker.KEY_WARNINGS)
-                                            ?.toList()
+                                            .getNullableStringArray(DeezerImportWorker.KEY_WARNINGS)
+                                            ?.filterNotNull()
                                             .orEmpty(),
                                 )
                                 _uiState.value = DeezerImportUiState.Completed(result)

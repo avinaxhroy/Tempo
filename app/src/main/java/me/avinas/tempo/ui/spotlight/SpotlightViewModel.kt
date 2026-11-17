@@ -20,6 +20,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -98,6 +99,9 @@ class SpotlightViewModel @Inject constructor(
                 .flatMapLatest { range ->
                     statsRepository.observeListeningOverview(range)
                 }
+                // one emission per batch of writes is enough; conflate drops the ones that piled up
+                // while the previous loadCards() was still running instead of queueing another.
+                .conflate()
                 .collect { _ ->
                     val range = _uiState.value.selectedTimeRange
                     // The Room Flow emits the current DB state immediately on collection.

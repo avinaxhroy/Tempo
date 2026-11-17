@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
  *
  * Any working connection is enough: the whole payload is a few hundred bytes per event and
  * ~16 KB on a busy day, so holding it back for Wi-Fi would suppress reporting for the
- * majority of users who are on mobile data only. The constraint is deliberately `CONNECTED`
+ * majority of users who are on mobile data only. The constraint is `CONNECTED`
  * rather than `UNMETERED` for that reason — see docs/ANALYTICS.md.
  *
  * Events older than 24h are dropped by the queue before they can be sent, so running this rarely

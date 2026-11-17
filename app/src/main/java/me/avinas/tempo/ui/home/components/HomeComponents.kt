@@ -43,6 +43,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,6 +51,8 @@ import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.data.stats.TimeRange
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.GlassCardVariant
+import me.avinas.tempo.ui.components.NeoSpotlightCta
+import me.avinas.tempo.ui.components.NeoSpotlightSurface
 import me.avinas.tempo.ui.components.TelemetryMiniCell
 import me.avinas.tempo.ui.components.TrendLine
 import me.avinas.tempo.ui.theme.*
@@ -551,39 +554,14 @@ fun SpotlightStoryCard(
     storyViewed: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val cardShape = RoundedCornerShape(22.dp)
-    val cardBlendBrush = remember {
-        Brush.linearGradient(
-            colors = listOf(
-                TempoPrimary.copy(alpha = 0.12f),
-                Color(0xFFA855F7).copy(alpha = 0.08f),
-                Color(0xFFEC4899).copy(alpha = 0.06f)
-            )
-        )
-    }
-    val cardBorderBrush = remember {
-        Brush.linearGradient(
-            colors = listOf(
-                TempoPrimary.copy(alpha = 0.35f),
-                Color(0xFFA855F7).copy(alpha = 0.25f),
-                Color(0xFFEC4899).copy(alpha = 0.18f)
-            )
-        )
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(cardShape)
-            .background(TempoDarkSurfaceElevated.copy(alpha = 0.94f))
-            .background(cardBlendBrush)
-            .border(0.8.dp, cardBorderBrush, cardShape)
-            .premiumClickable(onClick = onClick, pressedScale = 0.98f)
-            .padding(16.dp)
+    NeoSpotlightSurface(
+        modifier = modifier.fillMaxWidth(),
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             if (storyAvailable) {
@@ -600,50 +578,21 @@ fun SpotlightStoryCard(
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp
                     ),
-                    color = TextPrimary
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = stringResource(R.string.home_spotlight_subtitle),
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
+                    color = TextSecondary,
+                    maxLines = 2,
+                    lineHeight = 16.sp
                 )
             }
 
-            val buttonBlendBrush = remember {
-                Brush.linearGradient(
-                    colors = listOf(
-                        TempoPrimary.copy(alpha = 0.20f),
-                        Color(0xFFA855F7).copy(alpha = 0.22f),
-                        Color(0xFFEC4899).copy(alpha = 0.18f)
-                    )
-                )
-            }
-            val buttonBorderBrush = remember {
-                Brush.linearGradient(
-                    colors = listOf(
-                        TempoPrimary.copy(alpha = 0.48f),
-                        Color(0xFFA855F7).copy(alpha = 0.38f),
-                        Color(0xFFEC4899).copy(alpha = 0.30f)
-                    )
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(buttonBlendBrush)
-                    .border(0.8.dp, buttonBorderBrush, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ArrowForwardIos,
-                    contentDescription = null,
-                    tint = TextPrimary,
-                    modifier = Modifier.size(12.dp)
-                )
-            }
+            NeoSpotlightCta(size = 38.dp, iconSize = 12.dp)
         }
     }
 }

@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeoutOrNull
+import me.avinas.tempo.data.local.entities.Artist
 import me.avinas.tempo.data.local.entities.EnrichedMetadata
 import me.avinas.tempo.data.local.entities.Track
 import javax.inject.Inject
@@ -91,6 +92,18 @@ class CoverArtPickerService @Inject constructor(
             CoverArtProvider.DEEZER,
             CoverArtProvider.LASTFM,
         )
+
+        /**
+         * Providers that can return an artist portrait.
+         *
+         * MusicBrainz is absent on purpose: the Cover Art Archive only holds release
+         * artwork, so an artist lookup there would sit on "No cover found" forever.
+         */
+        val ARTIST_PROVIDERS = listOf(
+            CoverArtProvider.APPLE_MUSIC,
+            CoverArtProvider.DEEZER,
+            CoverArtProvider.LASTFM,
+        )
     }
 
     fun currentCandidate(
@@ -101,6 +114,109 @@ class CoverArtPickerService @Inject constructor(
             track = track,
             currentMetadata = currentMetadata,
         )
+
+    fun currentArtistCandidate(artist: Artist): CoverArtCandidate? {
+        val current = artist.imageUrl?.takeIf { it.isNotBlank() } ?: return null
+        return CoverArtCandidate(
+            provider = CoverArtProvider.CURRENT,
+            albumArtUrl = MusicBrainzEnrichmentService.fixHttpUrl(current) ?: current,
+            albumArtUrlLarge = MusicBrainzEnrichmentService.fixHttpUrl(current) ?: current,
+            albumTitle = artist.name,
+            isCurrent = true,
+        )
+    }
+
+    /**
+     * Look up an artist portrait from a single provider.
+     *
+     * Mirrors [searchProvider] but works from the artist name alone, since a
+     * portrait has no album or track context to disambiguate with.
+     */
+    suspend fun searchArtistProvider(
+        provider: CoverArtProvider,
+        artist: Artist,
+    ): CoverArtLookupResult {
+        val lookup = try {
+            withTimeoutOrNull(PROVIDER_LOOKUP_TIMEOUT_MS) {
+                when (provider) {
+                    CoverArtProvider.CURRENT -> {
+                        val candidate = currentArtistCandidate(artist)
+                        CoverArtLookupResult(
+                            provider = provider,
+                            status = if (candidate != null) CoverArtLookupStatus.FOUND else CoverArtLookupStatus.NOT_FOUND,
+                            candidate = candidate,
+                        )
+                    }
+
+                    CoverArtProvider.APPLE_MUSIC -> {
+                        val url = iTunesEnrichmentService
+                            .searchAndFetchSingleArtistImage(artist.name)
+                            ?.takeIf { it.isNotBlank() }
+                        artistCandidateOrMissing(provider, url, artist.name)
+                    }
+
+                    CoverArtProvider.DEEZER -> {
+                        val url = deezerEnrichmentService
+                            .searchArtistImage(artist.name)
+                            ?.takeIf { it.isNotBlank() }
+                        artistCandidateOrMissing(provider, url, artist.name)
+                    }
+
+                    CoverArtProvider.LASTFM -> {
+                        if (!lastFmEnrichmentService.isAvailable()) {
+                            CoverArtLookupResult(provider, CoverArtLookupStatus.UNAVAILABLE)
+                        } else {
+                            val url = lastFmEnrichmentService
+                                .fetchArtistImage(artist.name)
+                                ?.takeIf { it.isNotBlank() }
+                            artistCandidateOrMissing(provider, url, artist.name)
+                        }
+                    }
+
+                    // Not offered for artists; answered explicitly so a stray call
+                    // cannot silently fall through to a track lookup.
+                    CoverArtProvider.MUSICBRAINZ ->
+                        CoverArtLookupResult(provider, CoverArtLookupStatus.UNAVAILABLE)
+                }
+            } ?: CoverArtLookupResult(
+                provider = provider,
+                status = CoverArtLookupStatus.ERROR,
+                message = "Search timed out",
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            CoverArtLookupResult(
+                provider = provider,
+                status = CoverArtLookupStatus.ERROR,
+                message = e.message,
+            )
+        }
+
+        currentCoroutineContext().ensureActive()
+        return lookup
+    }
+
+    private fun artistCandidateOrMissing(
+        provider: CoverArtProvider,
+        url: String?,
+        artistName: String,
+    ): CoverArtLookupResult =
+        if (url == null) {
+            CoverArtLookupResult(provider, CoverArtLookupStatus.NOT_FOUND)
+        } else {
+            val normalized = MusicBrainzEnrichmentService.fixHttpUrl(url) ?: url
+            CoverArtLookupResult(
+                provider = provider,
+                status = CoverArtLookupStatus.FOUND,
+                candidate = CoverArtCandidate(
+                    provider = provider,
+                    albumArtUrl = normalized,
+                    albumArtUrlLarge = normalized,
+                    albumTitle = artistName,
+                ),
+            )
+        }
 
     suspend fun searchProvider(
         provider: CoverArtProvider,

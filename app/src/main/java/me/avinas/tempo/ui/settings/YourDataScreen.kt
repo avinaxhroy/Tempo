@@ -48,7 +48,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import me.avinas.tempo.R
 import me.avinas.tempo.data.analytics.AnalyticsCatalog
 import me.avinas.tempo.ui.components.DeepOceanBackground
@@ -224,7 +224,6 @@ fun YourDataScreen(
                                         context.startActivity(Intent.createChooser(intent, null))
                                     },
                                     modifier = Modifier.weight(1f),
-                                    enabled = report != null,
                                     colors =
                                         ButtonDefaults.buttonColors(
                                             containerColor = TempoPrimary,

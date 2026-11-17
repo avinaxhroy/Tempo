@@ -111,8 +111,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.palette.graphics.Palette
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import coil3.BitmapImage
 import coil3.imageLoader
 import coil3.request.ImageRequest
@@ -132,8 +134,8 @@ import me.avinas.tempo.ui.components.DeepOceanBackground
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.GlassCardVariant
 import me.avinas.tempo.ui.components.FrostedIconButton
-import me.avinas.tempo.ui.components.SharePreviewDialog
 import me.avinas.tempo.ui.components.SongShareCard
+import me.avinas.tempo.ui.components.share.SingleCardShareSheet
 import me.avinas.tempo.ui.spotify.SpotifyViewModel
 import me.avinas.tempo.ui.theme.*
 import java.text.SimpleDateFormat
@@ -540,26 +542,10 @@ fun SongDetailsContent(
     }
 
     if (showShareDialog) {
-        SharePreviewDialog(
+        SongShareSheet(
+            trackDetails = trackDetails,
+            uiState = uiState,
             onDismiss = { showShareDialog = false },
-            contentToShare = { theme ->
-                val engagement = uiState.engagement
-                val completionFraction = engagement?.let { it.averageCompletionPercent / 100f }
-                val skipFraction = engagement?.let {
-                    if (it.playCount > 0) it.skipsCount.toFloat() / it.playCount else null
-                }
-                SongShareCard(
-                    trackDetails = trackDetails,
-                    theme = theme,
-                    genre = uiState.genre,
-                    mood = uiState.moodSummary?.moodName,
-                    habitualHour = uiState.habitualHour,
-                    peakBingeDay = uiState.peakBingeDay,
-                    completionRate = completionFraction,
-                    skipRate = skipFraction,
-                    releaseYear = uiState.releaseYear,
-                )
-            },
         )
     }
 
@@ -573,7 +559,16 @@ fun SongDetailsContent(
 
     if (uiState.showCoverPicker) {
         CoverArtPickerSheet(
-            state = uiState,
+            state = CoverPickerUiState(
+                selectedProvider = uiState.selectedCoverProvider,
+                candidates = uiState.coverCandidates,
+                providerStatuses = uiState.coverProviderStatuses,
+                error = uiState.coverPickerError,
+                isLoadingCandidates = uiState.isLoadingCoverCandidates,
+                isSaving = uiState.isSavingCover,
+                isResetting = uiState.isResettingCover,
+                isManual = uiState.isManualCover,
+            ),
             onSelect = viewModel::selectCover,
             onSelectProvider = viewModel::setSelectedCoverProvider,
             onGallerySelected = viewModel::selectCoverFromGallery,
@@ -2918,10 +2913,44 @@ private fun rememberDominantColor(trackDetails: TrackDetails): Color {
         if (bitmap.config == android.graphics.Bitmap.Config.HARDWARE) {
             bitmap = bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
         }
-        Palette.from(bitmap).generate { palette ->
-            val color = palette?.dominantSwatch?.rgb?.let { conditionedAccent(Color(it)) } ?: TempoPrimary
-            dominantColor = color
-        }
+        val palette = withContext(Dispatchers.Default) { Palette.from(bitmap).generate() }
+        val color = palette.dominantSwatch?.rgb?.let { conditionedAccent(Color(it)) } ?: TempoPrimary
+        dominantColor = color
     }
     return dominantColor
+}
+
+// ──────────────────────────────────────────────────────────────
+// Share Sheet
+// ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun SongShareSheet(
+    trackDetails: TrackDetails,
+    uiState: SongDetailsUiState,
+    onDismiss: () -> Unit,
+) {
+    SingleCardShareSheet(
+        artworkUrl = trackDetails.track.albumArtUrl,
+        onDismiss = onDismiss,
+    ) { page, showSummary ->
+        val engagement = uiState.engagement
+        val completionFraction = engagement?.let { it.averageCompletionPercent / 100f }
+        val skipFraction = engagement?.let {
+            if (it.playCount > 0) it.skipsCount.toFloat() / it.playCount else null
+        }
+        SongShareCard(
+            trackDetails = trackDetails,
+            card = page.card,
+            modifier = Modifier.fillMaxSize(),
+            genre = uiState.genre,
+            mood = uiState.moodSummary?.moodName,
+            habitualHour = uiState.habitualHour,
+            peakBingeDay = uiState.peakBingeDay,
+            completionRate = completionFraction,
+            skipRate = skipFraction,
+            releaseYear = uiState.releaseYear,
+            showSummary = showSummary,
+        )
+    }
 }

@@ -33,7 +33,7 @@ import me.avinas.tempo.data.local.entities.DesktopPairingSession
         DesktopPairingSession::class, // Desktop Satellite pairing sessions
         DetectedApp::class, // Default-deny inbox: media apps rejected as unrecognized
     ],
-    version = 58, // Migration 55->58 (squashed): detected_apps inbox, per-play tz offset, hide-streaks
+    version = 59,
     exportSchema = true, // Schema exported to app/schemas/ — commit these files so migration gaps are caught at build time
 )
 @TypeConverters(Converters::class)
@@ -78,7 +78,7 @@ abstract class AppDatabase : RoomDatabase() {
         private const val TAG = "AppDatabase"
 
         /** Current Room schema version — keep in sync with the @Database(version = ...) annotation. */
-        const val VERSION = 58
+        const val VERSION = 59
 
         /**
          * Migration from version 6 to 7: Add enhanced tracking columns to listening_events.
@@ -244,14 +244,6 @@ abstract class AppDatabase : RoomDatabase() {
                         """
                     CREATE INDEX IF NOT EXISTS index_enriched_metadata_status_timestamp 
                     ON enriched_metadata(enrichment_status, last_enrichment_attempt)
-                """,
-                    )
-
-                    // Index for track title search
-                    db.execSQL(
-                        """
-                    CREATE INDEX IF NOT EXISTS index_tracks_title_lower 
-                    ON tracks(title COLLATE NOCASE)
                 """,
                     )
 
@@ -2655,6 +2647,47 @@ abstract class AppDatabase : RoomDatabase() {
             }
 
         /**
+         * 58 -> 59: remember where each artist portrait came from.
+         *
+         * Artists could previously only get a portrait from an automatic source, and every
+         * enrichment pass was free to overwrite it. The new column records the provenance:
+         * `USER_SELECTED` locks the row against those automatic writers, `USER_RESET` marks
+         * the user handing control back so an in-flight enrichment cannot restore the old
+         * manual portrait, and every other value keeps the usual priority ordering.
+         *
+         * Existing rows default to `NONE`, which preserves the previous behaviour exactly:
+         * anything already stored stays eligible to be replaced by a better automatic source.
+         *
+         * The probe keeps this re-enterable after an interrupted upgrade -- `ALTER TABLE ...
+         * ADD COLUMN` has no `IF NOT EXISTS` form.
+         *
+         * This step also drops `index_tracks_title_lower`, the NOCASE index on `tracks.title`
+         * that earlier builds created in `MIGRATION_8_9`. `@Index` cannot express a collation, so
+         * the Track entity never declared it, and Room compares the **whole index set** when it
+         * validates `tracks` after an upgrade: the leftover index made that validation throw
+         * "Migration didn't properly handle: tracks(...)" on open. The lookups it served now scan;
+         * see docs/PERFORMANCE_AUDIT.md #1.
+         */
+        val MIGRATION_58_59 =
+            object : Migration(58, 59) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    Log.i(TAG, "Starting migration from version 58 to 59")
+
+                    if (!db.hasColumn("artists", "image_art_source")) {
+                        db.execSQL(
+                            "ALTER TABLE `artists` ADD COLUMN `image_art_source` TEXT NOT NULL DEFAULT 'NONE'",
+                        )
+                    }
+
+                    // Undeclared index left behind by older 8 -> 9 upgrades; see the note above.
+                    // IF EXISTS keeps this re-enterable and a no-op on fresh installs.
+                    db.execSQL("DROP INDEX IF EXISTS `index_tracks_title_lower`")
+
+                    Log.i(TAG, "Migration from version 58 to 59 completed successfully")
+                }
+            }
+
+        /**
          * All migrations in order.
          */
         val ALL_MIGRATIONS =
@@ -2712,6 +2745,7 @@ abstract class AppDatabase : RoomDatabase() {
                 // them ship as one migration out of 55 -- the last schema v4.8.11 actually
                 // shipped. See MIGRATION_55_58.
                 MIGRATION_55_58, // detected_apps inbox + per-play tz offset + hide-streaks pref
+                MIGRATION_58_59, // Artist artwork source + drop the undeclared tracks title index
             )
     }
 }

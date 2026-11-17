@@ -34,7 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.os.LocaleListCompat
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
@@ -73,6 +73,7 @@ fun SettingsScreen(
     onNavigateToLastFmImport: (() -> Unit)? = null,
     onNavigateToSpotifyJsonImport: (() -> Unit)? = null,
     onNavigateToDeezerImport: (() -> Unit)? = null,
+    onNavigateToAppleMusicImport: (() -> Unit)? = null,
     onNavigateToYouTubeMusicImport: (() -> Unit)? = null,
     onNavigateToMusicoletImport: (() -> Unit)? = null,
     onNavigateToExtensionImport: (() -> Unit)? = null,
@@ -607,6 +608,14 @@ fun SettingsScreen(
                             title = stringResource(R.string.settings_import_deezer),
                             subtitle = stringResource(R.string.settings_import_deezer_desc),
                             onClick = { onNavigateToDeezerImport?.invoke() },
+                        )
+
+                        HorizontalDivider(color = GlassBorderSoft)
+
+                        SettingsOption(
+                            title = stringResource(R.string.settings_import_apple_music),
+                            subtitle = stringResource(R.string.settings_import_apple_music_desc),
+                            onClick = { onNavigateToAppleMusicImport?.invoke() },
                         )
 
                         HorizontalDivider(color = GlassBorderSoft)

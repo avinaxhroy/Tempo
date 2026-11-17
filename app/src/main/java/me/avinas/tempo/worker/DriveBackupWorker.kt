@@ -2,7 +2,9 @@ package me.avinas.tempo.worker
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
@@ -12,12 +14,10 @@ import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkRequest
 import androidx.work.WorkerParameters
@@ -26,15 +26,20 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import me.avinas.tempo.MainActivity
 import me.avinas.tempo.R
 import me.avinas.tempo.data.drive.BackupInterval
 import me.avinas.tempo.data.drive.BackupSettingsManager
 import me.avinas.tempo.data.drive.BackupStatus
 import me.avinas.tempo.data.drive.DriveBackupResult
+import me.avinas.tempo.data.drive.DriveException
+import me.avinas.tempo.data.drive.DriveFailureNotice
 import me.avinas.tempo.data.drive.GoogleAuthManager
 import me.avinas.tempo.data.drive.GoogleDriveService
+import me.avinas.tempo.data.drive.toDriveFailureNotice
 import me.avinas.tempo.data.importexport.ImportExportManager
 import me.avinas.tempo.data.importexport.ImportExportResult
 import me.avinas.tempo.utils.ForegroundNotificationGuard
@@ -85,6 +90,21 @@ class DriveBackupWorker @AssistedInject constructor(
             isWifiTransport: Boolean
         ): Boolean = hasValidatedInternet && (!wifiOnly || isWifiTransport)
 
+        /**
+         * Drops the "sign in again" failure notification. It is auto-cancel only on
+         * tap, so without this it survives the sign-in that fixed the problem and
+         * keeps telling the user the session expired.
+         */
+        internal fun clearFailureNotification(context: Context) {
+            try {
+                val notificationManager =
+                    context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.cancel(NOTIFICATION_ID)
+            } catch (e: Exception) {
+                Log.w(TAG, "Unable to clear the Drive backup notification", e)
+            }
+        }
+
         internal fun shouldSkipBackup(
             backupInterval: BackupInterval,
             driveEnabled: Boolean,
@@ -95,8 +115,7 @@ class DriveBackupWorker @AssistedInject constructor(
 
         fun schedule(
             context: Context,
-            intervalHours: Long,
-            wifiOnly: Boolean = true
+            intervalHours: Long
         ) {
             if (intervalHours <= 0L) {
                 cancel(context)
@@ -133,7 +152,7 @@ class DriveBackupWorker @AssistedInject constructor(
                 request
             )
 
-            Log.i(TAG, "Scheduled Drive backup every $intervalHours hours (Wi-Fi only=$wifiOnly)")
+            Log.i(TAG, "Scheduled Drive backup every $intervalHours hours")
         }
 
         fun cancel(context: Context) {
@@ -146,24 +165,20 @@ class DriveBackupWorker @AssistedInject constructor(
             Log.i(TAG, "Cancelled manual Drive backup")
         }
 
-        fun scheduleOneTime(context: Context) {
-            val request = OneTimeWorkRequestBuilder<DriveBackupWorker>()
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .setRequiresStorageNotLow(true)
-                        .build()
-                )
-                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .addTag(MANUAL_WORK_NAME)
-                .build()
-
-            WorkManager.getInstance(context).enqueueUniqueWork(
-                MANUAL_WORK_NAME,
-                ExistingWorkPolicy.KEEP,
-                request
-            )
-        }
+        /** True while the periodic Drive worker is actually executing. */
+        suspend fun isScheduledRunActive(context: Context): Boolean =
+            withContext(Dispatchers.IO) {
+                try {
+                    WorkManager.getInstance(context)
+                        .getWorkInfosForUniqueWork(WORK_NAME)
+                        .get()
+                        .any { it.state == WorkInfo.State.RUNNING }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    false
+                }
+            }
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -187,11 +202,15 @@ class DriveBackupWorker @AssistedInject constructor(
             }
 
             if (!isDriveNetworkAvailable(settings.wifiOnly)) {
+                // Not a failure: nothing was attempted, the phone simply is not on
+                // the configured network. Retrying quietly keeps last night's
+                // success from turning into "Drive Backup Failed".
                 Log.i(TAG, "Configured Drive network is not available yet; retrying later")
-                return@withContext retryOrFinish(
-                    runStateDir = runStateDir,
-                    message = "The configured network for Google Drive is unavailable"
-                )
+                return@withContext if (shouldRetryFailure(runAttemptCount)) {
+                    Result.retry()
+                } else {
+                    Result.success()
+                }
             }
 
             if ((!runStateDir.exists() && !runStateDir.mkdirs()) || !runStateDir.isDirectory) {
@@ -214,7 +233,8 @@ class DriveBackupWorker @AssistedInject constructor(
                 if (!authManager.restoreSessionSilently()) {
                     return@withContext retryOrFinish(
                         runStateDir,
-                        "Open Tempo and sign in to Google again to resume automatic Drive backups"
+                        "Open Tempo and sign in to Google again to resume automatic Drive backups",
+                        title = "Drive Backup Needs Sign-In"
                     )
                 }
             }
@@ -222,7 +242,8 @@ class DriveBackupWorker @AssistedInject constructor(
             if (authManager.getAccessToken() == null) {
                 return@withContext retryOrFinish(
                     runStateDir,
-                    "Google authorization expired. Open Tempo and sign in again."
+                    "Google authorization expired. Open Tempo and sign in again.",
+                    title = "Drive Backup Needs Sign-In"
                 )
             }
 
@@ -252,7 +273,11 @@ class DriveBackupWorker @AssistedInject constructor(
                     } else {
                         "Backup archive was not created correctly"
                     }
-                    return@withContext retryOrFinish(runStateDir, message)
+                    return@withContext retryOrFinish(
+                        runStateDir,
+                        message,
+                        title = "Backup Could Not Be Created"
+                    )
                 }
                 archiveReadyMarker.writeText(backupRunId)
             } else {
@@ -282,7 +307,11 @@ class DriveBackupWorker @AssistedInject constructor(
                 }
 
                 is DriveBackupResult.Error -> {
-                    retryOrFinish(runStateDir, uploadResult.message)
+                    retryOrFinish(
+                        runStateDir,
+                        uploadResult.message,
+                        cause = uploadResult.exception
+                    )
                 }
             }
         } catch (e: CancellationException) {
@@ -291,12 +320,17 @@ class DriveBackupWorker @AssistedInject constructor(
             // constraint changes; the upload may already have reached Drive, so
             // losing the ID here would let the resumed attempt create a duplicate.
             BackupRunState.discardSnapshotPreservingRunId(runStateDir)
+            // A run stopped by sign-out or by switching the interval to Manual never
+            // reaches retryOrFinish, so without this lastBackupStatus stays
+            // IN_PROGRESS until the Backup screen is opened again.
+            withContext(NonCancellable) { markInterruptedIfInProgress() }
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Scheduled Drive backup failed", e)
             retryOrFinish(
                 runStateDir,
-                e.message ?: "An unexpected error occurred"
+                "The backup stopped unexpectedly. Open Tempo, then try Backup Now to see details.",
+                cause = e
             )
         }
     }
@@ -323,15 +357,33 @@ class DriveBackupWorker @AssistedInject constructor(
         File(context.cacheDir, "tempo_drive_backup_runs/$id").deleteRecursively()
     }
 
-    private suspend fun retryOrFinish(runStateDir: File, message: String): Result {
+    private suspend fun retryOrFinish(
+        runStateDir: File,
+        message: String,
+        cause: Throwable? = null,
+        title: String? = null
+    ): Result {
         updateStatusSafely(BackupStatus.FAILED)
 
-        return if (shouldRetryFailure(runAttemptCount)) {
-            Log.w(TAG, "Retrying Drive backup after failure (attempt=$runAttemptCount): $message")
-            notifyFirstAttempt("Drive Backup Failed", message)
+        val notice = if (title != null) {
+            DriveFailureNotice(title, message)
+        } else {
+            cause.toDriveFailureNotice(message)
+        }
+        // Re-uploading the same bytes cannot fix a failed verification, so that case
+        // is reported once instead of being retried three times.
+        val retryable = cause !is DriveException.Corrupt
+
+        return if (retryable && shouldRetryFailure(runAttemptCount)) {
+            Log.w(
+                TAG,
+                "Retrying Drive backup after failure (attempt=$runAttemptCount): " +
+                    "${notice.title} — ${notice.message}"
+            )
+            notifyFirstAttempt(notice.title, notice.message)
             Result.retry()
         } else {
-            showNotification("Drive Backup Failed", message)
+            showNotification(notice.title, notice.message)
             runStateDir.deleteRecursively()
             Result.success()
         }
@@ -344,6 +396,23 @@ class DriveBackupWorker @AssistedInject constructor(
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "Unable to persist Drive backup status $status", e)
+        }
+    }
+
+    /**
+     * Flips a cancelled run out of IN_PROGRESS. Any other status belongs to a
+     * different run and is left untouched.
+     */
+    private suspend fun markInterruptedIfInProgress() {
+        val status = try {
+            settingsManager.settings.first().lastBackupStatus
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        if (status == BackupStatus.IN_PROGRESS) {
+            updateStatusSafely(BackupStatus.FAILED)
         }
     }
 
@@ -382,6 +451,23 @@ class DriveBackupWorker @AssistedInject constructor(
         }
     }
 
+    /**
+     * Opens the app when a backup notification is tapped. Without a content
+     * intent, tapping "Drive Backup Failed" did nothing at all — the message
+     * could not lead anywhere.
+     */
+    private fun createContentPendingIntent(): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     private fun showNotification(title: String, message: String) {
         try {
             val notificationManager =
@@ -398,6 +484,8 @@ class DriveBackupWorker @AssistedInject constructor(
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(message)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                .setContentIntent(createContentPendingIntent())
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .build()
@@ -424,6 +512,7 @@ class DriveBackupWorker @AssistedInject constructor(
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Backing up Tempo to Google Drive")
             .setContentText("Creating backup...")
+            .setContentIntent(createContentPendingIntent())
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .build()

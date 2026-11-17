@@ -37,6 +37,8 @@
     <string name="widget_heatmap_desc">Visualisiere deine Hörgewohnheiten im Zeitverlauf</string>
     <string name="widget_milestone_desc">Verfolge deine Meilensteine beim Musikhören</string>
     <string name="widget_mix_desc">Dein persönlicher Musik-Mix</string>
+    <string name="widget_today_total_desc">Heutige Hörzeit, Wiedergaben und Veränderung zu gestern</string>
+    <string name="widget_rhythm_desc">Dein Hörrhythmus über den Tag</string>
 
     <!-- Home components -->
     <string name="home_spotlight_title">Tempo Spotlight</string>
@@ -56,12 +58,12 @@
     <string name="home_habits_title">Ein Blick auf deine Gewohnheiten</string>
     <string name="home_lvl">LVL</string>
 
-    <!-- Rate App -->
     <string name="rate_enjoying">Gefällt dir Tempo?</string>
-    <string name="rate_message">Wenn du die App gerne nutzt, nimm dir bitte einen Moment Zeit für eine Bewertung. Das hilft uns sehr beim Wachsen!</string>
-    <string name="rate_now">Jetzt bewerten</string>
-    <string name="rate_not_now">Nicht jetzt</string>
-    
+    <string name="rate_message">Dein Feedback hilft uns, die App zu verbessern und mehr Musikliebhaber wie dich zu erreichen.</string>
+    <string name="rate_badge_on_play">Bei Google Play</string>
+    <string name="rate_cta_review">Im Play Store bewerten</string>
+    <string name="rate_maybe_later">Vielleicht später</string>
+    <string name="rate_close">Schließen</string>
     <!-- Gamification / Level -->
     <string name="level_label">LEVEL %1$d</string>
     <string name="level_xp">%1$d XP</string>
@@ -303,7 +305,6 @@
     <!-- Spotlight -->
     <string name="spotlight_title">Spotlight</string>
     <string name="spotlight_share_story">Story teilen</string>
-    <string name="spotlight_share_instagram">Auf Instagram Stories teilen</string>
     <string name="spotlight_loading">Lade deine Karten…</string>
     <string name="spotlight_no_cards">Keine Karten verfügbar</string>
     <string name="spotlight_preparing">Bereite deine Story vor…</string>

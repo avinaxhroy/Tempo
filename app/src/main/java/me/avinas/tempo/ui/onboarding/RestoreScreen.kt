@@ -62,8 +62,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import me.avinas.tempo.R
+import me.avinas.tempo.data.applemusic.AppleMusicImportService
 import me.avinas.tempo.data.drive.DriveBackupInfo
 import me.avinas.tempo.data.drive.DriveRestoreResult
 import me.avinas.tempo.data.importexport.ImportConflictStrategy
@@ -71,6 +72,10 @@ import me.avinas.tempo.data.importexport.ImportExportResult
 import me.avinas.tempo.data.lastfm.LastFmImportService
 import me.avinas.tempo.data.spotify.SpotifyJsonImportService
 import me.avinas.tempo.data.youtube.YouTubeMusicImportService
+import me.avinas.tempo.ui.applemusic.APPLE_MUSIC_IMPORT_MIME_TYPES
+import me.avinas.tempo.ui.applemusic.AppleMusicGuideDialog
+import me.avinas.tempo.ui.applemusic.AppleMusicImportUiState
+import me.avinas.tempo.ui.applemusic.AppleMusicImportViewModel
 import me.avinas.tempo.ui.components.GlassCard
 import me.avinas.tempo.ui.components.GlassCardVariant
 import me.avinas.tempo.ui.components.TempoSnackbar
@@ -108,6 +113,7 @@ fun RestoreScreen(
     lastFmViewModel: LastFmViewModel = hiltViewModel(),
     spotifyJsonImportViewModel: SpotifyJsonImportViewModel = hiltViewModel(),
     youTubeMusicImportViewModel: YouTubeMusicImportViewModel = hiltViewModel(),
+    appleMusicImportViewModel: AppleMusicImportViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -151,6 +157,10 @@ fun RestoreScreen(
     val youTubeMusicImportUiState by youTubeMusicImportViewModel.uiState.collectAsState()
     val youTubeMusicImportState by youTubeMusicImportViewModel.importState.collectAsState()
 
+    // Apple Music Import State
+    val appleMusicImportUiState by appleMusicImportViewModel.uiState.collectAsState()
+    val appleMusicImportState by appleMusicImportViewModel.importState.collectAsState()
+
     val isOperationActive =
         driveOperation is DriveOperationState.Downloading ||
             driveOperation is DriveOperationState.Restoring ||
@@ -159,7 +169,8 @@ fun RestoreScreen(
             lastFmUiState.isImporting ||
             lastFmUiState.isLoading ||
             spotifyJsonImportUiState is SpotifyJsonImportUiState.Importing ||
-            youTubeMusicImportUiState is YouTubeMusicImportUiState.Importing
+            youTubeMusicImportUiState is YouTubeMusicImportUiState.Importing ||
+            appleMusicImportUiState is AppleMusicImportUiState.Importing
 
     androidx.activity.compose.BackHandler(enabled = !isOperationActive, onBack = onBack)
 
@@ -176,7 +187,6 @@ fun RestoreScreen(
 
     // Handle Sign-In/Restore/Consent callbacks
     val signInRequested by viewModel.signInRequested.collectAsState()
-    val sessionRestoreRequested by viewModel.sessionRestoreRequested.collectAsState()
     val consentRequested by viewModel.consentRequested.collectAsState()
 
     // Consent Flow Launcher
@@ -198,12 +208,6 @@ fun RestoreScreen(
                     activityErrorShown = true
                 }
             }
-        }
-    }
-
-    LaunchedEffect(sessionRestoreRequested) {
-        if (sessionRestoreRequested && activity != null) {
-            viewModel.onSessionRestoreReady(activity)
         }
     }
 
@@ -361,6 +365,26 @@ fun RestoreScreen(
                     },
                     expanded = expandedId == "youtube",
                     onExpandedChange = { open -> expandedId = if (open) "youtube" else null },
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Apple Music Import Card
+                AppleMusicImportCard(
+                    uiState = appleMusicImportUiState,
+                    importState = appleMusicImportState,
+                    onImport = { uri ->
+                        appleMusicImportViewModel.importFile(context, uri)
+                    },
+                    onReset = {
+                        appleMusicImportViewModel.resetState()
+                    },
+                    onFinish = {
+                        appleMusicImportViewModel.resetState()
+                        safeOnFinish()
+                    },
+                    expanded = expandedId == "apple",
+                    onExpandedChange = { open -> expandedId = if (open) "apple" else null },
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -1923,6 +1947,330 @@ fun YouTubeMusicImportCard(
 
             if (showGuide) {
                 TakeoutGuideDialog(onDismiss = { showGuide = false })
+            }
+        }
+    }
+}
+
+@Composable
+fun AppleMusicImportCard(
+    uiState: AppleMusicImportUiState,
+    importState: AppleMusicImportService.ImportState,
+    onImport: (Uri) -> Unit,
+    onReset: () -> Unit,
+    onFinish: () -> Unit,
+    modifier: Modifier = Modifier,
+    expanded: Boolean? = null,
+    onExpandedChange: ((Boolean) -> Unit)? = null,
+) {
+    val applePink = Color(0xFFFA2D48)
+    var internalExpanded by remember { mutableStateOf(false) }
+    var showGuide by remember { mutableStateOf(false) }
+    val isExpanded = expanded ?: internalExpanded
+
+    fun setExpanded(value: Boolean) {
+        if (expanded == null) {
+            internalExpanded = value
+        } else {
+            onExpandedChange?.invoke(value)
+        }
+    }
+
+    val filePickerLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            if (uri != null) {
+                setExpanded(true)
+                onImport(uri)
+            }
+        }
+
+    LaunchedEffect(uiState) {
+        if (uiState is AppleMusicImportUiState.Importing || uiState is AppleMusicImportUiState.Completed) {
+            setExpanded(true)
+        }
+    }
+
+    // The view model persists its work id, so a leftover Completed from an import finished in
+    // Settings can arrive here already terminal. Advancing onboarding on that would skip the
+    // step, so only a run this card watched go through Importing is allowed to auto-continue.
+    var sawImporting by remember { mutableStateOf(false) }
+
+    LaunchedEffect(uiState) {
+        when (uiState) {
+            is AppleMusicImportUiState.Importing -> {
+                sawImporting = true
+            }
+
+            is AppleMusicImportUiState.Completed -> {
+                if (sawImporting) {
+                    kotlinx.coroutines.delay(2000)
+                    onFinish()
+                }
+            }
+
+            else -> Unit
+        }
+    }
+
+    GlassCard(
+        modifier = modifier.fillMaxWidth(),
+        variant = GlassCardVariant.LowProminence,
+        contentPadding = PaddingValues(0.dp),
+    ) {
+        Column {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (uiState !is AppleMusicImportUiState.Importing) {
+                                setExpanded(!isExpanded)
+                            }
+                        }.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(adaptiveSizeByCategory(48.dp, 44.dp, 40.dp))
+                            .background(applePink.copy(alpha = 0.2f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MusicNote,
+                        contentDescription = null,
+                        tint = applePink,
+                        modifier = Modifier.size(adaptiveSizeByCategory(28.dp, 26.dp, 24.dp)),
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Apple Music",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                    Text(
+                        text = "Import your listening history (ZIP)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.6f),
+                    )
+                }
+
+                if (uiState !is AppleMusicImportUiState.Importing) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        tint = Color.White.copy(alpha = 0.6f),
+                    )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter =
+                    expandVertically(expandFrom = Alignment.Top, animationSpec = tween(280, easing = FastOutSlowInEasing)) +
+                        fadeIn(tween(220)),
+                exit =
+                    shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                        fadeOut(tween(160)),
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    when (uiState) {
+                        is AppleMusicImportUiState.Idle -> {
+                            Text(
+                                text =
+                                    buildAnnotatedString {
+                                        append("Request a copy of your data at ")
+                                        withLink(
+                                            LinkAnnotation.Url(
+                                                url = "https://privacy.apple.com",
+                                                styles =
+                                                    TextLinkStyles(
+                                                        style = SpanStyle(color = applePink, textDecoration = TextDecoration.Underline),
+                                                    ),
+                                            ),
+                                        ) {
+                                            append("privacy.apple.com")
+                                        }
+                                        append(
+                                            ", tick only \"Apple Media Services information\" and download the ZIP when Apple emails you — up to 7 days. Select that ZIP here, don't unzip it. You can also do this later from Settings.",
+                                        )
+                                    },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.7f),
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            TextButton(
+                                onClick = { showGuide = true },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayCircle,
+                                    contentDescription = null,
+                                    tint = applePink,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "See how to do it",
+                                    color = applePink,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Button(
+                                onClick = { filePickerLauncher.launch(APPLE_MUSIC_IMPORT_MIME_TYPES) },
+                                colors = ButtonDefaults.buttonColors(containerColor = applePink),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Select File")
+                            }
+                        }
+
+                        is AppleMusicImportUiState.Importing -> {
+                            val (message, progress) =
+                                when (importState) {
+                                    is AppleMusicImportService.ImportState.Parsing -> {
+                                        "Reading ${importState.fileName}..." to 0.05f
+                                    }
+
+                                    is AppleMusicImportService.ImportState.Importing -> {
+                                        "Importing ${importState.current}/${importState.total}" to
+                                            (importState.current.toFloat() / importState.total.coerceAtLeast(1))
+                                    }
+
+                                    else -> {
+                                        "Preparing..." to 0f
+                                    }
+                                }
+
+                            Text(
+                                text = message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.7f),
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier.fillMaxWidth(),
+                                color = applePink,
+                                trackColor = Color.White.copy(alpha = 0.1f),
+                            )
+                        }
+
+                        is AppleMusicImportUiState.Completed -> {
+                            val result = uiState.result
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color(0xFF27AE60),
+                                modifier = Modifier.size(40.dp),
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "Import Complete!",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                            )
+
+                            Text(
+                                text = "${result.tracksImported} tracks, ${result.eventsCreated} events",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.7f),
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            if (sawImporting) {
+                                Text(
+                                    text = "Continuing automatically...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.5f),
+                                )
+                            } else {
+                                // A leftover Completed from an earlier session: nothing will advance
+                                // this screen on its own, so it needs a button instead of that line.
+                                Button(
+                                    onClick = onFinish,
+                                    colors = ButtonDefaults.buttonColors(containerColor = applePink),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                ) {
+                                    Text(
+                                        text = "Continue",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                        }
+
+                        is AppleMusicImportUiState.Error -> {
+                            Icon(
+                                imageVector = Icons.Default.Error,
+                                contentDescription = null,
+                                tint = Color(0xFFE74C3C),
+                                modifier = Modifier.size(40.dp),
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = uiState.message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.7f),
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                OutlinedButton(
+                                    onClick = onReset,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text("Retry")
+                                }
+                                Button(
+                                    onClick = {
+                                        onReset()
+                                        filePickerLauncher.launch(APPLE_MUSIC_IMPORT_MIME_TYPES)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = applePink),
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text("Select File")
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+
+            if (showGuide) {
+                AppleMusicGuideDialog(onDismiss = { showGuide = false })
             }
         }
     }

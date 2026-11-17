@@ -11,6 +11,9 @@ val TempoDarkBackground = Color(0xFF0A0E0E)
 val TempoDarkSurface = Color(0xFF101414)
 val TempoDarkSurfaceElevated = Color(0xFF141818)
 val TempoDarkSurfaceSunken = Color(0xFF080A0A)
+// Spotlight recap sheet: a value step above the dimmed app, with the faintest
+// green cast so the mint rim reads as light on ink rather than a teal wash.
+val RecapSheetBase = Color(0xFF0A1312)
 
 val TempoPrimary = Color(0xFF2FDBB8)
 val TempoSecondary = Color(0xFF1FA88C)

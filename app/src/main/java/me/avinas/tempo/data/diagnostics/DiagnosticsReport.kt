@@ -3,7 +3,7 @@ package me.avinas.tempo.data.diagnostics
 /**
  * Everything a diagnostics report may be built from.
  *
- * Note what is deliberately **absent**: there is no field for a track title, artist name,
+ * Note what is absent: there is no field for a track title, artist name,
  * album, file path, account or device identifier. A report cannot leak listening content
  * because this type has nowhere to carry it — the same structural guarantee the analytics
  * schema relies on, rather than a rule someone has to remember.

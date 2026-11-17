@@ -191,7 +191,7 @@ class MusicTrackingManager(
     /**
      * Get all active sessions (for recovery on service restart).
      */
-    fun getActiveSessions(): Map<String, SessionState> = activeSessions.toMap()
+    fun getActiveSessions(): Map<String, SessionState> = activeSessions.snapshotEntries().toMap()
     
     /**
      * Recover sessions from persistent storage.
@@ -535,7 +535,7 @@ class MusicTrackingManager(
     }
 
     /**
-     * Ask the repository for the current persistence rule. Validation deliberately fails
+     * Ask the repository for the current persistence rule. Validation Fails
      * open on infrastructure errors so a transient Room failure cannot silently lose music.
      */
     private suspend fun shouldPersistEvent(event: ListeningEvent): Boolean {

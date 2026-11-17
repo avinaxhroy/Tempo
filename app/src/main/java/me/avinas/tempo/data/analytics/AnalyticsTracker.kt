@@ -27,7 +27,7 @@ interface AnalyticsTracker {
      * send, then mark — from disagreeing about whether the send happened, and keeps the rule
      * itself in the one implementation that owns it.
      *
-     * Deliberately not a cached flag: consent can change between two calls.
+     * Not a cached flag: consent can change between two calls.
      */
     suspend fun canReport(): Boolean
 

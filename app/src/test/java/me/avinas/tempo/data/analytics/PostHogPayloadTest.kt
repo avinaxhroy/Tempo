@@ -47,7 +47,7 @@ class PostHogPayloadTest {
     /** Without this every event would create a person profile at PostHog. */
     @Test
     fun `every event is marked anonymous`() {
-        val json = payloadOf(DailyActivity(listenerDown = true), DbMigration(51, 52))
+        val json = payloadOf(DailyActivity(listenerDown = true), InstallOnce("4.8.15", 34))
 
         assertTrue(json.contains("\"\$process_person_profile\":false"))
         // Twice: one flag per event, never once for the batch.
@@ -65,7 +65,7 @@ class PostHogPayloadTest {
      */
     @Test
     fun `every event disables location enrichment`() {
-        val json = payloadOf(DailyActivity(listenerDown = true), DbMigration(51, 52))
+        val json = payloadOf(DailyActivity(listenerDown = true), InstallOnce("4.8.15", 34))
 
         assertTrue(json.contains("\"\$geoip_disable\":true"))
         assertTrue(
@@ -107,7 +107,7 @@ class PostHogPayloadTest {
     @Test
     fun `device model travels only with a crash`() {
         assertFalse(payloadOf(DailyActivity(listenerDown = false)).contains("\$device_model"))
-        assertFalse(payloadOf(DbMigration(51, 52)).contains("\$device_model"))
+        assertFalse(payloadOf(InstallOnce("4.8.15", 34)).contains("\$device_model"))
         assertTrue(payloadOf(Crash("a.b.c", "d(SourceFile:412)", "4.8.11")).contains("\"\$device_model\":\"Pixel 8\""))
     }
 

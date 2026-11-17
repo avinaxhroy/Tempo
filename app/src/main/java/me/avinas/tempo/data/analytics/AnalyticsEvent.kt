@@ -48,6 +48,21 @@ object AnalyticsBucket {
         }
 
     /**
+     * Coarse Android API band, for the one event that describes the install rather than a day.
+     *
+     * Exact levels are high-entropy in a base this small, and no question worth asking needs
+     * them: the band is enough to tell "old devices are stuck" from "the new target breaks".
+     */
+    fun androidApi(api: Int): String =
+        when {
+            api <= 0 -> "unknown"
+            api <= 29 -> "26-29"
+            api <= 32 -> "30-32"
+            api <= 35 -> "33-35"
+            else -> "36+"
+        }
+
+    /**
      * How long music detection was dead, bucketed for the range gaps actually occur in.
      *
      * A dead listener cannot be noticed in under the health worker's 15-minute retry, so
@@ -55,13 +70,18 @@ object AnalyticsBucket {
      * `30s+`, which meant every gap ever reported landed in the same bucket — a thirty-second
      * blip and a three-day silence were indistinguishable, which is precisely the distinction
      * the metric exists to draw.
+     *
+     * The boundaries sit where the answer changes rather than where the clock divides. Two
+     * hours is the point at which a revival stops being routine housekeeping and starts being
+     * an outage someone could have noticed; over a day is the point at which a device is
+     * genuinely broken. Anything below two hours is the watchdog doing its job, and one bucket
+     * says that. The former `UNDER_30M` and `UNDER_6H` bands held 14 and 327 rows in a month —
+     * too few to act on, enough to make the healthy bucket look like a spectrum.
      */
     fun gap(gapMillis: Long?): TrackingGapSeverity =
         when {
             gapMillis == null -> TrackingGapSeverity.UNKNOWN
-            gapMillis < 30L * 60L * 1000L -> TrackingGapSeverity.UNDER_30M
             gapMillis < 2L * 60L * 60L * 1000L -> TrackingGapSeverity.UNDER_2H
-            gapMillis < 6L * 60L * 60L * 1000L -> TrackingGapSeverity.UNDER_6H
             gapMillis < 24L * 60L * 60L * 1000L -> TrackingGapSeverity.UNDER_24H
             else -> TrackingGapSeverity.OVER_24H
         }
@@ -105,10 +125,6 @@ enum class OnboardingStepName { WELCOME, HOW_IT_WORKS, PRIVACY, PERMISSION, BATT
 
 enum class OnboardingAction { NEXT, SKIP, BACK }
 
-enum class AccessResult { GRANTED, DEFERRED }
-
-enum class ExemptionResult { GRANTED, SKIPPED }
-
 /**
  * How long music detection was dead.
  *
@@ -120,8 +136,12 @@ enum class ExemptionResult { GRANTED, SKIPPED }
  * since a gap can never be detected in under the health worker's 15-minute retry, every value
  * it ever produced was `30s+` — the one distinction the metric existed to draw, erased by the
  * bucket it was squeezed into.
+ *
+ * A second pass of the same defect: six bands, of which one held 96.6% of every row ever sent.
+ * A dimension with one inhabited value is a constant, whatever the enum declares, so the bands
+ * were cut down to the three the data actually separates. See [AnalyticsBucket.gap].
  */
-enum class TrackingGapSeverity { UNKNOWN, UNDER_30M, UNDER_2H, UNDER_6H, UNDER_24H, OVER_24H }
+enum class TrackingGapSeverity { UNKNOWN, UNDER_2H, UNDER_24H, OVER_24H }
 
 enum class RevivedBy { HEALTH_WORKER, BOOT }
 
@@ -131,7 +151,7 @@ enum class RevivedBy { HEALTH_WORKER, BOOT }
  */
 enum class RecoveryAction { REBIND, FORCE_RESTART, COMPONENT_REENABLE }
 
-enum class ImportProvider { LASTFM, SPOTIFY_JSON, DEEZER, YOUTUBE_MUSIC, MUSICOLET, BROWSER_EXTENSION }
+enum class ImportProvider { LASTFM, SPOTIFY_JSON, DEEZER, YOUTUBE_MUSIC, MUSICOLET, BROWSER_EXTENSION, APPLE_MUSIC }
 
 /**
  * How a background run ended.
@@ -232,18 +252,28 @@ data class OnboardingCompleted(
         )
 }
 
-data class NotifAccessResult(
-    val result: AccessResult,
+/**
+ * The install itself, reported once ever — the only event whose unit is the install.
+ *
+ * Everything else here is per day or per outcome, which leaves a question unanswerable:
+ * "active users fell" and "nobody new installed" produce the same daily series, and no
+ * event says which build a device arrived on. This one does, exactly once, so a release can
+ * be attributed and the install base counted without guessing.
+ *
+ * [androidApi] goes out as a band rather than an exact level, for the same reason every other
+ * number in this file is a bucket: an exact API level plus a stable install id is a
+ * fingerprint in a base this small, and no question worth asking needs it.
+ */
+data class InstallOnce(
+    val appVersion: String,
+    val androidApi: Int,
 ) : AnalyticsEvent {
-    override val name = "notif_access"
-    override val props: Map<String, Any> = mapOf("result" to result.name)
-}
-
-data class BatteryExemptionResult(
-    val result: ExemptionResult,
-) : AnalyticsEvent {
-    override val name = "battery_exemption"
-    override val props: Map<String, Any> = mapOf("result" to result.name)
+    override val name = "install_once"
+    override val props: Map<String, Any> =
+        mapOf(
+            "app_version" to appVersion,
+            "android_api" to AnalyticsBucket.androidApi(androidApi),
+        )
 }
 
 /**
@@ -259,7 +289,7 @@ data class BatteryExemptionResult(
  * ninety-six unlucky users. One row per device per day makes "how many devices had a problem"
  * the number you actually read.
  *
- * There is deliberately no per-day incident count. Now that events carry a stable identity,
+ * There is no per-day incident count. Now that events carry a stable identity,
  * "is this one device flapping every day" is a question for the query layer — count the days
  * on which a device reported this event — rather than a field that would need a second
  * accumulator and a two-day slot to survive the day boundary. The payload stays smaller and
@@ -280,7 +310,7 @@ data class TrackingHealth(
 }
 
 /**
- * Daily aggregate of listening activity. There is deliberately no per-listen event —
+ * Daily aggregate of listening activity. There is no per-listen event —
  * that would be both wasteful and a fingerprinting risk.
  *
  * Sent once for the **previous calendar day**, so [uiOpened] describes a whole day rather
@@ -304,7 +334,7 @@ data class ListeningActivity(
 /**
  * The daily active-use marker — the event every DAU/WAU/MAU figure is counted from.
  *
- * Deliberately tiny, and deliberately separate from [ListeningActivity]. Two reasons:
+ * Tiny, and separate from [ListeningActivity]. Two reasons:
  *
  *  - **It must never fail for someone else's reason.** [ListeningActivity] needs a database
  *    read before it can be built, so it is emitted inside a `runCatching`. If that read ever
@@ -323,18 +353,6 @@ data class DailyActivity(
     override val name = "daily_activity"
     override val props: Map<String, Any> =
         mapOf("listener_down" to if (listenerDown) 1 else 0)
-}
-
-data class DbMigration(
-    val fromVersion: Int,
-    val toVersion: Int,
-) : AnalyticsEvent {
-    override val name = "db_migration"
-    override val props: Map<String, Any> =
-        mapOf(
-            "from_v" to fromVersion,
-            "to_v" to toVersion,
-        )
 }
 
 data class ImportRun(
@@ -356,41 +374,38 @@ data class ImportRun(
 }
 
 /**
- * One enrichment sweep, reported once per run rather than once per provider.
+ * An enrichment sweep that ended in failure — **at most once per install per day**.
  *
- * The event this replaces fired **per provider per run**, and enrichment is a fallback chain
- * eight providers long — so a single hard-to-enrich track emitted up to eight events, and the
- * figure read as "how much enrichment happened" while actually counting how many providers had
- * been tried. It reached 30% of all traffic, and deleting it did nothing for months because
- * devices on older builds kept sending it.
+ * Successful sweeps are silent, and that is the whole change. The event this
+ * replaces fired once per worker invocation, and every app start, every hourly periodic tick
+ * and every per-track refresh is an invocation — so a healthy install emitted dozens a day,
+ * 64% of them reporting that a batch cleared nothing at all. Enrichment reached 980,594 of the
+ * project's 1,038,791 events (94%, roughly 50,000 a day) across ~1,750 installs, and the cap it
+ * exhausted took the events that actually describe the product with it.
  *
- * Nothing reported enrichment outcomes in the meantime, which made this the one background job
- * with no telemetry at all: imports and backups both report phase, volume and failure class.
- * This restores it, bounded at one event per run.
+ * The unit was the defect, exactly as it was for `app_started` and for `tracking_gap` +
+ * `service_revived` before it: a per-invocation event reporting that a background scheduler
+ * ran. What is worth knowing is the exception — that enrichment is failing — and one row per
+ * install per day answers it, because "how many devices failed today" is the number to act on
+ * and "how many times did the scheduler tick" is not.
  *
- * `cleared` is the backlog reduction across the run, which is what answers "is enrichment
- * keeping up". It is derived from the pending count before and after rather than instrumented
- * per track, so it cannot drift from what the database actually holds — and it is floored at
- * zero, because new tracks can arrive mid-run and a negative "cleared" would be nonsense.
+ * `phase` went with it: on a failure path it was a constant. A property that can only hold one
+ * value is a dimension only in the published list.
  */
-data class EnrichmentRun(
+data class EnrichmentFailure(
     val trigger: EnrichmentTrigger,
-    val phase: RunPhase,
     val backlog: Int,
-    val cleared: Int,
+    val failure: FailureClass,
     val durationMillis: Long,
-    val failure: FailureClass?,
 ) : AnalyticsEvent {
-    override val name = "enrichment_run"
+    override val name = "enrichment_failure"
     override val props: Map<String, Any> =
-        buildMap {
-            put("trigger", trigger.name)
-            put("phase", phase.name)
-            put("backlog", AnalyticsBucket.count(backlog))
-            put("cleared", AnalyticsBucket.count(cleared))
-            put("dur", AnalyticsBucket.duration(durationMillis))
-            failure?.let { put("error_class", it.name) }
-        }
+        mapOf(
+            "trigger" to trigger.name,
+            "backlog" to AnalyticsBucket.count(backlog),
+            "error_class" to failure.name,
+            "dur" to AnalyticsBucket.duration(durationMillis),
+        )
 }
 
 data class BackupRun(
@@ -412,7 +427,7 @@ data class BackupRun(
 /**
  * A crash reduced to a signature with no readable content.
  *
- * Exception messages are deliberately omitted: they routinely embed parsed notification
+ * Exception messages are omitted: they routinely embed parsed notification
  * text, which is exactly the listening data we promise never to collect. Only the
  * obfuscated class name and a single obfuscated frame are sent, which are retraceable
  * locally with the `mapping.txt` archived for that version.

@@ -2,36 +2,18 @@ package me.avinas.tempo.widget
 
 import android.content.Context
 import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import dagger.hilt.android.EntryPointAccessors
 import me.avinas.tempo.data.analytics.FeatureFirstUsed
 import me.avinas.tempo.data.analytics.TempoFeature
 import me.avinas.tempo.di.AnalyticsEntryPoint
-import me.avinas.tempo.widget.utils.cancelPeriodicWidgetUpdateIfUnused
-import me.avinas.tempo.widget.utils.scheduleImmediateWidgetUpdate
-import me.avinas.tempo.widget.utils.schedulePeriodicWidgetUpdate
+import me.avinas.tempo.widget.utils.TempoGlanceReceiver
 
-class TempoWidgetReceiver : GlanceAppWidgetReceiver() {
+class TempoWidgetReceiver : TempoGlanceReceiver() {
     override val glanceAppWidget: GlanceAppWidget = TempoAppWidget()
-
-    override fun onUpdate(
-        context: Context,
-        appWidgetManager: android.appwidget.AppWidgetManager,
-        appWidgetIds: IntArray
-    ) {
-        super.onUpdate(context, appWidgetManager, appWidgetIds)
-        scheduleImmediateWidgetUpdate(context)
-    }
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
-        schedulePeriodicWidgetUpdate(context)
         reportWidgetPlaced(context)
-    }
-
-    override fun onDisabled(context: Context) {
-        super.onDisabled(context)
-        cancelPeriodicWidgetUpdateIfUnused(context)
     }
 
     /**

@@ -69,7 +69,7 @@ class EnrichmentReportViewModel @Inject constructor(
 
     /**
      * Songs that are NOT_FOUND and still inside the 7-day re-enrichment block, so the
-     * current sweep deliberately skips them (they were already searched on every source).
+     * current sweep Skips them (they were already searched on every source).
      */
     private val _blockedNotFound = MutableStateFlow(0)
     val blockedNotFound: StateFlow<Int> = _blockedNotFound.asStateFlow()

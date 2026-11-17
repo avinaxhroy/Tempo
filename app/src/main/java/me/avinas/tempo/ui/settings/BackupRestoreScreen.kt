@@ -35,7 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.data.drive.*
@@ -100,7 +100,6 @@ fun BackupRestoreScreen(
     BackHandler(enabled = isOperationActive) { }
     // Handle sign-in request from ViewModel
     val signInRequested by viewModel.signInRequested.collectAsState()
-    val sessionRestoreRequested by viewModel.sessionRestoreRequested.collectAsState()
     val consentRequested by viewModel.consentRequested.collectAsState()
     
     // Consent Flow Launcher
@@ -122,13 +121,6 @@ fun BackupRestoreScreen(
                     activityErrorShown = true
                 }
             }
-        }
-    }
-    
-    // Bridge Activity context for session restore on screen launch
-    LaunchedEffect(sessionRestoreRequested) {
-        if (sessionRestoreRequested && activity != null) {
-            viewModel.onSessionRestoreReady(activity)
         }
     }
     
@@ -699,7 +691,7 @@ private fun GoogleDriveSection(
                     
                     Button(
                         onClick = onBackupNow,
-                        enabled = driveOperation == DriveOperationState.Idle &&
+                        enabled = !driveOperation.isBusy &&
                             backupSettings.isGoogleDriveEnabled,
                         colors = ButtonDefaults.buttonColors(containerColor = TempoInfo),
                         shape = RoundedCornerShape(12.dp)

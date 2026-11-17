@@ -37,6 +37,8 @@
     <string name="widget_heatmap_desc">Visualize seus padrões de escuta ao longo do tempo</string>
     <string name="widget_milestone_desc">Acompanhe seus marcos auditivos</string>
     <string name="widget_mix_desc">Seu mix musical personalizado</string>
+    <string name="widget_today_total_desc">Tempo de audição, reproduções e variação em relação a ontem</string>
+    <string name="widget_rhythm_desc">Seu ritmo de audição ao longo do dia</string>
 
     <!-- Home components -->
     <string name="home_spotlight_title">Destaque do Tempo</string>
@@ -56,12 +58,12 @@
     <string name="home_habits_title">Uma olhada em seus hábitos</string>
     <string name="home_lvl">LVL</string>
 
-    <!-- Rate App -->
     <string name="rate_enjoying">Gostando do Tempo?</string>
-    <string name="rate_message">Se você gosta de usar o aplicativo, reserve um momento para avaliá-lo. Isso realmente nos ajuda a crescer!</string>
-    <string name="rate_now">Avalie agora</string>
-    <string name="rate_not_now">Agora não</string>
-    
+    <string name="rate_message">Seu feedback nos ajuda a melhorar o app e a alcançar mais amantes de música como você.</string>
+    <string name="rate_badge_on_play">No Google Play</string>
+    <string name="rate_cta_review">Avaliar na Play Store</string>
+    <string name="rate_maybe_later">Talvez mais tarde</string>
+    <string name="rate_close">Fechar</string>
     <!-- Gamification / Level -->
     <string name="level_label">NÍVEL %1$d</string>
     <string name="level_xp">%1$d XP</string>
@@ -303,7 +305,6 @@
     <!-- Spotlight -->
     <string name="spotlight_title">Destaque</string>
     <string name="spotlight_share_story">Compartilhar história</string>
-    <string name="spotlight_share_instagram">Compartilhe nas histórias do Instagram</string>
     <string name="spotlight_loading">Carregando seus cartões…</string>
     <string name="spotlight_no_cards">Nenhum cartão disponível</string>
     <string name="spotlight_preparing">Preparando sua história…</string>

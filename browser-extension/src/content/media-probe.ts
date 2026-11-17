@@ -229,24 +229,34 @@
     return node.querySelector('audio, video') !== null;
   }
 
+  // Scanning inserted nodes synchronously on every mutation is expensive on origins with chat or
+  // feed DOM (hundreds of insertions a second). Queue the candidates and scan once per burst; the
+  // follow-up poll is already debounced, so detection latency is unchanged.
+  const MAX_PENDING_MEDIA_NODES = 256;
+  let pendingMediaNodes: Node[] = [];
+  let mediaScanTimer: ReturnType<typeof setTimeout> | null = null;
+
   // Watch for added/removed <audio>/<video> elements to invalidate cache
   const mediaElementObserver = new MutationObserver((mutations) => {
     for (const m of mutations) {
       for (const node of m.addedNodes) {
-        if (nodeTouchesMedia(node)) {
-          mediaElementsDirty = true;
-          // Debounce: collapse bursts of player-DOM insertions into one delayed poll.
-          schedulePollSoon(500);
-          return;
-        }
+        if (pendingMediaNodes.length < MAX_PENDING_MEDIA_NODES) pendingMediaNodes.push(node);
       }
       for (const node of m.removedNodes) {
-        if (nodeTouchesMedia(node)) {
-          mediaElementsDirty = true;
-          return;
-        }
+        if (pendingMediaNodes.length < MAX_PENDING_MEDIA_NODES) pendingMediaNodes.push(node);
       }
     }
+    if (mediaScanTimer !== null) return;
+    mediaScanTimer = setTimeout(() => {
+      mediaScanTimer = null;
+      const pending = pendingMediaNodes;
+      pendingMediaNodes = [];
+      if (pending.some(nodeTouchesMedia)) {
+        mediaElementsDirty = true;
+        // Debounce: collapse bursts of player-DOM insertions into one delayed poll.
+        schedulePollSoon(500);
+      }
+    }, 100);
   });
 
   function ensureMediaElementObserver(): void {

@@ -114,15 +114,6 @@ class BackupSettingsManager @Inject constructor(
             }
         }
     }
-    
-    /**
-     * Clear all backup settings (useful on sign out).
-     */
-    suspend fun clearSettings() {
-        context.backupDataStore.edit { preferences ->
-            preferences.clear()
-        }
-    }
 }
 
 /**

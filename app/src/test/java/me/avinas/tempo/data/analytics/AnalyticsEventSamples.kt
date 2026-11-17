@@ -17,15 +17,13 @@ object AnalyticsEventSamples {
         FeatureFirstUsed(TempoFeature.WIDGET),
         OnboardingStep(OnboardingStepName.PRIVACY, OnboardingAction.SKIP, 4_000L),
         OnboardingCompleted(skippedCount = 3, totalMillis = 42_000L),
-        NotifAccessResult(AccessResult.GRANTED),
-        BatteryExemptionResult(ExemptionResult.SKIPPED),
+        InstallOnce(appVersion = "4.8.15", androidApi = 34),
         TrackingHealth(TrackingGapSeverity.OVER_24H, RevivedBy.HEALTH_WORKER, RecoveryAction.FORCE_RESTART),
         TrackingHealth(TrackingGapSeverity.UNKNOWN, RevivedBy.BOOT, RecoveryAction.COMPONENT_REENABLE),
         DailyActivity(listenerDown = true),
         DailyActivity(listenerDown = false),
         ListeningActivity(listens = 37, distinctApps = 3, uiOpened = true),
         ListeningActivity(listens = 0, distinctApps = 0, uiOpened = true),
-        DbMigration(fromVersion = 51, toVersion = 52),
         ImportRun(
             provider = ImportProvider.YOUTUBE_MUSIC,
             phase = RunPhase.FAILED,
@@ -40,21 +38,11 @@ object AnalyticsEventSamples {
             failure = null,
             durationMillis = 60_000L
         ),
-        EnrichmentRun(
-            trigger = EnrichmentTrigger.ENRICH_ALL,
-            phase = RunPhase.COMPLETED,
-            backlog = 120,
-            cleared = 40,
-            durationMillis = 30_000L,
-            failure = null,
-        ),
-        EnrichmentRun(
+        EnrichmentFailure(
             trigger = EnrichmentTrigger.BATCH,
-            phase = RunPhase.FAILED,
             backlog = 900,
-            cleared = 0,
-            durationMillis = 2_000L,
             failure = FailureClass.NETWORK,
+            durationMillis = 2_000L,
         ),
         BackupRun(
             target = BackupTarget.DRIVE,

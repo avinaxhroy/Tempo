@@ -137,8 +137,7 @@ class LocalBackupFolderPickerActivity : ComponentActivity() {
         if (settings.isGoogleDriveEnabled) {
             DriveBackupWorker.schedule(
                 context = this,
-                intervalHours = settings.backupInterval.hours,
-                wifiOnly = settings.wifiOnly
+                intervalHours = settings.backupInterval.hours
             )
         } else {
             DriveBackupWorker.cancel(this)

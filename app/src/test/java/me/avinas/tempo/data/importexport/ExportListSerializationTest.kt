@@ -70,7 +70,7 @@ class ExportListSerializationTest {
         // the pre-fix adapter threw JsonDataException ("Expected BEGIN_ARRAY but was
         // STRING") and aborted the whole restore.
         val parsed = erasedListAdapter.fromJson("\"jazz|||cool jazz\"")
-        assertEquals(listOf("jazz", "cool jazz"), parsed as List<String>)
+        assertEquals(listOf("jazz", "cool jazz"), (parsed as List<*>).map { it as String })
     }
 
     @Test

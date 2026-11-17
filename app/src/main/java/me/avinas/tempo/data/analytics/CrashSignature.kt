@@ -3,7 +3,7 @@ package me.avinas.tempo.data.analytics
 /**
  * Reduces a [Throwable] to a crash signature with no readable content.
  *
- * The exception **message is deliberately never read**: messages routinely embed the
+ * The exception message is never read: messages routinely embed the
  * notification text Tempo parsed, which is exactly the listening data we promise not to
  * collect. Only the obfuscated class name and a single frame survive, and both are stripped
  * of anything outside a strict character set so no free text can pass through.

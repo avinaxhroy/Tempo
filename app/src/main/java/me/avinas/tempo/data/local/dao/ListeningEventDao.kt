@@ -41,6 +41,15 @@ interface ListeningEventDao {
     @Query("SELECT * FROM listening_events ORDER BY timestamp DESC LIMIT :limit")
     fun recentEvents(limit: Int): Flow<List<ListeningEvent>>
 
+    /**
+     * Newest event timestamp, or null when the table is empty.
+     *
+     * Used as a liveness probe: if this is recent, the tracking service was demonstrably alive
+     * moments ago and there is nothing for a catch-up sync to recover.
+     */
+    @Query("SELECT MAX(timestamp) FROM listening_events")
+    suspend fun getLatestEventTimestamp(): Long?
+
     @Query("SELECT * FROM listening_events WHERE timestamp >= :startTime AND timestamp <= :endTime ORDER BY timestamp DESC")
     fun eventsInRange(
         startTime: Long,

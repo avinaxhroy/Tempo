@@ -18,9 +18,9 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -29,18 +29,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
-import me.avinas.tempo.ui.components.CaptureController
-import me.avinas.tempo.ui.components.CaptureWrapper
-import me.avinas.tempo.ui.components.rememberCaptureController
-import me.avinas.tempo.utils.ShareUtils
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
@@ -55,6 +48,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.material.icons.filled.Pause
 import me.avinas.tempo.R
+import me.avinas.tempo.ui.components.asShareArt
+import me.avinas.tempo.ui.components.share.ShareCardSheet
+import me.avinas.tempo.ui.components.share.ShareCardSurface
+import me.avinas.tempo.ui.components.share.ShareItemCount
+import me.avinas.tempo.ui.components.share.ShareItemCountDeck
+import me.avinas.tempo.ui.components.share.SharePage
+import me.avinas.tempo.ui.components.share.rememberShareCardPalettes
+import me.avinas.tempo.ui.components.share.ShareCardBrandingInset
+import me.avinas.tempo.ui.components.share.ShareStorySafeTop
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -71,36 +73,46 @@ fun SpotlightStoryScreen(
     val coroutineScope = rememberCoroutineScope()
     val currentProgress = remember { Animatable(0f) }
     var isPaused by remember { mutableStateOf(false) }
-    
+
+    // Sharing is a modal over the story: the sheet covers the screen, so the
+    // timer must not advance behind it or the user returns to a different slide
+    // than the one they were customising.
+    var isSharing by remember { mutableStateOf(false) }
+
+    // How many artists and songs the closing slide lists. Only the closing slide
+    // reads it, and only its sheet offers the control — every other slide has
+    // nothing to configure, which is why the sheet shows no deck for them.
+    var conclusionItemCount by remember { mutableStateOf(ShareItemCount.TOP_5) }
+
     // Audio Controller
     val context = LocalContext.current
     val audioController = remember { SpotlightAudioController(context = context, scope = coroutineScope) }
     val isMuted by audioController.isMuted.collectAsState()
-    
+
     DisposableEffect(Unit) {
         onDispose { audioController.release() }
     }
-    
+
     // Manage Audio Playback
-    
+
     // Preload the first track immediately to reduce latency
     LaunchedEffect(Unit) {
         // Find the first page that has a preview URL (usually the Intro)
         val firstAudioPage = storyPages.firstOrNull { it.previewUrl != null }
         val preloadUrl = firstAudioPage?.previewUrl
-        
+
         if (preloadUrl != null) {
             Log.d("SpotlightStoryScreen", "Preloading audio: $preloadUrl")
             audioController.prepare(preloadUrl)
         }
     }
-    
+
     LaunchedEffect(pagerState.currentPage) {
             val page = storyPages.getOrNull(pagerState.currentPage)
             val previewUrl = page?.previewUrl
-            
+
             Log.d("SpotlightStoryScreen", "Page: ${page?.id}, PreviewUrl: $previewUrl")
-            
+
             if (previewUrl != null) {
                 if (page is SpotlightStoryPage.TopTrackSetup) {
                     // Lower volume build-up for the top track reveal
@@ -115,135 +127,11 @@ fun SpotlightStoryScreen(
             }
     }
 
-    // Determine colors based on current page - Narrative Arc Color Story
-    // Act 1 (Setup): Cool blues/purples - curiosity, introspection
-    // Act 2 (Discoveries): Warm ambers/pinks - excitement, passion  
-    // Act 3 (Climax): Bold reds/golds - revelation, celebration
-    // Act 4 (Resolution): Serene teals/whites - reflection, peace
+    // The slide's narrative colours. The script itself lives in
+    // `SpotlightStoryColors.kt`, because the share sheet needs to know what the
+    // current slide's backdrop is painted in to offer it as a choice.
     val currentPage = storyPages.getOrNull(pagerState.currentPage)
-    val (primaryColor, secondaryColor, tertiaryColor) = when (currentPage) {
-        // ACT 1: SETUP - Cool, introspective blues/purples
-        is SpotlightStoryPage.ListeningMinutes -> Triple(
-            Color(0xFF6366F1), // Indigo - curiosity
-            Color(0xFF818CF8), // Light Indigo
-            Color(0xFF4F46E5)  // Deep Indigo
-        )
-        is SpotlightStoryPage.ListeningStreak -> Triple(
-            Color(0xFF7C3AED), // Violet - building momentum
-            Color(0xFF8B5CF6), // Light Violet
-            Color(0xFF6D28D9)  // Deep Violet
-        )
-        is SpotlightStoryPage.ListeningClock -> Triple(
-            Color(0xFF1E1B4B), // Deep Indigo (night)
-            Color(0xFF3730A3), // Indigo
-            Color(0xFF4338CA)  // Bright Indigo
-        )
-        
-        // ACT 2: DISCOVERIES - Warm, exciting ambers/pinks
-        is SpotlightStoryPage.TopArtist -> Triple(
-            Color(0xFFEC4899), // Pink - passion
-            Color(0xFFF472B6), // Light Pink
-            Color(0xFFBE185D)  // Dark Pink
-        )
-        is SpotlightStoryPage.TopAlbum -> Triple(
-            Color(0xFFD97706), // Amber - warmth
-            Color(0xFFF59E0B), // Light Amber
-            Color(0xFFB45309)  // Dark Amber
-        )
-        is SpotlightStoryPage.TopSongs -> Triple(
-            Color(0xFFF59E0B), // Amber - energy
-            Color(0xFFFBBF24), // Light Amber
-            Color(0xFFD97706)  // Dark Amber
-        )
-        is SpotlightStoryPage.TopTrackSetup -> Triple(
-            Color(0xFFFB923C), // Orange - anticipation
-            Color(0xFFFDBA74), // Light Orange
-            Color(0xFFEA580C)  // Dark Orange
-        )
-        is SpotlightStoryPage.TopGenres -> Triple(
-            Color(0xFF10B981), // Emerald - exploration
-            Color(0xFF34D399), // Light Emerald
-            Color(0xFF059669)  // Dark Emerald
-        )
-        is SpotlightStoryPage.DiscoveryCount -> Triple(
-            Color(0xFF06B6D4), // Cyan - discovery
-            Color(0xFF22D3EE), // Light Cyan
-            Color(0xFF0891B2)  // Dark Cyan
-        )
-        is SpotlightStoryPage.WeekdayVsWeekend -> Triple(
-            Color(0xFF0284C7), // Sky blue - patterns
-            Color(0xFF38BDF8), // Light Sky
-            Color(0xFF0369A1)  // Dark Sky
-        )
-        is SpotlightStoryPage.BingeSession -> Triple(
-            Color(0xFFE11D48), // Rose - intensity
-            Color(0xFFFB7185), // Light Rose
-            Color(0xFFBE123C)  // Dark Rose
-        )
-        is SpotlightStoryPage.TimeOfDayVibes -> Triple(
-            Color(0xFF8B5CF6), // Violet - moods
-            Color(0xFFA78BFA), // Light Violet
-            Color(0xFF7C3AED)  // Dark Violet
-        )
-        
-        // ACT 3: CLIMAX - Bold, celebratory reds/golds
-        is SpotlightStoryPage.AudioMood -> Triple(
-            Color(0xFFDC2626), // Red - emotional peak
-            Color(0xFFEF4444), // Light Red
-            Color(0xFFB91C1C)  // Dark Red
-        )
-        is SpotlightStoryPage.Personality -> Triple(
-            Color(0xFFEAB308), // Gold - REVELATION
-            Color(0xFFFDE047), // Light Gold
-            Color(0xFFCA8A04)  // Dark Gold
-        )
-        is SpotlightStoryPage.BadgesEarned -> Triple(
-            Color(0xFFD97706), // Amber - achievement
-            Color(0xFFF59E0B), // Light Amber
-            Color(0xFFB45309)  // Dark Amber
-        )
-        
-        // ACT 4: RESOLUTION - Serene, reflective teals/whites
-        is SpotlightStoryPage.LevelUp -> Triple(
-            Color(0xFF14B8A6), // Teal - growth
-            Color(0xFF2DD4BF), // Light Teal
-            Color(0xFF0F766E)  // Dark Teal
-        )
-        is SpotlightStoryPage.TitleEarned -> Triple(
-            Color(0xFF0D9488), // Dark Teal - identity
-            Color(0xFF5EEAD4), // Light Teal
-            Color(0xFF115E59)  // Deep Teal
-        )
-        is SpotlightStoryPage.Conclusion -> Triple(
-            Color(0xFF64748B), // Slate - reflection
-            Color(0xFF94A3B8), // Light Slate
-            Color(0xFF475569)  // Dark Slate
-        )
-        null -> Triple(Color(0xFF6366F1), Color(0xFF818CF8), Color(0xFF4F46E5))
-    }
-
-    val captureController = rememberCaptureController()
-    val captureRequested = remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        captureController.capturedBitmap.collect { bitmap ->
-            val success = ShareUtils.shareBitmap(context, bitmap)
-            if (!success) {
-                android.widget.Toast.makeText(context, "Failed to share story", android.widget.Toast.LENGTH_SHORT).show()
-            }
-            captureRequested.value = false
-        }
-    }
-
-    // When capture is requested, wait for the ShadowStoryRenderer's AndroidView to be
-    // composed + laid out, then trigger the actual bitmap capture.
-    LaunchedEffect(captureRequested.value) {
-        if (captureRequested.value) {
-            withFrameNanos { }
-            withFrameNanos { }
-            captureController.capture()
-        }
-    }
+    val storyColors = spotlightStoryColors(currentPage)
 
     // Tracks which page the current progress bar value belongs to. Progress must be
     // reset inside the auto-advance coroutine itself, not in a separate LaunchedEffect:
@@ -263,9 +151,8 @@ fun SpotlightStoryScreen(
     }
 
     // Auto-advance logic with pause support
-    LaunchedEffect(pagerState.currentPage, isPaused) {
-        if (!isPaused) {
-             if (timerPageIndex.value != pagerState.currentPage) {
+    LaunchedEffect(pagerState.currentPage, isPaused, isSharing) {
+        if (!isPaused && !isSharing) {             if (timerPageIndex.value != pagerState.currentPage) {
                  currentProgress.snapTo(0f)
                  timerPageIndex.value = pagerState.currentPage
              }
@@ -289,27 +176,12 @@ fun SpotlightStoryScreen(
 
     // Main Content Box
     Box(modifier = Modifier.fillMaxSize()) {
-        
-        // 0. Shadow Renderer (For Sharing) - Hidden offscreen
-        // Only composed when a capture is requested — avoids doubling render cost on every frame.
-        // Renders the CURRENT page at exactly 1080x1920 px for consistent sharing.
-        val shadowPage = storyPages.getOrNull(pagerState.currentPage)
-        if (captureRequested.value && shadowPage != null) {
-            ShadowStoryRenderer(
-                page = shadowPage,
-                primaryColor = primaryColor,
-                secondaryColor = secondaryColor,
-                tertiaryColor = tertiaryColor,
-                captureController = captureController
-            )
-        }
-        
+
         // 1. Visible Content (Background + Pager)
-        // No CaptureWrapper here anymore
         SpotlightStoryBackground(
-            primaryColor = primaryColor,
-            secondaryColor = secondaryColor,
-            tertiaryColor = tertiaryColor
+            primaryColor = storyColors.primary,
+            secondaryColor = storyColors.secondary,
+            tertiaryColor = storyColors.tertiary
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 HorizontalPager(
@@ -323,51 +195,24 @@ fun SpotlightStoryScreen(
                             LocalStorySeenPages provides seenPages,
                             LocalStoryPageId provides page.id
                         ) {
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                when (page) {
-                                    is SpotlightStoryPage.ListeningMinutes -> ListeningMinutesPage(page)
-                                    is SpotlightStoryPage.ListeningStreak -> ListeningStreakPage(page)
-                                    is SpotlightStoryPage.ListeningClock -> ListeningClockPage(page)
-                                    is SpotlightStoryPage.TopArtist -> TopArtistPage(page)
-                                    is SpotlightStoryPage.TopAlbum -> TopAlbumPage(page)
-                                    is SpotlightStoryPage.TopTrackSetup -> TopTrackSetupPage(page)
-                                    is SpotlightStoryPage.TopSongs -> TopSongsPage(page)
-                                    is SpotlightStoryPage.DiscoveryCount -> DiscoveryCountPage(page)
-                                    is SpotlightStoryPage.AudioMood -> AudioMoodPage(page)
-                                    is SpotlightStoryPage.WeekdayVsWeekend -> WeekdayVsWeekendPage(page)
-                                    is SpotlightStoryPage.BingeSession -> BingeSessionPage(page)
-                                    is SpotlightStoryPage.TimeOfDayVibes -> TimeOfDayVibesPage(page)
-                                    is SpotlightStoryPage.BadgesEarned -> BadgesEarnedPage(page)
-                                    is SpotlightStoryPage.LevelUp -> LevelUpPage(page)
-                                    is SpotlightStoryPage.TitleEarned -> TitleEarnedPage(page)
-                                    is SpotlightStoryPage.TopGenres -> TopGenresPage(page)
-                                    is SpotlightStoryPage.Personality -> PersonalityPage(page)
-                                    is SpotlightStoryPage.Conclusion -> ConclusionPage(page)
-                                }
-                            }
+                            // One mapping for the pager, the share card and the
+                            // export: eighteen branches used to be written out
+                            // here and again in the offscreen renderer.
+                            SpotlightStoryPageContent(
+                                page = page,
+                                showWatermark = false,
+                                conclusionItemCount = conclusionItemCount.count,
+                            )
                         }
                     }
                 }
-                
+
                 // Watermark (Visible on screen too, optional but keeps consistency)
-                Box(
+                StoryWatermark(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 24.dp)
-                ) {
-                    Text(
-                        text = "Tempo Spotlight",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            shadow = androidx.compose.ui.graphics.Shadow(
-                                color = Color.Black.copy(alpha = 0.5f),
-                                offset = androidx.compose.ui.geometry.Offset(0f, 2f),
-                                blurRadius = 4f
-                            )
-                        ),
-                        color = Color.White.copy(alpha = 0.6f)
-                    )
-                }
+                )
             }
         }
 
@@ -437,7 +282,7 @@ fun SpotlightStoryScreen(
                 )
             }
         }
-        
+
         // Top Bar (Progress & Close)
         Column(
             modifier = Modifier
@@ -446,43 +291,15 @@ fun SpotlightStoryScreen(
                 .align(Alignment.TopCenter)
         ) {
             // Progress Indicators
-            Row(
+            StoryProgressRow(
+                pageCount = storyPages.size,
+                currentPage = pagerState.currentPage,
+                progress = { currentProgress.value },
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                storyPages.forEachIndexed { index, _ ->
-                    val progress = when {
-                        index < pagerState.currentPage -> 1f
-                        index == pagerState.currentPage -> currentProgress.value
-                        else -> 0f
-                    }
-                    // Dim upcoming segments and brighten watched ones
-                    val trackAlpha = when {
-                        index < pagerState.currentPage -> 0.5f
-                        index == pagerState.currentPage -> 0.3f
-                        else -> 0.16f
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color.White.copy(alpha = trackAlpha))
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(progress)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color.White)
-                        )
-                    }
-                }
-            }
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             // Top Controls Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -504,7 +321,7 @@ fun SpotlightStoryScreen(
                         modifier = Modifier.size(20.dp)
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.width(12.dp))
 
                 // Close Button
@@ -524,7 +341,7 @@ fun SpotlightStoryScreen(
                 }
             }
         }
-        
+
         // Share Button (Bottom)
         Box(
             modifier = Modifier
@@ -532,8 +349,8 @@ fun SpotlightStoryScreen(
                 .padding(bottom = 64.dp) // Moved up slightly to avoid overlapping watermark if visible
         ) {
              Button(
-                onClick = { if (!captureRequested.value) captureRequested.value = true },
-                enabled = !captureRequested.value,
+                onClick = { if (!isSharing) isSharing = true },
+                enabled = !isSharing,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.White.copy(alpha = 0.2f),
                     contentColor = Color.White
@@ -552,25 +369,135 @@ fun SpotlightStoryScreen(
                 )
             }
         }
+    }
 
-        // Loading overlay while preparing share image
-        if (captureRequested.value) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.6f)),
-                contentAlignment = Alignment.Center
+    // The share sheet. Same component, same capture pipeline and same gallery
+    // write as every card surface in the app; the only thing that differs is the
+    // strip it offers, whose first entry is the story's own backdrop rather than
+    // a card theme.
+    if (isSharing && currentPage != null) {
+        val storyChoices = rememberStoryShareChoices(storyColors)
+        val storyChoice = rememberStoryShareChoice(storyColors)
+        ShareCardSheet(
+            onDismiss = { isSharing = false },
+            title = stringResource(R.string.spotlight_share_title),
+            artworkUrls = storyShareArtwork(currentPage),
+            choices = storyChoices,
+            initial = storyChoice,
+            // A story slide has nothing to configure — except the closing slide,
+            // where list length matters: three rows of large print is a different
+            // slide from ten rows of small.
+            controls =
+                if (currentPage is SpotlightStoryPage.Conclusion) {
+                    { enabled ->
+                        ShareItemCountDeck(
+                            count = conclusionItemCount,
+                            onCountChange = { conclusionItemCount = it },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                            label = stringResource(R.string.spotlight_conclusion_items_label),
+                            enabled = enabled,
+                        )
+                    }
+                } else {
+                    null
+                },
+        ) { page ->
+            StorySharePage(
+                storyPage = currentPage,
+                colors = storyColors,
+                conclusionItemCount = conclusionItemCount.count,
+                page = page,
+            )
+        }
+    }
+}
+
+/**
+ * The cover a gradient theme should sample, per slide.
+ *
+ * The story's own backdrop ignores it, but the card themes are built around
+ * artwork — the ones that blur a cover or pull their palette from one would sit
+ * on a blank page without it. Mirrors the lead-art mapping the story ring uses,
+ * so the slide the user came from is the cover the card gets.
+ */
+private fun storyShareArtwork(page: SpotlightStoryPage?): List<String?> =
+    listOfNotNull(
+        when (page) {
+            is SpotlightStoryPage.TopArtist -> page.topArtistImageUrl
+            is SpotlightStoryPage.TopTrackSetup -> page.topSongImageUrl
+            is SpotlightStoryPage.TopSongs -> page.topSongImageUrl
+            is SpotlightStoryPage.TopAlbum -> page.albumArtUrl
+            is SpotlightStoryPage.Conclusion ->
+                page.topSongs.firstOrNull()?.imageUrl ?: page.topArtists.firstOrNull()?.imageUrl
+            else -> null
+        }?.takeIf { it.isNotBlank() }
+    )
+
+/**
+ * One story slide as a share card.
+ *
+ * Two shapes, because the strip offers two kinds of choice. The story backdrop is
+ * the slide exactly as it plays, over its own drifting background. A card theme
+ * puts the same slide on that theme's card — and since a theme may be light, the
+ * slide's ink is switched over to the theme's palette; without that, white type
+ * on a paper card is invisible.
+ */
+@Composable
+private fun StorySharePage(
+    storyPage: SpotlightStoryPage,
+    colors: SpotlightStoryColors,
+    conclusionItemCount: Int,
+    page: SharePage,
+) {
+    // The frame a slide gets when it is a picture rather than a screen: the same
+    // story-safe top margin the card sheets use, so the host app's username row
+    // does not land on the heading, and just enough bottom room for the credit.
+    // Without it the pages keep their player padding, which leaves a fifth of the
+    // export empty below the copy.
+    val frame = remember { StoryCardFrame(top = ShareStorySafeTop, bottom = 56.dp) }
+    CompositionLocalProvider(LocalStoryCardFrame provides frame) {
+        if (page.choice is StoryShareChoice) {
+            // The slide as it plays: same background, same ink. The watermark
+            // stays — it is the story's own credit, and it was in the shared
+            // image before this sheet existed.
+            SpotlightStoryBackground(
+                primaryColor = colors.primary,
+                secondaryColor = colors.secondary,
+                tertiaryColor = colors.tertiary,
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    CircularProgressIndicator(color = Color.White)
-                    Text(
-                        text = stringResource(R.string.spotlight_preparing),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
+                SpotlightStoryPageContent(
+                    page = storyPage,
+                    showWatermark = true,
+                    conclusionItemCount = conclusionItemCount,
+                )
+            }
+        } else {
+            val palettes = rememberShareCardPalettes(page.card)
+            val ink = palettes.ink
+            val cardInk =
+                if (ink.isDark) {
+                    StoryInk.Dark
+                } else {
+                    // A light card needs dark type. The theme already knows which
+                    // colour that is and how strong each surface should be, so the
+                    // story borrows its answer instead of guessing a grey.
+                    StoryInk(
+                        ink = ink.textStrong,
+                        surface = ink.surface,
+                        border = ink.divider,
+                    )
+                }
+            ShareCardSurface(
+                card = page.card,
+                modifier = Modifier.fillMaxSize(),
+                art = storyShareArtwork(storyPage).firstOrNull().asShareArt(),
+                brandingBottomPadding = ShareCardBrandingInset,
+            ) {
+                CompositionLocalProvider(LocalStoryInk provides cardInk) {
+                    SpotlightStoryPageContent(
+                        page = storyPage,
+                        showWatermark = false,
+                        conclusionItemCount = conclusionItemCount,
                     )
                 }
             }
@@ -578,101 +505,55 @@ fun SpotlightStoryScreen(
     }
 }
 
+/**
+ * Story progress segments.
+ *
+ * [progress] is invoked from the draw phase on purpose: the caller animates it with an
+ * [Animatable] that ticks every frame, and reading its value in composition re-composed this
+ * entire screen ~900 times per 15 s story. A draw-phase read invalidates only the fill rect.
+ */
 @Composable
-fun ShadowStoryRenderer(
-    page: SpotlightStoryPage,
-    primaryColor: Color,
-    secondaryColor: Color,
-    tertiaryColor: Color,
-    captureController: CaptureController
+private fun StoryProgressRow(
+    pageCount: Int,
+    currentPage: Int,
+    progress: () -> Float,
+    modifier: Modifier = Modifier,
 ) {
-    // 1. Force Density for consistent scale (Pixel 2 XL density approx)
-    val targetDensity = androidx.compose.ui.unit.Density(2.75f)
-    
-    // 2. Hide offscreen (safe culling avoidance)
-    Box(
-        modifier = Modifier
-            .offset(x = 10000.dp)
-            .wrapContentSize(unbounded = true)
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        androidx.compose.runtime.CompositionLocalProvider(
-            androidx.compose.ui.platform.LocalDensity provides targetDensity
-        ) {
-            // 3. Custom Layout to force 1080x1920 measurement
-            androidx.compose.ui.layout.Layout(
-                content = {
-                    CaptureWrapper(
-                        controller = captureController,
-                        modifier = Modifier.size(392.dp, 698.dp) // 1080px/2.75, 1920px/2.75 (Must match desired pixel / density)
-                    ) {
-                         SpotlightStoryBackground(
-                            primaryColor = primaryColor,
-                            secondaryColor = secondaryColor,
-                            tertiaryColor = tertiaryColor
-                        ) {
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                when (page) {
-                                    is SpotlightStoryPage.ListeningMinutes -> ListeningMinutesPage(page)
-                                    is SpotlightStoryPage.ListeningStreak -> ListeningStreakPage(page)
-                                    is SpotlightStoryPage.ListeningClock -> ListeningClockPage(page)
-                                    is SpotlightStoryPage.TopArtist -> TopArtistPage(page)
-                                    is SpotlightStoryPage.TopAlbum -> TopAlbumPage(page)
-                                    is SpotlightStoryPage.TopTrackSetup -> TopTrackSetupPage(page)
-                                    is SpotlightStoryPage.TopSongs -> TopSongsPage(page)
-                                    is SpotlightStoryPage.DiscoveryCount -> DiscoveryCountPage(page)
-                                    is SpotlightStoryPage.AudioMood -> AudioMoodPage(page)
-                                    is SpotlightStoryPage.WeekdayVsWeekend -> WeekdayVsWeekendPage(page)
-                                    is SpotlightStoryPage.BingeSession -> BingeSessionPage(page)
-                                    is SpotlightStoryPage.TimeOfDayVibes -> TimeOfDayVibesPage(page)
-                                    is SpotlightStoryPage.BadgesEarned -> BadgesEarnedPage(page)
-                                    is SpotlightStoryPage.LevelUp -> LevelUpPage(page)
-                                    is SpotlightStoryPage.TitleEarned -> TitleEarnedPage(page)
-                                    is SpotlightStoryPage.TopGenres -> TopGenresPage(page)
-                                    is SpotlightStoryPage.Personality -> PersonalityPage(page)
-                                    is SpotlightStoryPage.Conclusion -> ConclusionPage(page)
+        repeat(pageCount) { index ->
+            // Dim upcoming segments and brighten watched ones
+            val trackAlpha =
+                when {
+                    index < currentPage -> 0.5f
+                    index == currentPage -> 0.3f
+                    else -> 0.16f
+                }
+
+            Box(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.White.copy(alpha = trackAlpha))
+                        .drawBehind {
+                            val fill =
+                                when {
+                                    index < currentPage -> 1f
+                                    index == currentPage -> progress()
+                                    else -> 0f
                                 }
-                                
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .padding(bottom = 24.dp)
-                                ) {
-                                    Text(
-                                        text = "Tempo Spotlight",
-                                        style = MaterialTheme.typography.labelMedium.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            shadow = androidx.compose.ui.graphics.Shadow(
-                                                color = Color.Black.copy(alpha = 0.5f),
-                                                offset = androidx.compose.ui.geometry.Offset(0f, 2f),
-                                                blurRadius = 4f
-                                            )
-                                        ),
-                                        color = Color.White.copy(alpha = 0.6f)
-                                    )
-                                }
+                            if (fill > 0f) {
+                                drawRect(
+                                    color = Color.White,
+                                    size = Size(size.width * fill.coerceIn(0f, 1f), size.height),
+                                )
                             }
-                        }
-                    }
-                }
-            ) { measurables, _ ->
-                // Force measure to exactly 1080x1920 pixels
-                // We derived the Dp size above (392x698) based on density 2.75
-                // 392 * 2.75 = 1078. 698 * 2.75 = 1919.5. Close enough.
-                // Better: rely on fixed Pixel size if possible? 
-                // CaptureWrapper captures the View. The View size is determined by the Compose layout.
-                // If we specify Modifier.size(392.72.dp, 698.18.dp), we get 1080x1920.
-                
-                val widthPx = 1080
-                val heightPx = 1920
-                
-                val placeable = measurables[0].measure(
-                     androidx.compose.ui.unit.Constraints.fixed(widthPx, heightPx)
-                )
-                
-                layout(widthPx, heightPx) {
-                    placeable.place(0, 0)
-                }
-            }
+                        },
+            )
         }
     }
 }

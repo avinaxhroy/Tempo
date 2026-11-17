@@ -1,14 +1,29 @@
 package me.avinas.tempo.ui.details
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.qualifiers.ApplicationContext
+import me.avinas.tempo.R
+import me.avinas.tempo.data.enrichment.CoverArtCandidate
+import me.avinas.tempo.data.enrichment.CoverArtLookupStatus
+import me.avinas.tempo.data.enrichment.CoverArtPickerService
+import me.avinas.tempo.data.enrichment.CoverArtProvider
+import me.avinas.tempo.data.enrichment.UserCoverArtStore
+import me.avinas.tempo.data.enrichment.isUserArtistCoverArtUrl
+import me.avinas.tempo.data.local.entities.AlbumArtSource
 import me.avinas.tempo.data.local.entities.Artist
 import me.avinas.tempo.data.repository.ArtistRenameRepository
+import me.avinas.tempo.data.repository.ArtistRepository
 import me.avinas.tempo.data.repository.StatsRepository
+import me.avinas.tempo.data.repository.TrackRepository
 import me.avinas.tempo.data.stats.ArtistDetails
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,8 +33,13 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ArtistDetailsViewModel @Inject constructor(
+    @param:ApplicationContext private val context: Context,
     private val statsRepository: StatsRepository,
     private val artistRenameRepository: ArtistRenameRepository,
+    private val artistRepository: ArtistRepository,
+    private val coverArtPickerService: CoverArtPickerService,
+    private val userCoverArtStore: UserCoverArtStore,
+    private val trackRepository: TrackRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -37,6 +57,9 @@ class ArtistDetailsViewModel @Inject constructor(
 
     // Guards on-demand image fetch so it fires once per screen entry, not on every reload
     private var hasTriggeredImageRefresh = false
+
+    /** In-flight provider lookups for the artwork picker. */
+    private var coverLookupJob: Job? = null
 
     private val _uiState = MutableStateFlow(ArtistDetailsUiState())
     val uiState: StateFlow<ArtistDetailsUiState> = _uiState.asStateFlow()
@@ -82,6 +105,7 @@ class ArtistDetailsViewModel @Inject constructor(
                     it.copy(
                         isLoading = false,
                         artistDetails = details,
+                        isManualCover = details.artist.imageArtSource == AlbumArtSource.USER_SELECTED,
                         error = null
                     )
                 }
@@ -147,6 +171,7 @@ class ArtistDetailsViewModel @Inject constructor(
                     it.copy(
                         isLoading = false,
                         artistDetails = details,
+                        isManualCover = details?.artist?.imageArtSource == AlbumArtSource.USER_SELECTED,
                         error = if (details == null) "No listening history found for $artistName" else null
                     )
                 }
@@ -193,6 +218,7 @@ class ArtistDetailsViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     artistDetails = details,
+                    isManualCover = details.artist.imageArtSource == AlbumArtSource.USER_SELECTED,
                     isRefreshingImage = false // Hide loading state now that we have fresh data
                 )
             }
@@ -217,6 +243,9 @@ class ArtistDetailsViewModel @Inject constructor(
      * the correct image for THIS artist, not a track's primary artist.
      */
     fun refreshArtistImage() {
+        // The user's own portrait is locked: a refresh would spend requests and
+        // then be refused by the DAO, so skip the work entirely.
+        if (_uiState.value.isManualCover) return
         viewModelScope.launch {
             try {
                 val artistId = currentArtistId
@@ -234,6 +263,7 @@ class ArtistDetailsViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             artistDetails = details,
+                            isManualCover = details.artist.imageArtSource == AlbumArtSource.USER_SELECTED,
                             isRefreshingImage = false
                         )
                     }
@@ -245,8 +275,349 @@ class ArtistDetailsViewModel @Inject constructor(
         }
     }
 
-    // Rename Flow
+    // Artwork picker
 
+    /** Select which provider's candidate is being previewed in the picker. */
+    fun setSelectedCoverProvider(provider: CoverArtProvider?) {
+        _uiState.update { it.copy(selectedCoverProvider = provider) }
+    }
+
+    /**
+     * Open the artwork picker and start looking for portraits.
+     *
+     * Remote work starts only here: the details screen never spends a request on
+     * artwork the user did not ask for.
+     */
+    fun showCoverPicker() {
+        val artist = _uiState.value.artistDetails?.artist ?: return
+        if (_uiState.value.showCoverPicker) return
+        _uiState.update {
+            it.copy(
+                showCoverPicker = true,
+                isLoadingCoverCandidates = true,
+                isSavingCover = false,
+                isResettingCover = false,
+                selectedCoverProvider = null,
+                coverPickerError = null,
+                coverCandidates = emptyList(),
+                coverProviderStatuses = CoverArtPickerService.ARTIST_PROVIDERS
+                    .associateWith { CoverArtLookupStatus.LOADING },
+                isManualCover = artist.imageArtSource == AlbumArtSource.USER_SELECTED,
+            )
+        }
+        loadCoverCandidates()
+    }
+
+    fun dismissCoverPicker() {
+        if (_uiState.value.isSavingCover || _uiState.value.isResettingCover) return
+        coverLookupJob?.cancel()
+        coverLookupJob = null
+        _uiState.update {
+            it.copy(
+                showCoverPicker = false,
+                isLoadingCoverCandidates = false,
+                isSavingCover = false,
+                isResettingCover = false,
+                selectedCoverProvider = null,
+                coverPickerError = null,
+            )
+        }
+    }
+
+    fun retryCoverCandidates(providerToRetry: CoverArtProvider? = null) {
+        if (_uiState.value.showCoverPicker) loadCoverCandidates(providerToRetry)
+    }
+
+    private fun loadCoverCandidates(providerToRetry: CoverArtProvider? = null) {
+        val artist = _uiState.value.artistDetails?.artist ?: return
+        coverLookupJob?.cancel()
+        coverLookupJob = viewModelScope.launch {
+            val providersToSearch = if (providerToRetry != null) {
+                listOf(providerToRetry)
+            } else {
+                val currentStatuses = _uiState.value.coverProviderStatuses
+                val failedProviders = CoverArtPickerService.ARTIST_PROVIDERS.filter {
+                    currentStatuses[it] == CoverArtLookupStatus.ERROR
+                }
+                if (failedProviders.isNotEmpty()) failedProviders
+                else CoverArtPickerService.ARTIST_PROVIDERS
+            }
+
+            _uiState.update { state ->
+                val newStatuses = state.coverProviderStatuses.toMutableMap()
+                providersToSearch.forEach { newStatuses[it] = CoverArtLookupStatus.LOADING }
+                state.copy(
+                    isLoadingCoverCandidates = true,
+                    coverPickerError = null,
+                    selectedCoverProvider =
+                        if (state.selectedCoverProvider in providersToSearch) null else state.selectedCoverProvider,
+                    coverCandidates = state.coverCandidates.filterNot { it.provider in providersToSearch },
+                    coverProviderStatuses = newStatuses,
+                )
+            }
+
+            try {
+                _uiState.update { state ->
+                    if (state.coverCandidates.none { it.provider == CoverArtProvider.CURRENT }) {
+                        val current = coverArtPickerService.currentArtistCandidate(artist)
+                        if (current != null) {
+                            state.copy(coverCandidates = listOf(current) + state.coverCandidates)
+                        } else state
+                    } else state
+                }
+                coroutineScope {
+                    providersToSearch.forEach { provider ->
+                        launch {
+                            val result = coverArtPickerService.searchArtistProvider(provider, artist)
+                            _uiState.update { state ->
+                                val candidates = result.candidate?.let { candidate ->
+                                    (state.coverCandidates.filterNot { it.provider == provider } + candidate)
+                                        .sortedBy { item ->
+                                            when (item.provider) {
+                                                CoverArtProvider.CURRENT -> -1
+                                                else -> CoverArtPickerService.ARTIST_PROVIDERS.indexOf(item.provider)
+                                            }
+                                        }
+                                } ?: state.coverCandidates.filterNot { it.provider == provider }
+
+                                val statuses = state.coverProviderStatuses + (provider to result.status)
+                                state.copy(
+                                    coverCandidates = candidates,
+                                    coverProviderStatuses = statuses,
+                                    isLoadingCoverCandidates =
+                                        statuses.values.any { it == CoverArtLookupStatus.LOADING },
+                                )
+                            }
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { state ->
+                    state.copy(
+                        isLoadingCoverCandidates = false,
+                        coverPickerError = e.message ?: context.getString(R.string.details_cover_load_error),
+                        coverProviderStatuses = state.coverProviderStatuses.mapValues { (_, status) ->
+                            if (status == CoverArtLookupStatus.LOADING) CoverArtLookupStatus.ERROR else status
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Persist a portrait the user picked from a provider.
+     *
+     * The write also sets [AlbumArtSource.USER_SELECTED], so no enrichment pass
+     * can replace it later.
+     */
+    fun selectCover(candidate: CoverArtCandidate) {
+        val details = _uiState.value.artistDetails ?: return
+        if (_uiState.value.isSavingCover || _uiState.value.isResettingCover) return
+
+        coverLookupJob?.cancel()
+        coverLookupJob = null
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingCover = true, coverPickerError = null) }
+            try {
+                val selectedUrl = me.avinas.tempo.data.enrichment.MusicBrainzEnrichmentService
+                    .fixHttpUrl(
+                        candidate.albumArtUrlLarge?.takeIf { it.isNotBlank() } ?: candidate.albumArtUrl
+                    )
+                    ?: candidate.albumArtUrl
+                val previousUrl = details.artist.imageUrl
+                artistRepository.setUserSelectedImage(details.artist.id, selectedUrl)
+                if (previousUrl != selectedUrl) discardGalleryPortraitIfOurs(previousUrl)
+
+                applySavedPortrait(selectedUrl)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingCoverCandidates = false,
+                        isSavingCover = false,
+                        isResettingCover = false,
+                        coverPickerError = e.message ?: context.getString(R.string.details_cover_save_error),
+                        coverProviderStatuses = it.coverProviderStatuses.mapValues { (_, status) ->
+                            if (status == CoverArtLookupStatus.LOADING) CoverArtLookupStatus.ERROR else status
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Save a portrait the user picked from their own gallery.
+     *
+     * The image is copied into Tempo's managed artwork directory and locked with
+     * [AlbumArtSource.USER_SELECTED]. This path performs no network work.
+     */
+    fun selectCoverFromGallery(source: android.net.Uri) {
+        val details = _uiState.value.artistDetails ?: return
+        if (_uiState.value.isSavingCover || _uiState.value.isResettingCover) return
+
+        coverLookupJob?.cancel()
+        coverLookupJob = null
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingCover = true, coverPickerError = null) }
+            try {
+                val previousUrl = details.artist.imageUrl
+                val savedUrl = userCoverArtStore.saveGalleryArtistCover(details.artist.id, source)
+                artistRepository.setUserSelectedImage(details.artist.id, savedUrl)
+                if (previousUrl != savedUrl) discardGalleryPortraitIfOurs(previousUrl)
+
+                applySavedPortrait(savedUrl)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // One user-facing failure mode; UserCoverArtStore logs the cause.
+                _uiState.update {
+                    it.copy(
+                        isLoadingCoverCandidates = false,
+                        isSavingCover = false,
+                        coverPickerError = context.getString(R.string.details_cover_gallery_error),
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Release the manual lock so enrichment may choose a portrait again.
+     *
+     * The currently displayed image is kept in state until the reload brings a
+     * replacement, which avoids a blank hero while the worker runs.
+     */
+    fun resetCoverToAutomatic() {
+        val details = _uiState.value.artistDetails ?: return
+        if (_uiState.value.isSavingCover || _uiState.value.isResettingCover) return
+
+        coverLookupJob?.cancel()
+        coverLookupJob = null
+        viewModelScope.launch {
+            _uiState.update { it.copy(isResettingCover = true, coverPickerError = null) }
+            try {
+                val obsoleteGalleryPortrait = details.artist.imageUrl
+                    ?.takeIf { isUserArtistCoverArtUrl(it, details.artist.id) }
+                artistRepository.resetImageToAutomatic(details.artist.id)
+                discardGalleryPortraitIfOurs(obsoleteGalleryPortrait)
+
+                statsRepository.invalidateCache()
+                statsRepository.notifyMetadataUpdate()
+                _uiState.update {
+                    it.copy(
+                        isManualCover = false,
+                        showCoverPicker = false,
+                        isLoadingCoverCandidates = false,
+                        isSavingCover = false,
+                        isResettingCover = false,
+                        selectedCoverProvider = null,
+                        coverPickerError = null,
+                    )
+                }
+                // Fetch an automatic portrait now instead of leaving the hero
+                // empty until the next enrichment pass happens to run. The reset
+                // is already persisted, so a lookup failure must not surface as
+                // a failure of the reset itself.
+                try {
+                    statsRepository.refreshArtistImageDirectly(details.artist.id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not fetch an automatic portrait after reset", e)
+                }
+                reloadDetailsAfterArtworkChange()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingCoverCandidates = false,
+                        isSavingCover = false,
+                        isResettingCover = false,
+                        coverPickerError =
+                            e.message ?: context.getString(R.string.details_cover_restore_auto_error),
+                        coverProviderStatuses = it.coverProviderStatuses.mapValues { (_, status) ->
+                            if (status == CoverArtLookupStatus.LOADING) CoverArtLookupStatus.ERROR else status
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Reflect a persisted portrait in the hero and close the picker.
+     *
+     * Updating state directly keeps the UI responsive; the reload afterwards
+     * picks up everything the repository derived from the new URL.
+     */
+    private suspend fun applySavedPortrait(savedUrl: String) {
+        _uiState.update { state ->
+            val details = state.artistDetails
+            state.copy(
+                artistDetails = details?.copy(
+                    artist = details.artist.copy(
+                        imageUrl = savedUrl,
+                        imageArtSource = AlbumArtSource.USER_SELECTED,
+                    ),
+                ),
+                isManualCover = true,
+                showCoverPicker = false,
+                isLoadingCoverCandidates = false,
+                isSavingCover = false,
+                isResettingCover = false,
+                selectedCoverProvider = null,
+                coverPickerError = null,
+            )
+        }
+        statsRepository.invalidateCache()
+        statsRepository.notifyMetadataUpdate()
+        reloadDetailsAfterArtworkChange()
+    }
+
+    /** Reload the row so the hero and accent colours match what was persisted. */
+    private suspend fun reloadDetailsAfterArtworkChange() {
+        // Key off the loaded row, not currentArtistId: the screen can be opened
+        // with a name only, in which case currentArtistId is null.
+        val artistId = _uiState.value.artistDetails?.artist?.id ?: return
+        try {
+            val details = statsRepository.getArtistDetails(artistId)
+            _uiState.update {
+                it.copy(
+                    artistDetails = details,
+                    isManualCover = details.artist.imageArtSource == AlbumArtSource.USER_SELECTED,
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not reload artist $artistId after artwork change", e)
+        }
+    }
+
+    /**
+     * Delete a gallery portrait this artist no longer uses, once nothing in the
+     * database references it. The repository re-checks references and refuses
+     * any path outside Tempo's managed artwork directory.
+     */
+    private suspend fun discardGalleryPortraitIfOurs(url: String?) {
+        val artistId = _uiState.value.artistDetails?.artist?.id ?: return
+        if (!isUserArtistCoverArtUrl(url, artistId)) return
+        try {
+            trackRepository.discardLocalAlbumArtBackup(url!!)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Best-effort cleanup; the artwork change is already persisted.
+        }
+    }
+
+    // Rename Flow
     /** Show the rename dialog. */
     fun showRenameDialog() {
         _uiState.update { it.copy(
@@ -357,5 +728,32 @@ data class ArtistDetailsUiState(
     val isRenaming: Boolean = false,
     val renameSuccess: Boolean? = null,
     // Split state
-    val showSplitDialog: Boolean = false
-)
+    val showSplitDialog: Boolean = false,
+    // Artwork picker state (mirrors SongDetailsUiState so the shared sheet can render it)
+    val showCoverPicker: Boolean = false,
+    val isLoadingCoverCandidates: Boolean = false,
+    val isSavingCover: Boolean = false,
+    val isResettingCover: Boolean = false,
+    val selectedCoverProvider: CoverArtProvider? = null,
+    val coverPickerError: String? = null,
+    val coverCandidates: List<CoverArtCandidate> = emptyList(),
+    val coverProviderStatuses: Map<CoverArtProvider, CoverArtLookupStatus> = emptyMap(),
+    val isManualCover: Boolean = false,
+) {
+    /**
+     * Project the artwork fields into the shape the shared picker sheet renders.
+     *
+     * The song and artist screens use one sheet so the two flows cannot drift.
+     */
+    internal val coverPickerState: CoverPickerUiState
+        get() = CoverPickerUiState(
+            selectedProvider = selectedCoverProvider,
+            candidates = coverCandidates,
+            providerStatuses = coverProviderStatuses,
+            error = coverPickerError,
+            isLoadingCandidates = isLoadingCoverCandidates,
+            isSaving = isSavingCover,
+            isResetting = isResettingCover,
+            isManual = isManualCover,
+        )
+}

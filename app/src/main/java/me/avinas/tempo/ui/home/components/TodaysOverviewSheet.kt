@@ -63,6 +63,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.palette.graphics.Palette
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import coil3.BitmapImage
 import coil3.imageLoader
 import coil3.request.ImageRequest
@@ -1671,14 +1673,11 @@ private fun rememberTodayAccentColor(imageUrl: String?): Color {
         if (bitmap.config == android.graphics.Bitmap.Config.HARDWARE) {
             bitmap = bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
         }
-        Palette.from(bitmap).generate { palette ->
-            val color = palette?.let {
-                it.vibrantSwatch?.rgb
-                    ?: it.mutedSwatch?.rgb
-                    ?: it.dominantSwatch?.rgb
-            }?.let { conditionedAccent(Color(it)) } ?: TempoPrimary
-            accent = color
-        }
+        val palette = withContext(Dispatchers.Default) { Palette.from(bitmap).generate() }
+        val color = palette.vibrantSwatch?.rgb
+            ?: palette.mutedSwatch?.rgb
+            ?: palette.dominantSwatch?.rgb
+        accent = color?.let { conditionedAccent(Color(it)) } ?: TempoPrimary
     }
     return accent
 }

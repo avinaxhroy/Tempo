@@ -12,4 +12,14 @@ class RoomArtistRepository @Inject constructor(private val dao: ArtistDao) : Art
     override fun search(query: String): Flow<List<Artist>> = dao.search(query)
     override suspend fun insert(artist: Artist): Long = dao.insert(artist)
     override suspend fun update(artist: Artist) = dao.update(artist)
+
+    override suspend fun getByIdNow(id: Long): Artist? = dao.getArtistById(id)
+
+    override suspend fun setUserSelectedImage(artistId: Long, imageUrl: String): String? {
+        val previousUrl = dao.getArtistById(artistId)?.imageUrl
+        dao.setUserSelectedImageUrl(artistId, imageUrl)
+        return previousUrl
+    }
+
+    override suspend fun resetImageToAutomatic(artistId: Long) = dao.resetImageToAutomatic(artistId)
 }

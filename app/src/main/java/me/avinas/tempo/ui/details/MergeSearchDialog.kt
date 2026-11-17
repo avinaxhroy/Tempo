@@ -27,7 +27,7 @@ import me.avinas.tempo.data.local.entities.Track
 import me.avinas.tempo.ui.components.TempoDialogButtonRow
 import me.avinas.tempo.ui.components.TempoDialogShape
 import me.avinas.tempo.ui.components.CachedAsyncImage
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 
 @Composable
 fun MergeSearchDialog(

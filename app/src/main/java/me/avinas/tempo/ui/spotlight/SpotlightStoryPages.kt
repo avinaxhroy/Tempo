@@ -79,12 +79,15 @@ import androidx.compose.material.icons.filled.Balance
 import kotlinx.coroutines.delay
 import me.avinas.tempo.ui.components.CachedAsyncImage
 import me.avinas.tempo.ui.components.LocalInCaptureContext
+import me.avinas.tempo.ui.components.MusicNotePlaceholder
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import me.avinas.tempo.data.stats.TimeRange
+import me.avinas.tempo.ui.components.FitToHeight
 import me.avinas.tempo.ui.components.GlassCard
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import me.avinas.tempo.R
 import androidx.compose.foundation.Canvas
@@ -133,8 +136,8 @@ fun isStoryPageSeen(): Boolean {
 private fun SolidCard(
     modifier: Modifier = Modifier,
     shape: RoundedCornerShape = RoundedCornerShape(20.dp),
-    backgroundColor: Color = Color.White.copy(alpha = 0.08f),
-    borderColor: Color = Color.White.copy(alpha = 0.12f),
+    backgroundColor: Color = storySurface(),
+    borderColor: Color = storyBorder(),
     borderWidth: Dp = 1.dp,
     contentPadding: PaddingValues = PaddingValues(16.dp),
     content: @Composable () -> Unit
@@ -180,19 +183,27 @@ data class SpotlightDimens(
 
 @Composable
 fun rememberSpotlightDimens(maxHeight: Dp): SpotlightDimens {
-    val density = LocalDensity.current
+    // A slide drawn inside a share card gets the card's frame instead of the
+    // player's: the top inset is the same story-safe margin the card sheets use,
+    // and the bottom only has to clear the branding footer — not the player's
+    // "Share your story" button, which does not exist in an exported image.
+    val cardFrame = LocalStoryCardFrame.current
     // Reference height: 800dp (approx generic phone height)
     // We clamp scale between 0.75 (small phones) and 1.2 (large/tall phones)
     // so UI doesn't look too tiny or too blown up.
     val scale = (maxHeight.value / 800f).coerceIn(0.75f, 1.2f)
-    
-    return remember(scale, maxHeight) {
+
+    return remember(scale, maxHeight, cardFrame) {
         SpotlightDimens(
             scale = scale,
 
-            screenTopPadding = (maxHeight * 0.08f).coerceAtLeast(32.dp),
-            screenBottomPadding = (maxHeight * 0.15f).coerceAtLeast(130.dp), // Increased to clear 'Share Your Story' button
-            horizontalPadding = 24.dp, 
+            screenTopPadding =
+                cardFrame?.top ?: (maxHeight * 0.08f).coerceAtLeast(32.dp),
+            // Increased to clear 'Share Your Story' button; in a card the footer
+            // is the only thing below the copy.
+            screenBottomPadding =
+                cardFrame?.bottom ?: (maxHeight * 0.15f).coerceAtLeast(130.dp),
+            horizontalPadding = 24.dp,
             spacerSmall = (maxHeight * 0.015f).coerceAtLeast(8.dp),  // 1.5% height
             spacerMedium = (maxHeight * 0.025f).coerceAtLeast(16.dp), // 2.5% height
             spacerLarge = (maxHeight * 0.05f).coerceAtLeast(32.dp),   // 5% height
@@ -252,7 +263,7 @@ private fun AutoFitText(
     maxFontSize: TextUnit,
     modifier: Modifier = Modifier,
     baseStyle: TextStyle = MaterialTheme.typography.displayLarge,
-    color: Color = Color.White,
+    color: Color = storyInk(),
     fontWeight: FontWeight = FontWeight.Bold,
     fontStyle: FontStyle? = null,
     shadow: Shadow? = null,
@@ -331,7 +342,7 @@ fun ListeningMinutesPage(page: SpotlightStoryPage.ListeningMinutes) {
                     text = titleText,
                     style = MaterialTheme.typography.headlineSmall.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = storyInk(0.85f),
                     letterSpacing = (1f * dimens.scale).sp,
                     textAlign = TextAlign.Center
                 )
@@ -345,7 +356,7 @@ fun ListeningMinutesPage(page: SpotlightStoryPage.ListeningMinutes) {
                         text = stringResource(R.string.spotlight_listened_for),
                         style = MaterialTheme.typography.headlineMedium.copy(fontSize = dimens.textHeadline),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = storyInk()
                     )
 
                     Spacer(modifier = Modifier.height(dimens.spacerSmall))
@@ -369,7 +380,7 @@ fun ListeningMinutesPage(page: SpotlightStoryPage.ListeningMinutes) {
                                 blurRadius = 12f
                             )
                         ),
-                        color = Color.White,
+                        color = storyInk(),
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         lineHeight = (numberFontSize.value * 1.1f).sp
@@ -379,7 +390,7 @@ fun ListeningMinutesPage(page: SpotlightStoryPage.ListeningMinutes) {
                         text = stringResource(R.string.spotlight_listened_minutes),
                         style = MaterialTheme.typography.headlineSmall.copy(fontSize = dimens.textHeadline),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.9f),
+                        color = storyInk(0.9f),
                         letterSpacing = (2f * dimens.scale).sp
                     )
 
@@ -389,7 +400,7 @@ fun ListeningMinutesPage(page: SpotlightStoryPage.ListeningMinutes) {
                         text = page.conversationalText,
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = dimens.textBody),
                         fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                        color = Color.White.copy(alpha = 0.8f),
+                        color = storyInk(0.8f),
                         textAlign = TextAlign.Center,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
@@ -407,14 +418,14 @@ fun ListeningMinutesPage(page: SpotlightStoryPage.ListeningMinutes) {
                     GlassCard(
                         modifier = Modifier.wrapContentSize(),
                         shape = RoundedCornerShape(50),
-                        backgroundColor = Color.White.copy(alpha = 0.1f),
+                        backgroundColor = storyInk(0.1f),
                         contentPadding = PaddingValues(horizontal = dimens.horizontalPadding, vertical = dimens.spacerSmall)
                     ) {
                         Text(
                             text = stringResource(R.string.spotlight_days_nonstop, daysInt),
                             style = MaterialTheme.typography.titleMedium.copy(fontSize = dimens.textBody),
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.White
+                            color = storyInk()
                         )
                     }
                 }
@@ -427,10 +438,10 @@ fun ListeningMinutesPage(page: SpotlightStoryPage.ListeningMinutes) {
                     Box(
                         modifier = Modifier
                             .background(
-                                color = Color.White.copy(alpha = 0.15f),
+                                color = storyInk(0.15f),
                                 shape = RoundedCornerShape(50)
                             )
-                            .border(1.dp * dimens.scale, Color.White.copy(alpha = 0.3f), RoundedCornerShape(50))
+                            .border(1.dp * dimens.scale, storyInk(0.3f), RoundedCornerShape(50))
                             .padding(horizontal = 20.dp * dimens.scale, vertical = 10.dp * dimens.scale)
                     ) {
                         Text(
@@ -474,7 +485,7 @@ fun TopArtistPage(page: SpotlightStoryPage.TopArtist) {
                      text = stringResource(R.string.spotlight_top_artist_label),
                      style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                      fontWeight = FontWeight.Bold,
-                     color = Color.White.copy(alpha = 0.85f),
+                     color = storyInk(0.85f),
                      modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                      textAlign = TextAlign.Center
                  )
@@ -529,7 +540,7 @@ fun TopArtistPage(page: SpotlightStoryPage.TopArtist) {
                                      fontSize = (dimens.textHeadline.value * heroImageScale).sp
                                  ),
                                  fontWeight = FontWeight.Black,
-                                 color = Color.White,
+                                 color = storyInk(),
                                  textAlign = TextAlign.Center,
                                  maxLines = 1,
                                  overflow = TextOverflow.Ellipsis
@@ -541,7 +552,7 @@ fun TopArtistPage(page: SpotlightStoryPage.TopArtist) {
                                  text = page.conversationalText,
                                  style = MaterialTheme.typography.bodyMedium.copy(fontSize = dimens.textBody),
                                  fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                 color = Color.White.copy(alpha = 0.8f),
+                                 color = storyInk(0.8f),
                                  textAlign = TextAlign.Center,
                                  maxLines = 2,
                                  overflow = TextOverflow.Ellipsis
@@ -573,30 +584,33 @@ fun TopArtistPage(page: SpotlightStoryPage.TopArtist) {
                                           SolidCard(
                                               modifier = Modifier.fillMaxWidth().fillMaxHeight(0.9f),
                                               shape = RoundedCornerShape(dimens.cardCornerRadius * 0.6f),
-                                              backgroundColor = Color.White.copy(alpha = 0.08f),
-                                              borderColor = Color.White.copy(alpha = 0.15f),
+                                              backgroundColor = storySurface(),
+                                              borderColor = storyInk(0.15f),
                                               contentPadding = PaddingValues(horizontal = 8.dp * dimens.scale, vertical = 4.dp * dimens.scale)
                                           ) {
                                               Row(verticalAlignment = Alignment.CenterVertically) {
                                                   Text(
                                                       text = "#${artist.rank}",
-                                                      style = MaterialTheme.typography.labelSmall,
-                                                      color = Color.White.copy(alpha = 0.6f),
-                                                      modifier = Modifier.width((20.dp * dimens.scale))
+                                                      style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
+                                                      color = storyInk(0.6f),
+                                                      maxLines = 1,
+                                                      softWrap = false,
+                                                      modifier = Modifier.width(20.dp * dimens.scale)
                                                   )
-                                                  CachedAsyncImage(
+                                                  // A two-digit rank nearly fills its column, so the gap does the
+                                                  // breathing; the mark itself never wraps.
+                                                  Spacer(modifier = Modifier.width(4.dp * dimens.scale))
+                                                  ListCover(
                                                       imageUrl = artist.imageUrl,
-                                                      contentDescription = null,
-                                                      modifier = Modifier.size(dimens.imageGrid).clip(CircleShape),
-                                                      contentScale = ContentScale.Crop,
-                                                      allowHardware = false
+                                                      size = dimens.imageGrid,
+                                                      shape = CircleShape
                                                   )
                                                   Spacer(modifier = Modifier.width(8.dp * dimens.scale))
                                                   Text(
                                                       text = artist.name,
                                                       style = MaterialTheme.typography.bodySmall,
                                                       fontWeight = FontWeight.SemiBold,
-                                                      color = Color.White,
+                                                      color = storyInk(),
                                                       maxLines = 2,
                                                       overflow = TextOverflow.Ellipsis
                                                   )
@@ -625,7 +639,7 @@ fun TopArtistPage(page: SpotlightStoryPage.TopArtist) {
                               SolidCard(
                                   modifier = Modifier.fillMaxWidth().fillMaxHeight(0.8f),
                                   shape = RoundedCornerShape(dimens.cardCornerRadius * 0.6f),
-                                  backgroundColor = Color.White.copy(alpha = 0.16f),
+                                  backgroundColor = storyInk(0.16f),
                                   borderColor = Color.Transparent,
                                   contentPadding = PaddingValues(12.dp * dimens.scale)
                               ) {
@@ -633,22 +647,22 @@ fun TopArtistPage(page: SpotlightStoryPage.TopArtist) {
                                       Text(
                                           text = "#${lastArtist.rank}",
                                           style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
-                                          color = Color.White.copy(alpha = 0.6f),
+                                          color = storyInk(0.6f),
+                                          maxLines = 1,
+                                          softWrap = false,
                                           modifier = Modifier.width(32.dp * dimens.scale)
                                       )
-                                     CachedAsyncImage(
+                                     ListCover(
                                          imageUrl = lastArtist.imageUrl,
-                                         contentDescription = null,
-                                         modifier = Modifier.size(dimens.imageList).clip(CircleShape),
-                                         contentScale = ContentScale.Crop,
-                                         allowHardware = false
+                                         size = dimens.imageList,
+                                         shape = CircleShape
                                      )
                                      Spacer(modifier = Modifier.width(dimens.gridSpacing))
                                      Text(
                                          text = lastArtist.name,
                                          style = MaterialTheme.typography.bodySmall.copy(fontSize = dimens.textLabel),
                                          fontWeight = FontWeight.SemiBold,
-                                         color = Color.White,
+                                         color = storyInk(),
                                          maxLines = 2,
                                          overflow = TextOverflow.Ellipsis
                                      )
@@ -683,7 +697,7 @@ fun TopTrackSetupPage(page: SpotlightStoryPage.TopTrackSetup) {
                     text = stringResource(R.string.spotlight_top_track_setup_label),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = storyInk(0.85f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -720,6 +734,28 @@ fun TopTrackSetupPage(page: SpotlightStoryPage.TopTrackSetup) {
     }
 }
 
+/**
+ * A list cover that keeps its tile when the artwork does not arrive.
+ *
+ * An empty or failed URL used to paint nothing, so the row read as a missing
+ * entry — the closing card's tenth track looked like a broken image. The
+ * music-note tile is the stand-in the rest of the app already uses.
+ */
+@Composable
+private fun ListCover(imageUrl: String?, size: Dp, shape: Shape) {
+    CachedAsyncImage(
+        imageUrl = imageUrl,
+        contentDescription = null,
+        modifier = Modifier.size(size).clip(shape),
+        contentScale = ContentScale.Crop,
+        allowHardware = false,
+        // The wrapper skips its own modifier when the URL is blank, so the tile
+        // carries the size and shape itself.
+        placeholder = { MusicNotePlaceholder(modifier = Modifier.size(size).clip(shape)) },
+        error = { MusicNotePlaceholder(modifier = Modifier.size(size).clip(shape)) },
+    )
+}
+
 @Composable
 fun TopSongsPage(page: SpotlightStoryPage.TopSongs) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -743,7 +779,7 @@ fun TopSongsPage(page: SpotlightStoryPage.TopSongs) {
                     text = stringResource(R.string.spotlight_top_song_label),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = storyInk(0.85f),
                     modifier = Modifier.fillMaxWidth().wrapContentHeight(),
                     textAlign = TextAlign.Center
                 )
@@ -777,7 +813,7 @@ fun TopSongsPage(page: SpotlightStoryPage.TopSongs) {
                                 text = page.topSongTitle,
                                 style = MaterialTheme.typography.headlineMedium.copy(fontSize = (dimens.textHeadline.value * heroImageScale).sp),
                                 fontWeight = FontWeight.Black,
-                                color = Color.White,
+                                color = storyInk(),
                                 textAlign = TextAlign.Center,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -785,7 +821,7 @@ fun TopSongsPage(page: SpotlightStoryPage.TopSongs) {
                             Text(
                                 text = page.topSongArtist,
                                 style = MaterialTheme.typography.titleLarge.copy(fontSize = (dimens.textTitle.value * heroImageScale).sp),
-                                color = Color.White.copy(alpha = 0.7f),
+                                color = storyInk(0.7f),
                                 textAlign = TextAlign.Center
                             )
                             // Total playtime chip for #1 song
@@ -833,50 +869,61 @@ fun TopSongsPage(page: SpotlightStoryPage.TopSongs) {
                                  horizontalArrangement = Arrangement.spacedBy(8.dp * dimens.scale)
                              ) {
                                  rowItems.forEachIndexed { colIndex, item ->
-                                     EnterAnimation(delay = 400 + (rowIndex * 2 + colIndex) * 50) {
-                                         // Inner Item
-                                         SolidCard(
-                                             modifier = Modifier.weight(1f).fillMaxHeight(),
-                                             shape = RoundedCornerShape(dimens.cardCornerRadius * 0.6f),
-                                             backgroundColor = Color.White.copy(alpha = 0.08f),
-                                             borderColor = Color.White.copy(alpha = 0.15f),
-                                             contentPadding = PaddingValues(8.dp * dimens.scale)
-                                         ) {
-                                             Row(
-                                                 verticalAlignment = Alignment.CenterVertically,
-                                                 modifier = Modifier.fillMaxSize()
+                                     // The row hands the cell its width, so the weight has to sit on
+                                     // EnterAnimation's own child. Weighted inside the card, it was read by the
+                                     // AnimatedVisibility wrapper instead: on a first play-through the card then
+                                     // measured against the row's whole width, the left song took all of it and
+                                     // #3/#5/#7/#9 were squeezed to nothing — until a re-visit skipped the
+                                     // animation and the weight reached the Row again.
+                                     Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                         EnterAnimation(delay = 400 + (rowIndex * 2 + colIndex) * 50) {
+                                             // Inner Item
+                                             SolidCard(
+                                                 modifier = Modifier.fillMaxSize(),
+                                                 shape = RoundedCornerShape(dimens.cardCornerRadius * 0.6f),
+                                                 backgroundColor = storySurface(),
+                                                 borderColor = storyInk(0.15f),
+                                                 contentPadding = PaddingValues(8.dp * dimens.scale)
                                              ) {
-                                                 Text(
-                                                     text = "#${item.rank}",
-                                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
-                                                     fontWeight = FontWeight.Bold,
-                                                     color = Color.White.copy(alpha = 0.6f),
-                                                     modifier = Modifier.width(20.dp * dimens.scale)
-                                                 )
-                                                 CachedAsyncImage(
-                                                     imageUrl = item.imageUrl,
-                                                     contentDescription = null,
-                                                     modifier = Modifier.size(dimens.imageList * 0.8f).clip(RoundedCornerShape(6.dp * dimens.scale)),
-                                                     contentScale = ContentScale.Crop,
-                                                     allowHardware = false
-                                                 )
-                                                 Spacer(modifier = Modifier.width(6.dp * dimens.scale))
-                                                 Column(modifier = Modifier.weight(1f)) {
+                                                 Row(
+                                                     verticalAlignment = Alignment.CenterVertically,
+                                                     modifier = Modifier.fillMaxSize()
+                                                 ) {
                                                      Text(
-                                                         text = item.title,
-                                                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = (dimens.textBody.value * 0.85f).sp),
+                                                         text = "#${item.rank}",
+                                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
                                                          fontWeight = FontWeight.Bold,
-                                                         color = Color.White,
+                                                         color = storyInk(0.6f),
                                                          maxLines = 1,
-                                                         overflow = TextOverflow.Ellipsis
+                                                         softWrap = false,
+                                                         modifier = Modifier.width(20.dp * dimens.scale)
                                                      )
-                                                     Text(
-                                                         text = item.artist,
-                                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = (dimens.textLabel.value * 0.8f).sp),
-                                                         color = Color.White.copy(alpha = 0.7f),
-                                                         maxLines = 1,
-                                                         overflow = TextOverflow.Ellipsis
+                                                     // A two-digit rank nearly fills its column, so the gap does the
+                                                     // breathing; the mark itself never wraps.
+                                                     Spacer(modifier = Modifier.width(4.dp * dimens.scale))
+                                                     ListCover(
+                                                         imageUrl = item.imageUrl,
+                                                         size = dimens.imageList * 0.8f,
+                                                         shape = RoundedCornerShape(6.dp * dimens.scale)
                                                      )
+                                                     Spacer(modifier = Modifier.width(6.dp * dimens.scale))
+                                                     Column(modifier = Modifier.weight(1f)) {
+                                                         Text(
+                                                             text = item.title,
+                                                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = (dimens.textBody.value * 0.85f).sp),
+                                                             fontWeight = FontWeight.Bold,
+                                                             color = storyInk(),
+                                                             maxLines = 1,
+                                                             overflow = TextOverflow.Ellipsis
+                                                         )
+                                                         Text(
+                                                             text = item.artist,
+                                                             style = MaterialTheme.typography.labelSmall.copy(fontSize = (dimens.textLabel.value * 0.8f).sp),
+                                                             color = storyInk(0.7f),
+                                                             maxLines = 1,
+                                                             overflow = TextOverflow.Ellipsis
+                                                         )
+                                                     }
                                                  }
                                              }
                                          }
@@ -903,24 +950,24 @@ fun TopSongsPage(page: SpotlightStoryPage.TopSongs) {
                              SolidCard(
                                  modifier = Modifier.fillMaxWidth().fillMaxHeight(0.8f),
                                  shape = RoundedCornerShape(dimens.cardCornerRadius * 0.6f),
-                                 backgroundColor = Color.White.copy(alpha = 0.16f),
+                                 backgroundColor = storyInk(0.16f),
                                  borderColor = Color.Transparent,
                                  contentPadding = PaddingValues(12.dp * dimens.scale)
                              ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                      Text(
-                                        text = "#${lastItem.rank}",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White.copy(alpha = 0.6f),
-                                        modifier = Modifier.width(32.dp * dimens.scale)
-                                    )
-                                    CachedAsyncImage(
+                                         text = "#${lastItem.rank}",
+                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
+                                         fontWeight = FontWeight.Bold,
+                                         color = storyInk(0.6f),
+                                         maxLines = 1,
+                                         softWrap = false,
+                                         modifier = Modifier.width(32.dp * dimens.scale)
+                                     )
+                                    ListCover(
                                         imageUrl = lastItem.imageUrl,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(dimens.imageList).clip(RoundedCornerShape(8.dp * dimens.scale)),
-                                        contentScale = ContentScale.Crop,
-                                        allowHardware = false
+                                        size = dimens.imageList,
+                                        shape = RoundedCornerShape(8.dp * dimens.scale)
                                     )
                                     Spacer(modifier = Modifier.width(12.dp * dimens.scale))
                                     Column {
@@ -928,14 +975,14 @@ fun TopSongsPage(page: SpotlightStoryPage.TopSongs) {
                                             text = lastItem.title,
                                             style = MaterialTheme.typography.bodyLarge.copy(fontSize = dimens.textBody),
                                             fontWeight = FontWeight.Bold,
-                                            color = Color.White,
+                                            color = storyInk(),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = lastItem.artist,
                                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = (dimens.textBody.value * 0.85f).sp),
-                                            color = Color.White.copy(alpha = 0.7f),
+                                            color = storyInk(0.7f),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -972,7 +1019,7 @@ fun TopGenresPage(page: SpotlightStoryPage.TopGenres) {
                     text = stringResource(R.string.spotlight_top_genres_label),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = storyInk(0.85f),
                     modifier = Modifier.padding(bottom = dimens.spacerSmall)
                 )
             }
@@ -1012,7 +1059,7 @@ fun TopGenresPage(page: SpotlightStoryPage.TopGenres) {
                                 text = page.topGenre,
                                 style = MaterialTheme.typography.displaySmall.copy(fontSize = dimens.textHeadline),
                                 fontWeight = FontWeight.Black,
-                                color = Color.White,
+                                color = storyInk(),
                                 textAlign = TextAlign.Center,
                                 lineHeight = dimens.textHeadline
                             )
@@ -1023,14 +1070,14 @@ fun TopGenresPage(page: SpotlightStoryPage.TopGenres) {
                                 text = page.conversationalText,
                                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = dimens.textBody),
                                 fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                color = Color.White.copy(alpha = 0.9f),
+                                color = storyInk(0.9f),
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(8.dp * dimens.scale))
                             Text(
                                 text = "${page.topGenrePercentage}%",
                                 style = MaterialTheme.typography.headlineSmall.copy(fontSize = dimens.textTitle),
-                                color = Color.White.copy(alpha = 0.95f),
+                                color = storyInk(0.95f),
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -1075,13 +1122,13 @@ fun TopGenresPage(page: SpotlightStoryPage.TopGenres) {
                                         .background(
                                             brush = Brush.radialGradient(
                                                 colors = listOf(
-                                                    Color.White.copy(alpha = 0.15f),
-                                                    Color.White.copy(alpha = 0.05f)
+                                                    storyInk(0.15f),
+                                                    storyInk(0.05f)
                                                 )
                                             ),
                                             shape = CircleShape
                                         )
-                                        .border(1.dp * dimens.scale, Color.White.copy(alpha = 0.2f), CircleShape)
+                                        .border(1.dp * dimens.scale, storyInk(0.2f), CircleShape)
                                         .padding(12.dp * dimens.scale),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -1090,7 +1137,7 @@ fun TopGenresPage(page: SpotlightStoryPage.TopGenres) {
                                             text = genre.name,
                                             style = MaterialTheme.typography.titleMedium.copy(fontSize = dimens.textLabel),
                                             fontWeight = FontWeight.Bold,
-                                            color = Color.White,
+                                            color = storyInk(),
                                             textAlign = TextAlign.Center,
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
@@ -1098,7 +1145,7 @@ fun TopGenresPage(page: SpotlightStoryPage.TopGenres) {
                                         Text(
                                             text = "${genre.percentage}%",
                                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = (dimens.textLabel.value * 0.8f).sp),
-                                            color = Color.White.copy(alpha = 0.7f)
+                                            color = storyInk(0.7f)
                                         )
                                     }
                                 }
@@ -1162,7 +1209,7 @@ fun PersonalityPage(page: SpotlightStoryPage.Personality) {
                     text = stringResource(R.string.spotlight_listening_personality),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = storyInk(0.85f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -1253,7 +1300,7 @@ fun PersonalityPage(page: SpotlightStoryPage.Personality) {
                             fontSize = dimens.textBody,
                             lineHeight = (dimens.textBody.value * (if (isShortScreen) 1.45f else 1.6f)).sp
                         ),
-                        color = Color.White.copy(alpha = 0.9f),
+                        color = storyInk(0.9f),
                         textAlign = TextAlign.Start,
                         maxLines = if (isShortScreen) 3 else 4,
                         overflow = TextOverflow.Ellipsis,
@@ -1269,7 +1316,7 @@ fun PersonalityPage(page: SpotlightStoryPage.Personality) {
                             fontSize = (dimens.textBody.value * 0.9f).sp,
                             fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                         ),
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = storyInk(0.7f),
                         textAlign = TextAlign.Center,
                         maxLines = if (isShortScreen) 2 else 3,
                         overflow = TextOverflow.Ellipsis,
@@ -1320,7 +1367,7 @@ fun ListeningStreakPage(page: SpotlightStoryPage.ListeningStreak) {
                     text = stringResource(R.string.spotlight_listening_streak_label),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = storyInk(0.85f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -1364,7 +1411,7 @@ fun ListeningStreakPage(page: SpotlightStoryPage.ListeningStreak) {
                         text = if (page.currentStreakDays == 1) stringResource(R.string.spotlight_day_in_a_row) else stringResource(R.string.spotlight_days_in_a_row),
                         style = MaterialTheme.typography.headlineSmall.copy(fontSize = dimens.textHeadline),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.9f),
+                        color = storyInk(0.9f),
                         letterSpacing = (1f * dimens.scale).sp
                     )
                     Spacer(modifier = Modifier.height(dimens.spacerSmall))
@@ -1372,7 +1419,7 @@ fun ListeningStreakPage(page: SpotlightStoryPage.ListeningStreak) {
                         text = page.conversationalText,
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = dimens.textBody),
                         fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                        color = Color.White.copy(alpha = 0.75f),
+                        color = storyInk(0.75f),
                         textAlign = TextAlign.Center
                     )
                 }
@@ -1405,7 +1452,7 @@ fun ListeningStreakPage(page: SpotlightStoryPage.ListeningStreak) {
                             Text(
                                 text = stringResource(R.string.spotlight_best_streak),
                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel),
-                                color = Color.White.copy(alpha = 0.7f),
+                                color = storyInk(0.7f),
                                 maxLines = 1
                             )
                         }
@@ -1413,8 +1460,8 @@ fun ListeningStreakPage(page: SpotlightStoryPage.ListeningStreak) {
                     SolidCard(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(dimens.cardCornerRadius),
-                        backgroundColor = Color.White.copy(alpha = 0.06f),
-                        borderColor = Color.White.copy(alpha = 0.15f),
+                        backgroundColor = storyInk(0.06f),
+                        borderColor = storyInk(0.15f),
                         contentPadding = PaddingValues(dimens.spacerSmall)
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -1422,13 +1469,13 @@ fun ListeningStreakPage(page: SpotlightStoryPage.ListeningStreak) {
                                 text = page.totalActiveDays.toString(),
                                 style = MaterialTheme.typography.headlineMedium.copy(fontSize = dimens.textTitle),
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White,
+                                color = storyInk(),
                                 maxLines = 1
                             )
                             Text(
                                 text = stringResource(R.string.spotlight_active_days),
                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel),
-                                color = Color.White.copy(alpha = 0.7f),
+                                color = storyInk(0.7f),
                                 maxLines = 1
                             )
                         }
@@ -1508,7 +1555,7 @@ fun ListeningClockPage(page: SpotlightStoryPage.ListeningClock) {
                     text = stringResource(R.string.spotlight_listening_clock_label),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = storyInk(0.85f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -1523,6 +1570,11 @@ fun ListeningClockPage(page: SpotlightStoryPage.ListeningClock) {
                     modifier = Modifier.size(clockSize),
                     contentAlignment = Alignment.Center
                 ) {
+                    // A DrawScope lambda is not composable, so resolve ink before the Canvas.
+                    val trackInk = storyInk(0.1f)
+                    val barInkStrong = storyInk(0.65f)
+                    val barInkSoft = storyInk(0.25f)
+
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val cx = size.width / 2f
                         val cy = size.height / 2f
@@ -1532,7 +1584,7 @@ fun ListeningClockPage(page: SpotlightStoryPage.ListeningClock) {
 
                         // Draw background track ring
                         drawCircle(
-                            color = Color.White.copy(alpha = 0.1f),
+                            color = trackInk,
                             radius = (innerRadius + barMaxHeight / 2f),
                             style = Stroke(width = barMaxHeight)
                         )
@@ -1552,8 +1604,8 @@ fun ListeningClockPage(page: SpotlightStoryPage.ListeningClock) {
                             val barColor = when {
                                 isPeak -> accentColor
                                 level > 0.6f -> secondaryColor.copy(alpha = 0.9f)
-                                level > 0.3f -> Color.White.copy(alpha = 0.65f)
-                                else -> Color.White.copy(alpha = 0.25f)
+                                level > 0.3f -> barInkStrong
+                                else -> barInkSoft
                             }
 
                             val startX = cx + cos(angleRad) * startR
@@ -1583,14 +1635,14 @@ fun ListeningClockPage(page: SpotlightStoryPage.ListeningClock) {
                             text = page.peakHourLabel,
                             style = MaterialTheme.typography.titleMedium.copy(fontSize = dimens.textBody),
                             fontWeight = FontWeight.Black,
-                            color = Color.White,
+                            color = storyInk(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = stringResource(R.string.spotlight_peak),
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
-                            color = Color.White.copy(alpha = 0.6f)
+                            color = storyInk(0.6f)
                         )
                     }
                 }
@@ -1611,7 +1663,7 @@ fun ListeningClockPage(page: SpotlightStoryPage.ListeningClock) {
                             text = page.listenerType,
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = dimens.textBody),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = storyInk()
                     )
                 }
             }
@@ -1623,7 +1675,7 @@ fun ListeningClockPage(page: SpotlightStoryPage.ListeningClock) {
                     text = page.conversationalText,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = dimens.textBody),
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    color = Color.White.copy(alpha = 0.75f),
+                    color = storyInk(0.75f),
                     textAlign = TextAlign.Center
                 )
             }
@@ -1645,15 +1697,15 @@ fun ListeningClockPage(page: SpotlightStoryPage.ListeningClock) {
                         SolidCard(
                             modifier = Modifier.wrapContentSize(),
                             shape = RoundedCornerShape(50),
-                            backgroundColor = Color.White.copy(alpha = 0.05f),
-                            borderColor = Color.White.copy(alpha = 0.12f),
+                            backgroundColor = storyInk(0.05f),
+                            borderColor = storyBorder(),
                             borderWidth = 0.5.dp,
                             contentPadding = PaddingValues(horizontal = 8.dp * dimens.scale, vertical = 4.dp * dimens.scale)
                         ) {
                             Text(
                                 text = stringResource(labelRes),
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
-                                color = Color.White.copy(alpha = 0.65f)
+                                color = storyInk(0.65f)
                             )
                         }
                     }
@@ -1711,7 +1763,7 @@ fun TopAlbumPage(page: SpotlightStoryPage.TopAlbum) {
                     text = stringResource(R.string.spotlight_top_album_label),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = storyInk(0.85f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -1730,7 +1782,7 @@ fun TopAlbumPage(page: SpotlightStoryPage.TopAlbum) {
                             .background(
                                 brush = Brush.radialGradient(
                                     colors = listOf(
-                                        Color.White.copy(alpha = 0.15f),
+                                        storyInk(0.15f),
                                         Color.Transparent
                                     )
                                 ),
@@ -1759,7 +1811,7 @@ fun TopAlbumPage(page: SpotlightStoryPage.TopAlbum) {
                         text = page.albumName,
                         style = MaterialTheme.typography.displaySmall.copy(fontSize = dimens.textHeadline),
                         fontWeight = FontWeight.Black,
-                        color = Color.White,
+                        color = storyInk(),
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -1768,7 +1820,7 @@ fun TopAlbumPage(page: SpotlightStoryPage.TopAlbum) {
                     Text(
                         text = page.artistName,
                         style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = storyInk(0.7f),
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -1778,7 +1830,7 @@ fun TopAlbumPage(page: SpotlightStoryPage.TopAlbum) {
                         text = page.conversationalText,
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = dimens.textBody),
                         fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                        color = Color.White.copy(alpha = 0.8f),
+                        color = storyInk(0.8f),
                         textAlign = TextAlign.Center,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
@@ -1814,8 +1866,8 @@ fun TopAlbumPage(page: SpotlightStoryPage.TopAlbum) {
                         SolidCard(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(dimens.cardCornerRadius),
-                            backgroundColor = Color.White.copy(alpha = 0.06f),
-                            borderColor = Color.White.copy(alpha = 0.15f),
+                            backgroundColor = storyInk(0.06f),
+                            borderColor = storyInk(0.15f),
                             contentPadding = PaddingValues(vertical = 10.dp * dimens.scale, horizontal = 4.dp * dimens.scale)
                         ) {
                             Column(
@@ -1826,14 +1878,14 @@ fun TopAlbumPage(page: SpotlightStoryPage.TopAlbum) {
                                     text = value,
                                     style = MaterialTheme.typography.titleLarge.copy(fontSize = statFontSize),
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White,
+                                    color = storyInk(),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = label,
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
-                                    color = Color.White.copy(alpha = 0.65f),
+                                    color = storyInk(0.65f),
                                     maxLines = 1
                                 )
                             }
@@ -1902,7 +1954,7 @@ fun DiscoveryCountPage(page: SpotlightStoryPage.DiscoveryCount) {
                         text = stringResource(R.string.spotlight_music_universe),
                         style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.85f)
+                        color = storyInk(0.85f)
                     )
                 }
             }
@@ -1950,7 +2002,7 @@ fun DiscoveryCountPage(page: SpotlightStoryPage.DiscoveryCount) {
                             Text(
                                 text = stringResource(R.string.spotlight_artists),
                                 style = MaterialTheme.typography.labelLarge.copy(fontSize = (dimens.textBody.value * 0.85f).sp),
-                                color = Color.White.copy(alpha = 0.75f),
+                                color = storyInk(0.75f),
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -1983,7 +2035,7 @@ fun DiscoveryCountPage(page: SpotlightStoryPage.DiscoveryCount) {
                             Text(
                                 text = stringResource(R.string.spotlight_unique_songs),
                                 style = MaterialTheme.typography.labelLarge.copy(fontSize = (dimens.textBody.value * 0.85f).sp),
-                                color = Color.White.copy(alpha = 0.75f),
+                                color = storyInk(0.75f),
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -1997,7 +2049,7 @@ fun DiscoveryCountPage(page: SpotlightStoryPage.DiscoveryCount) {
                     text = page.conversationalText,
                     style = MaterialTheme.typography.titleMedium.copy(fontSize = dimens.textBody),
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
+                    color = storyInk(),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2118,7 +2170,7 @@ fun WeekdayVsWeekendPage(page: SpotlightStoryPage.WeekdayVsWeekend) {
                     text = stringResource(R.string.spotlight_week_vs_weekend),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = storyInk(0.85f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -2135,9 +2187,9 @@ fun WeekdayVsWeekendPage(page: SpotlightStoryPage.WeekdayVsWeekend) {
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(dimens.cardCornerRadius),
                         backgroundColor = if (!isWeekendDominant) Color(0xFF60A5FA).copy(alpha = 0.12f)
-                                         else Color.White.copy(alpha = 0.04f),
+                                         else storyInk(0.04f),
                         borderColor = if (!isWeekendDominant) Color(0xFF60A5FA).copy(alpha = 0.35f)
-                                     else Color.White.copy(alpha = 0.12f),
+                                     else storyInk(0.12f),
                         contentPadding = PaddingValues(12.dp * dimens.scale)
                     ) {
                         Column(
@@ -2150,20 +2202,20 @@ fun WeekdayVsWeekendPage(page: SpotlightStoryPage.WeekdayVsWeekend) {
                                     fontSize = dimens.textHeadline,
                                     fontWeight = FontWeight.Black
                                 ),
-                                color = if (!isWeekendDominant) Color(0xFF93C5FD) else Color.White.copy(alpha = 0.65f),
+                                color = if (!isWeekendDominant) Color(0xFF93C5FD) else storyInk(0.65f),
                                 maxLines = 1
                             )
                             Text(
                                 text = stringResource(R.string.spotlight_min_per_day),
                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel),
-                                color = Color.White.copy(alpha = 0.6f)
+                                color = storyInk(0.6f)
                             )
                             Spacer(modifier = Modifier.height(4.dp * dimens.scale))
                             Text(
                                 text = stringResource(R.string.spotlight_weekdays),
                                 style = MaterialTheme.typography.labelLarge.copy(fontSize = (dimens.textBody.value * 0.85f).sp),
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White.copy(alpha = 0.8f)
+                                color = storyInk(0.8f)
                             )
                             Spacer(modifier = Modifier.height(4.dp * dimens.scale))
                             Text(
@@ -2180,9 +2232,9 @@ fun WeekdayVsWeekendPage(page: SpotlightStoryPage.WeekdayVsWeekend) {
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(dimens.cardCornerRadius),
                         backgroundColor = if (isWeekendDominant) Color(0xFFF59E0B).copy(alpha = 0.12f)
-                                         else Color.White.copy(alpha = 0.04f),
+                                         else storyInk(0.04f),
                         borderColor = if (isWeekendDominant) Color(0xFFF59E0B).copy(alpha = 0.35f)
-                                     else Color.White.copy(alpha = 0.12f),
+                                     else storyInk(0.12f),
                         contentPadding = PaddingValues(12.dp * dimens.scale)
                     ) {
                         Column(
@@ -2195,20 +2247,20 @@ fun WeekdayVsWeekendPage(page: SpotlightStoryPage.WeekdayVsWeekend) {
                                     fontSize = dimens.textHeadline,
                                     fontWeight = FontWeight.Black
                                 ),
-                                color = if (isWeekendDominant) Color(0xFFFCD34D) else Color.White.copy(alpha = 0.65f),
+                                color = if (isWeekendDominant) Color(0xFFFCD34D) else storyInk(0.65f),
                                 maxLines = 1
                             )
                             Text(
                                 text = stringResource(R.string.spotlight_min_per_day),
                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel),
-                                color = Color.White.copy(alpha = 0.6f)
+                                color = storyInk(0.6f)
                             )
                             Spacer(modifier = Modifier.height(4.dp * dimens.scale))
                             Text(
                                 text = stringResource(R.string.spotlight_weekends),
                                 style = MaterialTheme.typography.labelLarge.copy(fontSize = (dimens.textBody.value * 0.85f).sp),
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White.copy(alpha = 0.8f)
+                                color = storyInk(0.8f)
                             )
                             Spacer(modifier = Modifier.height(4.dp * dimens.scale))
                             Text(
@@ -2282,7 +2334,7 @@ fun WeekdayVsWeekendPage(page: SpotlightStoryPage.WeekdayVsWeekend) {
                     text = page.conversationalText,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = dimens.textBody),
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    color = Color.White.copy(alpha = 0.75f),
+                    color = storyInk(0.75f),
                     textAlign = TextAlign.Center
                 )
             }
@@ -2334,7 +2386,7 @@ fun BingeSessionPage(page: SpotlightStoryPage.BingeSession) {
                     text = stringResource(R.string.spotlight_longest_binge),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = storyInk(0.85f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -2354,7 +2406,7 @@ fun BingeSessionPage(page: SpotlightStoryPage.BingeSession) {
                                 blurRadius = 20f
                             )
                         ),
-                        color = Color.White,
+                        color = storyInk(),
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -2420,7 +2472,7 @@ fun BingeSessionPage(page: SpotlightStoryPage.BingeSession) {
                             Text(
                                 text = stringResource(R.string.spotlight_tracks_in_a_row),
                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel),
-                                color = Color.White.copy(alpha = 0.65f),
+                                color = storyInk(0.65f),
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -2455,7 +2507,7 @@ fun BingeSessionPage(page: SpotlightStoryPage.BingeSession) {
                             Text(
                                 text = stringResource(R.string.spotlight_straight),
                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel),
-                                color = Color.White.copy(alpha = 0.65f)
+                                color = storyInk(0.65f)
                             )
                         }
                     }
@@ -2467,7 +2519,7 @@ fun BingeSessionPage(page: SpotlightStoryPage.BingeSession) {
                     text = page.conversationalText,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = dimens.textBody),
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    color = Color.White.copy(alpha = 0.75f),
+                    color = storyInk(0.75f),
                     textAlign = TextAlign.Center,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
@@ -2533,7 +2585,7 @@ fun TimeOfDayVibesPage(page: SpotlightStoryPage.TimeOfDayVibes) {
                     text = stringResource(R.string.spotlight_when_you_listen),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = storyInk(0.85f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -2577,7 +2629,7 @@ fun TimeOfDayVibesPage(page: SpotlightStoryPage.TimeOfDayVibes) {
                     Text(
                         text = stringResource(R.string.spotlight_listener),
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = dimens.textBody),
-                        color = Color.White.copy(alpha = 0.7f)
+                        color = storyInk(0.7f)
                     )
                 }
             }
@@ -2646,7 +2698,7 @@ fun TimeOfDayVibesPage(page: SpotlightStoryPage.TimeOfDayVibes) {
                     text = page.conversationalText,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = dimens.textBody),
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    color = Color.White.copy(alpha = 0.75f),
+                    color = storyInk(0.75f),
                     textAlign = TextAlign.Center
                 )
             }
@@ -2678,7 +2730,7 @@ fun AudioMoodPage(page: SpotlightStoryPage.AudioMood) {
                     text = stringResource(R.string.spotlight_sound_profile),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = storyInk(0.85f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -2699,7 +2751,7 @@ fun AudioMoodPage(page: SpotlightStoryPage.AudioMood) {
                             blurRadius = 16f
                         )
                     ),
-                    color = Color.White,
+                    color = storyInk(),
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -2713,7 +2765,7 @@ fun AudioMoodPage(page: SpotlightStoryPage.AudioMood) {
                     text = page.conversationalText,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = dimens.textBody),
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    color = Color.White.copy(alpha = 0.75f),
+                    color = storyInk(0.75f),
                     textAlign = TextAlign.Center
                 )
             }
@@ -2753,7 +2805,7 @@ fun AudioMoodPage(page: SpotlightStoryPage.AudioMood) {
                                 text = stringResource(label),
                                 style = MaterialTheme.typography.titleMedium.copy(fontSize = dimens.textBody),
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White.copy(alpha = 0.9f)
+                                color = storyInk(0.9f)
                             )
                             Text(
                                 text = "${percent}%",
@@ -2768,7 +2820,7 @@ fun AudioMoodPage(page: SpotlightStoryPage.AudioMood) {
                                 .fillMaxWidth()
                                 .height(10.dp * dimens.scale)
                                 .clip(RoundedCornerShape(50))
-                                .background(Color.White.copy(alpha = 0.1f))
+                                .background(storyInk(0.1f))
                         ) {
                             Box(
                                 modifier = Modifier
@@ -2796,7 +2848,7 @@ fun AudioMoodPage(page: SpotlightStoryPage.AudioMood) {
 }
 
 @Composable
-fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
+fun ConclusionPage(page: SpotlightStoryPage.Conclusion, itemCount: Int = 5) {
     val context = LocalContext.current
     val titleText = remember(page.timeRange) {
         SpotlightPoetry.getHeading(context, page.timeRange)
@@ -2843,7 +2895,7 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                             fontSize = (dimens.textHeadline.value * 1.1f).sp,
                             fontWeight = FontWeight.Black
                         ),
-                        color = Color.White,
+                        color = storyInk(),
                         textAlign = TextAlign.Center,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
@@ -2857,7 +2909,7 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                             fontSize = dimens.textBody,
                             fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                         ),
-                        color = Color.White.copy(alpha = 0.8f),
+                        color = storyInk(0.8f),
                         textAlign = TextAlign.Center,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
@@ -2879,12 +2931,12 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                             fontSize = (dimens.textDisplay.value * 0.8f).sp,
                             fontWeight = FontWeight.Black
                         ),
-                        color = Color.White
+                        color = storyInk()
                     )
                     Text(
                         text = stringResource(R.string.spotlight_conclusion_min),
                         style = MaterialTheme.typography.labelLarge.copy(fontSize = dimens.textLabel),
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = storyInk(0.7f),
                         letterSpacing = (1f * dimens.scale).sp
                     )
                 }
@@ -2909,6 +2961,7 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                         Icon(
                             imageVector = pIcon,
                             contentDescription = null,
+                            // Fixed purple fill: the card keeps white ink on both pages.
                             tint = Color.White,
                             modifier = Modifier.size(36.dp * dimens.scale)
                         )
@@ -2937,92 +2990,103 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
             Spacer(modifier = Modifier.height(24.dp * dimens.scale))
             
             // Top Artists & Songs - Two columns
-            EnterAnimation(delay = 600) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp * dimens.scale)
-                ) {
-                    // Top Artists
-                    SolidCard(
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(dimens.cardCornerRadius),
-                        backgroundColor = Color(0xFFEC4899).copy(alpha = 0.08f),
-                        borderColor = Color(0xFFEC4899).copy(alpha = 0.2f),
-                        contentPadding = PaddingValues(12.dp * dimens.scale)
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = stringResource(R.string.spotlight_conclusion_top_artists),
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
-                                color = Color(0xFFF9A8D4),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp * dimens.scale))
-                            
-                            page.topArtists.take(5).forEach { artist ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(vertical = 3.dp * dimens.scale)
-                                ) {
-                                    CachedAsyncImage(
-                                        imageUrl = artist.imageUrl,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp * dimens.scale).clip(CircleShape),
-                                        contentScale = ContentScale.Crop,
-                                        allowHardware = false
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp * dimens.scale))
+            // The Box is a direct child of the Column so `weight` is honoured: it takes
+            // the height left under the page, and FitToHeight shrinks the two columns
+            // into it so itemCount rows stay visible in the 1080x1920 export.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+            ) {
+                EnterAnimation(delay = 600) {
+                    FitToHeight {
+                        // A light card needs its own wash: an alpha tint over near-white
+                        // paper is invisible, which is what made these panels read as empty.
+                        // Dark ink means the page under it is light.
+                        val lightCard = storyInk().luminance() < 0.5f
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp * dimens.scale)
+                        ) {
+                            // Top Artists
+                            SolidCard(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(dimens.cardCornerRadius),
+                                backgroundColor = if (lightCard) Color(0xFFFCE7F3) else Color(0xFFEC4899).copy(alpha = 0.08f),
+                                borderColor = if (lightCard) Color(0xFFF9A8D4) else Color(0xFFEC4899).copy(alpha = 0.2f),
+                                contentPadding = PaddingValues(12.dp * dimens.scale)
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
                                     Text(
-                                        text = artist.name,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = (dimens.textLabel.value * 0.9f).sp),
-                                        color = Color.White,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
+                                        text = stringResource(R.string.spotlight_conclusion_top_artists),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
+                                        color = if (lightCard) Color(0xFFBE185D) else Color(0xFFF9A8D4),
+                                        fontWeight = FontWeight.SemiBold
                                     )
+                                    Spacer(modifier = Modifier.height(8.dp * dimens.scale))
+
+                                    page.topArtists.take(itemCount).forEach { artist ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(vertical = 3.dp * dimens.scale)
+                                        ) {
+                                            ListCover(
+                                                imageUrl = artist.imageUrl,
+                                                size = 18.dp * dimens.scale,
+                                                shape = CircleShape
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp * dimens.scale))
+                                            Text(
+                                                text = artist.name,
+                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = (dimens.textLabel.value * 0.9f).sp),
+                                                color = storyInk(),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
-                    
-                    // Top Songs
-                    SolidCard(
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(dimens.cardCornerRadius),
-                        backgroundColor = Color(0xFFF59E0B).copy(alpha = 0.08f),
-                        borderColor = Color(0xFFF59E0B).copy(alpha = 0.2f),
-                        contentPadding = PaddingValues(12.dp * dimens.scale)
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = stringResource(R.string.spotlight_conclusion_top_songs),
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
-                                color = Color(0xFFFCD34D),
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp * dimens.scale))
-                            
-                            page.topSongs.take(5).forEach { song ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(vertical = 3.dp * dimens.scale)
-                                ) {
-                                    CachedAsyncImage(
-                                        imageUrl = song.imageUrl,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp * dimens.scale).clip(RoundedCornerShape(3.dp * dimens.scale)),
-                                        contentScale = ContentScale.Crop,
-                                        allowHardware = false
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp * dimens.scale))
+
+                            // Top Songs
+                            SolidCard(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(dimens.cardCornerRadius),
+                                backgroundColor = if (lightCard) Color(0xFFFEF3C7) else Color(0xFFF59E0B).copy(alpha = 0.08f),
+                                borderColor = if (lightCard) Color(0xFFFCD34D) else Color(0xFFF59E0B).copy(alpha = 0.2f),
+                                contentPadding = PaddingValues(12.dp * dimens.scale)
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
                                     Text(
-                                        text = song.title,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = (dimens.textLabel.value * 0.9f).sp),
-                                        color = Color.White,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
+                                        text = stringResource(R.string.spotlight_conclusion_top_songs),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = dimens.textLabel),
+                                        color = if (lightCard) Color(0xFFB45309) else Color(0xFFFCD34D),
+                                        fontWeight = FontWeight.SemiBold
                                     )
+                                    Spacer(modifier = Modifier.height(8.dp * dimens.scale))
+
+                                    page.topSongs.take(itemCount).forEach { song ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(vertical = 3.dp * dimens.scale)
+                                        ) {
+                                            ListCover(
+                                                imageUrl = song.imageUrl,
+                                                size = 18.dp * dimens.scale,
+                                                shape = RoundedCornerShape(3.dp * dimens.scale)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp * dimens.scale))
+                                            Text(
+                                                text = song.title,
+                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = (dimens.textLabel.value * 0.9f).sp),
+                                                color = storyInk(),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -3042,7 +3106,7 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                         modifier = Modifier
                             .fillMaxWidth(0.3f)
                             .height(1.dp)
-                            .background(Color.White.copy(alpha = 0.3f))
+                            .background(storyInk(0.3f))
                     )
                     Spacer(modifier = Modifier.height(16.dp * dimens.scale))
                     val closingResId = remember(page.timeRange) {
@@ -3059,7 +3123,7 @@ fun ConclusionPage(page: SpotlightStoryPage.Conclusion) {
                             fontSize = dimens.textBody,
                             fontWeight = FontWeight.SemiBold
                         ),
-                        color = Color.White.copy(alpha = 0.9f),
+                        color = storyInk(0.9f),
                         textAlign = TextAlign.Center
                     )
                 }
@@ -3164,7 +3228,7 @@ fun BadgesEarnedPage(page: SpotlightStoryPage.BadgesEarned) {
                         text = stringResource(R.string.spotlight_badges_earned),
                         style = MaterialTheme.typography.titleLarge.copy(fontSize = dimens.textTitle),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.85f)
+                        color = storyInk(0.85f)
                     )
                 }
             }
@@ -3229,7 +3293,7 @@ fun BadgesEarnedPage(page: SpotlightStoryPage.BadgesEarned) {
                                             style = MaterialTheme.typography.labelSmall.copy(
                                                 fontSize = (dimens.textLabel.value * 0.8f).sp
                                             ),
-                                            color = Color.White.copy(alpha = 0.6f),
+                                            color = storyInk(0.6f),
                                             textAlign = TextAlign.Center,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
@@ -3267,7 +3331,7 @@ fun BadgesEarnedPage(page: SpotlightStoryPage.BadgesEarned) {
                     text = page.conversationalText,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = dimens.textBody),
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = storyInk(0.7f),
                     textAlign = TextAlign.Center
                 )
             }
@@ -3394,7 +3458,7 @@ fun LevelUpPage(page: SpotlightStoryPage.LevelUp) {
                             fontWeight = FontWeight.Bold,
                             letterSpacing = (4f * dimens.scale).sp
                         ),
-                        color = Color.White.copy(alpha = 0.7f)
+                        color = storyInk(0.7f)
                     )
                     Text(
                         text = levelAnim.value.toInt().toString(),
@@ -3430,7 +3494,7 @@ fun LevelUpPage(page: SpotlightStoryPage.LevelUp) {
                         Text(
                             text = stringResource(R.string.spotlight_lv_format, page.currentLevel + 1),
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = (dimens.textLabel.value * 0.85f).sp),
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = storyInk(0.7f)
                         )
                     }
                     Spacer(Modifier.height(4.dp * dimens.scale))
@@ -3439,7 +3503,7 @@ fun LevelUpPage(page: SpotlightStoryPage.LevelUp) {
                             .fillMaxWidth()
                             .height(12.dp * dimens.scale)
                             .clip(RoundedCornerShape(50))
-                            .background(Color.White.copy(alpha = 0.08f))
+                            .background(storyInk(0.08f))
                     ) {
                         Box(
                             modifier = Modifier
@@ -3485,7 +3549,7 @@ fun LevelUpPage(page: SpotlightStoryPage.LevelUp) {
                                     Text(
                                         text = stringResource(R.string.spotlight_earned_this_period),
                                         style = MaterialTheme.typography.labelMedium.copy(fontSize = dimens.textLabel),
-                                        color = Color.White.copy(alpha = 0.7f)
+                                        color = storyInk(0.7f)
                                     )
                                 }
                                 Text(
@@ -3505,7 +3569,7 @@ fun LevelUpPage(page: SpotlightStoryPage.LevelUp) {
                     text = page.conversationalText,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = (dimens.textBody.value * 0.9f).sp),
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = storyInk(0.7f),
                     textAlign = TextAlign.Center
                 )
             }
@@ -3647,7 +3711,7 @@ fun TitleEarnedPage(page: SpotlightStoryPage.TitleEarned) {
                             fontSize = (dimens.textTitle.value * 0.9f).sp,
                             textDecoration = TextDecoration.LineThrough
                         ),
-                        color = Color.White.copy(alpha = oldTitleAlpha.value * 0.4f),
+                        color = storyInk().copy(alpha = oldTitleAlpha.value * 0.4f),
                         textAlign = TextAlign.Center
                     )
                 }
@@ -3703,7 +3767,7 @@ fun TitleEarnedPage(page: SpotlightStoryPage.TitleEarned) {
                                 Text(
                                     text = label,
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = (dimens.textLabel.value * 0.85f).sp),
-                                    color = Color.White.copy(alpha = 0.7f),
+                                    color = storyInk(0.7f),
                                     textAlign = TextAlign.Center,
                                     maxLines = 1
                                 )
@@ -3718,7 +3782,7 @@ fun TitleEarnedPage(page: SpotlightStoryPage.TitleEarned) {
                     text = page.conversationalText,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = (dimens.textBody.value * 0.9f).sp),
                     fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    color = Color.White.copy(alpha = 0.65f),
+                    color = storyInk(0.65f),
                     textAlign = TextAlign.Center
                 )
             }

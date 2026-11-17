@@ -3,11 +3,19 @@ package me.avinas.tempo.widget.utils
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
+import android.graphics.Bitmap
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.action.actionStartActivity
+import androidx.glance.action.clickable
+import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
+import androidx.glance.layout.ContentScale
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.padding
 import androidx.work.Constraints
@@ -16,14 +24,17 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.PeriodicWorkRequest
 import androidx.work.WorkManager
-import me.avinas.tempo.utils.MAX_SAFE_BITMAP_EDGE_PX
-import me.avinas.tempo.widget.TempoAppWidget
-import me.avinas.tempo.widget.TempoArtistWidget
-import me.avinas.tempo.widget.TempoDashboardWidget
-import me.avinas.tempo.widget.TempoDiscoveryWidget
-import me.avinas.tempo.widget.TempoHeatmapWidget
-import me.avinas.tempo.widget.TempoMilestoneWidget
-import me.avinas.tempo.widget.TempoMixWidget
+import me.avinas.tempo.MainActivity
+import me.avinas.tempo.widget.RhythmRefreshWorker
+import me.avinas.tempo.widget.TempoArtistWidgetReceiver
+import me.avinas.tempo.widget.TempoDashboardWidgetReceiver
+import me.avinas.tempo.widget.TempoDiscoveryWidgetReceiver
+import me.avinas.tempo.widget.TempoHeatmapWidgetReceiver
+import me.avinas.tempo.widget.TempoListeningRhythmWidgetReceiver
+import me.avinas.tempo.widget.TempoMilestoneWidgetReceiver
+import me.avinas.tempo.widget.TempoMixWidgetReceiver
+import me.avinas.tempo.widget.TempoTodayTotalWidgetReceiver
+import me.avinas.tempo.widget.TempoWidgetReceiver
 import me.avinas.tempo.widget.WidgetWorker
 import java.util.concurrent.TimeUnit
 
@@ -68,6 +79,22 @@ object WidgetHub {
     const val PREF_MIX_CHART_DATA = "mix_chart_data" // audio bar heights
     
     const val PREF_TOP_ARTIST_TRACKS = "top_artist_tracks" // unique tracks count
+
+    // Today cards, ported to the home screen. Kept as display strings rather than
+    // re-deriving them in the widget: the renderers run inside Glance's composition
+    // on the launcher's process budget, and the worker already has the raw models.
+    const val PREF_TODAY_HERO_TIME = "today_hero_time" // "1h 3m"
+    const val PREF_TODAY_PLAY_COUNT = "today_play_count"
+    const val PREF_TODAY_TRACK_COUNT = "today_track_count"
+    const val PREF_TODAY_ALBUM_COUNT = "today_album_count"
+    const val PREF_TODAY_ARTIST_COUNT = "today_artist_count"
+    const val PREF_TODAY_AVG_SESSION = "today_avg_session" // "1.1h"
+    const val PREF_TODAY_SHORT_TIME = "today_short_time" // "1.1h"
+    const val PREF_TODAY_TOTAL_MS = "today_total_ms"
+    const val PREF_YESTERDAY_SHORT_TIME = "yesterday_short_time" // "8m"
+    const val PREF_YESTERDAY_TOTAL_MS = "yesterday_total_ms"
+    const val PREF_TODAY_GROWTH_PERCENT = "today_growth_percent" // raw, for the trend arrow
+    const val PREF_TODAY_HOURLY_PLAYS = "today_hourly_plays" // 24 comma-separated ints
 }
 
 fun GlanceModifier.appWidgetBackground(): GlanceModifier {
@@ -89,8 +116,23 @@ private const val PERIODIC_WORK_NAME = "TempoWidgetPeriodicWork"
  */
 private const val IMMEDIATE_WORK_NAME = "TempoWidgetImmediateWork"
 
+/** Unique name of the rhythm card's one-query refresh; see [scheduleRhythmRefresh]. */
+private const val RHYTHM_WORK_NAME = "TempoRhythmRefreshWork"
+
+/**
+ * Ceiling for a widget bitmap edge. The app-wide MAX_SAFE_BITMAP_EDGE_PX (4096) allows a 64 MB
+ * ARGB card if a host ever reports a nonsense size; 2048 keeps the worst case at ~16 MB while
+ * staying above a real 3x-density large widget (~2000 px), so normal cards are never downscaled.
+ */
+private const val MAX_WIDGET_BITMAP_EDGE_PX = 2048
+
 /**
  * Every widget provider this app registers, used to answer "is any Tempo widget still placed?".
+ *
+ * These must be the *receiver* classes: [AppWidgetManager.getAppWidgetIds] takes a component
+ * name, and a [androidx.glance.appwidget.GlanceAppWidget] subclass matches nothing, so listing
+ * the composable classes made this list answer "none placed" no matter what was on the home
+ * screen.
  *
  * Kept as one list because the periodic work is shared by all of them (a single
  * [PERIODIC_WORK_NAME]); a helper that only knew about its own provider could not tell whether
@@ -98,13 +140,15 @@ private const val IMMEDIATE_WORK_NAME = "TempoWidgetImmediateWork"
  */
 private val ALL_WIDGET_PROVIDERS =
     listOf(
-        TempoAppWidget::class.java,
-        TempoArtistWidget::class.java,
-        TempoDashboardWidget::class.java,
-        TempoDiscoveryWidget::class.java,
-        TempoHeatmapWidget::class.java,
-        TempoMilestoneWidget::class.java,
-        TempoMixWidget::class.java,
+        TempoWidgetReceiver::class.java,
+        TempoArtistWidgetReceiver::class.java,
+        TempoDashboardWidgetReceiver::class.java,
+        TempoDiscoveryWidgetReceiver::class.java,
+        TempoHeatmapWidgetReceiver::class.java,
+        TempoMilestoneWidgetReceiver::class.java,
+        TempoMixWidgetReceiver::class.java,
+        TempoTodayTotalWidgetReceiver::class.java,
+        TempoListeningRhythmWidgetReceiver::class.java,
     )
 
 /**
@@ -128,6 +172,21 @@ fun scheduleImmediateWidgetUpdate(context: Context) {
         // KEEP: a queued-but-not-yet-started refresh already covers this request, because the
         // worker rebuilds every widget from current data. REPLACE would restart the work and
         // delay it each time another widget's onUpdate arrived.
+        ExistingWorkPolicy.KEEP,
+        workRequest,
+    )
+}
+
+/**
+ * Refresh for the rhythm card's 30-minute tick.
+ *
+ * [RhythmRefreshWorker] runs one hourly query and rewrites one pref; [scheduleImmediateWidgetUpdate]
+ * would rebuild all nine widgets and run the full aggregate set for a single bar.
+ */
+fun scheduleRhythmRefresh(context: Context) {
+    val workRequest = OneTimeWorkRequest.Builder(RhythmRefreshWorker::class.java).build()
+    WorkManager.getInstance(context).enqueueUniqueWork(
+        RHYTHM_WORK_NAME,
         ExistingWorkPolicy.KEEP,
         workRequest,
     )
@@ -175,9 +234,68 @@ fun cancelPeriodicWidgetUpdateIfUnused(context: Context) {
     fun getPixelSize(context: Context, size: androidx.compose.ui.unit.DpSize): android.util.Size {
         val density = context.resources.displayMetrics.density
         // Just convert DP to PX. No extra usage of "scaleFactor" needed as density already covers it.
-        // Clamped to the app-wide bitmap ceiling so a host reporting an absurd widget size cannot
+        // Clamped to the widget bitmap ceiling so a host reporting an absurd widget size cannot
         // drive BitmapGenerator's createBitmap(width, height) allocations past it.
-        val widthPx = (size.width.value * density).toInt().coerceIn(100, MAX_SAFE_BITMAP_EDGE_PX)
-        val heightPx = (size.height.value * density).toInt().coerceIn(100, MAX_SAFE_BITMAP_EDGE_PX)
+        val widthPx = (size.width.value * density).toInt().coerceIn(100, MAX_WIDGET_BITMAP_EDGE_PX)
+        val heightPx = (size.height.value * density).toInt().coerceIn(100, MAX_WIDGET_BITMAP_EDGE_PX)
         return android.util.Size(widthPx, heightPx)
     }
+
+/**
+ * The receiver behaviour every Tempo widget shares: a system update tick asks for an immediate
+ * refresh, the first placement starts the shared periodic work, and removing the last widget
+ * stops it. Providers declare only [glanceAppWidget] — nothing else belongs in a receiver body.
+ */
+abstract class TempoGlanceReceiver : GlanceAppWidgetReceiver() {
+    /**
+     * Work enqueued on each system update tick. The rhythm card overrides it: its tick only needs
+     * its own hourly counts, not a full nine-widget rebuild.
+     */
+    protected open fun refreshOnUpdate(context: Context) = scheduleImmediateWidgetUpdate(context)
+
+    override fun onUpdate(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetIds: IntArray,
+    ) {
+        super.onUpdate(context, appWidgetManager, appWidgetIds)
+        refreshOnUpdate(context)
+    }
+
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        schedulePeriodicWidgetUpdate(context)
+    }
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        // Shared periodic work: this only stops it once the last Tempo widget is gone,
+        // so removing one widget does not silently kill refresh for the others.
+        cancelPeriodicWidgetUpdateIfUnused(context)
+    }
+}
+
+/**
+ * The card shell every card widget renders: full-bleed bitmap, rounded background, opens the app
+ * on tap.
+ *
+ * One copy on purpose. Before it existed the eight card widgets each carried their own `Box` +
+ * `Image` block, and three of them drifted to a hardcoded `3x` pixel scale instead of
+ * [getPixelSize] — the exact sizing that was fixed after causing RemoteViews memory crashes.
+ */
+@Composable
+fun WidgetCard(bitmap: Bitmap, description: String) {
+    Box(
+        modifier = GlanceModifier
+            .appWidgetBackground()
+            .clickable(actionStartActivity<MainActivity>()),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            provider = ImageProvider(bitmap),
+            contentDescription = description,
+            modifier = GlanceModifier.fillMaxSize(),
+            contentScale = ContentScale.FillBounds,
+        )
+    }
+}

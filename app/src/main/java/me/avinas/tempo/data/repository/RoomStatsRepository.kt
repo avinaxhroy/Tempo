@@ -6,6 +6,7 @@ import android.util.Log
 import android.util.LruCache
 import me.avinas.tempo.data.local.DeviceTimeZone
 import me.avinas.tempo.data.local.dao.*
+import me.avinas.tempo.data.local.entities.AlbumArtSource
 import me.avinas.tempo.data.local.entities.Artist
 import me.avinas.tempo.data.local.entities.Track
 import me.avinas.tempo.data.local.entities.UserPreferences
@@ -21,9 +22,11 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -32,6 +35,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 import me.avinas.tempo.domain.insights.InsightGenerator
+import me.avinas.tempo.domain.insights.InsightInputs
 import me.avinas.tempo.data.stats.InsightCardData
 import me.avinas.tempo.data.stats.AudioFeaturesStats
 import me.avinas.tempo.data.stats.MoodTrend
@@ -303,6 +307,13 @@ class RoomStatsRepository @Inject constructor(
         val artistName = artist.name
         Log.d(TAG, "refreshArtistImageDirectly: Searching for image of '$artistName' (ID=$artistId)")
 
+        // A portrait the user picked by hand is locked. Return it unchanged rather
+        // than clearing it and spending provider requests that the DAO would refuse.
+        if (artist.imageArtSource == AlbumArtSource.USER_SELECTED) {
+            Log.d(TAG, "refreshArtistImageDirectly: '$artistName' uses a user-selected portrait, keeping it")
+            return@withContext artist.imageUrl
+        }
+
         // Clear existing image and caches
         artistDao.updateImageUrl(artistId, null)
         synchronized(artistImageSearchCache) {
@@ -391,23 +402,37 @@ class RoomStatsRepository @Inject constructor(
                 val bingeSessions = statsDao.getBingeListeningSessions(startTime, endTime)
                 val discoveryTrends = statsDao.getNewArtistDiscoveryTrend(startTime, endTime)
                 val hourlyDistribution = statsDao.getHourlyDistribution(startTime, endTime)
-                val dayOfWeekDistribution = statsDao.getDayOfWeekDistribution(startTime, endTime)
 
                 // Feed metrics
                 val listeningStreak = getListeningStreak()
                 val topGenres = getTopGenres(timeRange, limit = 1) // Just need top one
                 val engagementStats = getEngagementStats(timeRange)
+                val discoveryStats = getDiscoveryStats(timeRange, withLeeway)
+                val topArtist = getTopArtists(
+                    timeRange = timeRange,
+                    sortBy = SortBy.COMBINED_SCORE,
+                    pageSize = 1,
+                    withLeeway = withLeeway,
+                ).items.firstOrNull()
+                val overview = getListeningOverview(timeRange, withLeeway)
 
                 insightGenerator.generateInsights(
-                    moodStats = moodStats,
-                    bingeSessions = bingeSessions,
-                    discoveryTrends = discoveryTrends,
-                    hourlyDistribution = hourlyDistribution,
-                    dayOfWeekDistribution = dayOfWeekDistribution,
-                    listeningStreak = listeningStreak,
-                    topGenres = topGenres,
-                    engagementStats = engagementStats,
-                    timeRange = timeRange
+                    InsightInputs(
+                        moodStats = moodStats,
+                        bingeSessions = bingeSessions,
+                        discoveryTrends = discoveryTrends,
+                        hourlyDistribution = hourlyDistribution,
+                        listeningStreak = listeningStreak,
+                        recentListeningDays = computeRecentListeningDays(),
+                        topGenres = topGenres,
+                        topArtist = topArtist,
+                        engagementStats = engagementStats,
+                        totalPlayCount = overview.totalPlayCount,
+                        // Discovery already resolves variety against the same range, so this
+                        // reuses its query instead of paying for the entropy calculation twice.
+                        varietyScore = discoveryStats.varietyScore,
+                        newArtistCount = discoveryStats.newArtistsCount,
+                    )
                 )
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -510,12 +535,17 @@ class RoomStatsRepository @Inject constructor(
         )
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
     override fun observeListeningOverview(timeRange: TimeRange, withLeeway: Boolean): Flow<ListeningOverview> =
         // Use a bounded query as a change trigger; all() on large datasets (e.g. after Last.fm import)
         // overflows the 2MB CursorWindow and throws IllegalStateException. The actual data is
         // fetched inside computeListeningOverview() via targeted statsDao queries.
+        // Room re-emits once per inserted row, so a burst of writes used to queue one full aggregate
+        // set per row, none cancellable. Debounce collapses the burst and mapLatest cancels a
+        // superseded aggregate (the computation is read-only, so cancelling it is safe).
         listeningEventDao.recentEvents(1)
-            .map { _ -> computeListeningOverview(timeRange, withLeeway) }
+            .debounce(250)
+            .mapLatest { _ -> computeListeningOverview(timeRange, withLeeway) }
             .flowOn(Dispatchers.IO)
 
     private suspend fun computeListeningOverview(timeRange: TimeRange, withLeeway: Boolean = true): ListeningOverview {
@@ -1390,6 +1420,28 @@ class RoomStatsRepository @Inject constructor(
             longestStreakEndDate = longestStreakEnd?.toString(),
             totalActiveDays = parsedDates.size
         )
+    }
+
+    /**
+     * The last [days] days as booleans, oldest first, true when that day had a play.
+     *
+     * The streak card draws these as a calendar strip, so the empty days matter as much as the
+     * played ones — a run of six days reads as a run only when the gaps around it are visible.
+     * Anchored to the same "today" as [computeListeningStreak] for the same reason.
+     */
+    private suspend fun computeRecentListeningDays(days: Int = 14): List<Boolean> {
+        val playedDates = try {
+            val formatter = DateTimeFormatter.ISO_LOCAL_DATE
+            statsDao.getAllListeningDates()
+                .mapNotNull { runCatching { LocalDate.parse(it, formatter) }.getOrNull() }
+                .toSet()
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not read listening dates for the streak strip", e)
+            return emptyList()
+        }
+
+        val today = DeviceTimeZone.todayIn(statsDao.getLatestListeningOffsetMinutes())
+        return (days - 1 downTo 0).map { offset -> today.minusDays(offset.toLong()) in playedDates }
     }
 
     override suspend fun getMostActiveHour(timeRange: TimeRange, withLeeway: Boolean): HourlyDistribution? {

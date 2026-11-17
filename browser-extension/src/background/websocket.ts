@@ -261,7 +261,9 @@ export class PhoneSocket {
       const { sig, ts } = await signWsMessage(pairing.authToken, payload);
       const signed: SignedWsMessage = { payload, sig, ts };
       this.ws.send(JSON.stringify(signed));
-      this._lastRealTrafficAt = Date.now();
+      // Pings are not real traffic. Refreshing the clock for them made the idle-suspend check
+      // below unreachable, so the service worker was never released.
+      if (payload.type !== 'ping') this._lastRealTrafficAt = Date.now();
       return true;
     } catch {
       return false;

@@ -28,8 +28,6 @@ class AnalyticsEnumUsageTest {
         "RunPhase",
         "BackupTarget",
         "FailureClass",
-        "AccessResult",
-        "ExemptionResult",
         "RevivedBy",
         "RecoveryAction",
         "TrackingGapSeverity",

@@ -610,7 +610,7 @@ object ArtistParser {
      * (imports affected by the newer Takeout layout reported "Release" as a
      * top-3 artist with 500+ tracks).
      *
-     * The list is deliberately tight — exact, case-insensitive matches of
+     * The list is tight — exact, case-insensitive matches of
      * clearly structural words — so a real artist name is never rejected.
      */
     fun isPlaceholderArtistName(artist: String): Boolean {

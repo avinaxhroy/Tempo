@@ -8,13 +8,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Celebration
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.Piano
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -26,18 +19,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import me.avinas.tempo.ui.components.DeepOceanBackground
 import me.avinas.tempo.ui.components.TimePeriodSelector
 import me.avinas.tempo.ui.stats.StatsShareDialog
 import me.avinas.tempo.ui.stats.StatsTab
 import me.avinas.tempo.ui.home.components.*
-import me.avinas.tempo.data.stats.InsightCardData
 import me.avinas.tempo.data.stats.InsightType
 import me.avinas.tempo.data.stats.TimeRange
 import androidx.compose.runtime.LaunchedEffect
@@ -321,7 +312,6 @@ fun HomeScreen(
                             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                                 InsightFeed(
                                     insights = insights,
-                                    onNavigateToTrack = onNavigateToTrack,
                                     onNavigateToArtist = onNavigateToArtist
                                 )
                             }
@@ -344,17 +334,17 @@ fun HomeScreen(
             )
         }
         
-        // Rate App Bottom Sheet
+        // Rate App prompt
         if (flags.showRateAppPopup) {
-            RateAppBottomSheet(
+            RateAppPopup(
                 onDismiss = viewModel::onRateAppDismissed,
                 onRate = {
-                    if (isLaunchingReview) return@RateAppBottomSheet
+                    if (isLaunchingReview) return@RateAppPopup
                     val activity = ReviewUtils.run { context.findActivity() }
                     if (activity == null) {
                         ReviewUtils.openPlayStoreListing(context)
                         viewModel.onRateAppFlowHandled()
-                        return@RateAppBottomSheet
+                        return@RateAppPopup
                     }
                     // Set the guard BEFORE launching the coroutine so a rapid second tap
                     // is blocked even if the coroutine hasn't begun executing yet.
@@ -388,7 +378,6 @@ fun HomeScreen(
                     if (nudgeRange == TimeRange.THIS_MONTH) R.string.share_nudge_caption_monthly
                     else R.string.share_nudge_caption_weekly
                 ),
-                nudgeHint = stringResource(R.string.share_nudge_hint),
                 onDismiss = viewModel::onShareNudgeDismissed,
                 onShared = viewModel::onShareNudgeShared
             )
@@ -406,11 +395,12 @@ fun HomeScreen(
                     onNavigateToSpotlight(flags.reminderTimeRange, false)
                     // Dismiss the reminder
                     viewModel.dismissSpotlightReminder()
-                }
+                },
+                preview = flags.reminderPreview
             )
         }
-        
-        // Today Overview Overlay — opened by tapping the Today's Listening widget
+
+                // Today Overview Overlay — opened by tapping the Today's Listening widget
         // or its "More insights" link; slides over the home feed until dismissed.
         if (showTodaysOverview && uiState.todayOverview != null) {
             TodaysOverviewOverlay(
@@ -448,26 +438,3 @@ fun HomeScreen(
     }
 }
 
-@Composable
-private fun mapInsightToHabit(insight: InsightCardData): HabitInsightData {
-    val (icon, color, gradient) = when(insight.type) {
-        InsightType.MOOD -> Triple(Icons.Default.Face, InsightMood, listOf(InsightMood.copy(alpha=0.4f), InsightMood.copy(alpha=0.1f)))
-        InsightType.PEAK_TIME -> Triple(Icons.Default.DateRange, InsightPeakTime, listOf(InsightPeakTime.copy(alpha=0.4f), InsightPeakTime.copy(alpha=0.1f)))
-        InsightType.BINGE -> Triple(Icons.Filled.Bolt, InsightBinge, listOf(InsightBinge.copy(alpha=0.4f), InsightBinge.copy(alpha=0.1f)))
-        InsightType.DISCOVERY -> Triple(Icons.Default.Celebration, InsightDiscovery, listOf(InsightDiscovery.copy(alpha=0.4f), InsightDiscovery.copy(alpha=0.1f)))
-        InsightType.ENERGY -> Triple(Icons.Default.Bolt, InsightEnergy, listOf(InsightEnergy.copy(alpha=0.4f), InsightEnergy.copy(alpha=0.1f)))
-        InsightType.DANCEABILITY -> Triple(Icons.Default.Celebration, InsightDanceability, listOf(InsightDanceability.copy(alpha=0.4f), InsightDanceability.copy(alpha=0.1f)))
-        InsightType.TEMPO -> Triple(Icons.Default.Speed, InsightTempo, listOf(InsightTempo.copy(alpha=0.4f), InsightTempo.copy(alpha=0.1f)))
-        InsightType.ACOUSTICNESS -> Triple(Icons.Default.Piano, InsightAcousticness, listOf(InsightAcousticness.copy(alpha=0.4f), InsightAcousticness.copy(alpha=0.1f)))
-        else -> Triple(Icons.Default.DateRange, TextTertiary, listOf(TextTertiary.copy(alpha=0.2f), TextTertiary.copy(alpha=0.1f)))
-    }
-    
-    return HabitInsightData(
-        title = insight.title,
-        subtitle = insight.description,
-        icon = icon,
-        iconColor = color,
-        iconBgColor = color.copy(alpha = 0.2f),
-        gradient = gradient
-    )
-}

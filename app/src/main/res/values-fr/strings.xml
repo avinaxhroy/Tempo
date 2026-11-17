@@ -37,6 +37,8 @@
     <string name="widget_heatmap_desc">Visualisez vos habitudes d\'écoute dans le temps</string>
     <string name="widget_milestone_desc">Suivez vos jalons d\'écoute</string>
     <string name="widget_mix_desc">Votre mix musical personnalisé</string>
+    <string name="widget_today_total_desc">Temps d\'écoute, écoutes et évolution par rapport à hier</string>
+    <string name="widget_rhythm_desc">Votre rythme d\'écoute au fil de la journée</string>
 
     <!-- Home components -->
     <string name="home_spotlight_title">Tempo en vedette</string>
@@ -56,12 +58,12 @@
     <string name="home_habits_title">Un coup d\'œil sur vos habitudes</string>
     <string name="home_lvl">NIV</string>
 
-    <!-- Rate App -->
     <string name="rate_enjoying">Vous aimez Tempo ?</string>
-    <string name="rate_message">Si l\'appli vous plaît, prenez un instant pour la noter. Cela nous aide vraiment à progresser !</string>
-    <string name="rate_now">Noter maintenant</string>
-    <string name="rate_not_now">Pas maintenant</string>
-    
+    <string name="rate_message">Vos retours nous aident à améliorer l\'appli et à toucher plus d\'amateurs de musique comme vous.</string>
+    <string name="rate_badge_on_play">Sur Google Play</string>
+    <string name="rate_cta_review">Noter sur le Play Store</string>
+    <string name="rate_maybe_later">Plus tard</string>
+    <string name="rate_close">Fermer</string>
     <!-- Gamification / Level -->
     <string name="level_label">NIVEAU %1$d</string>
     <string name="level_xp">%1$d XP</string>
@@ -303,7 +305,6 @@
     <!-- Spotlight -->
     <string name="spotlight_title">En vedette</string>
     <string name="spotlight_share_story">Partager la story</string>
-    <string name="spotlight_share_instagram">Partager sur Instagram Stories</string>
     <string name="spotlight_loading">Chargement de vos cartes…</string>
     <string name="spotlight_no_cards">Aucune carte disponible</string>
     <string name="spotlight_preparing">Préparation de votre story…</string>

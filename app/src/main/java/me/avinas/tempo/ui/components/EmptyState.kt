@@ -6,8 +6,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.draw.scale
 import androidx.compose.animation.core.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -367,12 +368,16 @@ private fun PulsingRadar(
     )
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        // Ripple
+        // Ripple — animated properties are read in the draw/layer phases only, so the 60 fps
+        // animation never triggers recomposition of the empty state.
         Box(
             modifier = Modifier
                 .size(8.dp)
-                .scale(scale)
-                .background(color.copy(alpha = alpha), androidx.compose.foundation.shape.CircleShape)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .drawBehind { drawCircle(color.copy(alpha = alpha)) }
         )
         // Core Dot (Static)
         Box(

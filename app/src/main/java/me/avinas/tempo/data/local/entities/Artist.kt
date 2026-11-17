@@ -50,6 +50,21 @@ data class Artist(
     
     @ColumnInfo(name = "image_url") 
     val imageUrl: String?,
+
+    /**
+     * Where [imageUrl] came from.
+     *
+     * Reuses [AlbumArtSource] so artist and track artwork obey one arbitration
+     * rule set: [AlbumArtSource.USER_SELECTED] locks the image against every
+     * automatic writer, [AlbumArtSource.USER_RESET] records "the user chose to go
+     * back to automatic" so a stale in-memory copy cannot restore the manual
+     * portrait, and the numbered sources keep their normal priority order.
+     *
+     * Every automatic writer goes through [me.avinas.tempo.data.local.dao.ArtistDao.updateImageUrl],
+     * which refuses to touch a locked row.
+     */
+    @ColumnInfo(name = "image_art_source", defaultValue = "NONE")
+    val imageArtSource: AlbumArtSource = AlbumArtSource.NONE,
     
     val genres: List<String> = emptyList(),
     

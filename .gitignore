@@ -74,10 +74,6 @@ browser-extension/dist/
 # Python bytecode from .github/scripts
 __pycache__/
 
-# Internal docs - never publish to GitHub
-tempo-premium-cloud-architecture.md
-apple-design.md
-
 # Local build caches redirected inside the workspace (sandboxed builds)
 .gradle-home/
 .android-home/

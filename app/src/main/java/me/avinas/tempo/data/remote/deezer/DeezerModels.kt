@@ -15,6 +15,13 @@ data class DeezerSearchResponse(
 )
 
 @JsonClass(generateAdapter = true)
+data class DeezerArtistSearchResponse(
+    val data: List<DeezerArtist>,
+    val total: Int,
+    val next: String?
+)
+
+@JsonClass(generateAdapter = true)
 data class DeezerTrack(
     val id: Long,
     val title: String,

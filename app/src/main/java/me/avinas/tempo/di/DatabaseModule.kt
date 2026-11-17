@@ -162,53 +162,9 @@ object DatabaseModule {
                     } catch (e: Exception) {
                         android.util.Log.w("DatabaseModule", "Failed to apply PRAGMA optimizations", e)
                     }
-                    ensureTrackLookupIndex(db)
                 }
             })
             .build()
-    }
-
-    /**
-     * Guarantees `index_tracks_title_lower`, the case-insensitive index on `tracks.title` that
-     * `TrackDao.findByTitleAndArtist` and friends are served by.
-     *
-     * **Why this is not a migration.** The index is created by `MIGRATION_8_9`, but it is not
-     * declared on the `Track` entity — and it cannot be, because Room's `@Index` has no collation
-     * parameter, so there is no annotation that can express `(title COLLATE NOCASE)`. Room's
-     * generated `createAllTables` therefore creates only the eight *declared* indices, and because
-     * a fresh install builds its schema that way and **never runs migrations**, every
-     * freshly-installed database has been missing this index while every upgraded one has it.
-     *
-     * Measured on a 50k-row `tracks` table: with the index a lookup is an index seek (~0.001 ms);
-     * without it SQLite scans the whole table (~1.6 ms for a miss, and a *miss* is the common case
-     * during import because every genuinely new track is one). Same app, same version, roughly
-     * three orders of magnitude apart depending only on install history.
-     *
-     * `onOpen` rather than `onCreate` is deliberate: `onCreate` only ever fires for a database
-     * that is being created right now, so it would fix future installs but leave everyone who
-     * already fresh-installed schema 55 permanently without the index. `onOpen` runs after both
-     * `onCreate` and `onUpgrade`, so it repairs existing installs too.
-     *
-     * The cost is one `CREATE INDEX IF NOT EXISTS` per process start, which is a schema lookup and
-     * a no-op wherever the index already exists. Where it does have to build, the table is empty
-     * by construction — a fresh install has no tracks yet — so it is instantaneous. It cannot
-     * interfere with schema validation: Room's `checkIdentity` runs before `onOpen` callbacks are
-     * invoked, and an undeclared *extra* index is not part of the declared schema it compares.
-     *
-     * A migration is still the tidier long-term home for this (a `58 -> 59` step once the
-     * `migration/squash-55-58` work lands). It is kept here for now so the fix stays correct
-     * regardless of which schema version a given install is sitting on.
-     */
-    private fun ensureTrackLookupIndex(db: SupportSQLiteDatabase) {
-        try {
-            db.execSQL(
-                "CREATE INDEX IF NOT EXISTS index_tracks_title_lower ON tracks(title COLLATE NOCASE)",
-            )
-        } catch (e: Exception) {
-            // A missing optimisation index must never stop the database from opening; the
-            // affected queries simply fall back to a scan, as they already did without it.
-            android.util.Log.w("DatabaseModule", "Failed to ensure track lookup index", e)
-        }
     }
 
     @Provides

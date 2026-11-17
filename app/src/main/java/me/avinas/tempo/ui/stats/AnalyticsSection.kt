@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.avinas.tempo.data.stats.HourlyDistribution
 import me.avinas.tempo.data.stats.InsightCardData
-import me.avinas.tempo.data.stats.InsightType
 import me.avinas.tempo.data.stats.ListeningOverview
 import me.avinas.tempo.ui.components.StatCard
 import me.avinas.tempo.ui.home.components.InsightCard
@@ -185,9 +184,5 @@ fun HourlyChart(hourlyData: List<HourlyDistribution>) {
 
 @Composable
 fun InsightItem(insight: InsightCardData) {
-    InsightCard(
-        insight = insight,
-        onCloseClick = null,
-        onClick = {}
-    )
+    InsightCard(insight = insight)
 }

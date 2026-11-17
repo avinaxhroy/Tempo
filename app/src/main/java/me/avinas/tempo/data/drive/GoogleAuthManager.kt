@@ -15,6 +15,7 @@ import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
+import com.google.android.gms.auth.api.identity.ClearTokenRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
@@ -394,7 +395,10 @@ class GoogleAuthManager @Inject constructor(
                 val token = result.accessToken
                 val hasDriveScope = result.grantedScopes.orEmpty()
                     .any { it.contains(DriveScopes.DRIVE_FILE) }
-                if (token != null && hasDriveScope) {
+                // The in-memory result carries no issue time; storage records the
+                // same token's age, so age the memory copy out with it instead of
+                // handing Drive a token that is already an hour old.
+                if (token != null && hasDriveScope && !tokenStorage.isTokenStale()) {
                     return@withContext token
                 }
                 if (token != null && !hasDriveScope) {
@@ -479,6 +483,13 @@ class GoogleAuthManager @Inject constructor(
                 tokenStorage.clearToken()
             }
 
+            // Play Services keeps its own access-token cache. Forgetting our copy is not
+            // enough: the next authorize() hands the same rejected token straight back,
+            // so every retry fails the same way and the user is told "session expired"
+            // forever, even after signing out and in. clearToken() is the documented way
+            // to drop it, forcing the next authorize() to go to the OAuth server.
+            clearCachedAccessToken(failedAccessToken)
+
             refreshAccessTokenUnlocked()
         }
 
@@ -501,8 +512,41 @@ class GoogleAuthManager @Inject constructor(
             if (failedTokenIsStillCurrent(failedAccessToken, tokenStorage.getAccessToken())) {
                 tokenStorage.clearToken()
             }
+            clearCachedAccessToken(failedAccessToken)
             true
         }
+
+    /**
+     * Drops a rejected access token from the Play Services authorization cache.
+     * Clearing credential state (sign out) does not touch this cache, which is why a
+     * rejected token otherwise survives a full sign-out / sign-in cycle.
+     */
+    private suspend fun clearCachedAccessToken(accessToken: String) {
+        if (accessToken.isBlank()) return
+        try {
+            authorizationClient.clearToken(
+                ClearTokenRequest.builder().setToken(accessToken).build()
+            ).await()
+            Log.i(TAG, "Cleared rejected access token from the Google authorization cache")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to clear the rejected access token from the cache", e)
+        }
+    }
+
+    /**
+     * Marks the current session unusable after Drive rejected a freshly refreshed
+     * token. Unlike a transient refresh failure this is definitive, so the UI must
+     * stop claiming the account is connected and offer the sign-in instead of
+     * showing a "Sign Out" button next to a dead session.
+     */
+    fun markSessionRejected() {
+        Log.w(TAG, "Drive rejected the authorized token; marking the session as signed out")
+        _isSignedIn.value = false
+        authorizationResult = null
+        authorizationResolution = null
+    }
 
     private fun currentScopedAccessToken(): String? {
         val inMemory = authorizationResult

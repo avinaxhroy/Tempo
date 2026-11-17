@@ -25,4 +25,16 @@ interface DeezerApi {
         @Query("q") query: String,
         @Query("limit") limit: Int = 5
     ): Response<DeezerSearchResponse>
+
+    /**
+     * Search for artists.
+     *
+     * @param query The search query (an artist name)
+     * @param limit Maximum number of results (default 5)
+     */
+    @GET("search/artist")
+    suspend fun searchArtists(
+        @Query("q") query: String,
+        @Query("limit") limit: Int = 5
+    ): Response<DeezerArtistSearchResponse>
 }

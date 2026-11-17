@@ -29,7 +29,7 @@ import javax.inject.Singleton
  *
  * [BuildConfig.ANALYTICS_ENDPOINT] is a **full URL**, so the same client talks to PostHog's
  * batch endpoint (`https://eu.i.posthog.com/batch/`) or to any compatible ingest URL. There is
- * deliberately no intermediary service: events go straight from the device to PostHog, and the
+ * No intermediary service: events go straight from the device to PostHog, and the
  * privacy guarantees that matter are enforced here — the anonymous flag and `$geoip_disable` —
  * rather than by something the client has to trust.
  *
@@ -61,7 +61,7 @@ class PostHogClient
         private val flushLock = Mutex()
 
         /**
-         * Deliberately NOT the app's shared OkHttp client: the UserAgent, Retry and RateLimit
+         * NOT the app's shared OkHttp client: the UserAgent, Retry and RateLimit
          * interceptors — and the debug HttpLoggingInterceptor — must never see analytics
          * traffic. Built lazily so a build that cannot report never allocates it at all.
          */

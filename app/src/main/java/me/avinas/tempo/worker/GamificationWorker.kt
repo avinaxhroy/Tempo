@@ -32,6 +32,7 @@ class GamificationWorker
         companion object {
             const val TAG = "GamificationWorker"
             const val WORK_NAME = "gamification_refresh"
+            private const val IMMEDIATE_WORK_NAME = "gamification_immediate_refresh"
 
             /**
              * Enqueue periodic gamification refresh.
@@ -77,9 +78,23 @@ class GamificationWorker
                 val request =
                     OneTimeWorkRequestBuilder<GamificationWorker>()
                         .addTag(TAG)
-                        .build()
+                        .setConstraints(
+                            Constraints
+                                .Builder()
+                                .setRequiresBatteryNotLow(true)
+                                .build(),
+                        ).build()
 
-                WorkManager.getInstance(context).enqueue(request)
+                // This runs on every process start (including widget ticks and boot), and each run
+                // costs a full XP/badge recompute. KEEP collapses starts that arrive while one is
+                // already queued or running; the 6-hourly periodic refresh is the backstop.
+                WorkManager
+                    .getInstance(context)
+                    .enqueueUniqueWork(
+                        IMMEDIATE_WORK_NAME,
+                        ExistingWorkPolicy.KEEP,
+                        request,
+                    )
                 Log.d(TAG, "Immediate gamification refresh enqueued")
             }
         }

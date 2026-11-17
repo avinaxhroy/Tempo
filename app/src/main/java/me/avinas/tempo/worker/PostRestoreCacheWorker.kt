@@ -129,7 +129,7 @@ class PostRestoreCacheWorker
                         }
                     } else {
                         // Fallback to Data array (old method)
-                        inputData.getStringArray(KEY_URLS)?.toList() ?: emptyList()
+                        inputData.getNullableStringArray(KEY_URLS)?.filterNotNull().orEmpty()
                     }
 
                 if (urls.isEmpty()) {
