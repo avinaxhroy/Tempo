@@ -12,7 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.avinas.tempo.BuildConfig
@@ -51,7 +51,15 @@ class SettingsViewModel
         private val analyticsFeatureLedger: me.avinas.tempo.data.analytics.AnalyticsFeatureLedger,
         private val coverArtSourcePreference: CoverArtSourcePreference,
     ) : ViewModel() {
-        private val _uiState = MutableStateFlow(SettingsUiState())
+        private val _uiState = MutableStateFlow(
+            SettingsUiState(
+                analyticsConfigured = AnalyticsGate.isBuildConfigured(
+                    endpoint = BuildConfig.ANALYTICS_ENDPOINT,
+                    isDebug = BuildConfig.DEBUG,
+                    debugPreview = BuildConfig.ANALYTICS_DEBUG_PREVIEW,
+                ),
+            ),
+        )
         val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
         // Import/Export states
@@ -72,113 +80,44 @@ class SettingsViewModel
         private val NOTIF_ACHIEVEMENTS_KEY = booleanPreferencesKey("notif_achievements")
         private val NOTIF_CHALLENGES_KEY = booleanPreferencesKey("notif_daily_challenges")
         private val EXTENDED_AUDIO_ANALYSIS_KEY = booleanPreferencesKey("extended_audio_analysis")
-        private val USER_NAME_KEY =
-            androidx.datastore.preferences.core
-                .stringPreferencesKey("user_name")
 
         init {
             viewModelScope.launch {
-                // Load DataStore preferences
-                val dataStorePrefs = context.dataStore.data.first()
-
-                // Load Room preferences
-                val roomPrefs =
-                    userPreferencesDao.getSync() ?: me.avinas.tempo.data.local.entities
-                        .UserPreferences()
-
-                _uiState.update {
+                combine(
+                    profileIdentityManager.profileIdentity,
+                    context.dataStore.data,
+                    coverArtSourcePreference.preferredSource,
+                    analyticsConsent.isEnabled,
+                    userPreferencesDao.preferences(),
+                ) { identity, dataStorePrefs, preferredCover, analyticsEnabled, roomPrefs ->
+                    val prefs =
+                        roomPrefs ?: me.avinas.tempo.data.local.entities
+                            .UserPreferences()
                     SettingsUiState(
                         dailySummaryEnabled = dataStorePrefs[NOTIF_DAILY_KEY] ?: true,
                         weeklyRecapEnabled = dataStorePrefs[NOTIF_WEEKLY_KEY] ?: true,
                         achievementsEnabled = dataStorePrefs[NOTIF_ACHIEVEMENTS_KEY] ?: true,
                         dailyChallengesEnabled = dataStorePrefs[NOTIF_CHALLENGES_KEY] ?: true,
                         extendedAudioAnalysisEnabled = dataStorePrefs[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
-                        // Load preference directly from DataStore snapshot to avoid race conditions.
-                        // decode() returns null both for "absent" and "not a known provider", and
-                        // null *is* the Automatic value — falling back to the previous state here
-                        // would keep a stale provider name selected after the user resets.
-                        preferredCoverSource = CoverArtSourcePreference.decode(dataStorePrefs[CoverArtSourcePreference.PREFERENCE_KEY]),
-                        userName = dataStorePrefs[USER_NAME_KEY] ?: "User",
-                        profileImagePath = profileIdentityManager.getStoredProfileImagePath(),
-                        mergeAlternateVersions = roomPrefs.mergeAlternateVersions,
-                        filterPodcasts = roomPrefs.filterPodcasts,
-                        filterAudiobooks = roomPrefs.filterAudiobooks,
-                        spotifyApiOnlyMode = roomPrefs.spotifyApiOnlyMode,
-                        isLastFmConnected = roomPrefs.lastfmConnected,
-                        lastFmUsername = roomPrefs.lastfmUsername,
-                        lastFmSyncFrequency = roomPrefs.lastfmSyncFrequency,
-                        isGamificationEnabled = roomPrefs.isGamificationEnabled,
-                        hideStreaks = roomPrefs.hideStreaks,
-                        pauseTrackingOnLowBattery = roomPrefs.pauseTrackingOnLowBattery,
-                        analyticsConfigured =
-                            AnalyticsGate.isBuildConfigured(
-                                endpoint = BuildConfig.ANALYTICS_ENDPOINT,
-                                isDebug = BuildConfig.DEBUG,
-                                debugPreview = BuildConfig.ANALYTICS_DEBUG_PREVIEW,
-                            ),
+                        preferredCoverSource = preferredCover,
+                        userName = identity.userName,
+                        profileImagePath = identity.profileImagePath,
+                        mergeAlternateVersions = prefs.mergeAlternateVersions,
+                        filterPodcasts = prefs.filterPodcasts,
+                        filterAudiobooks = prefs.filterAudiobooks,
+                        spotifyApiOnlyMode = prefs.spotifyApiOnlyMode,
+                        isLastFmConnected = prefs.lastfmConnected,
+                        lastFmUsername = prefs.lastfmUsername,
+                        lastFmSyncFrequency = prefs.lastfmSyncFrequency,
+                        isGamificationEnabled = prefs.isGamificationEnabled,
+                        hideStreaks = prefs.hideStreaks,
+                        pauseTrackingOnLowBattery = prefs.pauseTrackingOnLowBattery,
+                        analyticsEnabled = analyticsEnabled,
+                        analyticsConfigured = _uiState.value.analyticsConfigured,
                     )
-                }
-            }
-
-            // Watch DataStore for updates
-            viewModelScope.launch {
-                profileIdentityManager.profileIdentity.collect { identity ->
-                    _uiState.update {
-                        it.copy(
-                            userName = identity.userName,
-                            profileImagePath = identity.profileImagePath,
-                        )
-                    }
-                }
-            }
-
-            viewModelScope.launch {
-                context.dataStore.data.collect { preferences ->
-                    _uiState.update {
-                        it.copy(
-                            dailySummaryEnabled = preferences[NOTIF_DAILY_KEY] ?: true,
-                            weeklyRecapEnabled = preferences[NOTIF_WEEKLY_KEY] ?: true,
-                            achievementsEnabled = preferences[NOTIF_ACHIEVEMENTS_KEY] ?: true,
-                            dailyChallengesEnabled = preferences[NOTIF_CHALLENGES_KEY] ?: true,
-                            extendedAudioAnalysisEnabled = preferences[EXTENDED_AUDIO_ANALYSIS_KEY] ?: false,
-                        )
-                    }
-                }
-            }
-
-            viewModelScope.launch {
-                coverArtSourcePreference.preferredSource.collect { preferred ->
-                    _uiState.update { it.copy(preferredCoverSource = preferred) }
-                }
-            }
-
-            // Analytics consent is observed through AnalyticsConsent rather than by reading the
-            // DataStore key directly, so the key stays owned in one place.
-            viewModelScope.launch {
-                analyticsConsent.isEnabled.collect { enabled ->
-                    _uiState.update { it.copy(analyticsEnabled = enabled) }
-                }
-            }
-
-            // Watch Room preferences for updates (Last.fm state, filters, etc.)
-            viewModelScope.launch {
-                userPreferencesDao.preferences().collect { roomPrefs ->
-                    val prefs =
-                        roomPrefs ?: me.avinas.tempo.data.local.entities
-                            .UserPreferences()
-                    _uiState.update {
-                        it.copy(
-                            mergeAlternateVersions = prefs.mergeAlternateVersions,
-                            filterPodcasts = prefs.filterPodcasts,
-                            filterAudiobooks = prefs.filterAudiobooks,
-                            spotifyApiOnlyMode = prefs.spotifyApiOnlyMode,
-                            isLastFmConnected = prefs.lastfmConnected,
-                            lastFmUsername = prefs.lastfmUsername,
-                            lastFmSyncFrequency = prefs.lastfmSyncFrequency,
-                            isGamificationEnabled = prefs.isGamificationEnabled,
-                            hideStreaks = prefs.hideStreaks,
-                            pauseTrackingOnLowBattery = prefs.pauseTrackingOnLowBattery,
-                        )
+                }.collect { combinedState ->
+                    _uiState.update { current ->
+                        combinedState.copy(analyticsIdResetAt = current.analyticsIdResetAt)
                     }
                 }
             }
