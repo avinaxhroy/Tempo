@@ -1784,4 +1784,75 @@
     <string name="settings_cover_source_title">Preferred cover source</string>
     <string name="settings_cover_source_description">Choose which service to try first for album artwork. If no cover is found, Tempo falls back to other services automatically.</string>
     <string name="settings_cover_source_automatic">Automatic (default)</string>
+
+    <!-- Redesigned Settings hub & sub-pages -->
+    <string name="settings_search_placeholder">Search settings…</string>
+    <string name="settings_search_clear">Clear search</string>
+    <string name="settings_search_empty_title">No matching settings</string>
+    <string name="settings_search_empty_desc">Try searching for notifications, backup, Last.fm, or language</string>
+    <string name="settings_profile_edit_subtitle">Tap to edit name or photo</string>
+    <string name="settings_profile_dialog_title">Edit Profile</string>
+    <string name="settings_profile_dialog_body">Customize how your name and photo appear across Tempo.</string>
+
+    <string name="settings_group_core">Core Experience</string>
+    <string name="settings_group_connections">Connections &amp; Import</string>
+    <string name="settings_group_data_privacy">Data &amp; Privacy</string>
+    <string name="settings_group_tempo">Tempo</string>
+
+    <string name="settings_hub_tracking_title">Tracking &amp; Playback</string>
+    <string name="settings_hub_tracking_active">Active</string>
+    <string name="settings_hub_tracking_permission_needed">Notification access needed</string>
+    <string name="settings_hub_tracking_xiaomi_needed">Background setup needed</string>
+    <string name="settings_hub_tracking_filters_on">Filters on</string>
+    <string name="settings_hub_tracking_filters_off">All media</string>
+
+    <string name="settings_hub_notifications_summary">%1$d of %2$d enabled</string>
+    <string name="settings_hub_notifications_all_off">All notifications off</string>
+
+    <string name="settings_hub_experience_title">Experience &amp; Language</string>
+    <string name="settings_hub_experience_gamification_on">Gamification on</string>
+    <string name="settings_hub_experience_gamification_off">Gamification off</string>
+
+    <string name="settings_hub_import_title">Import Listening History</string>
+    <string name="settings_hub_import_connected">Last.fm (@%1$s) · 6 other sources</string>
+    <string name="settings_hub_import_default">Last.fm, Spotify, Apple Music &amp; 4 more</string>
+
+    <string name="settings_hub_data_title">Data, Backup &amp; Privacy</string>
+    <string name="settings_hub_data_subtitle">Backup, smart merge, diagnostics &amp; reset</string>
+
+    <string name="settings_hub_about_title">About &amp; Community</string>
+    <string name="settings_hub_about_subtitle">Version %1$s · Community &amp; privacy</string>
+
+    <string name="settings_banner_permission_title">Music tracking is paused</string>
+    <string name="settings_banner_permission_desc">Grant notification access so Tempo can detect songs as you listen.</string>
+    <string name="settings_banner_permission_action">Fix</string>
+    <string name="settings_banner_xiaomi_title">Background protection needed</string>
+    <string name="settings_banner_xiaomi_desc">Allow autostart so MIUI does not stop music tracking in the background.</string>
+    <string name="settings_banner_xiaomi_action">Configure</string>
+
+    <string name="settings_status_enabled">Enabled</string>
+    <string name="settings_status_required">Required</string>
+    <string name="settings_status_action_needed">Action needed</string>
+    <string name="settings_status_connected">Connected</string>
+    <string name="settings_status_low_battery">Low (%1$d%%)</string>
+    <string name="settings_status_critical_battery">Paused (%1$d%%)</string>
+
+    <string name="settings_section_status_access">Status &amp; Access</string>
+    <string name="settings_section_artwork_power">Artwork &amp; Power</string>
+    <string name="settings_section_recaps">Listening Recaps</string>
+    <string name="settings_section_milestones">Milestones &amp; Challenges</string>
+    <string name="settings_section_insights_display">Insights &amp; Display</string>
+    <string name="settings_section_live_sync">Live Sync</string>
+    <string name="settings_section_platform_exports">Platform Exports</string>
+    <string name="settings_section_browser">Browser</string>
+    <string name="settings_section_backup_library">Backup &amp; Library</string>
+    <string name="settings_section_privacy_telemetry">Privacy &amp; Telemetry</string>
+    <string name="settings_section_danger_zone">Danger Zone</string>
+    <string name="settings_section_app_info">App Info</string>
+
+    <string name="settings_gamification_disabled_title">Gamification is turned off</string>
+    <string name="settings_gamification_disabled_desc">Daily challenge and achievement reminders are hidden while gamification is disabled.</string>
+    <string name="settings_gamification_disabled_action">Open Experience</string>
+    <string name="settings_clear_all_desc">Permanently delete your listening history and preferences</string>
+    <string name="settings_version_footer">Tempo v%1$s</string>
 </resources>
